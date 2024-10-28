@@ -217,7 +217,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     def test_config(self):
         self.config_tester.run_common_tests()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

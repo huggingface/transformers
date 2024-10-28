@@ -423,7 +423,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     def test_config(self):
         self.clvp_config_tester.run_common_tests()
-        self.clvp_config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     def tearDown(self):
         super().tearDown()

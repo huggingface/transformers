@@ -230,7 +230,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     def test_config(self):
         self.config_tester.run_common_tests()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

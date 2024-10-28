@@ -570,7 +570,6 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_config(self):
         self.config_tester.run_common_tests()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
 
     @unittest.skip(reason="hidden_states are tested in individual model tests")
     def test_hidden_states_output(self):

@@ -496,7 +496,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
     def test_config(self):
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

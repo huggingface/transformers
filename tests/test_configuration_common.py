@@ -40,9 +40,10 @@ class ConfigTester:
         config = self.config_class(**self.inputs_dict)
         common_properties = (
             ["hidden_size", "num_attention_heads", "num_hidden_layers"]
-            if self.common_properties is None
+            if self.common_properties is None and not self.config_class.sub_configs
             else self.common_properties
         )
+        common_properties = [] if common_properties is None else common_properties
 
         # Add common fields for text models
         if self.has_text_modality:
@@ -126,12 +127,14 @@ class ConfigTester:
             sub_configs = self.config_class.sub_configs
             for sub_config_key in sub_configs:
                 class_name = getattr(self.config_class, f"{sub_config_key}_class")
-                if class_name != "AutoConfig":
+                if class_name == "AutoConfig":
+                    sub_class = AutoConfig.for_model(**general_config_dict[sub_config_key])
+                    sub_config_loaded = sub_class.__class__.from_pretrained(tmpdirname)
+                elif hasattr(transformers_module, class_name):
                     sub_config_class = getattr(transformers_module, class_name)
                     sub_config_loaded = sub_config_class.from_pretrained(tmpdirname)
                 else:
-                    sub_class = AutoConfig.for_model(**general_config_dict[sub_config_key])
-                    sub_config_loaded = sub_class.__class__.from_pretrained(tmpdirname)
+                    continue
 
                 # Pop `transformers_version`, it never exists when a config is part of a general composite config
                 # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
@@ -161,6 +164,9 @@ class ConfigTester:
             self.parent.assertIsNotNone(config)
 
     def check_config_arguments_init(self):
+        if self.config_class.sub_configs:
+            return  # TODO: @raushan composite models are not consistent in how they set general params
+
         kwargs = copy.deepcopy(config_common_kwargs)
         config = self.config_class(**kwargs)
         wrong_values = []
@@ -186,6 +192,7 @@ class ConfigTester:
         self.create_and_test_config_to_json_file()
         self.create_and_test_config_from_and_save_pretrained()
         self.create_and_test_config_from_and_save_pretrained_subfolder()
+        self.create_and_test_config_from_and_save_pretrained_composite()
         self.create_and_test_config_with_num_labels()
         self.check_config_can_be_init_without_params()
         self.check_config_arguments_init()

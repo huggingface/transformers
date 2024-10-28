@@ -467,7 +467,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         )
 
     def test_config(self):
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
+        self.config_tester.run_common_tests()
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
