@@ -2125,7 +2125,12 @@ class DVCLiveCallback(TrainerCallback):
             from transformers.trainer import Trainer
 
             if self._log_model is True:
-                fake_trainer = Trainer(args=args, model=kwargs.get("model"), processing_class=kwargs.get("tokenizer"))
+                fake_trainer = Trainer(
+                    args=args,
+                    model=kwargs.get("model"),
+                    processing_class=kwargs.get("tokenizer"),
+                    eval_dataset=["fake"],
+                )
                 name = "best" if args.load_best_model_at_end else "last"
                 output_dir = os.path.join(args.output_dir, name)
                 fake_trainer.save_model(output_dir)
