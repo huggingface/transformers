@@ -213,6 +213,7 @@ def no_init_weights(_enable=True):
             for name, init_func in TORCH_INIT_FUNCTIONS.items():
                 setattr(torch.nn.init, name, init_func)
 
+
 @contextmanager
 def set_quantized_state():
     global _is_quantized
