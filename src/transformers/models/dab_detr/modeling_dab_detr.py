@@ -346,11 +346,6 @@ class DabDetrSinePositionEmbedding(nn.Module):
             raise ValueError("No pixel mask provided")
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
-        # In place operations
-        # y_embed /= (y_embed[:, -1:, :] + 1e-6)
-        # y_embed *= self.scale
-        # x_embed /= (x_embed[:, :, -1:] + 1e-6)
-        # x_embed *= self.scale
         y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
         x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
