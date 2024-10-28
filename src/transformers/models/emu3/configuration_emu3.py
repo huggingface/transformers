@@ -8,10 +8,6 @@ from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class Emu3VQVAEConfig(PretrainedConfig):
@@ -299,13 +295,11 @@ class Emu3Config(PretrainedConfig):
     ):
         if vq_config is None:
             vq_config = Emu3VQVAEConfig()
-            logger.info("Passed `vq_config` is None. initializing the `Emu3VQVAEConfig` with default values.")
         elif isinstance(vq_config, dict):
             vq_config = Emu3VQVAEConfig(**vq_config)
 
         if text_config is None:
             text_config = Emu3TextConfig()
-            logger.info("Passed `text_config` is None. initializing the `Emu3TextConfig` with default values.")
         elif isinstance(text_config, dict):
             text_config = Emu3TextConfig(**text_config)
 

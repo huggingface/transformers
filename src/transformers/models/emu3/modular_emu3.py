@@ -45,6 +45,7 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
+_CONFIG_FOR_DOC = "Emu3Config"
 _CHECKPOINT_FOR_DOC = "Emu3-community/Emu3-Chat-hf"
 
 logger = logging.get_logger(__name__)
@@ -335,13 +336,11 @@ class Emu3Config(PretrainedConfig):
     ):
         if vq_config is None:
             vq_config = Emu3VQVAEConfig()
-            logger.info("Passed `vq_config` is None. initializing the `Emu3VQVAEConfig` with default values.")
         elif isinstance(vq_config, dict):
             vq_config = Emu3VQVAEConfig(**vq_config)
 
         if text_config is None:
             text_config = Emu3TextConfig()
-            logger.info("Passed `text_config` is None. initializing the `Emu3TextConfig` with default values.")
         elif isinstance(text_config, dict):
             text_config = Emu3TextConfig(**text_config)
 
@@ -1194,27 +1193,6 @@ class Emu3ImageVocabularyMapping:
         return img_tokens.to(device)
 
 
-EMU3_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Emu3Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Emu3 Model outputting raw hidden-states without any specific head on top.",
-    EMU3_START_DOCSTRING,
-)
 class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
     _no_split_modules = [
         "Emu3DecoderLayer",
@@ -1232,6 +1210,23 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+
+EMU3_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Emu3Config`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 EMU3_TEXT_INPUTS_DOCSTRING = r"""
@@ -1669,12 +1664,12 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
@@ -1683,7 +1678,6 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
             num_logits_to_keep (`int`, *optional*):
                 Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
@@ -1819,12 +1813,12 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
@@ -1833,7 +1827,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
             num_logits_to_keep (`int`, *optional*):
                 Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that

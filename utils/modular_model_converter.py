@@ -38,8 +38,11 @@ logger = logging.get_logger(__name__)
 # value from the dependency is used, then mapped to current name convention, resulting in wrong value.
 # The corresponding mapped value is used to define the file target for the assignment
 ASSIGNMENTS_TO_KEEP = {
+    "_CONFIG_FOR_DOC": "modeling",
     "_CHECKPOINT_FOR_DOC": "modeling",
 }
+
+MODEL_DOCSTRING_PATTERNS = ["INPUTS_DOCSTRING$", "START_DOCSTRING$"]
 
 AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 #           This file was automatically generated from {relative_path}.
@@ -781,6 +784,14 @@ class ModularConverterTransformer(CSTTransformer):
             "image_processing": {},
             "feature_extractor": {},
         }
+        self.global_assignments = {  # mapping for different component bodies
+            "modeling": {},
+            "configuration": {},
+            "tokenization": {},
+            "processing": {},
+            "image_processing": {},
+            "feature_extractor": {},
+        }
         self.match_patterns = "|".join(self.files.keys())
         self.all_definitions = {}
         self.class_to_file_type = {}
@@ -841,8 +852,15 @@ class ModularConverterTransformer(CSTTransformer):
                     self.all_imports.append(updated_node)
                 return updated_node
             elif m.matches(original_node, m.SimpleStatementLine(body=[m.Assign()])):
-                if original_node.body[0].targets[0].target.value in ASSIGNMENTS_TO_KEEP.keys():
+                value = original_node.body[0].targets[0].target.value
+                if value in ASSIGNMENTS_TO_KEEP.keys():
                     file_ = ASSIGNMENTS_TO_KEEP[original_node.body[0].targets[0].target.value]
+                    self.files[file_][original_node.body[0].targets[0].target.value] = {
+                        "node": original_node,
+                        "insert_idx": self.global_scope_index,
+                    }
+                elif any(re.search(pattern, value) for pattern in MODEL_DOCSTRING_PATTERNS):
+                    file_ = "modeling"
                     self.files[file_][original_node.body[0].targets[0].target.value] = {
                         "node": original_node,
                         "insert_idx": self.global_scope_index,
