@@ -24,7 +24,6 @@ from packaging import version
 from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
-    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -47,6 +46,7 @@ if is_torch_available():
 
     from transformers import (
         MistralForCausalLM,
+        MistralForQuestionAnswering,
         MistralForSequenceClassification,
         MistralForTokenClassification,
         MistralModel,
@@ -291,7 +291,13 @@ class MistralModelTester:
 @require_torch
 class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MistralModel, MistralForCausalLM, MistralForSequenceClassification, MistralForTokenClassification)
+        (
+            MistralModel,
+            MistralForCausalLM,
+            MistralForSequenceClassification,
+            MistralForTokenClassification,
+            MistralForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -303,6 +309,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "token-classification": MistralForTokenClassification,
             "text-generation": MistralForCausalLM,
             "zero-shot": MistralForSequenceClassification,
+            "question-answering": MistralForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -313,16 +320,16 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
-
-    # TODO: @Fxmarty
-    @is_flaky(max_attempts=3, description="flaky on some models.")
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
 
     def setUp(self):
         self.model_tester = MistralModelTester(self)
@@ -340,6 +347,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
 
     def test_Mistral_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -517,7 +527,7 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            out = model(input_ids).logits.cpu()
+            out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
