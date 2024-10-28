@@ -1928,15 +1928,15 @@ class GenerationTesterMixin:
             with self.assertRaises(ValueError):
                 model.generate(**generation_kwargs, **inputs_dict)
 
-    @pytest.mark.generate
-    @require_torch_gpu
-    @slow
     @parameterized.expand(
         [
             ("forward_only", False),  # TODO (@joao): a few models failing. After fixed, this should not be "@slow"
             ("end_to_end", True),  # TODO (@joao): end-to-end compilation is broken with torch 2.5+, explore and fix
         ]
     )
+    @pytest.mark.generate
+    @require_torch_gpu
+    @slow
     def test_generate_compile(self, name, end_to_end):
         """
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results. Tests
