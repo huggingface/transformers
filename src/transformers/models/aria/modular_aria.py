@@ -129,8 +129,7 @@ class AriaCrossAttention(nn.Module):
         Returns:
             torch.Tensor: Output tensor after cross-attention.
         """
-        normed_hidden_states = self.layer_norm(hidden_states)
-        query = self.q_proj(normed_hidden_states)
+        query = self.q_proj(self.layer_norm(hidden_states))
 
         x = self.ln_kv(x)
         key = self.k_proj(x)
