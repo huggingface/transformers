@@ -418,7 +418,7 @@ class GenerationMixin:
         for model_input_name in ["position_ids", "token_type_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
-                if past_key_values:
+                if past_key_values is not None:
                     model_input = model_input[:, -input_ids.shape[1] :]
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input

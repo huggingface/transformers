@@ -82,7 +82,6 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_flash_attn,
     require_non_xpu,
-    require_read_token,
     require_safetensors,
     require_torch,
     require_torch_accelerator,

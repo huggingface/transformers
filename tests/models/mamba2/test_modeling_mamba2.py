@@ -275,12 +275,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-    @unittest.skip(
-        reason="Mamba2 does not support generating with input embeddings (custom cache_position computation)"
-    )
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
-
 
 @require_torch
 @slow
