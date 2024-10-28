@@ -32,7 +32,6 @@ else:
     _import_structure["modeling_aria"] = [
         "AriaForConditionalGeneration",
         "AriaPreTrainedModel",
-        "AriaVisionModel",
         "AriaTextModel",
         "AriaForCausalLM",
     ]
@@ -59,7 +58,6 @@ if TYPE_CHECKING:
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
             AriaTextModel,
-            AriaVisionModel,
         )
         from .processing_aria import AriaProcessor
 

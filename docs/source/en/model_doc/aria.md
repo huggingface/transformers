@@ -80,10 +80,6 @@ response = processor.decode(output_ids, skip_special_tokens=True)
 
 [[autodoc]] AriaConfig
 
-## AriaVisionModel
-
-[[autodoc]] AriaVisionModel
-
 ## AriaTextModel
 
 [[autodoc]] AriaTextModel

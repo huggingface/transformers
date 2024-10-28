@@ -678,13 +678,6 @@ class AriaTextModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class AriaVisionModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ASTForAudioClassification(metaclass=DummyObject):
     _backends = ["torch"]
 

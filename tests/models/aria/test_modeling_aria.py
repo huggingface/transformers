@@ -344,7 +344,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
@@ -366,7 +366,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
@@ -421,7 +421,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = AriaForConditionalGeneration.from_pretrained(
-            "rhymes-ai/Aria", load_in_4bit=True, attn_implementation="eager"
+            model_id, load_in_4bit=True, attn_implementation="eager"
         )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
@@ -536,13 +536,14 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         loss.backward()
 
     def test_tokenizer_integration(self):
+        model_id = "rhymes-ai/Aria"
         slow_tokenizer = AutoTokenizer.from_pretrained(
-            "rhymes-ai/Aria", bos_token="<|startoftext|>", eos_token="<|endoftext|>", use_fast=False
+            model_id, bos_token="<|startoftext|>", eos_token="<|endoftext|>", use_fast=False
         )
         slow_tokenizer.add_tokens("<image>", True)
 
         fast_tokenizer = AutoTokenizer.from_pretrained(
-            "rhymes-ai/Aria",
+            model_id,
             bos_token="<|startoftext|>",
             eos_token="<|endoftext|>",
             from_slow=True,

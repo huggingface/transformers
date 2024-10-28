@@ -1403,7 +1403,6 @@ else:
             "AriaForConditionalGeneration",
             "AriaPreTrainedModel",
             "AriaTextModel",
-            "AriaVisionModel",
         ]
     )
     _import_structure["models.audio_spectrogram_transformer"].extend(
@@ -6314,7 +6313,6 @@ if TYPE_CHECKING:
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
             AriaTextModel,
-            AriaVisionModel,
         )
         from .models.audio_spectrogram_transformer import (
             ASTForAudioClassification,
