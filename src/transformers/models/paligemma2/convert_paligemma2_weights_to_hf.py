@@ -29,7 +29,7 @@ from transformers import (
 )
 from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
-
+import numpy as np
 
 device = "cuda"  # "cpu"
 
@@ -181,9 +181,10 @@ def slice_state_dict(state_dict, config):
     embedding_vector = state_dict.pop("llm/embedder/input_embedding")
     state_dict["language_model.model.embed_tokens.weight"] = embedding_vector
 
-    # pop the einsum attention + mlp representations. There are 18 layers in gemma-2b.
+    # pop the einsum attention + mlp representations. There are 26 layers in gemma2-2b.
 
     llm_attention_attn_vec_einsum = state_dict.pop("llm/layers/attn/attn_vec_einsum/w")
+    #  (26, 2, 4, 2304, 256) for 2b-224, 4 kv heads and 26 layers
     llm_attention_kv_einsum = state_dict.pop("llm/layers/attn/kv_einsum/w")
     llm_attention_q_einsum = state_dict.pop("llm/layers/attn/q_einsum/w")
     llm_mlp_gating_einsum = state_dict.pop("llm/layers/mlp/gating_einsum")
@@ -197,19 +198,34 @@ def slice_state_dict(state_dict, config):
 
     for i in range(config.text_config.num_hidden_layers):
         # llm_attention_q_einsum[i].shape = (8, 2048, 256)
-        q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
+        # q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
+        
+        """
+        q shape (8, 2304, 256)
+        k shape (4, 2304, 256)
+        v shape (4, 2304, 256)
+        o shape (8, 256, 2304)
 
+        """
+        q_transpose = (0, 2, 1)
+        k_transpose = (0, 2, 1)
+        v_transpose = (0, 2, 1)
+        o_transpose = (2, 0, 1)
+
+        q_weight_matrices = llm_attention_q_einsum[i].transpose(*q_transpose)
+        q_proj_weight_reshaped = q_weight_matrices
+        q_proj_weight_reshaped = q_proj_weight_reshaped.reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
         state_dict[f"language_model.model.layers.{i}.self_attn.q_proj.weight"] = q_proj_weight_reshaped
-
-        k_weight_matrices = llm_attention_kv_einsum[i, 0]  # Shape: (4, 2304, 256)
-        k_proj_weight_reshaped = k_weight_matrices.transpose(0, 2, 1).reshape(
+        # Shape: (4, 2304, 256)
+        k_weight_matrices = llm_attention_kv_einsum[i, 0].transpose(*k_transpose)
+        k_proj_weight_reshaped = k_weight_matrices.reshape(
             config.text_config.num_key_value_heads * config.text_config.head_dim,
             config.text_config.hidden_size
         )
         state_dict[f"language_model.model.layers.{i}.self_attn.k_proj.weight"] = k_proj_weight_reshaped
         # llm_attention_kv_einsum[i, 1].shape = (num_key_value_heads, hidden_size, head_dim)
-        v_weight_matrices = llm_attention_kv_einsum[i, 1]  # Shape: (4, 2304, 256)
-        v_proj_weight_reshaped = v_weight_matrices.transpose(0, 2, 1).reshape(
+        v_weight_matrices = llm_attention_kv_einsum[i, 1].transpose(*v_transpose) # Shape: (4, 2304, 256)
+        v_proj_weight_reshaped = v_weight_matrices.reshape(
             config.text_config.num_key_value_heads * config.text_config.head_dim,
             config.text_config.hidden_size
         )
@@ -218,7 +234,7 @@ def slice_state_dict(state_dict, config):
         # output projection.
 
         # llm_attention_attn_vec_einsum[i].shape = (8, 256, 2304)
-        o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(2, 1, 0).reshape(config.text_config.hidden_size, config.text_config.num_attention_heads * config.text_config.head_dim)
+        o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(*o_transpose).reshape(config.text_config.hidden_size, config.text_config.num_attention_heads * config.text_config.head_dim)
         state_dict[f"language_model.model.layers.{i}.self_attn.o_proj.weight"] = o_proj_weight_reshaped
         # mlp layers
         gate_proj_weight = llm_mlp_gating_einsum[i, 0]
@@ -232,10 +248,12 @@ def slice_state_dict(state_dict, config):
         state_dict[f"language_model.model.layers.{i}.post_feedforward_layernorm.weight"] = llm_post_feedforward_layernorm[i]
     state_dict["language_model.model.norm.weight"] = state_dict.pop("llm/final_norm/scale")
     state_dict["language_model.lm_head.weight"] = embedding_vector # weights are tied.
-
+    #breakpoint()
+    [k for k in state_dict.keys() if not k.startswith('vision') and not k.startswith('language')]
     # fmt: on
     for key, value in state_dict.items():
-        state_dict[key] = torch.from_numpy(value)
+        if not isinstance(value, torch.Tensor):
+            state_dict[key] = torch.from_numpy(value)
     return state_dict
 
 
@@ -284,6 +302,9 @@ def convert_paligemma2_checkpoint(
         del data
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
+        del config.hidden_size # this key is unused
+
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
         model = PaliGemmaForConditionalGeneration(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
@@ -320,9 +341,6 @@ def convert_paligemma2_checkpoint(
     model.to(DTYPES[precision])
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization=True)
     processor.save_pretrained(pytorch_dump_folder_path)
-
-
-#
 
 
 if __name__ == "__main__":
