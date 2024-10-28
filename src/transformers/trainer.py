@@ -3602,7 +3602,12 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            loss *= self.args.gradient_accumulation_steps
+            if num_items_in_batch is not None:
+                if self.compute_loss_func or self.model_accepts_loss_kwargs:
+                    loss *= self.args.gradient_accumulation_steps
+                # Average tokens across devices is orthogonal to gradient accumulation
+                if self.args.average_tokens_across_devices:
+                    loss *= self.args.world_size
             self.accelerator.backward(loss, **kwargs)
 
         return loss.detach() / self.args.gradient_accumulation_steps
@@ -3617,6 +3622,9 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
+            num_items_in_batch_tensor = torch.tensor(num_items_in_batch, device=self.args.device)
+            num_items_in_batch = int(self.accelerator.gather(num_items_in_batch_tensor).sum().cpu())
         if self.model_accepts_loss_kwargs:
             loss_kwargs = {}
             if num_items_in_batch is not None:
