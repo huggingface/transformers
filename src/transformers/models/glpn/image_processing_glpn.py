@@ -261,9 +261,9 @@ class GLPNImageProcessor(BaseImageProcessor):
         target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
         for depth, target_size in zip(predicted_depth, target_sizes):
             if target_size is not None:
-                depth = torch.nn.functional.interpolate(
-                    depth.unsqueeze(0).unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
-                ).squeeze()
+                depth = depth[None, None, ... ]
+                depth = torch.nn.functional.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
+                depth = depth.squeeze()
 
             results.append({"predicted_depth": depth})
 
