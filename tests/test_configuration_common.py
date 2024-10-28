@@ -117,6 +117,11 @@ class ConfigTester:
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
     def create_and_test_config_from_and_save_pretrained_composite(self):
+        """
+        Tests that composite or nested cofigs can be loaded and saved correctly. In case the config
+        has a sub-config, we should be able to call `sub_config.from_pretrained('general_config_file')`
+        and get a result same as if we loaded the whole config and obtained `config.sub_config` from it.
+        """
         config = self.config_class(**self.inputs_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -124,11 +129,12 @@ class ConfigTester:
             general_config_loaded = self.config_class.from_pretrained(tmpdirname)
             general_config_dict = config.to_dict()
 
+            # Iterate over all sub_configs if there are any and load them with their own classes
             sub_configs = self.config_class.sub_configs
             for sub_config_key, sub_class in sub_configs.items():
                 if sub_class.__name__ == "AutoConfig":
-                    sub_class = sub_class.for_model(**general_config_dict[sub_config_key])
-                    sub_config_loaded = sub_class.__class__.from_pretrained(tmpdirname)
+                    sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
+                    sub_config_loaded = sub_class.from_pretrained(tmpdirname)
                 else:
                     sub_config_loaded = sub_class.from_pretrained(tmpdirname)
 
@@ -141,6 +147,12 @@ class ConfigTester:
                 # Verify that the loaded config type is same as in the general config
                 type_from_general_config = type(getattr(general_config_loaded, sub_config_key))
                 self.parent.assertTrue(isinstance(sub_config_loaded, type_from_general_config))
+
+                # Now save only the sub-config and load it back to make sure the whole load-save-load pipeline works
+                with tempfile.TemporaryDirectory() as tmpdirname2:
+                    sub_config_loaded.save_pretrained(tmpdirname2)
+                    sub_config_loaded_2 = sub_class.from_pretrained(tmpdirname2)
+                    self.parent.assertEqual(sub_config_loaded.to_dict(), sub_config_loaded_2.to_dict())
 
     def create_and_test_config_with_num_labels(self):
         config = self.config_class(**self.inputs_dict, num_labels=5)
