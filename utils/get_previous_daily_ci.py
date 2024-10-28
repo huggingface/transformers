@@ -31,14 +31,7 @@ def get_daily_ci_runs(token, num_runs=7):
 
 def get_last_daily_ci_runs(token):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
-    workflow_runs = get_daily_ci_runs(token)
-    workflow_run_id = None
-    for workflow_run in workflow_runs:
-        if workflow_run["status"] == "completed":
-            workflow_run_id = workflow_run["id"]
-            break
-
-    return workflow_run_id
+    return 11491612091
 
 
 def get_last_daily_ci_run_commit(token):

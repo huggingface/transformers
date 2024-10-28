@@ -1250,7 +1250,7 @@ if __name__ == "__main__":
             )
 
     prev_ci_artifacts = None
-    if is_scheduled_ci_run:
+    if True:
         if job_name == "run_models_gpu":
             # Get the last previously completed CI's failure tables
             artifact_names = [f"ci_results_{job_name}"]
