@@ -21,7 +21,6 @@ import unittest
 
 import numpy as np
 from datasets import Audio, load_dataset
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
