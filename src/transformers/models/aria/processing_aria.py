@@ -32,7 +32,6 @@ from .processing_utils import (
 
 logger = logging.get_logger(__name__)
 
-
 class AriaVisionProcessor(BaseImageProcessor):
     """
     A vision processor for the Aria model that handles image preprocessing.
@@ -256,8 +255,6 @@ class AriaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
-        audio= None,
-        videos = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,

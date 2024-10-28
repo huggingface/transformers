@@ -14,25 +14,23 @@
 import argparse
 import glob
 import time
-from PIL import Image
-import requests
 
+import requests
 import torch
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import login, snapshot_download
+from PIL import Image
 from safetensors import safe_open
 
 from transformers import (
     AddedToken,
     AriaConfig,
     AriaForConditionalGeneration,
-    AutoConfig,
-    AutoImageProcessor,
-    AutoTokenizer,
-    LlavaProcessor,
-    Idefics3VisionConfig,
     AriaProcessor,
+    AutoConfig,
+    AutoTokenizer,
+    Idefics3VisionConfig,
 )
-from huggingface_hub import login
+
 
 login("token")
 

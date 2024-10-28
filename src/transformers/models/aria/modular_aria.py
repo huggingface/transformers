@@ -14,7 +14,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
@@ -28,8 +27,6 @@ from ...utils import (
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
-from ..idefics3.configuration_idefics3 import Idefics3VisionConfig
-from ..idefics3.modeling_idefics3 import Idefics3VisionTransformer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LLAMA_ATTENTION_CLASSES,
@@ -41,7 +38,6 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from ..siglip.modeling_siglip import SiglipVisionModel
 from .processing_utils import (
     experts_gemm,
     get_split_image,
@@ -70,96 +66,6 @@ class IdentityOp(torch.nn.Module):
 
 class AriaRMSNorm(LlamaRMSNorm):
     pass
-
-
-class AriaVisionModel(SiglipVisionModel):
-    """
-    Aria Vision Model extends SiglipVisionModel to support pixel_mask.
-
-    The pixel_mask is a 2D boolean tensor that indicates which pixels in the input
-    image are actual content and which are padding. It has the same height and width
-    as the input image, where:
-    - True (1) values represent pixels from the original image
-    - False (0) values represent padding pixels
-
-    This mask helps the model focus on the relevant parts of the image during processing.
-    """
-
-    main_input_name = "pixel_values"
-    _supports_sdpa = False
-
-    def __init__(self, config: Idefics3VisionConfig):
-        super().__init__(config)
-        self.vision_model = Idefics3VisionTransformer(config)
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_mask: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-        """
-        Forward pass of the AriaVisionModel.
-
-        Args:
-            pixel_values (torch.Tensor): The pixel values of the input images.
-            pixel_mask (Optional[torch.BoolTensor]): Mask for the pixel values.
-            output_attentions (Optional[bool]): Whether to output attentions.
-            output_hidden_states (Optional[bool]): Whether to output hidden states.
-            return_dict (Optional[bool]): Whether to return a ModelOutput object.
-
-        Returns:
-            Union[Tuple, BaseModelOutput]: The model's output.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-
-        vision_output = self.vision_model(
-            pixel_values=pixel_values,
-            patch_attention_mask=patch_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        image_attentions = self._create_image_attention_mask(patch_attention_mask)
-
-        last_hidden_state_pre_normalization = vision_output.hidden_states[-1]
-
-        vision_output.last_hidden_state = last_hidden_state_pre_normalization
-
-        if not return_dict:
-            return vision_output, image_attentions
-
-        return BaseModelOutput(
-            vision_output.last_hidden_state,
-            vision_output.hidden_states,
-            image_attentions,
-        )
-
-    def _create_patch_attention_mask(self, pixel_mask):
-        if pixel_mask is None:
-            return None
-
-        patches_subgrid = pixel_mask.unfold(
-            dimension=1,
-            size=self.vision_model.config.patch_size,
-            step=self.vision_model.config.patch_size,
-        ).unfold(
-            dimension=2,
-            size=self.vision_model.config.patch_size,
-            step=self.vision_model.config.patch_size,
-        )
-        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
-    def _create_image_attention_mask(self, patch_attention_mask):
-        if patch_attention_mask is None:
-            return None
-
-        flattened_mask = patch_attention_mask.flatten(1)
-        return torch.logical_not(flattened_mask)
 
 
 class AriaGeluDense(nn.Module):
@@ -760,7 +666,7 @@ class AriaConfig(PretrainedConfig):
 
     Args:
         vision_config (AriaVisionConfig or dict): Configuration for the vision component.
-        text_config (AriaMoELMConfig or dict): Configuration for the text component.
+        text_config (AriaTextConfig or dict): Configuration for the text component.
         projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
         ignore_index (int): Index to ignore in loss calculation.
         image_token_index (int): Index used to represent image tokens.
@@ -773,7 +679,7 @@ class AriaConfig(PretrainedConfig):
         image_token_index (int): Index used to represent image tokens.
         projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
         vision_config (AriaVisionConfig): Configuration for the vision component.
-        text_config (AriaMoELMConfig): Configuration for the text component.
+        text_config (AriaTextConfig): Configuration for the text component.
     """
 
     model_type = "aria"
@@ -788,7 +694,6 @@ class AriaConfig(PretrainedConfig):
         image_token_index=32000,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
 
@@ -800,24 +705,23 @@ class AriaConfig(PretrainedConfig):
                 4900: 256,
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
-        if text_config is None:
-            text_config = AriaTextConfig()
-
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "idefics3"
-            )
+            vision_config["model_type"] = "idefics3_vision"
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            vision_config = CONFIG_MAPPING["idefics3"]()
+            vision_config = CONFIG_MAPPING["idefics3_vision"]()
 
         self.vision_config = vision_config
 
         if isinstance(text_config, dict) and "model_type" in text_config:
             text_config = AriaTextConfig(**text_config)
+        elif text_config is None:
+            text_config = AriaTextConfig()
 
         self.text_config = text_config
+
+        super().__init__(**kwargs)
 
 
 class AriaPreTrainedModel(PreTrainedModel):
@@ -902,7 +806,7 @@ class AriaTopKRouter(nn.Module):
         return scores, top_indices, tokens_per_expert.to(original_dtype)
 
 
-class AriaMLP(LlamaMLP):
+class AriaSharedExpertsMLP(LlamaMLP):
     """
     Shared Expert MLP for shared experts.
 
@@ -1021,7 +925,7 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
 
         self.router = AriaTopKRouter(config)
         self.experts = AriaGroupedMLP(config)
-        self.shared_experts = AriaMLP(config)
+        self.shared_experts = AriaSharedExpertsMLP(config)
         self.config = config
         self.hidden_states_shape = None
         self.reversed_input_permutation_mapping = None
@@ -1118,7 +1022,7 @@ class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
         self.post_init()
 
 
-class AriaForCausalLM(LlamaForCausalLM):
+class AriaForCausalLM(AriaPreTrainedModel, LlamaForCausalLM):
     """
     Aria model for causal language modeling tasks.
 

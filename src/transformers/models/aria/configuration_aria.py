@@ -115,7 +115,7 @@ class AriaConfig(PretrainedConfig):
 
     Args:
         vision_config (AriaVisionConfig or dict): Configuration for the vision component.
-        text_config (AriaMoELMConfig or dict): Configuration for the text component.
+        text_config (AriaTextConfig or dict): Configuration for the text component.
         projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
         ignore_index (int): Index to ignore in loss calculation.
         image_token_index (int): Index used to represent image tokens.
@@ -128,7 +128,7 @@ class AriaConfig(PretrainedConfig):
         image_token_index (int): Index used to represent image tokens.
         projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
         vision_config (AriaVisionConfig): Configuration for the vision component.
-        text_config (AriaMoELMConfig): Configuration for the text component.
+        text_config (AriaTextConfig): Configuration for the text component.
     """
 
     model_type = "aria"
