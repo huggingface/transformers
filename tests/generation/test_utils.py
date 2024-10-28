@@ -142,7 +142,7 @@ class GenerationTesterMixin:
         Checks whether a pair of generate outputs are similar. Two `generate` call outputs are considered similar in
         the following siturations:
         1. The sequences are the same
-        2. The sequences are different, but the scores up until the first mismatch are nearly identical
+        2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
         """
         # scores doesn't include data regarding decoder input tokens
         decoder_input_length = output_1.sequences.shape[1] - len(output_1.scores)
