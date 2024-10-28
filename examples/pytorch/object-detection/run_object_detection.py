@@ -21,7 +21,6 @@ from typing import Any, List, Mapping, Tuple
 
 import albumentations as A
 import torch
-from datasets import load_dataset
 
 from transformers import (
     AutoImageProcessor,
