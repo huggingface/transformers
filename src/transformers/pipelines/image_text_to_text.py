@@ -17,7 +17,6 @@ import enum
 from typing import Dict, List, Optional, Union
 
 from ..processing_utils import ProcessingKwargs, Unpack
-from ..tokenization_utils_base import AddedToken
 from ..utils import (
     add_end_docstrings,
     is_torch_available,
@@ -31,7 +30,7 @@ from .base import Pipeline, build_pipeline_init_args
 if is_vision_available():
     from PIL import Image
 
-    from ..image_utils import load_image
+    from ..image_utils import load_images
 
 
 if is_torch_available():
@@ -79,10 +78,6 @@ def retrieve_images_in_messages(
             if isinstance(content, dict) and content.get("type") == "image":
                 if "image" in content:
                     retrieved_images.append(content["image"])
-                elif "url" in content:
-                    retrieved_images.append(content["url"])
-                elif "path" in content:
-                    retrieved_images.append(content["path"])
                 elif idx_images < len(images):
                     retrieved_images.append(images[idx_images])
                     idx_images += 1
@@ -267,8 +262,6 @@ class ImageTextToTextPipeline(Pipeline):
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
-        batch_size = kwargs.get("batch_size", 1)
-
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
 
@@ -295,93 +288,9 @@ class ImageTextToTextPipeline(Pipeline):
         if text is None:
             raise ValueError("You must provide text for this pipeline.")
 
-        if not isinstance(images, (list, tuple)):
-            images = [images]
-        if isinstance(text, str):
-            text = [text]
-        if not isinstance(text[0], str):
-            raise ValueError("The pipeline does not support nested lists of prompts.")
-
-        if hasattr(self.processor, "image_token") and self.processor.image_token is not None:
-            image_token = self.processor.image_token
-            if isinstance(image_token, AddedToken):
-                image_token = image_token.content
-        else:
-            image_token = IMAGE_TOKEN
-        # Check number of image_token token in each text
-        nested_images = False
-        num_images_in_text = [text_single.count(image_token) for text_single in text]
-        if sum(num_images_in_text) > 0:
-            if any(num > 1 for num in num_images_in_text):
-                # if batch_size > 1, we can't handle multiple images for a single prompt as it will result in overly nested images for batched inference
-                if batch_size > 1:
-                    raise ValueError(
-                        "The pipeline does not support multiple images for a single prompt with batch_size > 1."
-                    )
-                nested_images = True
-                # Check if already nested images and consistency
-                if isinstance(images[0], (list, tuple)):
-                    if len(images) != len(text):
-                        raise ValueError("The number of nested image groups and prompts should be the same.")
-                    num_images_in_images = [len(image) for image in images]
-                    if num_images_in_text != num_images_in_images:
-                        raise ValueError(
-                            f"The number of images in each nested image group should be the same as the number of {image_token} tokens in the corresponding prompt."
-                            f" Found {num_images_in_text} {image_token} tokens and {num_images_in_images} images."
-                        )
-                elif sum(num_images_in_text) != len(images):
-                    raise ValueError(
-                        f"The total number of {image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {sum(num_images_in_text)} {image_token} tokens and {len(images)} images."
-                    )
-                else:
-                    # Reorganize the images to match the prompts
-                    images = [
-                        images[sum(num_images_in_text[:i]) : sum(num_images_in_text[: i + 1])]
-                        for i in range(len(num_images_in_text))
-                    ]
-        elif len(text) == 1 and len(images) > 1:
-            raise ValueError(
-                "The pipeline detected no image tokens in the prompt, but multiple images were passed. This behavior is not supported."
-            )
-
-        # After reorganizing, these should be the same
-        if len(text) > 1 and len(images) != len(text):
-            raise ValueError(
-                "Undefined behavior, please check the number of images and prompts, and nest the images to match the prompts."
-            )
-
-        # if we have nested images (with more than one image per prompt), batch_size must be 1
-        if nested_images:
-            results = []
-            for image_group, text_single in zip(images, text):
-                results.extend(super().__call__({"images": image_group, "text": text_single}, **kwargs))
-            return results
-
-        # otherwise, we can flatten the images and text as we have a 1:1 relationship
-        if isinstance(images[0], (list, tuple)):
-            images = [img for img_list in images for img in img_list]
-
-        # Manually build batching as we are working with multimodal inputs which need collating
-        batching_index = 0
-        results = []
-        while batching_index < len(images):
-            batch_results = super().__call__(
-                {
-                    "images": images[batching_index : batching_index + batch_size],
-                    "text": text[batching_index : batching_index + batch_size],
-                },
-                **kwargs,
-            )
-            results.extend(batch_results)
-            batching_index += batch_size
-
-        return results
+        return super().__call__({"images": images, "text": text}, **kwargs)
 
     def preprocess(self, inputs=None, timeout=None, continue_final_message=None, processing_kwargs=None):
-        processing_kwargs["legacy"] = False
-        processing_kwargs = {k: v for k, v in processing_kwargs.items() if v is not None}
-
         # In case we only have text inputs
         if isinstance(inputs, (list, tuple, str)):
             images = None
@@ -406,20 +315,14 @@ class ImageTextToTextPipeline(Pipeline):
                 inputs_text = inputs["text"]
                 images = inputs["images"]
 
-            if len(images) > 0:
-                if not isinstance(images, (list, tuple)):
-                    images = load_image(images, timeout=timeout)
-                else:
-                    images = [load_image(image, timeout=timeout) for image in images]
-            else:
-                images = None
+            images = load_images(images)
 
         # if batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processing_kwargs.setdefault("padding", True)
-        model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **processing_kwargs).to(
-            dtype=self.torch_dtype
-        )
+        model_inputs = self.processor(
+            images=images, text=text, return_tensors=self.framework, legacy=False, **processing_kwargs
+        ).to(dtype=self.torch_dtype)
 
         model_inputs["text"] = inputs_text
 
