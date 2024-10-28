@@ -361,7 +361,8 @@ class ImageTextToTextPipeline(Pipeline):
             for text_generated, decoded_input in zip(generated_texts, decoded_inputs):
                 # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
                 index_input_text = text_generated.find(decoded_input)
-                if index_input_text != -1:
+                # Limit the search to 2 residual characters, like spaces or new lines, to avoid removing a large part of the answer
+                if 0 <= index_input_text <= 2:
                     # If the input text is found, we remove it
                     new_generated_texts.append(text_generated[index_input_text + len(decoded_input) :])
                 else:
