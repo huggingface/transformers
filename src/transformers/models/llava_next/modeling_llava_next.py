@@ -910,9 +910,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
                 attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-                cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[
-                    -target_length:
-                ]
+                cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[-target_length:]
 
         # TODO: @raushan retain only the new behavior after v4.47
         else:
@@ -990,11 +988,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        legacy_processing = (
-            input_ids is not None
-            and (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length
-        )
 
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,

@@ -714,17 +714,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        if input_ids is not None:
-            img_token_not_enough = (input_ids == self.config.image_token_index).sum(
-                1
-            ).max() < self.config.image_seq_length
-            video_token_not_enough = (input_ids == self.config.video_token_index).sum(
-                1
-            ).max() < self.config.video_seq_length
-            legacy_processing = (img_token_not_enough and pixel_values_images is not None) or (
-                video_token_not_enough and pixel_values_videos is not None
-            )
-
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
