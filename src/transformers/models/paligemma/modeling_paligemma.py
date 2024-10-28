@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch PaliGemmamodel."""
 
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -300,18 +299,11 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
-
-        vision_config = deepcopy(config.vision_config)
-        text_config = deepcopy(config.text_config)
-        if hasattr(config, "quantization_config"):
-            vision_config.quantization_config = config.quantization_config
-            text_config.quantization_config = config.quantization_config
-
-        self.vision_tower = AutoModel.from_config(config=vision_config)
+        self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
-        language_model = AutoModelForCausalLM.from_config(config=text_config)
+        language_model = AutoModelForCausalLM.from_config(config=config.text_config)
 
         if language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
