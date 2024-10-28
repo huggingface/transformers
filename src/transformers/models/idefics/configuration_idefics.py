@@ -233,10 +233,7 @@ class IdeficsConfig(PretrainedConfig):
     ```"""
 
     model_type = "idefics"
-    sub_configs = ["perceiver_config", "vision_config"]
-    perceiver_config_class = "IdeficsPerceiverConfig"
-    vision_config_class = "IdeficsVisionConfig"
-    is_composition = False
+    sub_configs = {"perceiver_config": IdeficsPerceiverConfig, "vision_config": IdeficsVisionConfig}
 
     def __init__(
         self,

@@ -370,10 +370,11 @@ class ClvpConfig(PretrainedConfig):
     ```"""
 
     model_type = "clvp"
-    sub_configs = ["text_config", "speech_config", "decoder_config"]
-    text_config_class = "ClvpEncoderConfig"
-    speech_config_class = "ClvpEncoderConfig"
-    decoder_config_class = "ClvpDecoderConfig"
+    sub_configs = {
+        "text_config": ClvpEncoderConfig,
+        "speech_config": ClvpEncoderConfig,
+        "decoder_config": ClvpDecoderConfig,
+    }
 
     def __init__(
         self,

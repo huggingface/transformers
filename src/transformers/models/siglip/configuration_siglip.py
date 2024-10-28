@@ -231,9 +231,7 @@ class SiglipConfig(PretrainedConfig):
     ```"""
 
     model_type = "siglip"
-    sub_configs = ["text_config", "vision_config"]
-    text_config_class = "SiglipTextConfig"
-    vision_config_class = "SiglipVisionConfig"
+    sub_configs = {"text_config": SiglipTextConfig, "vision_config": SiglipVisionConfig}
 
     def __init__(self, text_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)

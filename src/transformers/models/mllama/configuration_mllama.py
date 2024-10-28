@@ -337,9 +337,7 @@ class MllamaConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama"
-    sub_configs = ["text_config", "vision_config"]
-    text_config_class = "MllamaTextConfig"
-    vision_config_class = "MllamaVisionConfig"
+    sub_configs = {"text_config": MllamaTextConfig, "vision_config": MllamaVisionConfig}
 
     def __init__(
         self,

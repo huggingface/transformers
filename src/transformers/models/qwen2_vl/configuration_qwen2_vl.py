@@ -161,8 +161,7 @@ class Qwen2VLConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_vl"
-    sub_configs = ["vision_config"]
-    vision_config_class = "Qwen2VLVisionConfig"
+    sub_configs = {"vision_config": Qwen2VLVisionConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

@@ -279,9 +279,7 @@ class BlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip"
-    sub_configs = ["text_config", "vision_config"]
-    text_config_class = "BlipTextConfig"
-    vision_config_class = "BlipVisionConfig"
+    sub_configs = {"text_config": BlipTextConfig, "vision_config": BlipVisionConfig}
 
     def __init__(
         self,

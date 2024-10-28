@@ -17,7 +17,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -268,10 +268,11 @@ class InstructBlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblip"
-    sub_configs = ["text_config", "qformer_config", "vision_config"]
-    text_config_class = "AutoConfig"
-    qformer_config_class = "InstructBlipQFormerConfig"
-    vision_config_class = "InstructBlipVisionConfig"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "qformer_config": InstructBlipQFormerConfig,
+        "vision_config": InstructBlipVisionConfig,
+    }
 
     def __init__(
         self,

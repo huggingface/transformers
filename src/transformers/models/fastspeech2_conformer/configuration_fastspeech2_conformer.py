@@ -455,9 +455,7 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     """
 
     model_type = "fastspeech2_conformer_with_hifigan"
-    sub_configs = ["model_config", "vocoder_config"]
-    model_config_class = "FastSpeech2ConformerConfig"
-    vocoder_config_class = "FastSpeech2ConformerHifiGanConfig"
+    sub_configs = {"model_config": FastSpeech2ConformerConfig, "vocoder_config": FastSpeech2ConformerHifiGanConfig}
 
     def __init__(
         self,

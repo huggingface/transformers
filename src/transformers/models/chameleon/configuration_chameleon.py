@@ -188,8 +188,7 @@ class ChameleonConfig(PretrainedConfig):
     ```"""
 
     model_type = "chameleon"
-    sub_configs = ["vq_config"]
-    vq_config_class = "ChameleonVQVAEConfig"
+    sub_configs = {"vq_config": ChameleonVQVAEConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

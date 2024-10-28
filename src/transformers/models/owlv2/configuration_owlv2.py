@@ -241,9 +241,7 @@ class Owlv2Config(PretrainedConfig):
     """
 
     model_type = "owlv2"
-    sub_configs = ["text_config", "vision_config"]
-    text_config_class = "Owlv2TextConfig"
-    vision_config_class = "Owlv2VisionConfig"
+    sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}
 
     def __init__(
         self,

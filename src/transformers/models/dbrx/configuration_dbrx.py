@@ -57,7 +57,7 @@ class DbrxAttentionConfig(PretrainedConfig):
         self.kv_n_heads = kv_n_heads
         self.rope_theta = rope_theta
 
-        for k in ["model_type"]:
+        for k in ["model_type", "attn_implementation"]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
@@ -109,7 +109,7 @@ class DbrxFFNConfig(PretrainedConfig):
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
 
-        for k in ["model_type"]:
+        for k in ["model_type", "attn_implementation"]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
@@ -172,9 +172,7 @@ class DbrxConfig(PretrainedConfig):
     """
 
     model_type = "dbrx"
-    sub_configs = ["attn_config", "ffn_config"]
-    attn_config_class = "DbrxAttentionConfig"
-    ffn_config_class = "DbrxFFNConfig"
+    sub_configs = {"attn_config": DbrxAttentionConfig, "ffn_config": DbrxFFNConfig}
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",

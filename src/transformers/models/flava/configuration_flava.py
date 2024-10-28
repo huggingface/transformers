@@ -463,11 +463,12 @@ class FlavaConfig(PretrainedConfig):
     """
 
     model_type = "flava"
-    sub_configs = ["text_config", "image_config", "multimodal_config", "image_codebook_config"]
-    text_config_class = "FlavaTextConfig"
-    image_config_class = "FlavaImageConfig"
-    multimodal_config_class = "FlavaMultimodalConfig"
-    image_codebook_config_class = "FlavaImageCodebookConfig"
+    sub_configs = {
+        "text_config": FlavaTextConfig,
+        "image_config": FlavaImageConfig,
+        "multimodal_config": FlavaMultimodalConfig,
+        "image_codebook_config": FlavaImageCodebookConfig,
+    }
 
     def __init__(
         self,

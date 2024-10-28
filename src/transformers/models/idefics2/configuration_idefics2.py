@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -200,10 +200,11 @@ class Idefics2Config(PretrainedConfig):
     ```"""
 
     model_type = "idefics2"
-    sub_configs = ["text_config", "perceiver_config", "vision_config"]
-    text_config_class = "AutoConfig"
-    perceiver_config_class = "Idefics2PerceiverConfig"
-    vision_config_class = "Idefics2VisionConfig"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "perceiver_config": Idefics2PerceiverConfig,
+        "vision_config": Idefics2VisionConfig,
+    }
 
     def __init__(
         self,

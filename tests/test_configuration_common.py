@@ -19,7 +19,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from transformers import AutoConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.utils import direct_transformers_import
 
 from .utils.test_configuration_utils import config_common_kwargs
@@ -125,16 +125,12 @@ class ConfigTester:
             general_config_dict = config.to_dict()
 
             sub_configs = self.config_class.sub_configs
-            for sub_config_key in sub_configs:
-                class_name = getattr(self.config_class, f"{sub_config_key}_class")
-                if class_name == "AutoConfig":
-                    sub_class = AutoConfig.for_model(**general_config_dict[sub_config_key])
+            for sub_config_key, sub_class in sub_configs.items():
+                if sub_class.__name__ == "AutoConfig":
+                    sub_class = sub_class.for_model(**general_config_dict[sub_config_key])
                     sub_config_loaded = sub_class.__class__.from_pretrained(tmpdirname)
-                elif hasattr(transformers_module, class_name):
-                    sub_config_class = getattr(transformers_module, class_name)
-                    sub_config_loaded = sub_config_class.from_pretrained(tmpdirname)
                 else:
-                    continue
+                    sub_config_loaded = sub_class.from_pretrained(tmpdirname)
 
                 # Pop `transformers_version`, it never exists when a config is part of a general composite config
                 # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class

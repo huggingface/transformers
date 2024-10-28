@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -72,10 +72,7 @@ class VipLlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "vipllava"
-    sub_configs = ["text_config", "vision_config"]
-    text_config_class = "AutoConfig"
-    vision_config_class = "AutoConfig"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,

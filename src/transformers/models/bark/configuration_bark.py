@@ -18,7 +18,7 @@ from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -234,11 +234,12 @@ class BarkConfig(PretrainedConfig):
     """
 
     model_type = "bark"
-    sub_configs = ["semantic_config", "coarse_acoustics_config", "fine_acoustics_config", "codec_config"]
-    semantic_config_class = "BarkSemanticConfig"
-    coarse_acoustics_config_class = "BarkCoarseConfig"
-    fine_acoustics_config_class = "BarkFineConfig"
-    codec_config_class = "AutoConfig"
+    sub_configs = {
+        "semantic_config": BarkSemanticConfig,
+        "coarse_acoustics_config": BarkCoarseConfig,
+        "fine_acoustics_config": BarkFineConfig,
+        "codec_config": AutoConfig,
+    }
 
     def __init__(
         self,

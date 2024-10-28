@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -70,9 +71,7 @@ class EncoderDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "encoder-decoder"
-    sub_configs = ["encoder_config", "decoder_config"]
-    encoder_config_class = "AutoConfig"
-    decoder_config_class = "AutoConfig"
+    sub_configs = {"encoder_config": AutoConfig, "decoder_config": AutoConfig}
     is_composition = True
 
     def __init__(self, **kwargs):
@@ -86,8 +85,6 @@ class EncoderDecoderConfig(PretrainedConfig):
         encoder_model_type = encoder_config.pop("model_type")
         decoder_config = kwargs.pop("decoder")
         decoder_model_type = decoder_config.pop("model_type")
-
-        from ..auto.configuration_auto import AutoConfig
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)

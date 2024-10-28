@@ -236,9 +236,7 @@ class Kosmos2Config(PretrainedConfig):
     ```"""
 
     model_type = "kosmos-2"
-    sub_configs = ["text_config", "vision_config"]
-    text_config_class = "Kosmos2TextConfig"
-    vision_config_class = "Kosmos2VisionConfig"
+    sub_configs = {"text_config": Kosmos2TextConfig, "vision_config": Kosmos2VisionConfig}
 
     def __init__(
         self,

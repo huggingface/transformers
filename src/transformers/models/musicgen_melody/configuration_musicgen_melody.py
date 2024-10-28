@@ -196,10 +196,11 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ```"""
 
     model_type = "musicgen_melody"
-    sub_configs = ["text_encoder_config", "audio_encoder_config", "decoder_config"]
-    text_config_class = "AutoConfig"
-    vision_config_class = "AutoConfig"
-    decoder_config_class = "MusicgenMelodyDecoderConfig"
+    sub_configs = {
+        "text_encoder_config": AutoConfig,
+        "audio_encoder_config": AutoConfig,
+        "decoder_config": MusicgenMelodyDecoderConfig,
+    }
     is_composition = True
 
     def __init__(

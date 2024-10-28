@@ -281,6 +281,7 @@ class ChineseCLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "chinese_clip"
+    sub_configs = {"text_config": ChineseCLIPTextConfig, "vision_config": ChineseCLIPVisionConfig}
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs

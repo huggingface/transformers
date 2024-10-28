@@ -19,7 +19,7 @@ from typing import Optional
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -271,10 +271,7 @@ class Blip2Config(PretrainedConfig):
     ```"""
 
     model_type = "blip-2"
-    sub_configs = ["text_config", "qformer_config", "vision_config"]
-    text_config_class = "AutoConfig"
-    qformer_config_class = "Blip2QFormerConfig"
-    vision_config_class = "Blip2VisionConfig"
+    sub_configs = {"text_config": AutoConfig, "qformer_config": Blip2QFormerConfig, "vision_config": Blip2VisionConfig}
 
     def __init__(
         self,

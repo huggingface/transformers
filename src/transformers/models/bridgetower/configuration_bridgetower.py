@@ -257,9 +257,7 @@ class BridgeTowerConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower"
-    sub_configs = ["text_config", "vision_config"]
-    text_config_class = "BridgeTowerTextConfig"
-    vision_config_class = "BridgeTowerVisionConfig"
+    sub_configs = {"text_config": BridgeTowerTextConfig, "vision_config": BridgeTowerVisionConfig}
 
     def __init__(
         self,
