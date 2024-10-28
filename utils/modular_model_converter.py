@@ -185,7 +185,7 @@ class ClassDependencyMapper(CSTVisitor):
 
 class ModuleMapper(CSTVisitor, ABC):
     """A visitor class which analyses a module, creating a mapping of dependencies for classes and functions.
-    The `full_class_dependency_mapping` created contains 1st-level classes and assignments dependencies, as well
+    The `class_dependency_mapping` created contains 1st-level classes and assignments dependencies, as well
     as all (recursively) functions dependencies.
     The `function_call_recursive_dependecy_mapping` created contains all function definitions, and all their (recursively)
     dependencies.
@@ -333,17 +333,17 @@ class ModelFileMapper(ModuleMapper):
         """
         relative_order = {}
         idx = 0
-        classes = sorted([dep for dep in tuple(missing_dependencies) if dep in self.classes], key=lambda x: self.start_line[x])
+        classes = sorted([dep for dep in tuple(missing_dependencies) if dep in self.classes], key=lambda x: self.start_lines[x])
         # This is because for merged dependencies, we only have relative order in the other visited file, so we need
         # to track dependency order relative to a given class
-        if len(classes) > 0 and not hasattr(self, "full_class_dependency_mapping"):
+        if len(classes) > 0 and not hasattr(self, "class_dependency_mapping"):
             raise ValueError("Cannot correctly find the relative order of the dependencies.")
         
         remaining_dependencies = missing_dependencies.copy()
 
         # Start by tracking relative order class by class
         for class_name in classes:
-            class_dependencies = tuple(self.full_class_dependency_mapping[class_name] & remaining_dependencies)
+            class_dependencies = tuple(self.class_dependency_mapping[class_name] & remaining_dependencies)
             original_dependencies = []
             merged_dependencies = []
             # We need to differentiate between nodes that were already present (we can get relative order globally) and
@@ -1007,6 +1007,8 @@ class ModularFileMapper(ModuleMapper):
         position in the code later. We use the PositionProvider metadata wrapper for this.
         """
         super().leave_Module(node)
+
+        self.function_call_recursive_dependency_mapping = self._compute_recursive_function_dependencies()
 
         # Now, visit every model-specific files found in the imports, and merge their dependencies
         self.visited_modules = {}
