@@ -1989,11 +1989,11 @@ class GenerationTesterMixin:
             else:
                 model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
 
-            compuled_outputs = []
+            compiled_outputs = []
             for model_inputs in input_ids_sets:
-                compuled_outputs.append(model.generate(model_inputs, generation_config=generation_config))
+                compiled_outputs.append(model.generate(model_inputs, generation_config=generation_config))
 
-            for dynamic_result, compiled_result in zip(dynamic_outputs, compuled_outputs):
+            for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
 
     @pytest.mark.generate
