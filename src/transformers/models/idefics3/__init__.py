@@ -62,8 +62,8 @@ if TYPE_CHECKING:
         from .modeling_idefics3 import (
             Idefics3ForConditionalGeneration,
             Idefics3Model,
-            Idefics3VisionTransformer,
             Idefics3PreTrainedModel,
+            Idefics3VisionTransformer,
         )
         from .processing_idefics3 import Idefics3Processor
 

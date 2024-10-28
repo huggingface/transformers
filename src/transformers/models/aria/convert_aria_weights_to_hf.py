@@ -83,8 +83,8 @@ def convert_state_dict_to_hf(state_dict):
                 key = key.replace(key_to_modify, new_key)
 
         new_state_dict[key] = value
-    new_state_dict['vision_tower.post_layernorm.weight'] = torch.zeros((1152,))
-    new_state_dict['vision_tower.post_layernorm.bias'] = torch.zeros((1152,))
+    new_state_dict["vision_tower.post_layernorm.weight"] = torch.zeros((1152,))
+    new_state_dict["vision_tower.post_layernorm.bias"] = torch.zeros((1152,))
 
     return new_state_dict
 
@@ -99,7 +99,8 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     processor = AriaProcessor.from_pretrained(
-        text_model_id, tokenizer_path=text_model_id,
+        text_model_id,
+        tokenizer_path=text_model_id,
     )
 
     config = AutoConfig.from_pretrained(text_model_id)
@@ -185,7 +186,7 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
         tokenizer=processor.tokenizer,
         do_sample=False,
     )
-    output_ids = output[0][inputs["input_ids"].shape[1]:]
+    output_ids = output[0][inputs["input_ids"].shape[1] :]
     response = processor.decode(output_ids, skip_special_tokens=True)
 
     t2 = time.time()

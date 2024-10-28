@@ -64,7 +64,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [AltCLIP](model_doc/altclip)                       |       ✅        |         ❌         |      ❌      |
 |                          [Aria](model_doc/aria)                          |       ✅        |         ❌         |      ❌      |
 |                [AriaTextModel](model_doc/aria_text_model)                |       ✅        |         ❌         |      ❌      |
-|              [AriaVisionModel](model_doc/aria_vision_model)              |       ✅        |         ❌         |      ❌      |
 | [Audio Spectrogram Transformer](model_doc/audio-spectrogram-transformer) |       ✅        |         ❌         |      ❌      |
 |                    [Autoformer](model_doc/autoformer)                    |       ✅        |         ❌         |      ❌      |
 |                          [Bark](model_doc/bark)                          |       ✅        |         ❌         |      ❌      |

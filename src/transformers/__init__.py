@@ -5023,8 +5023,8 @@ if TYPE_CHECKING:
     )
     from .models.aria import (
         AriaConfig,
-        AriaTextConfig,
         AriaProcessor,
+        AriaTextConfig,
     )
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
@@ -7180,8 +7180,8 @@ if TYPE_CHECKING:
             Idefics3Model,
             Idefics3PreTrainedModel,
             Idefics3Processor,
-            Idefics3VisionTransformer,
             Idefics3VisionConfig,
+            Idefics3VisionTransformer,
         )
         from .models.imagegpt import (
             ImageGPTForCausalImageModeling,

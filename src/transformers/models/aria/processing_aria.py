@@ -32,6 +32,7 @@ from .processing_utils import (
 
 logger = logging.get_logger(__name__)
 
+
 class AriaVisionProcessor(BaseImageProcessor):
     """
     A vision processor for the Aria model that handles image preprocessing.

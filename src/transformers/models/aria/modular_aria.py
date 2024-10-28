@@ -63,7 +63,6 @@ class IdentityOp(torch.nn.Module):
         return x
 
 
-
 class AriaRMSNorm(LlamaRMSNorm):
     pass
 
@@ -746,9 +745,9 @@ class AriaPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
     def _init_weights(self, module):
-        if hasattr(self.config, 'initializer_range'):
+        if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
-        elif hasattr(self.config, 'text_config'):
+        elif hasattr(self.config, "text_config"):
             std = self.config.text_config.initializer_range
         else:
             std = 0.02
@@ -868,11 +867,9 @@ class AriaGroupedGEMM(nn.Module):
         if torch.cuda.is_available():
             torch.cuda.set_device(input.device)
         original_dtype = input.dtype
-        return experts_gemm(
-            input.to(torch.bfloat16),
-            self.weight.to(torch.bfloat16),
-            tokens_per_expert
-        ).to(original_dtype)
+        return experts_gemm(input.to(torch.bfloat16), self.weight.to(torch.bfloat16), tokens_per_expert).to(
+            original_dtype
+        )
 
 
 class AriaGroupedMLP(nn.Module):
