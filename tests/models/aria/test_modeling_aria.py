@@ -28,6 +28,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
@@ -112,7 +113,7 @@ class AriaVisionText2TextModelTester:
             vocab_size=99,
         ),
         is_training=True,
-        vision_config=AriaVisionConfig(
+        vision_config=Idefics3VisionConfig(
             image_size=358,
             patch_size=10,
             num_channels=3,
