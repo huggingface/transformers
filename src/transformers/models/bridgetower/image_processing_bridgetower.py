@@ -535,7 +535,11 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 images, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=data_format
             )
         else:
-            data = {"pixel_values": np.array(images) if (do_resize or do_center_crop) and return_tensors is not None else images}
+            data = {
+                "pixel_values": np.array(images)
+                if (do_resize or do_center_crop) and return_tensors is not None
+                else images
+            }
             encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_outputs
