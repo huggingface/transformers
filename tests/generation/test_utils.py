@@ -2058,16 +2058,21 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
-    @pytest.mark.generate
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """Tests that generate has equivalent outputs with SDPA (default) and eager attention implementations."""
+    def _test_attention_implementation(self, attn_implementation):
+        """
+        Compares the output of generate with the eager attention implementation against other implementations.
+        NOTE: despite the test logic being the same, different implementations actually need diferent decorators, hence
+        this separate function.
+        """
         max_new_tokens = 30
+        support_flag = {
+            "sdpa": "_supports_sdpa",
+            "flash_attention_2": "_supports_flash_attn_2",
+        }
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(f"{model_class.__name__} does not support SDPA")
+            if not getattr(model_class, support_flag[attn_implementation]):
+                self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
 
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
             inputs_dict = {}
@@ -2096,15 +2101,6 @@ class GenerationTesterMixin:
                     "output_scores": True,
                     "use_cache": True,
                 }
-
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-                res_sdpa = model_sdpa.generate(**inputs_dict, **generate_kwargs)
-                del model_sdpa
-                gc.collect()
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -2116,65 +2112,34 @@ class GenerationTesterMixin:
                 del model_eager
                 gc.collect()
 
-                self._check_similar_generate_outputs(res_eager, res_sdpa, atol=1e-3, rtol=1e-3)
+                model_attn = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                    attn_implementation=attn_implementation,
+                ).to(torch_device)
+                res_attn = model_attn.generate(**inputs_dict, **generate_kwargs)
+                del model_attn
+                gc.collect()
+
+                self._check_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3)
+
+    @pytest.mark.generate
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        """Tests that generate has equivalent outputs with SDPA and eager attention implementations."""
+        self._test_attention_implementation("sdpa")
 
     @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_gpu
     @slow
-    def test_flash_attn_2_generate_matches_default(self):
-        """Tests that generate has equivalent outputs with SDPA (default) and FA2 attention implementations."""
+    def test_eager_matches_fa2_generate(self):
+        """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
         # TODO (@joao @raushan) -- this test is failing the output checks on most models, investigate. After fixing,
         # check whether we still need the overwrites
-
-        max_new_tokens = 30
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
-            inputs_dict = {}
-            for input_name, input_data in original_inputs_dict.items():
-                if isinstance(input_data, torch.Tensor) and input_data.dtype in [torch.float32, torch.bfloat16]:
-                    inputs_dict[input_name] = input_data.to(torch.float16)
-                else:
-                    inputs_dict[input_name] = input_data
-            main_input = inputs_dict[model_class.main_input_name]
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                generate_kwargs = {
-                    "max_new_tokens": max_new_tokens,
-                    "do_sample": False,
-                    "return_dict_in_generate": True,
-                    "output_scores": True,
-                    "use_cache": True,
-                }
-
-                model = model.to(device=torch_device, dtype=torch.float16)
-                res_sdpa = model.generate(**inputs_dict, **generate_kwargs)
-                del model
-                gc.collect()
-
-                model_fa2 = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-                res_fa2 = model_fa2.generate(**inputs_dict, **generate_kwargs)
-                del model_fa2
-                gc.collect()
-
-                self._check_similar_generate_outputs(res_fa2, res_sdpa, atol=1e-3, rtol=1e-3)
+        self._test_attention_implementation("flash_attention_2")
 
     @pytest.mark.generate
     def test_generate_reuse_cache(self):
