@@ -1097,7 +1097,7 @@ class SpecialTokensMixin:
                 return str(value) if key != "additional_special_tokens" else [str(tok) for tok in value]
             else:
                 attr_as_tokens = getattr(self, key_without_id)
-                return self.convert_tokens_to_ids(attr_as_tokens)
+                return self.convert_tokens_to_ids(attr_as_tokens) if attr_as_tokens is not None else None
         else:
             super().__getattr__(key)
 
