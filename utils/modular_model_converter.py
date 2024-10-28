@@ -999,7 +999,7 @@ class ModularFileMapper(ModuleMapper):
                             if isinstance(element.value, cst.SimpleString):
                                 # Remove quotes and add the string to the elements list
                                 class_name = element.value.value
-                                file = self.find_file_type(class_name)
+                                file = self.find_file_type(element.value.evaluated_value)
                                 all_all_to_add[file] += [class_name]
                         for file, new_alls in all_all_to_add.items():
                             new_node = assign_node.with_changes(
