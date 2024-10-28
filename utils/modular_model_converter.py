@@ -807,7 +807,6 @@ class ModularConverterTransformer(CSTTransformer):
             logger.warning(f"Debug: node.module is None.\n Full Node:{node}")
             raise Exception(f"Trying to import from None module.\nFull Node:{node}")
         import_statement = self.python_module.code_for_node(node.module)
-        logger.info(f"Importing {import_statement}")
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 _import = re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", import_statement)
@@ -914,6 +913,7 @@ class ModularConverterTransformer(CSTTransformer):
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])
                 }
+
             if len(list_dependencies) == 0:
                 # so, maybe standard renaming did not work (the class name is different)
                 # we try with another renaming pattern
@@ -926,6 +926,25 @@ class ModularConverterTransformer(CSTTransformer):
                     self.model_name,
                     potential_given_name,
                 )
+                list_dependencies = {
+                    dep: class_finder.class_start_line.get(dep, 1000)
+                    for dep in class_finder.class_dependency_mapping.get(class_name, [])
+                }
+
+            if len(list_dependencies) == 0:
+                # last recourse, if the suffix of the new class is different from the one of the super class
+                # e.g. MyNewClassForSegmentation extends MyOldClassForObjectDetection
+                # we try with another renaming pattern
+                class_finder = find_classes_in_file(
+                    self.transformers_imports[super_file_name],
+                    model_name,
+                    self.model_name,
+                    self.given_old_name,
+                    self.given_new_name,
+                    super_class,
+                    class_name,
+                )
+                visited_modules[super_file_name] = class_finder
                 list_dependencies = {
                     dep: class_finder.class_start_line.get(dep, 1000)
                     for dep in class_finder.class_dependency_mapping.get(class_name, [])

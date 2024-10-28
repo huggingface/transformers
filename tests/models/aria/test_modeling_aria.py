@@ -62,27 +62,6 @@ class AriaVisionText2TextModelTester:
         seq_length=7,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
-        # model_type = "aria_moe_lm",
-        # seq_length = 7,
-        # is_training = True,
-        # use_input_mask = True,
-        # use_token_type_ids = False,
-        # use_labels = True,
-        # vocab_size = 99,
-        # hidden_size = 40,
-        # num_hidden_layers = 3,
-        # num_attention_heads = 20,
-        # intermediate_size = 37,
-        # hidden_act = "gelu",
-        # hidden_dropout_prob = 0.1,
-        # attention_probs_dropout_prob = 0.1,
-        # max_position_embeddings = 512,
-        # type_vocab_size = 16,
-        # type_sequence_label_size = 2,
-        # initializer_range = 0.02,
-        # num_labels = 3,
-        # num_choices = 4,
-        # pad_token_id = 1,
         text_config=AriaTextConfig(
             seq_length=7,
             is_training=True,
@@ -287,11 +266,15 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         pass
 
     @unittest.skip(reason="")
+    def test_new_cache_format_0(self):
+        pass
+
+    @unittest.skip(reason="")
     def test_new_cache_format_1(self):
         pass
 
     @unittest.skip(reason="")
-    def test_new_cache_format_0(self):
+    def test_new_cache_format_2(self):
         pass
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")

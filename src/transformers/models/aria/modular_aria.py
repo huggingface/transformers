@@ -437,7 +437,7 @@ class AriaProcessor(ProcessorMixin):
 
         self.image_token = image_token
 
-    # Copied from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
+    # Modified from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
