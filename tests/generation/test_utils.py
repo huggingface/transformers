@@ -2147,14 +2147,14 @@ class GenerationTesterMixin:
         self._test_attention_implementation("flash_attention_2")
 
     def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1):
-        batch_size = output.sequences.shape[0]
+        num_sequences_in_output = output.sequences.shape[0]
+        batch_size = num_sequences_in_output / num_return_sequences
 
         seq_length = getattr(self.model_tester, "seq_length", None)
         seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
         seq_length = getattr(self.model_tester, "text_seq_length", seq_length)
 
         config = config.text_config if hasattr(config, "text_config") else config
-        num_sequences_in_output = batch_size * num_return_sequences
 
         gen_len = (
             output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
