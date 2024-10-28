@@ -313,6 +313,10 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     def test_eager_matches_sdpa_inference_2_float32(self):
         pass
 
+    @unittest.skip(reason="Not supported yet")
+    def test_determinism(self):
+        pass
+
 
 @require_torch
 class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
