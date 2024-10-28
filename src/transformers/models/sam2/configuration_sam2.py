@@ -178,6 +178,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         pred_obj_scores=True,
         pred_obj_scores_mlp=True,
         use_multimask_token_for_obj_ptr=True,
+        feed_forward_hidden_act="relu",
         two_way_transformer_depth=2,
         two_way_transformer_embedding_dim=256,
         two_way_transformer_num_heads=8,
@@ -202,6 +203,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.pred_obj_scores = pred_obj_scores
         self.pred_obj_scores_mlp = pred_obj_scores_mlp
         self.use_multimask_token_for_obj_ptr = use_multimask_token_for_obj_ptr
+        self.feed_forward_hidden_act = feed_forward_hidden_act
 
         # TwoWayTransformer configuration
         self.two_way_transformer_depth = two_way_transformer_depth
@@ -223,8 +225,8 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        scalp (`int`, *optional*, defaults to 1):
-            The scalp parameter for the image encoder.
+        skip_lowest_resolutions (`int`, *optional*, defaults to 1):
+            The skip_lowest_resolutions parameter for the image encoder.
         hidden_size (`<fill_type>`, *optional*, defaults to 96): <fill_docstring>
         num_heads (`int`, *optional*, defaults to 1):
             Initial number of attention heads.
@@ -245,11 +247,11 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Dimension multiplier factor at stage shift.
         head_mul (`float`, *optional*, defaults to 2.0):
             Head multiplier factor at stage shift.
-        window_pos_embed_bkg_spatial_size (`Tuple[int, int]`, *optional*, defaults to `(7, 7)`):
+        window_positional_embedding_background_size (`Tuple[int, int]`, *optional*, defaults to `(7, 7)`):
             Window size per stage when not using global attention.
         window_spec (`Tuple[int, ...]`, *optional*, defaults to `(8, 4, 14, 7)`):
             Window specifications for each stage.
-        global_att_blocks (`Tuple[int, ...]`, *optional*, defaults to `(5, 7, 9)`):
+        global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `(5, 7, 9)`):
             Blocks where global attention is used.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the model in the neck.
@@ -274,7 +276,6 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        scalp=1,
         hidden_size=96,
         num_heads=1,
         num_channels=3,
@@ -288,9 +289,10 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         stages=(1, 2, 7, 2),
         dim_mul=2.0,
         head_mul=2.0,
-        window_pos_embed_bkg_spatial_size=(7, 7),
+        window_positional_embedding_background_size=(7, 7),
         window_spec=(8, 4, 14, 7),
-        global_att_blocks=(5, 7, 9),
+        global_attention_blocks=(5, 7, 9),
+        skip_lowest_resolutions=1,
         backbone_channel_list=[768, 384, 192, 96],
         fpn_hidden_size=256,
         fpn_kernel_size=1,
@@ -308,7 +310,6 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         assert len(stages) == len(window_spec) == len(backbone_channel_list)
         assert fuse_type in ["sum", "avg"]
 
-        self.scalp = scalp
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.num_channels = num_channels
@@ -322,9 +323,10 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         self.stages = stages
         self.dim_mul = dim_mul
         self.head_mul = head_mul
-        self.window_pos_embed_bkg_spatial_size = window_pos_embed_bkg_spatial_size
+        self.window_positional_embedding_background_size = window_positional_embedding_background_size
         self.window_spec = window_spec
-        self.global_att_blocks = global_att_blocks
+        self.global_attention_blocks = global_attention_blocks
+        self.skip_lowest_resolutions = skip_lowest_resolutions
 
         # Neck
         self.backbone_channel_list = backbone_channel_list

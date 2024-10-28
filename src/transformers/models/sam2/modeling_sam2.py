@@ -300,13 +300,15 @@ class Sam2ImageEncoder(nn.Module):
         # Patch embdding
         self.patch_embed = Sam2PatchEmbeddings(config)
         # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
-        self.pos_embed = nn.Parameter(torch.zeros(1, config.hidden_size, *config.window_pos_embed_bkg_spatial_size))
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, config.hidden_size, *config.window_positional_embedding_background_size)
+        )
         self.pos_embed_window = nn.Parameter(
             torch.zeros(1, config.hidden_size, config.window_spec[0], config.window_spec[0])
         )
 
         self.stage_ends = [sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)]
-        self.global_att_blocks = config.global_att_blocks
+        self.global_attention_blocks = config.global_attention_blocks
 
         self.blocks = nn.ModuleList()
         embed_dim = config.hidden_size
@@ -323,8 +325,8 @@ class Sam2ImageEncoder(nn.Module):
             # of previous stage and final window size of current stage
             window_size = config.window_spec[cur_stage - 1]
 
-            if self.global_att_blocks is not None:
-                window_size = 0 if i in self.global_att_blocks else window_size
+            if self.global_attention_blocks is not None:
+                window_size = 0 if i in self.global_attention_blocks else window_size
 
             if i - 1 in self.stage_ends:
                 dim_out = int(embed_dim * config.dim_mul)
@@ -345,7 +347,7 @@ class Sam2ImageEncoder(nn.Module):
             self.blocks.append(block)
 
         self.neck = Sam2VisionNeck(config)
-        self.scalp = config.scalp
+        self.skip_lowest_resolutions = config.skip_lowest_resolutions
 
     def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
         h, w = hw
@@ -396,11 +398,11 @@ class Sam2ImageEncoder(nn.Module):
 
         # Forward through backbone
         fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
-        if self.scalp > 0:
+        if self.skip_lowest_resolutions > 0:
             # Discard the lowest resolution features
             fpn_hidden_states, fpn_position_encoding = (
-                fpn_hidden_states[: -self.scalp],
-                fpn_position_encoding[: -self.scalp],
+                fpn_hidden_states[: -self.skip_lowest_resolutions],
+                fpn_position_encoding[: -self.skip_lowest_resolutions],
             )
 
         if not return_dict:
@@ -602,11 +604,12 @@ class Sam2MaskDecoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.transformer = Sam2TwoWayTransformer(config)
+        self.num_mask_tokens = config.num_multimask_outputs + 1
 
         self.iou_token = nn.Embedding(1, config.hidden_size)
-        self.num_mask_tokens = config.num_multimask_outputs + 1
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, config.hidden_size)
+
+        self.transformer = Sam2TwoWayTransformer(config)
 
         self.pred_obj_scores = config.pred_obj_scores
         if self.pred_obj_scores:
@@ -627,23 +630,31 @@ class Sam2MaskDecoder(nn.Module):
 
         self.output_hypernetworks_mlps = nn.ModuleList(
             [
-                Sam2MLP(config.hidden_size, config.hidden_size, config.hidden_size // 8, 3, activation="relu")
-                for i in range(self.num_mask_tokens)
+                Sam2FeedForward(
+                    config.hidden_size,
+                    config.hidden_size,
+                    config.hidden_size // 8,
+                    3,
+                    activation=config.feed_forward_hidden_act,
+                )
+                for _ in range(self.num_mask_tokens)
             ]
         )
 
-        self.iou_prediction_head = Sam2MLP(
+        self.iou_prediction_head = Sam2FeedForward(
             config.hidden_size,
             config.iou_head_hidden_dim,
             self.num_mask_tokens,
             config.iou_head_depth,
-            activation="relu",
+            activation=config.feed_forward_hidden_act,
             sigmoid_output=config.iou_prediction_use_sigmoid,
         )
         if config.pred_obj_scores:
             self.pred_obj_score_head = nn.Linear(config.hidden_size, 1)
             if config.pred_obj_scores_mlp:
-                self.pred_obj_score_head = Sam2MLP(config.hidden_size, config.hidden_size, 1, 3, activation="relu")
+                self.pred_obj_score_head = Sam2FeedForward(
+                    config.hidden_size, config.hidden_size, 1, 3, activation="relu"
+                )
 
         # When outputting a single mask, optionally we can dynamically fall back to the best
         # multimask output token if the single mask output token gives low stability scores.
@@ -845,7 +856,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
         )
         self.layer_norm2 = nn.LayerNorm(config.two_way_transformer_embedding_dim)
 
-        self.mlp = Sam2MLP(
+        self.mlp = Sam2FeedForward(
             config.two_way_transformer_embedding_dim,
             config.two_way_transformer_mlp_dim,
             config.two_way_transformer_embedding_dim,
@@ -1173,9 +1184,7 @@ def get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-# Lightly adapted from
-# https://github.com/facebookresearch/MaskFormer/blob/main/mask_former/modeling/transformer/transformer_predictor.py # noqa
-class Sam2MLP(nn.Module):
+class Sam2FeedForward(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -1184,20 +1193,25 @@ class Sam2MLP(nn.Module):
         num_layers: int,
         activation: str = "gelu",
         sigmoid_output: bool = False,
-    ) -> None:
+    ):
         super().__init__()
         self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-        self.sigmoid_output = sigmoid_output
         self.activation = ACT2FN[activation]
+        self.proj_in = nn.Linear(input_dim, hidden_dim)
+        self.proj_out = nn.Linear(hidden_dim, output_dim)
+        self.layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 2)])
+        self.sigmoid_output = sigmoid_output
 
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = self.activation(layer(x)) if i < self.num_layers - 1 else layer(x)
+    def forward(self, hidden_states):
+        hidden_states = self.proj_in(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        for layer in self.layers:
+            hidden_states = self.activation(layer(hidden_states))
+
+        hidden_states = self.proj_out(hidden_states)
         if self.sigmoid_output:
-            x = F.sigmoid(x)
-        return x
+            hidden_states = F.sigmoid(hidden_states)
+        return hidden_states
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->Sam2
@@ -1371,7 +1385,7 @@ class Sam2MultiScaleBlock(nn.Module):
         self.drop_path = Sam2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
         self.layer_norm2 = nn.LayerNorm(dim_out, eps=config.layer_norm_eps)
-        self.mlp = Sam2MLP(
+        self.mlp = Sam2FeedForward(
             dim_out,
             int(dim_out * mlp_ratio),
             dim_out,

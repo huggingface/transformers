@@ -82,15 +82,15 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_downscaling.6": "mask_embed.conv3",
     "point_embeddings": "point_embed",
     "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
-    "image_encoder": "vision_encoder",
+    "vision_encoder": "image_encoder",
+    "sam_prompt_encoder": "prompt_encoder",
+    "sam_mask_decoder": "mask_decoder",
     "neck.0": "neck.conv1",
     "neck.1": "neck.layer_norm1",
     "neck.2": "neck.conv2",
     "neck.3": "neck.layer_norm2",
     "patch_embed.proj": "patch_embed.projection",
     ".norm": ".layer_norm",
-    "blocks": "layers",
-    "trunk.layers": "blocks",
     "trunk.": "",
 }
 
@@ -101,15 +101,41 @@ def replace_keys(state_dict):
     state_dict.pop("pixel_std", None)
 
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
-    output_image_encoder_pattern = r"patch_embed.*.*"
+    output_mask_decoder_mlps_pattern = r"mask_decoder.transformer.layers.(\d+).mlp.layers.(\d+).*"
+    output_mask_decoder_score_head_pattern = r"mask_decoder.pred_obj_score_head.layers.(\d+).*"
+    output_image_encoder_mlps_pattern = r"image_encoder.blocks.(\d+).mlp.layers.(\d+).*"
+    output_image_encoder_neck_pattern = r"image_encoder.neck.convs.(\d+).conv"
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
 
-        if re.match(output_image_encoder_pattern, key):
-            key = key.replace("projection", "proj")
+        # image_encoder.blocks.0.mlp.layers.1.weight -> image_encoder.blocks.0.mlp.proj_out.weight
+        if re.match(output_image_encoder_mlps_pattern, key):
+            layer_nb = int(re.match(output_image_encoder_mlps_pattern, key).group(2))
+            if layer_nb == 0:
+                key = key.replace("layers.0", "proj_in")
+            elif layer_nb == 1:
+                key = key.replace("layers.1", "proj_out")
+
+        # mask_decoder.transformer.layers.0.mlp.layers.1.weight -> mask_decoder.transformer.layers.1.mlp.proj_out.weight
+        if re.match(output_mask_decoder_mlps_pattern, key):
+            layer_nb = int(re.match(output_mask_decoder_mlps_pattern, key).group(2))
+            if layer_nb == 0:
+                key = key.replace("mlp.layers.0", "mlp.proj_in")
+            elif layer_nb == 1:
+                key = key.replace("mlp.layers.1", "mlp.proj_out")
+
+        # mask_decoder.pred_obj_score_head.layers.1.weight -> mask_decoder.pred_obj_score_head.proj_in.weight
+        if re.match(output_mask_decoder_score_head_pattern, key):
+            layer_nb = int(re.match(output_mask_decoder_score_head_pattern, key).group(1))
+            if layer_nb == 0:
+                key = key.replace("layers.0", "proj_in")
+            elif layer_nb == 1:
+                key = key.replace("layers.1", "layers.0")
+            elif layer_nb == 2:
+                key = key.replace("layers.2", "proj_out")
 
         if re.match(output_hypernetworks_mlps_pattern, key):
             layer_nb = int(re.match(output_hypernetworks_mlps_pattern, key).group(2))
@@ -119,6 +145,10 @@ def replace_keys(state_dict):
                 key = key.replace("layers.1", "layers.0")
             elif layer_nb == 2:
                 key = key.replace("layers.2", "proj_out")
+
+        # image_encoder.neck.convs.1.conv.bias -> image_encoder.neck.convs.1.bias
+        if re.match(output_image_encoder_neck_pattern, key):
+            key = key.replace(".conv.", ".")
 
         model_state_dict[key] = value
 
@@ -134,6 +164,26 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     state_dict = replace_keys(state_dict)
+
+    # TO DO : This is temp code for pass video part.
+    def should_delete_key(key: str) -> bool:
+        # Define pattern prefixes to match
+        patterns = {
+            "maskmem_tpos_enc",
+            "no_mem_embed",
+            "no_mem_pos_enc",
+            "no_obj_ptr",
+            "mask_downsample",
+            "obj_ptr_proj",
+            "memory_attention",
+            "memory_encoder.fuser",
+        }
+
+        # Quick check using startswith for any pattern
+        return any(key.startswith(pattern) for pattern in patterns)
+
+    # Usage:
+    state_dict = {key: value for key, value in state_dict.items() if not should_delete_key(key)}
 
     image_processor = Sam2ImageProcessor()
     processor = Sam2Processor(image_processor=image_processor)
