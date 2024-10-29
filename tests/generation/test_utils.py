@@ -1612,6 +1612,9 @@ class GenerationTesterMixin:
             has_complex_embeds_computation = any(
                 model_name in model_class.__name__.lower() for model_name in ["moshi"]
             )
+            # 3 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
+            # we infer it from `input_ids`. The last test case will fail if there is a pad token in the original input.
+            missing_attention_mask = "attention_mask" not in inputs_dict
 
             # Traditional way of generating text
             input_ids = inputs_dict.pop("input_ids")
@@ -1646,7 +1649,7 @@ class GenerationTesterMixin:
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
-            if not requires_inputs_ids:
+            if not (requires_inputs_ids or missing_attention_mask):
                 outputs_from_embeds_wo_ids = model.generate(
                     inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
                 )
