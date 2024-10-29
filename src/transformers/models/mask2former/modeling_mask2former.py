@@ -927,7 +927,6 @@ class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes_list=None,
-        level_start_index=None,
         output_attentions: bool = False,
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
@@ -1007,7 +1006,6 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
         position_embeddings: torch.Tensor = None,
         reference_points=None,
         spatial_shapes_list=None,
-        level_start_index=None,
         output_attentions: bool = False,
     ):
         """
@@ -1022,8 +1020,6 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
                 Reference points.
             spatial_shapes_list (`list` of `tuple`):
                 Spatial shapes of the backbone feature maps as a list of tuples.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1039,7 +1035,6 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             reference_points=reference_points,
             spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
 
@@ -1128,7 +1123,6 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
         attention_mask=None,
         position_embeddings=None,
         spatial_shapes_list=None,
-        level_start_index=None,
         valid_ratios=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1147,8 +1141,6 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
             spatial_shapes_list (`list` of `tuple`):
                 Spatial shapes of each feature map as a list of tuples.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Ratio of valid area in each feature level.
             output_attentions (`bool`, *optional*):
@@ -1182,7 +1174,6 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
                 position_embeddings=position_embeddings,
                 reference_points=reference_points,
                 spatial_shapes_list=spatial_shapes_list,
-                level_start_index=level_start_index,
                 output_attentions=output_attentions,
             )
 
@@ -1309,14 +1300,12 @@ class Mask2FormerPixelDecoder(nn.Module):
         # Prepare encoder inputs (by flattening)
         spatial_shapes_list = [(embed.shape[2], embed.shape[3]) for embed in input_embeds]
         input_embeds_flat = torch.cat([embed.flatten(2).transpose(1, 2) for embed in input_embeds], 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=input_embeds_flat.device)
         masks_flat = torch.cat([mask.flatten(1) for mask in masks], 1)
 
         position_embeddings = [embed.flatten(2).transpose(1, 2) for embed in position_embeddings]
         level_pos_embed_flat = [x + self.level_embed[i].view(1, 1, -1) for i, x in enumerate(position_embeddings)]
         level_pos_embed_flat = torch.cat(level_pos_embed_flat, 1)
 
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(mask, dtype=input_embeds_flat.dtype) for mask in masks], 1)
 
         # Send input_embeds_flat + masks_flat + level_pos_embed_flat (backbone + proj layer output) through encoder
@@ -1326,7 +1315,6 @@ class Mask2FormerPixelDecoder(nn.Module):
                 attention_mask=masks_flat,
                 position_embeddings=level_pos_embed_flat,
                 spatial_shapes_list=spatial_shapes_list,
-                level_start_index=level_start_index,
                 valid_ratios=valid_ratios,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1336,8 +1324,6 @@ class Mask2FormerPixelDecoder(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         batch_size = last_hidden_state.shape[0]
 
-        # We compute level_start_index_list separately from the tensor version level_start_index
-        # to avoid iterating over a tensor which breaks torch.compile/export.
         level_start_index_list = [0]
         for height, width in spatial_shapes_list[:-1]:
             level_start_index_list.append(level_start_index_list[-1] + height * width)
