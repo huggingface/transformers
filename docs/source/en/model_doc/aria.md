@@ -22,7 +22,7 @@ The Aria model was proposed in [Aria: An Open Multimodal Native Mixture-of-Exper
 
 Aria is an open multimodal-native model with best-in-class performance across a wide range of multimodal, language, and coding tasks. It has a Mixture-of-Experts architecture, with respectively 3.9B and 3.5B activated parameters per visual token and text token. 
 
-This model was contributed by [Rhymes.AI](https://huggingface.co/rhymes-ai).
+This model was contributed by [m-ric](https://huggingface.co/m-ric).
 The original code can be found [here](https://github.com/rhymes-ai/Aria).
 
 ## Usage tips

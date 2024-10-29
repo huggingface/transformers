@@ -13,26 +13,19 @@
 # limitations under the License.
 import argparse
 import glob
-import time
 
-import requests
 import torch
-from huggingface_hub import login, snapshot_download
-from PIL import Image
+from huggingface_hub import snapshot_download
 from safetensors import safe_open
 
 from transformers import (
     AddedToken,
-    AriaConfig,
     AriaForConditionalGeneration,
     AriaProcessor,
     AutoConfig,
     AutoTokenizer,
-    Idefics3VisionConfig,
 )
 
-
-login("token")
 
 EPILOG_TXT = """Example:
     python transformers/src/transformers/models/aria/convert_aria_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/aria-v1.5-7b-conv --old_state_dict_id liuhaotian/aria-v1.5-7b
@@ -55,6 +48,9 @@ Example for creating the old state dict file with Python:
 
 KEYS_TO_MODIFY_MAPPING = {
     "vision_tower.vision_model": "vision_tower",
+    "ln_ffn": "layer_norm",
+    "ffn": "feed_forward",
+    "ln_kv": "layer_norm_kv",
 }
 
 
@@ -91,7 +87,6 @@ def convert_state_dict_to_hf(state_dict):
 
 def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
     torch.set_default_dtype(torch.float16)
-    text_config = AutoConfig.from_pretrained(text_model_id).text_config
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
@@ -104,21 +99,14 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
     )
 
     config = AutoConfig.from_pretrained(text_model_id)
-
-    vision_config = Idefics3VisionConfig(
-        hidden_size=1152,
-        image_size=980,
-        intermediate_size=4304,
-        num_attention_heads=16,
-        num_hidden_layers=27,
-        patch_size=14,
-        torch_dtype="bfloat16",
-    ).to_dict()
-
-    config = AriaConfig(
-        text_config=text_config,
-        vision_config=vision_config,
-    )
+    config.vision_config.hidden_size = 1152
+    config.vision_config.attention_heads=16
+    config.pad_token_id = 2
+    config.image_token_index = 9
+    config.auto_map = {
+        "AutoConfig": "modeling_aria.AriaConfig",
+        "AutoModelForCausalLM": "modeling_aria.AriaForConditionalGeneration"
+    }
 
     # llms-lab interleeave models do not use any selection startegy except for last hidden state
     if "Qwen" in text_model_id:
@@ -138,64 +126,10 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
     state_dict = convert_state_dict_to_hf(state_dict)
     model.load_state_dict(state_dict, strict=False, assign=True)
 
-    # pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
-    # mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    # n = pre_expansion_embeddings.size()[0]
-    # sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    # dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
-    # # We add an image token so we resize the model and pad to 64 for performance reasons
-    # pad_shape = 64
-    # vocab_size = config.text_config.vocab_size
-    # model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
-    # model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
-    #     tuple(
-    #         (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
-    #     ),
-    #     dim=0,
-    # )
-    # model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-    #     tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
-    #     dim=0,
-    # )
-
-    ### Test generation
-    t1 = time.time()
-    image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-    # image2 = Image.open("bird.jpg")
-
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"text": None, "type": "image"},
-                {"text": "What is the color of the bird's beak?", "type": "text"},
-            ],
-        }
-    ]
-
-    text = processor.apply_chat_template(messages, add_generation_prompt=True)
-    inputs = processor(text=text, images=[image], return_tensors="pt")
-    inputs["pixel_values"] = inputs["pixel_values"].to(model.dtype)
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
-
-    output = model.generate(
-        **inputs,
-        max_new_tokens=8,
-        stop_strings=["<|im_end|>"],
-        tokenizer=processor.tokenizer,
-        do_sample=False,
-    )
-    output_ids = output[0][inputs["input_ids"].shape[1] :]
-    response = processor.decode(output_ids, skip_special_tokens=True)
-
-    t2 = time.time()
-    print(response)
-    print(f"Generation time: {(t2-t1):.3f}s")
-
-    ### Push
-    model.save_pretrained(output_hub_path)
-    processor.save_pretrained(output_hub_path)
+    print("Saving models")
+    model.save_pretrained("local_aria", safe_serialization=False)
+    processor.save_pretrained("local_aria")
+    print("Pushing to hub")
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
 
@@ -217,7 +151,7 @@ def main():
     )
     parser.add_argument(
         "--output_hub_path",
-        default="m-ric/Aria_hf",
+        default="m-ric/Aria_hf_2",
         help="Location on the hub of the converted model",
     )
     parser.add_argument(

@@ -141,6 +141,7 @@ class AriaConfig(PretrainedConfig):
         projector_patch_to_query_dict=None,
         ignore_index=-100,
         image_token_index=32000,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -162,6 +163,7 @@ class AriaConfig(PretrainedConfig):
             vision_config = CONFIG_MAPPING["idefics3_vision"]()
 
         self.vision_config = vision_config
+        self.initializer_range = initializer_range
 
         if isinstance(text_config, dict) and "model_type" in text_config:
             text_config = AriaTextConfig(**text_config)

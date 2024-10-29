@@ -5,6 +5,7 @@
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -35,10 +36,50 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_aria import AriaConfig, AriaTextConfig
-from .processing_utils import (
-    experts_gemm,
-)
 
+
+logger = logging.get_logger(__name__)
+
+def sequential_gemm(input, weight, tokens_per_expert):
+    """
+    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
+
+    Args:
+        input (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+        weight (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+
+    Returns:
+        torch.Tensor: Output tensor of shape (num_tokens, out_features).
+    """
+    num_tokens = input.shape[0]
+    out_features = weight.shape[-1]
+    output = torch.zeros(num_tokens, out_features, dtype=input.dtype, device=input.device)
+
+    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
+    # Insert zero at the begining for offset index's convenience
+    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
+    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
+
+    for expert_num in range(weight.shape[0]):
+        start = cumsum_num_tokens[expert_num]
+        end = cumsum_num_tokens[expert_num + 1]
+        tokens = input[start:end]
+
+        out = torch.matmul(tokens, weight[expert_num])
+        output[start:end] = out
+    return output
+
+
+try:
+    from grouped_gemm.ops import gmm as experts_gemm
+
+    if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
+        logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM instead.")
+        experts_gemm = sequential_gemm
+except ImportError:
+    logger.warning("`grouped_gemm` is not installed, using sequential GEMM, which is slower.")
+    experts_gemm = sequential_gemm
 
 class IdentityOp(torch.nn.Module):
     """
@@ -83,15 +124,15 @@ class AriaGeluDense(nn.Module):
     Feed-Forward Network module.
 
     Args:
-        embed_dim (int): Input embedding dimension.
-        ff_dim (int): Hidden dimension of the feed-forward network.
+        in_features (int): Input embedding dimension.
+        hidden_features (int): Hidden dimension of the feed-forward network.
         output_dim (int): Output dimension.
     """
 
-    def __init__(self, embed_dim, ff_dim, output_dim):
+    def __init__(self, in_features, hidden_features, output_dim):
         super().__init__()
-        self.linear_in = nn.Linear(embed_dim, ff_dim, bias=False)
-        self.linear_out = nn.Linear(ff_dim, output_dim, bias=False)
+        self.linear_in = nn.Linear(in_features, hidden_features, bias=False)
+        self.linear_out = nn.Linear(hidden_features, output_dim, bias=False)
         self.act = ACT2FN["gelu_new"]
 
     def forward(self, hidden_states):
@@ -106,26 +147,26 @@ class AriaCrossAttention(nn.Module):
 
     Args:
         kv_dim (int): Dimension of key and value.
-        embed_dim (int): Embedding dimension.
+        in_features (int): Embedding dimension.
         num_heads (int): Number of attention heads.
         drop_out_rate (float): Dropout rate. Default is 0.
     """
-
-    def __init__(self, kv_dim, embed_dim, num_heads, drop_out_rate=0):
+    def __init__(self, kv_dim, in_features, num_heads, drop_out_rate=0):
         super().__init__()
         self.num_heads = num_heads
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.k_proj = nn.Linear(kv_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(kv_dim, embed_dim, bias=False)
+        self.q_proj = nn.Linear(in_features, in_features, bias=False)
+        self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
+        self.v_proj = nn.Linear(kv_dim, in_features, bias=False)
 
         # Use batch_first=True to simplify code by removing permutations compared to the original.
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
-        self.multihead_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
-        self.linear = nn.Linear(embed_dim, embed_dim)
+        self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
+        self.linear = nn.Linear(in_features, in_features)
         self.dropout = nn.Dropout(drop_out_rate)
 
-        self.layer_norm = nn.LayerNorm(embed_dim)
-        self.ln_kv = nn.LayerNorm(kv_dim)
+        self.layer_norm = nn.LayerNorm(in_features)
+        self.layer_norm_kv = nn.LayerNorm(kv_dim)
+
 
     def forward(self, x, hidden_states, attn_mask=None, add_residual=False):
         """
@@ -142,7 +183,7 @@ class AriaCrossAttention(nn.Module):
         """
         query = self.q_proj(self.layer_norm(hidden_states))
 
-        x = self.ln_kv(x)
+        x = self.layer_norm_kv(x)
         key = self.k_proj(x)
         value = self.v_proj(x)
 
@@ -163,10 +204,10 @@ class AriaProjector(nn.Module):
     Args:
         patch_to_query_dict (dict): Maps patch numbers to their corresponding query numbers,
             e.g., {1225: 128, 4900: 256}. This allows for different query sizes based on image resolution.
-        embed_dim (int): Embedding dimension.
+        in_features (int): Embedding dimension.
         num_heads (int): Number of attention heads.
         kv_dim (int): Dimension of key and value.
-        ff_dim (int): Hidden dimension of the feed-forward network.
+        hidden_features (int): Hidden dimension of the feed-forward network.
         output_dim (int): Output dimension.
         norm_layer (nn.Module): Normalization layer. Default is nn.LayerNorm.
 
@@ -176,27 +217,28 @@ class AriaProjector(nn.Module):
 
     def __init__(
         self,
-        patch_to_query_dict,
-        embed_dim,
-        num_heads,
-        kv_dim,
-        ff_dim,
-        output_dim,
-        norm_layer=nn.LayerNorm,
+        config: AriaConfig,
+        **kwargs,
     ):
         super().__init__()
-        self.patch_to_query_dict = patch_to_query_dict
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
 
-        self.query = nn.Parameter(torch.zeros(max(patch_to_query_dict.values()), self.embed_dim))
+        self.patch_to_query_dict = config.projector_patch_to_query_dict
+        self.in_features = config.vision_config.hidden_size
+        self.num_heads = config.vision_config.num_attention_heads
+        self.kv_dim = config.vision_config.hidden_size
+        self.hidden_features = config.text_config.hidden_size
+        self.output_dim = config.text_config.hidden_size
+
+        self.query = nn.Parameter(torch.zeros(max(self.patch_to_query_dict.values()), self.in_features))
 
         trunc_normal_(self.query, std=0.02)
 
-        self.cross_attn = AriaCrossAttention(kv_dim, embed_dim, num_heads)
+        self.cross_attn = AriaCrossAttention(self.kv_dim, self.in_features, self.num_heads)
 
-        self.ln_ffn = norm_layer(embed_dim)
-        self.ffn = AriaGeluDense(embed_dim, ff_dim, output_dim)  # TODO: Aria Projector MMLP
+        self.layer_norm = nn.LayerNorm(self.in_features)
+        self.feed_forward = AriaGeluDense(
+            self.in_features, self.hidden_features, self.output_dim
+        )  # TODO: Aria Projector MMLP
         # Removed weight inits compared to original:
         # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
 
@@ -211,13 +253,13 @@ class AriaProjector(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
-        bs = x.shape[0]
+        batch_size = x.shape[0]
 
         query_num = self.patch_to_query_dict.get(x.shape[1], None)
         assert query_num is not None, f"Query number for {x.shape[1]} patches is not provided"
 
         # Compared to original, simplify definition and use expand instead of repeat.
-        queries = self.query[:query_num].unsqueeze(0).expand(bs, -1, -1)
+        queries = self.query[:query_num].unsqueeze(0).expand(batch_size, -1, -1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
@@ -225,7 +267,7 @@ class AriaProjector(nn.Module):
 
         attention_out = self.cross_attn(x, queries, attn_mask=attn_mask)
 
-        out = self.ffn(self.ln_ffn(attention_out))
+        out = self.feed_forward(self.layer_norm(attention_out))
 
         return out
 
@@ -269,12 +311,7 @@ class AriaPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
     def _init_weights(self, module):
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        elif hasattr(self.config, "text_config"):
-            std = self.config.text_config.initializer_range
-        else:
-            std = 0.02
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1907,14 +1944,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self.vision_tower = AutoModel.from_config(
             config.vision_config, attn_implementation=config._attn_implementation
         )
-        self.multi_modal_projector = AriaProjector(
-            patch_to_query_dict=config.projector_patch_to_query_dict,
-            embed_dim=config.vision_config.hidden_size,
-            num_heads=config.vision_config.num_attention_heads,
-            kv_dim=config.vision_config.hidden_size,
-            ff_dim=config.text_config.hidden_size,
-            output_dim=config.text_config.hidden_size,
-        )
+        self.multi_modal_projector = AriaProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
@@ -2016,7 +2046,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                ### NEW PROCESSING
                 image_features = self.get_image_features(
                     pixel_values=pixel_values,
                     vision_feature_layer=vision_feature_layer,

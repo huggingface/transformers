@@ -1,9 +1,9 @@
 import inspect
+import os
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from PIL import Image
 from torch import nn
 from torch.nn.init import trunc_normal_
 from torchvision import transforms
@@ -12,7 +12,7 @@ from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_utils import BaseImageProcessor, select_best_resolution
 from ...image_utils import ImageInput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin
@@ -26,6 +26,7 @@ from ...tokenization_utils import (
 from ...utils import (
     logging,
 )
+from ...utils.import_utils import is_torch_available, is_vision_available
 from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -38,11 +39,133 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from .processing_utils import (
-    experts_gemm,
-    get_split_image,
-    keep_ratio_resize_and_pixel_mask,
-)
+
+
+logger = logging.get_logger(__name__)
+
+if is_vision_available():
+    from PIL import Image, ImageOps
+
+
+def sequential_gemm(input, weight, tokens_per_expert):
+    """
+    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
+
+    Args:
+        input (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+        weight (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+
+    Returns:
+        torch.Tensor: Output tensor of shape (num_tokens, out_features).
+    """
+    num_tokens = input.shape[0]
+    out_features = weight.shape[-1]
+    output = torch.zeros(num_tokens, out_features, dtype=input.dtype, device=input.device)
+
+    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
+    # Insert zero at the begining for offset index's convenience
+    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
+    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
+
+    for expert_num in range(weight.shape[0]):
+        start = cumsum_num_tokens[expert_num]
+        end = cumsum_num_tokens[expert_num + 1]
+        tokens = input[start:end]
+
+        out = torch.matmul(tokens, weight[expert_num])
+        output[start:end] = out
+    return output
+
+
+try:
+    from grouped_gemm.ops import gmm as experts_gemm
+
+    if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
+        logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM instead.")
+        experts_gemm = sequential_gemm
+except ImportError:
+    logger.warning("`grouped_gemm` is not installed, using sequential GEMM, which is slower.")
+    experts_gemm = sequential_gemm
+
+
+def get_split_image(
+    image: ImageInput,
+    split_ratio: List[List[int]],
+    patch_size: int,
+) -> List[ImageInput]:
+    """
+    Split image into multiple patches
+
+    Args:
+        image (ImageInput): Input image.
+        split_ratio (2d numpy array): dimension size (M,2)
+        patch_size (int): image patch size
+
+    Returns:
+        List[ImageInput]: List of splitted images.
+    """
+    (ratio_height, ratio_width) = select_best_resolution((image.height, image.width), split_ratio)
+    resize_width = patch_size * ratio_width
+    resize_height = patch_size * ratio_height
+    blocks = ratio_width * ratio_height
+    resized_img = image.resize((resize_width, resize_height))
+    processed_images = []
+    for i in range(blocks):
+        box = (
+            (i % (resize_width // patch_size)) * patch_size,
+            (i // (resize_width // patch_size)) * patch_size,
+            ((i % (resize_width // patch_size)) + 1) * patch_size,
+            ((i // (resize_width // patch_size)) + 1) * patch_size,
+        )
+        # split the image
+        split_img = resized_img.crop(box)
+        processed_images.append(split_img)
+    assert len(processed_images) == blocks
+    if len(processed_images) != 1:
+        processed_images.insert(0, image)
+    return processed_images
+
+
+def keep_ratio_resize_and_pixel_mask(img: ImageInput, max_size, min_size=336, padding_value=0):
+    """
+    Resize an image while maintaining aspect ratio and create a pixel mask.
+
+    Args:
+        img (ImageInput): Input image.
+        max_size (int): Maximum size for the larger dimension of the image.
+        min_size (int, optional): Minimum size for the smaller dimension. Defaults to 336.
+        padding_value (int, optional): Value used for padding. Defaults to 0.
+
+    Returns:
+        tuple: A tuple containing:
+            - ImageInput: Resized and padded image.
+            - torch.Tensor: Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
+                - True (1) values indicate pixels that belong to the original resized image.
+                - False (0) values indicate pixels that are part of the padding.
+              The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
+    """
+    img = img.convert("RGB")
+    # rescale the given image, keep the aspect ratio
+    scale = max_size / max(img.size)
+
+    w, h = img.size
+    if w >= h:
+        new_size = (max_size, max(int(h * scale), min_size))  # w, h
+    else:
+        new_size = (max(int(w * scale), min_size), max_size)  # w, h
+
+    img_resized = img.resize(new_size, resample=Image.Resampling.BICUBIC)
+
+    # padding the right/bottom
+    padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
+    img_padded = ImageOps.expand(img_resized, (0, 0, padding_right, padding_bottom), fill=padding_value)
+
+    # Create a pixel mask
+    pixel_mask = torch.zeros(max_size, max_size)
+    pixel_mask[: new_size[1], : new_size[0]] = 1
+    pixel_mask = pixel_mask.bool()
+    return img_padded, pixel_mask
 
 
 logger = logging.get_logger(__name__)
@@ -63,6 +186,113 @@ class IdentityOp(torch.nn.Module):
         return x
 
 
+class AriaTextConfig(LlamaConfig):
+    """
+    Configuration class for Aria language model.
+
+    This class extends the LlamaConfig to include additional parameters specific to the Mixture of Experts (MoE) architecture.
+
+    Args:
+        moe_intermediate_size (`int`): The intermediate size for MoE layers. Default is 4096.
+        moe_num_experts (int): The number of experts in the MoE layer. Default is 8.
+        moe_topk (int): The number of top experts to route to for each token. Default is 2.
+        moe_z_loss_coeff (float): The coefficient for the auxiliary z-loss. Default is 1e-5.
+        moe_aux_loss_coeff (float): The coefficient for the auxiliary load balancing loss. Default is 1e-3.
+        moe_num_shared_experts (int): The number of shared experts. Default is 2.
+        **kwargs: Additional keyword arguments to be passed to the parent LlamaConfig.
+    """
+
+    model_type = "aria_text_model"
+
+    def __init__(
+        self,
+        moe_intermediate_size: int = 4096,
+        moe_num_experts: int = 8,
+        moe_topk: int = 2,
+        moe_z_loss_coeff: float = 1e-5,
+        moe_aux_loss_coeff: float = 1e-3,
+        moe_num_shared_experts: int = 2,
+        pad_token_id=2,
+        **kwargs,
+    ):
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        self.moe_intermediate_size = moe_intermediate_size
+        self.moe_num_experts = moe_num_experts
+        self.moe_topk = moe_topk
+        self.moe_z_loss_coeff = moe_z_loss_coeff
+        self.moe_aux_loss_coeff = moe_aux_loss_coeff
+        self.moe_num_shared_experts = moe_num_shared_experts
+
+
+class AriaConfig(PretrainedConfig):
+    """
+    Configuration class for Aria model.
+
+    This class handles the configuration for both vision and text components of the Aria model,
+    as well as additional parameters for image token handling and projector mapping.
+
+    Args:
+        vision_config (AriaVisionConfig or dict): Configuration for the vision component.
+        text_config (AriaTextConfig or dict): Configuration for the text component.
+        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
+        ignore_index (int): Index to ignore in loss calculation.
+        image_token_index (int): Index used to represent image tokens.
+        **kwargs: Additional keyword arguments passed to the parent class.
+
+    Attributes:
+        model_type (str): Type of the model, set to "aria".
+        is_composition (bool): Whether the model is a composition of multiple components.
+        ignore_index (int): Index to ignore in loss calculation.
+        image_token_index (int): Index used to represent image tokens.
+        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
+        vision_config (AriaVisionConfig): Configuration for the vision component.
+        text_config (AriaTextConfig): Configuration for the text component.
+    """
+
+    model_type = "aria"
+    is_composition = False
+
+    def __init__(
+        self,
+        vision_config=None,
+        text_config=None,
+        projector_patch_to_query_dict=None,
+        ignore_index=-100,
+        image_token_index=32000,
+        initializer_range: float = 0.02,
+        **kwargs,
+    ):
+        self.ignore_index = ignore_index
+        self.image_token_index = image_token_index
+
+        # Convert the keys and values of projector_patch_to_query_dict to integers
+        # This ensures consistency even if they were provided as strings
+        if projector_patch_to_query_dict is None:
+            projector_patch_to_query_dict = {
+                1225: 128,
+                4900: 256,
+            }
+        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
+
+        if isinstance(vision_config, dict):
+            vision_config["model_type"] = "idefics3_vision"
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif vision_config is None:
+            vision_config = CONFIG_MAPPING["idefics3_vision"]()
+
+        self.vision_config = vision_config
+        self.initializer_range = initializer_range
+
+        if isinstance(text_config, dict) and "model_type" in text_config:
+            text_config = AriaTextConfig(**text_config)
+        elif text_config is None:
+            text_config = AriaTextConfig()
+
+        self.text_config = text_config
+
+        super().__init__(**kwargs)
+
+
 class AriaRMSNorm(LlamaRMSNorm):
     pass
 
@@ -72,15 +302,15 @@ class AriaGeluDense(nn.Module):
     Feed-Forward Network module.
 
     Args:
-        embed_dim (int): Input embedding dimension.
-        ff_dim (int): Hidden dimension of the feed-forward network.
+        in_features (int): Input embedding dimension.
+        hidden_features (int): Hidden dimension of the feed-forward network.
         output_dim (int): Output dimension.
     """
 
-    def __init__(self, embed_dim, ff_dim, output_dim):
+    def __init__(self, in_features, hidden_features, output_dim):
         super().__init__()
-        self.linear_in = nn.Linear(embed_dim, ff_dim, bias=False)
-        self.linear_out = nn.Linear(ff_dim, output_dim, bias=False)
+        self.linear_in = nn.Linear(in_features, hidden_features, bias=False)
+        self.linear_out = nn.Linear(hidden_features, output_dim, bias=False)
         self.act = ACT2FN["gelu_new"]
 
     def forward(self, hidden_states):
@@ -95,26 +325,26 @@ class AriaCrossAttention(nn.Module):
 
     Args:
         kv_dim (int): Dimension of key and value.
-        embed_dim (int): Embedding dimension.
+        in_features (int): Embedding dimension.
         num_heads (int): Number of attention heads.
         drop_out_rate (float): Dropout rate. Default is 0.
     """
 
-    def __init__(self, kv_dim, embed_dim, num_heads, drop_out_rate=0):
+    def __init__(self, kv_dim, in_features, num_heads, drop_out_rate=0):
         super().__init__()
         self.num_heads = num_heads
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.k_proj = nn.Linear(kv_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(kv_dim, embed_dim, bias=False)
+        self.q_proj = nn.Linear(in_features, in_features, bias=False)
+        self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
+        self.v_proj = nn.Linear(kv_dim, in_features, bias=False)
 
         # Use batch_first=True to simplify code by removing permutations compared to the original.
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
-        self.multihead_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
-        self.linear = nn.Linear(embed_dim, embed_dim)
+        self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
+        self.linear = nn.Linear(in_features, in_features)
         self.dropout = nn.Dropout(drop_out_rate)
 
-        self.layer_norm = nn.LayerNorm(embed_dim)
-        self.ln_kv = nn.LayerNorm(kv_dim)
+        self.layer_norm = nn.LayerNorm(in_features)
+        self.layer_norm_kv = nn.LayerNorm(kv_dim)
 
     def forward(self, x, hidden_states, attn_mask=None, add_residual=False):
         """
@@ -131,7 +361,7 @@ class AriaCrossAttention(nn.Module):
         """
         query = self.q_proj(self.layer_norm(hidden_states))
 
-        x = self.ln_kv(x)
+        x = self.layer_norm_kv(x)
         key = self.k_proj(x)
         value = self.v_proj(x)
 
@@ -152,10 +382,10 @@ class AriaProjector(nn.Module):
     Args:
         patch_to_query_dict (dict): Maps patch numbers to their corresponding query numbers,
             e.g., {1225: 128, 4900: 256}. This allows for different query sizes based on image resolution.
-        embed_dim (int): Embedding dimension.
+        in_features (int): Embedding dimension.
         num_heads (int): Number of attention heads.
         kv_dim (int): Dimension of key and value.
-        ff_dim (int): Hidden dimension of the feed-forward network.
+        hidden_features (int): Hidden dimension of the feed-forward network.
         output_dim (int): Output dimension.
         norm_layer (nn.Module): Normalization layer. Default is nn.LayerNorm.
 
@@ -165,27 +395,26 @@ class AriaProjector(nn.Module):
 
     def __init__(
         self,
-        patch_to_query_dict,
-        embed_dim,
-        num_heads,
-        kv_dim,
-        ff_dim,
-        output_dim,
-        norm_layer=nn.LayerNorm,
+        config: AriaConfig,
+        **kwargs,
     ):
         super().__init__()
-        self.patch_to_query_dict = patch_to_query_dict
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
 
-        self.query = nn.Parameter(torch.zeros(max(patch_to_query_dict.values()), self.embed_dim))
+        self.patch_to_query_dict = config.projector_patch_to_query_dict
+        self.in_features = config.vision_config.hidden_size
+        self.num_heads = config.vision_config.num_attention_heads
+        self.kv_dim = config.vision_config.hidden_size
+        self.hidden_features = config.text_config.hidden_size
+        self.output_dim = config.text_config.hidden_size
+
+        self.query = nn.Parameter(torch.zeros(max(self.patch_to_query_dict.values()), self.in_features))
 
         trunc_normal_(self.query, std=0.02)
 
-        self.cross_attn = AriaCrossAttention(kv_dim, embed_dim, num_heads)
+        self.cross_attn = AriaCrossAttention(self.kv_dim, self.in_features, self.num_heads)
 
-        self.ln_ffn = norm_layer(embed_dim)
-        self.ffn = AriaGeluDense(embed_dim, ff_dim, output_dim)  # TODO: Aria Projector MMLP
+        self.layer_norm = nn.LayerNorm(self.in_features)
+        self.feed_forward = AriaGeluDense(self.in_features, self.hidden_features, self.output_dim)  # TODO: Aria Projector MMLP
         # Removed weight inits compared to original:
         # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
 
@@ -200,13 +429,13 @@ class AriaProjector(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
-        bs = x.shape[0]
+        batch_size = x.shape[0]
 
         query_num = self.patch_to_query_dict.get(x.shape[1], None)
         assert query_num is not None, f"Query number for {x.shape[1]} patches is not provided"
 
         # Compared to original, simplify definition and use expand instead of repeat.
-        queries = self.query[:query_num].unsqueeze(0).expand(bs, -1, -1)
+        queries = self.query[:query_num].unsqueeze(0).expand(batch_size, -1, -1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
@@ -214,7 +443,7 @@ class AriaProjector(nn.Module):
 
         attention_out = self.cross_attn(x, queries, attn_mask=attn_mask)
 
-        out = self.ffn(self.ln_ffn(attention_out))
+        out = self.feed_forward(self.layer_norm(attention_out))
 
         return out
 
@@ -251,10 +480,6 @@ class AriaVisionProcessor(BaseImageProcessor):
         self.min_image_size = min_image_size
         self.image_mean = image_mean
         self.image_std = image_std
-        self.auto_map = {
-            "AutoProcessor": "processing_aria.AriaProcessor",
-            "AutoImageProcessor": "vision_processor.AriaVisionProcessor",
-        }
 
         # we make the transform a property so that it is lazily initialized,
         # this could avoid the error "TypeError: Object of type Normalize is not JSON serializable"
@@ -262,36 +487,27 @@ class AriaVisionProcessor(BaseImageProcessor):
         self._transform = None
         self._set_processor_class("AriaProcessor")
 
-    @property
-    def transform(self):
-        if self._transform is None:
-            # Recreate the transform when accessed
-            self._transform = transforms.Compose(
-                [
-                    transforms.ToTensor(),
-                    transforms.Normalize(self.image_mean, self.image_std),
-                ]
-            )
-        return self._transform
 
-    def __call__(
+    def preprocess(
         self,
-        images: Union[Image.Image, List[Image.Image]],
+        images: Union[ImageInput, List[ImageInput]],
         max_image_size: Optional[int] = 980,
         min_image_size: Optional[int] = 336,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         split_image: Optional[bool] = False,
-        split_ratio: Optional[List[List[int]]] = None,
+        split_ratio: Optional[List[Tuple[int]]] = None,
+        do_rescale: Optional[bool] = True,
+        do_normalize: Optional[bool] = True,
     ):
         """
         Process a list of images.
 
         Args:
-            images (list): List of PIL.Image objects.
+            images (list): List of ImageInput objects.
             max_image_size (int, optional): Override the default max image size. Defaults to None.
             return_tensors (str or TensorType, optional): The type of tensor to return. Defaults to "pt".
             split_image (bool, optional): Whether to split the image. Defaults to False.
-            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios.
+            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
         Returns:
             BatchFeature: A BatchFeature object containing:
                 - 'pixel_values': Tensor of processed image pixel values.
@@ -303,25 +519,25 @@ class AriaVisionProcessor(BaseImageProcessor):
         """
         if split_ratio is None:
             split_ratio = [
-                [1, 2],
-                [1, 3],
-                [1, 4],
-                [1, 5],
-                [1, 6],
-                [1, 7],
-                [1, 8],
-                [2, 4],
-                [2, 3],
-                [2, 2],
-                [2, 1],
-                [3, 1],
-                [3, 2],
-                [4, 1],
-                [4, 2],
-                [5, 1],
-                [6, 1],
-                [7, 1],
-                [8, 1],
+                (1, 2),
+                (1, 3),
+                (1, 4),
+                (1, 5),
+                (1, 6),
+                (1, 7),
+                (1, 8),
+                (2, 4),
+                (2, 3),
+                (2, 2),
+                (2, 1),
+                (3, 1),
+                (3, 2),
+                (4, 1),
+                (4, 2),
+                (5, 1),
+                (6, 1),
+                (7, 1),
+                (8, 1),
             ]
         max_size = self.max_image_size if max_image_size is None else max_image_size
         min_size = self.min_image_size if min_image_size is None else min_image_size
@@ -329,7 +545,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         if max_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
-        if isinstance(images, Image.Image):
+        if isinstance(images, ImageInput):
             images = [images]
 
         pixel_values = []
@@ -337,12 +553,18 @@ class AriaVisionProcessor(BaseImageProcessor):
         num_crops = None
 
         for image in images:
-            crop_images = get_split_image(image, split_image, split_ratio, max_size)
+            if split_image:
+                crop_images = get_split_image(image, split_ratio, max_size)
+            else:
+                crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
                 num_crops = len(crop_images)
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
-                img_padded = self.transform(img_padded)
+                if do_rescale:
+                    img_padded = transforms.ToTensor()(img_padded)
+                if do_normalize:
+                    img_padded = self.normalize(img_padded, self.image_mean, self.image_std)
                 pixel_values.append(img_padded)
                 pixel_masks.append(pixel_mask)
 
@@ -353,46 +575,6 @@ class AriaVisionProcessor(BaseImageProcessor):
                 "num_crops": num_crops,
             },
             tensor_type=return_tensors,
-        )
-
-    def preprocess(
-        self,
-        images,
-        max_image_size=None,
-        min_image_size=None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        split_image: Optional[bool] = False,
-        split_ratio: Optional[List[List[int]]] = None,
-    ):
-        if split_ratio is None:
-            split_ratio = [
-                [1, 2],
-                [1, 3],
-                [1, 4],
-                [1, 5],
-                [1, 6],
-                [1, 7],
-                [1, 8],
-                [2, 4],
-                [2, 3],
-                [2, 2],
-                [2, 1],
-                [3, 1],
-                [3, 2],
-                [4, 1],
-                [4, 2],
-                [5, 1],
-                [6, 1],
-                [7, 1],
-                [8, 1],
-            ]
-        return self.__call__(
-            images,
-            max_image_size=max_image_size,
-            min_image_size=min_image_size,
-            return_tensors=return_tensors,
-            split_image=split_image,
-            split_ratio=split_ratio,
         )
 
 
@@ -458,7 +640,7 @@ class AriaProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`ImageInput`, `np.ndarray`, `torch.Tensor`, `List[ImageInput]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
@@ -576,17 +758,13 @@ class AriaProcessor(ProcessorMixin):
         if "use_fast" in kwargs:
             logger.warning("use_fast is not supported for AriaProcessor. Ignoring...")
             kwargs.pop("use_fast")
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer_path,
-                use_fast=False,
-                **cls._extract_kwargs(AutoTokenizer.from_pretrained, **kwargs),
-            )
-            chat_template = tokenizer.chat_template
-        except Exception as e:
-            logger.warning(f"Failed to load tokenizer from {tokenizer_path}: {e}")
-            tokenizer = None
-            chat_template = None
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_path,
+            use_fast=False,
+            **cls._extract_kwargs(AutoTokenizer.from_pretrained, **kwargs),
+        )
+        chat_template = tokenizer.chat_template
+
         return cls(
             image_processor=image_processor,
             tokenizer=tokenizer,
@@ -617,111 +795,6 @@ class AriaProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
-class AriaTextConfig(LlamaConfig):
-    """
-    Configuration class for Aria language model.
-
-    This class extends the LlamaConfig to include additional parameters specific to the Mixture of Experts (MoE) architecture.
-
-    Args:
-        moe_intermediate_size (`int`): The intermediate size for MoE layers. Default is 4096.
-        moe_num_experts (int): The number of experts in the MoE layer. Default is 8.
-        moe_topk (int): The number of top experts to route to for each token. Default is 2.
-        moe_z_loss_coeff (float): The coefficient for the auxiliary z-loss. Default is 1e-5.
-        moe_aux_loss_coeff (float): The coefficient for the auxiliary load balancing loss. Default is 1e-3.
-        moe_num_shared_experts (int): The number of shared experts. Default is 2.
-        **kwargs: Additional keyword arguments to be passed to the parent LlamaConfig.
-    """
-
-    model_type = "aria_text_model"
-
-    def __init__(
-        self,
-        moe_intermediate_size: int = 4096,
-        moe_num_experts: int = 8,
-        moe_topk: int = 2,
-        moe_z_loss_coeff: float = 1e-5,
-        moe_aux_loss_coeff: float = 1e-3,
-        moe_num_shared_experts: int = 2,
-        pad_token_id=2,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
-        self.moe_intermediate_size = moe_intermediate_size
-        self.moe_num_experts = moe_num_experts
-        self.moe_topk = moe_topk
-        self.moe_z_loss_coeff = moe_z_loss_coeff
-        self.moe_aux_loss_coeff = moe_aux_loss_coeff
-        self.moe_num_shared_experts = moe_num_shared_experts
-
-
-class AriaConfig(PretrainedConfig):
-    """
-    Configuration class for Aria model.
-
-    This class handles the configuration for both vision and text components of the Aria model,
-    as well as additional parameters for image token handling and projector mapping.
-
-    Args:
-        vision_config (AriaVisionConfig or dict): Configuration for the vision component.
-        text_config (AriaTextConfig or dict): Configuration for the text component.
-        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
-        ignore_index (int): Index to ignore in loss calculation.
-        image_token_index (int): Index used to represent image tokens.
-        **kwargs: Additional keyword arguments passed to the parent class.
-
-    Attributes:
-        model_type (str): Type of the model, set to "aria".
-        is_composition (bool): Whether the model is a composition of multiple components.
-        ignore_index (int): Index to ignore in loss calculation.
-        image_token_index (int): Index used to represent image tokens.
-        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
-        vision_config (AriaVisionConfig): Configuration for the vision component.
-        text_config (AriaTextConfig): Configuration for the text component.
-    """
-
-    model_type = "aria"
-    is_composition = False
-
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        projector_patch_to_query_dict=None,
-        ignore_index=-100,
-        image_token_index=32000,
-        **kwargs,
-    ):
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-
-        # Convert the keys and values of projector_patch_to_query_dict to integers
-        # This ensures consistency even if they were provided as strings
-        if projector_patch_to_query_dict is None:
-            projector_patch_to_query_dict = {
-                1225: 128,
-                4900: 256,
-            }
-        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = "idefics3_vision"
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["idefics3_vision"]()
-
-        self.vision_config = vision_config
-
-        if isinstance(text_config, dict) and "model_type" in text_config:
-            text_config = AriaTextConfig(**text_config)
-        elif text_config is None:
-            text_config = AriaTextConfig()
-
-        self.text_config = text_config
-
-        super().__init__(**kwargs)
-
-
 class AriaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
@@ -744,12 +817,7 @@ class AriaPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
     def _init_weights(self, module):
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        elif hasattr(self.config, "text_config"):
-            std = self.config.text_config.initializer_range
-        else:
-            std = 0.02
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1067,12 +1135,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             config.vision_config, attn_implementation=config._attn_implementation
         )
         self.multi_modal_projector = AriaProjector(
-            patch_to_query_dict=config.projector_patch_to_query_dict,
-            embed_dim=config.vision_config.hidden_size,
-            num_heads=config.vision_config.num_attention_heads,
-            kv_dim=config.vision_config.hidden_size,
-            ff_dim=config.text_config.hidden_size,
-            output_dim=config.text_config.hidden_size,
+            config
         )
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
@@ -1175,7 +1238,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                ### NEW PROCESSING
                 image_features = self.get_image_features(
                     pixel_values=pixel_values,
                     vision_feature_layer=vision_feature_layer,
