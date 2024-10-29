@@ -2048,6 +2048,9 @@ class GenerationTesterMixin:
                 self.skipTest(reason="Stateful models don't support assisted generation")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+            # NOTE: assisted generation only works with cache on at the moment.
+            if not hasattr(config, "use_cache"):
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             config.use_cache = True
             config.is_decoder = True
 
@@ -2064,7 +2067,6 @@ class GenerationTesterMixin:
                 "output_scores": True,
             }
 
-            assistant_model.generation_config.assistant_confidence_threshold = None
             # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
             with_all_logits = model.generate(**generation_kwargs, **inputs_dict, num_logits_to_keep=0)
             # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
