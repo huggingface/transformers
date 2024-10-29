@@ -1552,22 +1552,44 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            # Ignore embedding scaling, the scaling factor applied after embeding from input_ids (requires knowledge
-            # of the variable that holds the scaling factor, which is model-dependent)
-            if hasattr(config, "scale_embedding"):
-                config.scale_embedding = False
-
             # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
             # decoder)
             if config.is_encoder_decoder:
                 continue
+            config.is_decoder = True
 
             # Skip models without explicit support
-            config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 continue
 
+            # There are a few exception patterns in this test:
+            # 1 - Some models can't generate without `input_ids`, when `inputs_embeds` are passed
+            requires_inputs_ids = any(
+                model_name in model_class.__name__.lower() for model_name in ["idefics", "qwen2vl"]
+            )
+            # 2 - Complex `inputs_embeds` computation, i.e. the correct computation of inputs embeds is more complex
+            # than calling the embedding layer with `input_ids`. Subcases of this exception:
+            #   2.A - Ignore `scale_embedding`, if the model supports it (it is controlled by a model-dependent flag)
+            if hasattr(config, "scale_embedding"):
+                config.scale_embedding = False
+            #   2.B - Some VLMs assume `inputs_embeds` and `pixel_values` are mutually exclusive AND fall in the
+            #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
+            #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
+            pixel_values_is_mutually_exclusive = any(
+                model_name in model_class.__name__.lower()
+                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma"]
+            )
+            if pixel_values_is_mutually_exclusive:
+                inputs_dict.pop("pixel_values", None)
+                inputs_dict.pop("pixel_values_videos", None)
+                inputs_dict.pop("pixel_values_images", None)
+            #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
+            has_complex_embeds_computation = any(
+                model_name in model_class.__name__.lower() for model_name in ["moshi"]
+            )
+
+            # Traditional way of generating text
             input_ids = inputs_dict.pop("input_ids")
             generation_kwargs = {
                 "return_dict_in_generate": True,
@@ -1577,19 +1599,19 @@ class GenerationTesterMixin:
                 "max_new_tokens": 5,
                 "min_new_tokens": 5,  # generate exactly 5 tokens
             }
-
-            # Traditional way of generating text
             outputs_from_ids = model.generate(input_ids, **generation_kwargs, **inputs_dict)
             self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
 
-            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
+            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output).
+            # The output of the two calls should be the same.
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs_from_embeds = model.generate(
                 input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
-            self.assertListEqual(outputs_from_ids.sequences.tolist(), outputs_from_embeds.sequences.tolist())
+            if not has_complex_embeds_computation:
+                self._check_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
 
-            # But if we pass different inputs_embeds, we should get different outputs (the output text may be the
+            # If we pass different inputs_embeds, we should get different outputs (the output text may be the
             # same, but the logits will almost surely be different)
             random_embeds = torch.rand_like(inputs_embeds)
             outputs_from_rand_embeds = model.generate(
@@ -1598,14 +1620,14 @@ class GenerationTesterMixin:
             for i in range(len(outputs_from_rand_embeds.scores)):
                 self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
 
-            # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
-            outputs_from_embeds_wo_ids = model.generate(
-                inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
-            )
-            self.assertListEqual(
-                outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids.sequences.tolist(),
-            )
+            # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
+            # be the same
+            if not requires_inputs_ids:
+                outputs_from_embeds_wo_ids = model.generate(
+                    inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
+                )
+                outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
+                self._check_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds)
 
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_with_static_cache(self):

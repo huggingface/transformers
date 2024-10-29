@@ -560,7 +560,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, input_ids, attention_mask, inputs_dict
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate()
+        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
 
         # Make sure we only return `input_ids`.
         # Note that audio_codes will still be generated internally, so the ability to test audio codes is still there.
