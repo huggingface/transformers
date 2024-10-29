@@ -213,7 +213,7 @@ class MllamaProcessor(ProcessorMixin):
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
-        if not tokenizer.is_multimodal:
+        if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"
             self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         else:

@@ -95,7 +95,7 @@ class Idefics2Processor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
-        if not tokenizer.is_multimodal:
+        if not hasattr(tokenizer, "image_token"):
             self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
             self.image_token = AddedToken("<image>", normalized=False, special=True)
             tokens_to_add = {"additional_special_tokens": [self.fake_image_token, self.image_token]}

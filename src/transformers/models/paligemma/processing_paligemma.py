@@ -160,7 +160,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         self.image_seq_length = image_processor.image_seq_length
 
-        if not tokenizer.is_multimodal:
+        if not hasattr(tokenizer, "image_token"):
             image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
