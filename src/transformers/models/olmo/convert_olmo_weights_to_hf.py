@@ -76,7 +76,7 @@ def write_model(
     n_heads = olmo_config["n_heads"]
     dim = olmo_config["d_model"]
     dims_per_head = dim // n_heads
-    base = 10000.0
+    base = olmo_config.get("rope_theta", 10000.0)
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
     max_position_embeddings = olmo_config["max_sequence_length"]
 
