@@ -1546,7 +1546,7 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     @parameterized.expand([(1,), (2,)])
     def test_generate_from_inputs_embeds(self, num_beams):
-      """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
+        """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
         for model_class in self.all_generative_model_classes:
