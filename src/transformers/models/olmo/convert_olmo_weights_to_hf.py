@@ -116,6 +116,8 @@ def write_model(
             f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
                 f"transformer.blocks.{layer_i}.attn_out.weight"
             ],
+            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded.get(f"transformer.blocks.{layer_i}.q_norm.weight"),
+            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded.get(f"transformer.blocks.{layer_i}.k_norm.weight"),
             f"model.layers.{layer_i}.mlp.gate_proj.weight": gate_proj_weight,
             f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"transformer.blocks.{layer_i}.ff_out.weight"],
             f"model.layers.{layer_i}.mlp.up_proj.weight": up_proj_weight,
@@ -174,6 +176,8 @@ def write_model(
         eos_token_id=olmo_config["eos_token_id"],
         tie_word_embeddings=olmo_config.get("weight_tying", True),
         layer_norm_type=olmo_config.get("layer_norm_type", "default"),
+        use_q_norm=olmo_config.get("attention_layer_norm", False),
+        use_k_norm=olmo_config.get("attention_layer_norm", False),
         rms_norm_eps=olmo_config.get("layer_norm_eps", 1e-5),
         rope_theta=base,
         clip_qkv=olmo_config.get("clip_qkv"),
