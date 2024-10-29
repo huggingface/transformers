@@ -53,7 +53,10 @@ if is_torch_available():
         DiffLlamaModel,
         DiffLlamaTokenizer,
     )
-    from transformers.models.diffllama.modeling_diffllama import DiffLlamaLinearScalingRotaryEmbedding, DiffLlamaRotaryEmbedding
+    from transformers.models.diffllama.modeling_diffllama import (
+        DiffLlamaLinearScalingRotaryEmbedding,
+        DiffLlamaRotaryEmbedding,
+    )
 
 
 class DiffLlamaModelTester:
@@ -602,7 +605,10 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_native = tokenizer.batch_decode(output_native)
 
         model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "meta-diffllama/DiffLlama-2-7b-hf",
+            load_in_4bit=True,
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -748,7 +754,10 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "meta-diffllama/DiffLlama-2-7b-hf",
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
         )
 
         with torch.no_grad():
@@ -863,7 +872,9 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = DiffLlamaTokenizer.from_pretrained("meta-diffllama/DiffLlama-2-7b-hf", pad_token="</s>", padding_side="right")
+        tokenizer = DiffLlamaTokenizer.from_pretrained(
+            "meta-diffllama/DiffLlama-2-7b-hf", pad_token="</s>", padding_side="right"
+        )
         model = DiffLlamaForCausalLM.from_pretrained(
             "meta-diffllama/DiffLlama-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
         )

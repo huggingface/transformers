@@ -4740,7 +4740,9 @@ else:
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
-    _import_structure["models.diffllama"].extend(["FlaxDiffLlamaForCausalLM", "FlaxDiffLlamaModel", "FlaxDiffLlamaPreTrainedModel"])
+    _import_structure["models.diffllama"].extend(
+        ["FlaxDiffLlamaForCausalLM", "FlaxDiffLlamaModel", "FlaxDiffLlamaPreTrainedModel"]
+    )
     _import_structure["models.gemma"].extend(["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"])
     _import_structure["models.longt5"].extend(
         [
@@ -5234,6 +5236,7 @@ if TYPE_CHECKING:
     )
     from .models.depth_anything import DepthAnythingConfig
     from .models.detr import DetrConfig
+    from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
     from .models.distilbert import (
@@ -5377,7 +5380,6 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
-    from .models.diffllama import DiffLlamaConfig
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -5912,12 +5914,12 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.deprecated.ernie_m import ErnieMTokenizer
         from .models.deprecated.xlm_prophetnet import XLMProphetNetTokenizer
+        from .models.diffllama import DiffLlamaTokenizer
         from .models.fnet import FNetTokenizer
         from .models.gemma import GemmaTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.llama import LlamaTokenizer
-        from .models.diffllama import DiffLlamaTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBartTokenizer
@@ -6839,6 +6841,14 @@ if TYPE_CHECKING:
             DetrModel,
             DetrPreTrainedModel,
         )
+        from .models.diffllama import (
+            DiffLlamaForCausalLM,
+            DiffLlamaForQuestionAnswering,
+            DiffLlamaForSequenceClassification,
+            DiffLlamaForTokenClassification,
+            DiffLlamaModel,
+            DiffLlamaPreTrainedModel,
+        )
         from .models.dinat import (
             DinatBackbone,
             DinatForImageClassification,
@@ -7221,14 +7231,6 @@ if TYPE_CHECKING:
             LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
-        )
-        from .models.diffllama import (
-            DiffLlamaForCausalLM,
-            DiffLlamaForQuestionAnswering,
-            DiffLlamaForSequenceClassification,
-            DiffLlamaForTokenClassification,
-            DiffLlamaModel,
-            DiffLlamaPreTrainedModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
@@ -8928,6 +8930,11 @@ if TYPE_CHECKING:
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
         )
+        from .models.diffllama import (
+            FlaxDiffLlamaForCausalLM,
+            FlaxDiffLlamaModel,
+            FlaxDiffLlamaPreTrainedModel,
+        )
         from .models.dinov2 import (
             FlaxDinov2ForImageClassification,
             FlaxDinov2Model,
@@ -8978,11 +8985,6 @@ if TYPE_CHECKING:
             FlaxLlamaForCausalLM,
             FlaxLlamaModel,
             FlaxLlamaPreTrainedModel,
-        )
-        from .models.diffllama import (
-            FlaxDiffLlamaForCausalLM,
-            FlaxDiffLlamaModel,
-            FlaxDiffLlamaPreTrainedModel,
         )
         from .models.longt5 import (
             FlaxLongT5ForConditionalGeneration,
