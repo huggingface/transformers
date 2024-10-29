@@ -1089,12 +1089,11 @@ class ProcessorMixin(PushToHubMixin):
 
         conversation = [
             {
-
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "Please describe this image in detail."},
                     {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-                    ],
+                    {"type": "text", "text": "Please describe this image in detail."},
+                ],
             },
         ]
 

@@ -402,23 +402,43 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
-def read_video_opencv(video_path, num_frames=None):
+def get_uniform_frame_indices(total_num_frames: int, num_frames: int = None):
+    """
+    Creates a numpy array for uniform sampling of `num_frame` frames from `total_num_frames`
+    when loading a video.
+
+    Args:
+        total_num_frames (`int`):
+            Total number of frames that a video has.
+        num_frames (`int`, *optional*):
+            Number of frames to sample uniformly. If not specified, all frames are sampled.
+
+    Returns:
+        np.ndarray: np array of frame indices that will be sampled.
+    """
+    if num_frames is not None:
+        indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
+    else:
+        indices = np.arange(0, total_num_frames).astype(int)
+    return indices
+
+
+def read_video_opencv(video_path: str, num_frames: int = None):
     """
     Decode the video with open-cv decoder.
 
     Args:
-        video_path (str): Path to the video file.
-        num_frames (int): Number of frames to sample uniformly. Defaults to NUM_FRAMES
+        video_path (`str`):
+            Path to the video file.
+        num_frames (`int`, *optional*):
+            Number of frames to sample uniformly. If not specified, all frames are sampled.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
     video = cv2.VideoCapture(video_path)
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-    if num_frames is not None:
-        indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
-    else:
-        indices = np.arange(0, total_num_frames).astype(int)
+    indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     index = 0
     frames = []
@@ -436,34 +456,34 @@ def read_video_opencv(video_path, num_frames=None):
     return np.stack(frames)
 
 
-def read_video_decord(video_path, num_frames=None):
+def read_video_decord(video_path: str, num_frames: int = None):
     """
     Decode the video with Decord decoder.
 
     Args:
-        video_path (str): Path to the video file.
-        num_frames (int): Number of frames to sample uniformly. Defaults to NUM_FRAMES
+        video_path (`str`):
+            Path to the video file.
+        num_frames (`int`, *optional*):
+            Number of frames to sample uniformly. If not specified, all frames are sampled.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
-    if num_frames is not None:
-        indices = np.arange(0, len(vr), len(vr) / num_frames).astype(int)
-    else:
-        indices = np.arange(0, len(vr)).astype(int)
-
+    indices = get_uniform_frame_indices(total_num_frames=len(vr), num_frames=num_frames)
     frames = vr.get_batch(indices).asnumpy()
     return frames
 
 
-def read_video_pyav(video_path, num_frames=None):
+def read_video_pyav(video_path: str, num_frames: int = None):
     """
     Decode the video with PyAV decoder.
 
     Args:
-        video_path (str): Path to the video file.
-        num_frames (int): Number of frames to sample uniformly. Defaults to NUM_FRAMES
+        video_path (`str`):
+            Path to the video file.
+        num_frames (`int`, *optional*):
+            Number of frames to sample uniformly. If not specified, all frames are sampled.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -471,11 +491,8 @@ def read_video_pyav(video_path, num_frames=None):
     container = av.open(video_path)
 
     # sample uniformly "num_frames" frames from the video
-    total_frames = container.streams.video[0].frames
-    if num_frames is not None:
-        indices = np.arange(0, total_frames, total_frames / num_frames).astype(int)
-    else:
-        indices = np.arange(0, total_frames).astype(int)
+    total_num_frames = container.streams.video[0].frames
+    indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     frames = []
     container.seek(0)
@@ -488,7 +505,19 @@ def read_video_pyav(video_path, num_frames=None):
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-def read_video_torchvision(video_path, num_frames=None):
+def read_video_torchvision(video_path: str, num_frames: int = None):
+    """
+    Decode the video with torchvision decoder.
+
+    Args:
+        video_path (`str`):
+            Path to the video file.
+        num_frames (`int`, *optional*):
+            Number of frames to sample uniformly. If not specified, all frames are sampled.
+
+    Returns:
+        np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
+    """
     video, _, info = torchvision_io.read_video(
         video_path,
         start_pts=0.0,
@@ -512,7 +541,7 @@ VIDEO_DECODERS = {
 }
 
 
-def load_video(video: Union[str, "VideoInput"], num_frames=None, backend="opencv") -> np.array:
+def load_video(video: Union[str, "VideoInput"], num_frames: int = None, backend: str = "opencv") -> np.array:
     """
     Loads `video` to a numpy array.
 
@@ -526,6 +555,8 @@ def load_video(video: Union[str, "VideoInput"], num_frames=None, backend="opencv
         `np.array`: A numpy array of shape (num_frames, channels, height, width).
     """
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
+        if not is_yt_dlp_available():
+            raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
         buffer = BytesIO()
         with redirect_stdout(buffer), YoutubeDL() as f:
             f.download([video])
@@ -550,6 +581,17 @@ def load_video(video: Union[str, "VideoInput"], num_frames=None, backend="opencv
 
     if file_obj is None:
         return video
+
+    if (
+        (not is_decord_available() and backend == "decord")
+        or (not is_av_available() and backend == "pyav")
+        or (not is_cv2_available() and backend == "opencv")
+        or (not is_torchvision_available() and backend == "torchvision")
+    ):
+        raise ImportError(
+            f"You chose backend={backend} for loading the video but the required library is not found in your environment "
+            f"Make sure to install {backend} before loading the video."
+        )
 
     video_decoder = VIDEO_DECODERS[backend]
     video = video_decoder(file_obj)
