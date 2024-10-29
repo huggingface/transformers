@@ -17,14 +17,14 @@ import glob
 import importlib
 import os
 import re
-from collections import defaultdict, deque
-from typing import Dict, List, Optional, Set
 from abc import ABC, abstractmethod
+from collections import defaultdict, deque
+from typing import Dict, Set
 
 import libcst as cst
 from check_copies import run_ruff
 from create_dependency_mapping import find_priority_list
-from libcst import ClassDef, CSTTransformer, CSTVisitor
+from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
 
@@ -53,6 +53,7 @@ def get_module_source_from_name(module_name: str) -> str:
     with open(spec.origin, "r", encoding="utf-8") as file:
         source_code = file.read()
     return source_code
+
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     """A transformer that replaces `old_name` with `new_name` in comments, string and any references.
@@ -466,10 +467,12 @@ ASSIGNMENTS_TO_KEEP = {
     "_CHECKPOINT_FOR_DOC",
 }
 
+
 class ClassDependencyMapper(CSTVisitor):
     """A visitor which is designed to analyze a single class node to get all its dependencies that are mutual with `global_names`.
     This class is used through the 2 convenient class methods.
     """
+
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
     def __init__(self, class_name: str, global_names: set | None):
@@ -510,6 +513,7 @@ class ModuleMapper(CSTVisitor, ABC):
     """An abstract visitor class which analyses a module, creating a mapping of dependencies for classes and functions.
     It defines common visiting patterns between the modular file and the model-specific module files that will be visited.
     """
+
     METADATA_DEPENDENCIES = (ParentNodeProvider, PositionProvider)
 
     def __init__(self, python_module: cst.Module):
@@ -528,17 +532,17 @@ class ModuleMapper(CSTVisitor, ABC):
         Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT' and all import statements
         are extracted and saved in their corresponding dict. They are then used when updating dependency mappings.
         """
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])) and m.matches(
-            self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()
-        ):
-            left_hand_side = node.body[0].targets[0].target
-            if hasattr(left_hand_side, "value"):
-                self.assignments[left_hand_side.value] = node
-            else:
-                for idx, target in enumerate(list(left_hand_side.elements)):
-                    self.assignments[target.value.value] = node.body[0].value.elements[idx].value
-        if m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
-            self.imports.append(node)
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        if m.matches(parent_node, m.Module()):
+            if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+                left_hand_side = node.body[0].targets[0].target
+                if hasattr(left_hand_side, "value"):
+                    self.assignments[left_hand_side.value] = node
+                else:
+                    for idx, target in enumerate(list(left_hand_side.elements)):
+                        self.assignments[target.value.value] = node.body[0].value.elements[idx].value
+            elif m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
+                self.imports.append(node)
 
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -551,7 +555,7 @@ class ModuleMapper(CSTVisitor, ABC):
         if m.matches(parent_node, m.Module()):
             self.current_function = None
 
-    def leave_If(self, node):
+    def visit_If(self, node):
         for stmt in node.body.body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                 self.imports.append(node)
@@ -606,7 +610,7 @@ class ModuleMapper(CSTVisitor, ABC):
             if dep in self.function_call_recursive_dependency_mapping.keys():
                 new_dependencies.update(self.function_call_recursive_dependency_mapping[dep])
         return new_dependencies
-    
+
     def compute_class_dependencies(self):
         """For each visited class, find its dependencies based on visited the current file + potential merged dependencies.
         Note: This function takes care of updating `global_nodes` and `function_call_recursive_dependency_mapping` as well after the
@@ -626,7 +630,7 @@ class ModuleMapper(CSTVisitor, ABC):
     @abstractmethod
     def compute_relative_order(self, missing_dependencies: set) -> dict[str, int]:
         pass
-    
+
 
 class ModelFileMapper(ModuleMapper):
     """A mapper designed for model-specific files (i.e. a `transformers.models.xxx` file). When encountering such a file
@@ -636,18 +640,19 @@ class ModelFileMapper(ModuleMapper):
 
     def __init__(self, python_module: cst.Module):
         super().__init__(python_module)
-    
+
     def compute_relative_order(self, missing_dependencies: set) -> dict[str, int]:
-        """Compute the relative order that the `missing_dependencies` should have between themselves in the output file.
-        """
+        """Compute the relative order that the `missing_dependencies` should have between themselves in the output file."""
         relative_order = {}
         idx = 0
-        classes = sorted([dep for dep in tuple(missing_dependencies) if dep in self.classes], key=lambda x: self.start_lines[x])
+        classes = sorted(
+            [dep for dep in tuple(missing_dependencies) if dep in self.classes], key=lambda x: self.start_lines[x]
+        )
         # This is because for merged dependencies, we only have relative order in the other visited file, so we need
         # to track dependency order relative to a given class
         if len(classes) > 0 and not hasattr(self, "class_dependency_mapping"):
             raise ValueError("Cannot correctly find the relative order of the dependencies.")
-        
+
         remaining_dependencies = missing_dependencies.copy()
 
         # Start by tracking relative order class by class
@@ -665,7 +670,7 @@ class ModelFileMapper(ModuleMapper):
             # Sort both list according to the order in their respective file
             original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
             merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
-            
+
             # Add all original node first, then merged ones
             for dep in original_dependencies + merged_dependencies:
                 remaining_dependencies.remove(dep)
@@ -688,7 +693,7 @@ class ModelFileMapper(ModuleMapper):
         # Sort both list according to the order in their respective file
         original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
         merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
-        
+
         # Add all original node first, then merged ones
         for dep in original_dependencies + merged_dependencies:
             relative_order[dep] = idx
@@ -699,7 +704,7 @@ class ModelFileMapper(ModuleMapper):
     def _merge_functions(self, functions: dict[str, cst.CSTNode], function_call_mapping: dict[str, set]):
         """Update the global nodes and function dependency mapping with those from the modular file.
 
-        Merging rule: if any function with the same name was redefined in the modular, use it and its dependencies 
+        Merging rule: if any function with the same name was redefined in the modular, use it and its dependencies
         instead of the original ones (this may mean to add new functions as well, if any redefined function uses a new one).
         """
         # Add/overwrite all needed function nodes and dependencies
@@ -709,7 +714,7 @@ class ModelFileMapper(ModuleMapper):
     def _merge_assignments(self, assignments: dict[str, cst.CSTNode]):
         """Update the global nodes with the assignment from the modular file.
 
-        Merging rule: if any assignment with the same name was redefined in the modular, we use it ONLY if it is 
+        Merging rule: if any assignment with the same name was redefined in the modular, we use it ONLY if it is
         in `ASSIGNMENTS_TO_KEEP`. Otherwise, we use the original value. This rule was chosen to avoid having to rewrite the
         big docstrings.
         """
@@ -725,7 +730,9 @@ class ModelFileMapper(ModuleMapper):
         self.modular_file_start_lines = start_lines
 
     @classmethod
-    def visit_and_merge_dependencies(cls, module: cst.Module, functions, function_mapping, assignments, start_lines) -> "ModelFileMapper":
+    def visit_and_merge_dependencies(
+        cls, module: cst.Module, functions, function_mapping, assignments, start_lines
+    ) -> "ModelFileMapper":
         wrapper = MetadataWrapper(module)
         mapper = cls(module)
         wrapper.visit(mapper)
@@ -734,7 +741,7 @@ class ModelFileMapper(ModuleMapper):
         # Create the class dependencies graph
         mapper.compute_class_dependencies()
         return mapper
-    
+
 
 def replace_class_node(mapper: ModelFileMapper, class_node: cst.ClassDef):
     """
@@ -770,8 +777,7 @@ def replace_class_node(mapper: ModelFileMapper, class_node: cst.ClassDef):
         for f in original_node.body.body
     }
     updated_methods = {
-        f.name.value if hasattr(f, "name") else mapper.python_module.code_for_node(f): f
-        for f in class_node.body.body
+        f.name.value if hasattr(f, "name") else mapper.python_module.code_for_node(f): f for f in class_node.body.body
     }
     end_meth = []
 
@@ -897,6 +903,7 @@ def find_file_type(class_name: str) -> str:
         file_type = "modeling"
     return file_type
 
+
 # These top-level variables will always appear the very beginning of the file, in the order they are defined in
 # this list (this is to avoid having variables at weird places, even if they are not used before)
 VARIABLES_AT_THE_BEGINNING = [
@@ -905,22 +912,92 @@ VARIABLES_AT_THE_BEGINNING = [
     "_CONFIG_FOR_DOC",
 ]
 
+def get_module_name(node: cst.ImportFrom) -> str:
+    """Recursively get the fully dotted name of a module in a cst.ImportFrom."""
+    if m.matches(node, m.Name()):
+        return node.value
+    elif m.matches(node, m.Attribute()):
+        # Recursively get the full name for attributes
+        return f"{get_module_name(node.value)}.{node.attr.value}"
+    return ""
+
+def append_new_import_node(node: cst.CSTNode, unused_imports: set[str], imports_to_keep: dict[str, cst.CSTNode], current_idx: int):
+    """Insert the new `node` to the dict of `imports_to_keep` in-place, if it is not part of the `unused_imports`.
+    This function takes cares of aggregating similar ImportFrom, i.e. if we ever saw a statement such as 
+    `from typing import Any`, and later another one `from typing import List`, we will aggregate as
+    `from typing import Any, List` in a single statement.
+    """
+    import_node = node.body[0]
+    if m.matches(import_node, m.ImportFrom()):
+        module_name = get_module_name(import_node.module)
+    else:
+        module_name = current_idx
+
+    # If we have a new import from with the same module name, write new names to the same import statement
+    names_to_keep = [name for name in imports_to_keep[module_name].body[0].names] if module_name in imports_to_keep else []
+    for name in import_node.names:
+        name_value = name.evaluated_name
+        if name_value not in unused_imports:
+            names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
+    if len(names_to_keep) > 0:
+        imports_to_keep[module_name] = node.with_changes(body=[import_node.with_changes(names=names_to_keep)])
+
+
+def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
+    """Get all the imports needed in the `body`, from the list of `all_imports`.
+    Note: we need to use `isinstance` on assignements, m.matches apparently does not work here yet!
+    """
+    new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
+    wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
+    scopes = set(wrapper.resolve(ScopeProvider).values())
+    unused_imports = set()
+    import_ref_count = {}
+    for scope in scopes:
+        for assignment in scope.assignments:
+            node = assignment.node
+            if isinstance(assignment, cst.metadata.Assignment) and isinstance(node, (cst.Import, cst.ImportFrom)):
+                ref_count = len(assignment.references)
+                name = assignment.name
+                # Similar imports may be redefined, and only used between their 1st and 2nd definition
+                # so if we already have a ref count > 0, the imports is not unused
+                if (ref_count == 0 and import_ref_count.get(name, -1) <= 0) or name in body.keys():
+                    unused_imports.add(name)
+                import_ref_count[name] = ref_count
+
+    # Note that dicts implicitly keep the order of insertion
+    imports_to_keep = {}
+    for idx, node in enumerate(all_imports):
+        if m.matches(node, m.If()):
+            new_statements = {}
+            for second_idx, stmt_node in enumerate(node.body.body):
+                append_new_import_node(stmt_node, unused_imports, new_statements, second_idx)
+            if len(new_statements) > 0:
+                imports_to_keep[idx] = node.with_changes(body=node.body.with_changes(body=list(new_statements.values())))
+        else:
+            append_new_import_node(node, unused_imports, imports_to_keep, idx)
+
+    return list(imports_to_keep.values())
+
+
 class ModularFileMapper(ModuleMapper):
     """This is a Mapper for a modular file. It visits the whole file, recording dependency, then visits all model-specific
     files that should be visited, and manages their mutual dependencies.
     Calling the method `create_modules()` after visit will create all modules based on this modular file.
     """
+
     def __init__(self, python_module, new_name, given_old_name=None, given_new_name=None):
         super().__init__(python_module)
+        # fmt: off
         self.model_name = new_name  # name of the model being defined. Should be in the format of `llama` or `layout_xlm` or `phi3`
         self.given_old_name = given_old_name
         self.given_new_name = given_new_name
 
-        self.model_specific_imported_objects: Dict[str, str] = {} # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
+        self.model_specific_imported_objects: Dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
         self.model_specific_modules: Dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
-        self.match_patterns = "|".join(list(TYPE_TO_FILE_TYPE.values()).append("modeling"))
+        self.match_patterns = "|".join(list(TYPE_TO_FILE_TYPE.values()) + ["modeling"])
         self.all_all_to_add = {}
+        # fmt: on
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from model-specific files (i.e. `transformers.models.xxx`) we get the code, parse it,
@@ -964,17 +1041,14 @@ class ModularFileMapper(ModuleMapper):
         )
         if m.matches(parent_node, m.Module()):
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
-                if node not in self.imports:
-                    self.imports.append(node)
+                self.imports.append(node)
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(node.body[0].module)
-                if (
+                if not (
                     # OR MATCH ..llama.modeling_llama
                     re.search(rf"(transformers\.models\..|..)*\.({self.match_patterns})_.*", full_statement)
                     and "auto.modeling_auto" not in full_statement
                 ):
-                    return
-                if node not in self.imports:
                     self.imports.append(node)
             elif m.matches(node, simple_top_level_assign_structure):
                 assigned_variable = node.body[0].targets[0].target.value
@@ -994,7 +1068,9 @@ class ModularFileMapper(ModuleMapper):
                                 all_all_to_add[file] += [class_name]
                         for file, new_alls in all_all_to_add.items():
                             new_node = assign_node.with_changes(
-                                value=cst.List(elements=[cst.Element(value=cst.SimpleString(value=k)) for k in new_alls])
+                                value=cst.List(
+                                    elements=[cst.Element(value=cst.SimpleString(value=k)) for k in new_alls]
+                                )
                             )
                             self.all_all_to_add[file] = node.with_changes(body=[new_node])
 
@@ -1013,18 +1089,25 @@ class ModularFileMapper(ModuleMapper):
         self.visited_modules = {}
         for file, module in self.model_specific_modules.items():
             file_model_name = re.search(r"models\.\w*?\.\w*?_(\S*)", file).groups()[0]
-            renamer = ReplaceNameTransformer(file_model_name, self.model_name, self.given_old_name, self.given_new_name)
+            renamer = ReplaceNameTransformer(
+                file_model_name, self.model_name, self.given_old_name, self.given_new_name
+            )
             renamed_module = module.visit(renamer)
-            self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(renamed_module, self.functions, self.function_call_dependency_mapping,
-                                                                                      self.assignments, self.start_lines)
+            self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
+                renamed_module,
+                self.functions,
+                self.function_call_dependency_mapping,
+                self.assignments,
+                self.start_lines,
+            )
 
-        # In turn, we need to add the imported functions/assignments to the dependencies of the modular mapper, using the 
+        # In turn, we need to add the imported functions/assignments to the dependencies of the modular mapper, using the
         # definitions found in the visited files
         self.merge_model_specific_imports(self.visited_modules)
 
         # Re-assign all nodes
         self.global_nodes = {**self.assignments, **self.classes, **self.functions}
-        
+
     def merge_model_specific_imports(self, visited_modules):
         """Merge the model-specific imported functions and assignments to the modular nodes and dependency graph,
         based on the visited files."""
@@ -1043,15 +1126,14 @@ class ModularFileMapper(ModuleMapper):
                     for dep in dependencies:
                         self.added_objects_file_mapping[dep] = file
                         self.functions[dep] = visited_module.global_nodes[dep]
-                
+
             # Add assignments
             elif object_name in visited_module.assignments and object_name not in self.assignments:
                 self.added_objects_file_mapping[object_name] = file
                 self.assignments[object_name] = visited_module.assignments[object_name]
 
     def compute_relative_order(self, missing_dependencies: set) -> dict[str, int]:
-        """Compute the relative order that the `missing_dependencies` should have between themselves in the output file.
-        """
+        """Compute the relative order that the `missing_dependencies` should have between themselves in the output file."""
         relative_order = {}
         idx = 0
 
@@ -1068,7 +1150,7 @@ class ModularFileMapper(ModuleMapper):
         for file, dependencies in other_files_dependencies.items():
             sorted_dependencies = sorted(dependencies, key=lambda x: self.start_lines_file_mapping[file][x])
             all_dependencies += sorted_dependencies
-        
+
         # Add all original node first, then merged ones (one file at a time)
         for dep in all_dependencies:
             relative_order[dep] = idx
@@ -1094,14 +1176,6 @@ class ModularFileMapper(ModuleMapper):
             super_class = bases[0]
             super_file_name = self.model_specific_imported_objects[super_class]
 
-            model_name = re.search(r"models\.\w*?\.\w*?_(\S*)", super_file_name)
-            if model_name:
-                model_name = model_name.groups()[0]
-            else:
-                raise ValueError(
-                    f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
-                )
-
             # Get the mapper corresponding to the inherited class
             mapper = self.visited_modules[super_file_name]
 
@@ -1118,16 +1192,15 @@ class ModularFileMapper(ModuleMapper):
 
             relative_dependency_order = mapper.compute_relative_order(all_dependencies_to_add)
             nodes_to_add = {
-                dep: (relative_dependency_order[dep], mapper.global_nodes[dep])
-                for dep in all_dependencies_to_add
+                dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
             }
 
         # No super class, just check functions and assignments dependency in the imports from other model-specific files
         else:
             updated_node = node
-            # The node was NOT modified -> no need to look for recursive dependencies
+            # The node was NOT modified -> no need to look for dependencies recursively
             all_dependencies_to_add = ClassDependencyMapper.dependencies_for_node(updated_node, self.global_nodes)
-            
+
             relative_dependency_order = self.compute_relative_order(all_dependencies_to_add)
             nodes_to_add = {
                 dep: (relative_dependency_order[dep], self.global_nodes[dep])
@@ -1166,20 +1239,21 @@ class ModularFileMapper(ModuleMapper):
             idx = current_file_indices[file_type]
             files[file_type]["__all__"] = {"insert_idx": idx, "node": node}
 
-        # Merge imports
-        # TODO: use scope solution instead
-        imports = {self.python_module.code_for_node(k): k for k in self.imports}
-        dependency_imports = {file_type: imports.copy() for file_type in files}
-        for super_file_name, visiter in self.visited_modules.items():
-            file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
-            dependency_imports[file_type].update(
-                {self.python_module.code_for_node(k): k for k in visiter.imports.values()}
-            )
+        # Aggregate all the imports statements (we look for duplicates with the code_for_node, not the nodes themselves)
+        all_imports = self.imports.copy()
+        all_imports_code = {self.python_module.code_for_node(node) for node in all_imports}
+        for file, mapper in self.visited_modules.items():
+            new_imports = [node for node in mapper.imports if mapper.python_module.code_for_node(node) not in all_imports_code]
+            new_imports_code = {mapper.python_module.code_for_node(node) for node in new_imports}
+            all_imports.extend(new_imports)
+            all_imports_code.update(new_imports_code)
 
+        # Find the correct imports, and write the new modules
         for file, body in files.items():
             new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-            new_body = list(dependency_imports[file].values()) + new_body
-            new_module = cst.Module(body=[*new_body], header=self.python_module.header)
+            needed_imports = get_needed_imports(body, all_imports)
+            full_module = needed_imports + new_body
+            new_module = cst.Module(body=full_module, header=self.python_module.header)
             files[file] = new_module
 
         return files
