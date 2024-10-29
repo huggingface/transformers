@@ -448,9 +448,9 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
         )
 
         logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 4].topk(5).indices)
+        eager_predicted_mask = tokenizer.decode(logits[0, 4].topk(5).indices)
         self.assertEqual(
-            eg_predicted_mask.split(),
+            eager_predicted_mask.split(),
             ["capital", "birthplace", "northernmost", "centre", "southernmost"],
         )
 
@@ -462,5 +462,5 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
         )
 
         result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)
+        exported_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
+        self.assertEqual(eager_predicted_mask, exported_predicted_mask)
