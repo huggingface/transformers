@@ -281,7 +281,7 @@ class LlamaAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if (layer_idx is None):
+        if layer_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
                 "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
@@ -1141,6 +1141,14 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    def custom_cross_entropy_loss(self, logits, labels, vocab_size, **kwargs):
+        """
+        Custom CrossEntropyLoss function to handle reduction and normalization of the loss based on the batch size.
+        """
+        loss_fct = nn.CrossEntropyLoss()
+        loss = loss_fct(logits.view(-1, vocab_size), labels.view(-1))
+        return loss
+
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1221,7 +1229,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.custom_cross_entropy_loss(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1239,10 +1247,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
 @add_start_docstrings(
     """
     The LLaMa Model transformer with a sequence classification head on top (linear layer).
-
+    
     [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
-
+    
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
     no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
