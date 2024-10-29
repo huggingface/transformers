@@ -921,8 +921,7 @@ IMPORTS_TO_SKIP_IN_MODULAR = ("auto.modeling_auto",)
 
 
 def append_new_import_node(node: cst.CSTNode, unused_imports: set[str], imports_to_keep: list[cst.CSTNode]):
-    """Insert the new `node` to the list of `imports_to_keep` in-place, if it is not part of the `unused_imports`.
-    """
+    """Insert the new `node` to the list of `imports_to_keep` in-place, if it is not part of the `unused_imports`."""
     import_node = node.body[0]
     names_to_keep = []
     for name in import_node.names:
