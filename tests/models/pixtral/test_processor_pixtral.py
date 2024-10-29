@@ -246,6 +246,25 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         # fmt: on
 
+    def test_processor_returns_full_length_batches(self):
+        # to avoid https://github.com/huggingface/transformers/issues/34204
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        prompt_string = [
+            "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
+        ] * 5
+        processor.tokenizer.pad_token = "</s>"
+        image_inputs = [self.image_0] * 5
+
+        # Make small for checking image token expansion
+        processor.image_processor.size = {"longest_edge": 30}
+        processor.image_processor.patch_size = {"height": 2, "width": 2}
+
+        # Test passing in an image
+        inputs_image = processor(text=prompt_string, images=image_inputs, return_tensors="pt", padding=True)
+        self.assertIn("input_ids", inputs_image)
+        self.assertTrue(len(inputs_image["input_ids"]) == 5)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 5)
+
     # Override as PixtralProcessor needs nested images to work properly with batched inputs
     @require_vision
     def prepare_image_inputs(self, batch_size: Optional[int] = None):

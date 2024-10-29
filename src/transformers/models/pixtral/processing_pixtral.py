@@ -214,8 +214,6 @@ class PixtralProcessor(ProcessorMixin):
                     elif len(text) == 1:
                         # Multiple images for a single prompt
                         images = [images]
-                    else:
-                        raise ValueError("Number of images does not match number of text prompts.")
                 elif all(isinstance(im, list) and all(is_image_or_image_url(i) for i in im) for im in images):
                     if len(images) != len(text):
                         raise ValueError("Number of image lists does not match number of text prompts.")
