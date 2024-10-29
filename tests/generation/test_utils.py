@@ -2166,7 +2166,9 @@ class GenerationTesterMixin:
 
     def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
-        internal_batch_size = input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
+        internal_batch_size = (
+            input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
+        )
 
         seq_length = getattr(self.model_tester, "seq_length", None)
         seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
