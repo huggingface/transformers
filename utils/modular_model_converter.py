@@ -290,7 +290,7 @@ class SuperTransformer(cst.CSTTransformer):
         deduplicated_new_body = self._fix_post_init_location(deduplicated_new_body)
 
         return deduplicated_new_body
-    
+
     def _fix_post_init_location(self, new_body: list[cst.CSTNode]):
         """Fix the location of the `post_init()` in the new body, if we added statements after the call to
         `super()` (it needs to be the very last statement called)"""
@@ -604,10 +604,10 @@ class ModuleMapper(CSTVisitor, ABC):
         ```
         def foo():
             pass
-        
+
         def bar():
             foo()
-        
+
         def test():
             bar()
         ```
@@ -896,7 +896,7 @@ TYPE_TO_FILE_TYPE = {
 
 def find_file_type(class_name: str) -> str:
     """Based on a class name, find the file type corresponding to the class.
-    If the class name is `LlamaConfig` it will return `configuration`. 
+    If the class name is `LlamaConfig` it will return `configuration`.
     The list of suffixes is in `TYPE_TO_FILE_TYPE`. If there are no match, we match by default to `modeling`
     """
     match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
@@ -917,9 +917,8 @@ VARIABLES_AT_THE_BEGINNING = (
 )
 
 # These specific modeling imports should not be visited as other modeling files
-IMPORTS_TO_SKIP_IN_MODULAR = (
-    "auto.modeling_auto",
-)
+IMPORTS_TO_SKIP_IN_MODULAR = ("auto.modeling_auto",)
+
 
 def get_module_name(node: cst.ImportFrom) -> str:
     """Recursively get the fully dotted name of a module in a cst.ImportFrom."""
@@ -981,7 +980,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     # Note that dicts implicitly keep the order of insertion
     imports_to_keep = {}
     for idx, node in enumerate(all_imports):
-        if m.matches(node, m.If()): # handle safe imports
+        if m.matches(node, m.If()):  # handle safe imports
             new_statements = {}
             for second_idx, stmt_node in enumerate(node.body.body):
                 append_new_import_node(stmt_node, unused_imports, new_statements, second_idx)
@@ -1018,9 +1017,7 @@ def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
                 all_all_to_add[file] += [class_name]
         for file, new_alls in all_all_to_add.items():
             new_node = assign_node.with_changes(
-                value=cst.List(
-                    elements=[cst.Element(value=cst.SimpleString(value=k)) for k in new_alls]
-                )
+                value=cst.List(elements=[cst.Element(value=cst.SimpleString(value=k)) for k in new_alls])
             )
             all_all_per_file[file] = node.with_changes(body=[new_node])
     return all_all_per_file
