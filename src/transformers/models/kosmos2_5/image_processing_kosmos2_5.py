@@ -337,3 +337,6 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         )
 
         return encoded_outputs
+
+
+__all__ = ["Kosmos2_5ImageProcessor"]

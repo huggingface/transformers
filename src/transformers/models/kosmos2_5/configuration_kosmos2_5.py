@@ -309,3 +309,6 @@ class Kosmos2_5Config(PretrainedConfig):
             vision_config=vision_config.to_dict(),
             **kwargs,
         )
+
+
+__all__ = ["Kosmos2_5Config"]

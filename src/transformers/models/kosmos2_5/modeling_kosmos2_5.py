@@ -2264,3 +2264,10 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
         )
 
         return output
+
+
+__all__ = [
+    "Kosmos2_5ForConditionalGeneration",
+    "Kosmos2_5Model",
+    "Kosmos2_5PreTrainedModel",
+]
