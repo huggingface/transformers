@@ -30,7 +30,6 @@ from transformers.models.llava_next.modeling_llava_next import (
 from ...configuration_utils import PretrainedConfig
 from ...utils import (
     logging,
-    replace_return_docstrings,
 )
 from ..auto import CONFIG_MAPPING
 
