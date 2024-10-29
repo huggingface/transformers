@@ -1,17 +1,10 @@
-from typing import List, Optional, Union
+from typing import Optional
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_utils import ImageInput
 from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
 from transformers.models.paligemma.processing_paligemma import (
     PaliGemmaImagesKwargs,
     PaliGemmaProcessor,
     PaliGemmaProcessorKwargs,
-)
-from transformers.processing_utils import Unpack
-from transformers.tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
 )
 
 
@@ -41,12 +34,4 @@ class NewKwargsModelForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
 
 class NewKwargsModelProcessor(PaliGemmaProcessor):
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
-        **kwargs: Unpack[NewKwargsModelProcessorKwargs],
-    ) -> BatchFeature:
-        super().__call__(images=images, text=text, audio=audio, videos=videos, **kwargs)
+    pass

@@ -34,6 +34,9 @@ from ...utils import (
 from .configuration_roberta import RobertaConfig
 
 
+_CHECKPOINT_FOR_DOC = "fake-org/roberta"
+
+
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "RobertaConfig"
 
@@ -821,7 +824,7 @@ class RobertaModel(RobertaPreTrainedModel):
 
     _no_split_modules = ["RobertaEmbeddings", "RobertaLayer"]
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
