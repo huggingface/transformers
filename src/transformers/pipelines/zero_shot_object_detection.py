@@ -162,7 +162,6 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return preprocess_params, {}, postprocess_params
 
     def preprocess(self, inputs, timeout=None):
-        print("inputs", inputs)
         image = load_image(inputs["image"], timeout=timeout)
         candidate_labels = inputs["candidate_labels"]
         if isinstance(candidate_labels, str):
