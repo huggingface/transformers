@@ -103,7 +103,7 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
-def safe_squeeze(tensor: torch.Tensor, axis: Optional[int] = None) -> torch.Tensor:
+def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
     """
     Squeezes a tensor, but only if the axis specified has dim 1.
     """
@@ -123,7 +123,7 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_max_height_width(images: List[torch.Tensor]) -> Tuple[int]:
+def get_max_height_width(images: List["torch.Tensor"]) -> Tuple[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
