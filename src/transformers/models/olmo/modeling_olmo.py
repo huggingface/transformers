@@ -610,6 +610,7 @@ class OlmoDecoderLayer(nn.Module):
         self.mlp = OlmoMLP(config)
         self.input_layernorm = get_layer_norm(config.layer_norm_type, config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = get_layer_norm(config.layer_norm_type, config.hidden_size, config.rms_norm_eps)
+        self.norm_after = config.norm_after
 
     # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     # TODO(joao): add me back asap :)
@@ -645,7 +646,8 @@ class OlmoDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        hidden_states = self.input_layernorm(hidden_states)
+        if not self.norm_after:
+            hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -658,12 +660,17 @@ class OlmoDecoderLayer(nn.Module):
             cache_position=cache_position,
             **kwargs,
         )
+        if self.norm_after:
+            hidden_states = self.input_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        if not self.norm_after:
+            hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        if self.norm_after:
+            hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)

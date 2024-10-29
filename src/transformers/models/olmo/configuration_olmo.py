@@ -68,6 +68,9 @@ class OlmoConfig(PretrainedConfig):
             Whether to apply norm to the queries within the attention mechanism.
         use_k_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply norm to the keys within the attention mechanism.
+        norm_after (`bool`, *optional*, defaults to `False`):
+            Whether to apply norm after the attention/feedforward layers rather than before, as introduced
+            in the Swin transformer paper (Liu et al).
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -129,6 +132,7 @@ class OlmoConfig(PretrainedConfig):
         layer_norm_type="default",
         use_q_norm=False,
         use_k_norm=False,
+        norm_after=False,
         rms_norm_eps=1e-6,
         use_cache=True,
         pad_token_id=1,
@@ -159,6 +163,7 @@ class OlmoConfig(PretrainedConfig):
         self.layer_norm_type = layer_norm_type
         self.use_q_norm = use_q_norm
         self.use_k_norm = use_k_norm
+        self.norm_after = norm_after
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
