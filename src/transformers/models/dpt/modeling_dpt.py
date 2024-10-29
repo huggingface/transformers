@@ -690,14 +690,12 @@ class DPTFeatureFusionStage(nn.Module):
 
         fused_hidden_states = []
         fused_hidden_state = None
-        # looping from the last layer to the second
-        for idx, (hidden_state, layer) in enumerate(zip(hidden_states, self.layers)):
-            if idx == 0:
+        for hidden_state, layer in zip(hidden_states, self.layers):
+            if fused_hidden_state is None:
                 # first layer only uses the last hidden_state
                 fused_hidden_state = layer(hidden_state)
-                fused_hidden_states.append(fused_hidden_state)
-                continue
-            fused_hidden_state = layer(fused_hidden_state, hidden_state)
+            else:
+                fused_hidden_state = layer(fused_hidden_state, hidden_state)
             fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states
