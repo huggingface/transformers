@@ -1169,7 +1169,7 @@ class ModularFileMapper(ModuleMapper):
         return relative_order
 
 
-def add_class_node(
+def get_class_node_and_dependencies(
     modular_mapper: ModularFileMapper, class_name: str, node: cst.CSTNode, files: dict[str, dict]
 ) -> tuple[dict, str]:
     """Return a single class node (and all its dependency nodes), to be added to the `files`. It creates the new
@@ -1239,7 +1239,7 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
 
     # For each class defined in modular, potentially replace the node and add it with its dependencies
     for class_name, node in modular_mapper.classes.items():
-        nodes_to_add, file_type = add_class_node(modular_mapper, class_name, node, files)
+        nodes_to_add, file_type = get_class_node_and_dependencies(modular_mapper, class_name, node, files)
         # Sort the nodes according to their relative order
         nodes_to_add = sorted(nodes_to_add.items(), key=lambda x: x[1][0])
         # Write all nodes to file
