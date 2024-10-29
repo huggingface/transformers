@@ -607,7 +607,12 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate,
+                model.config,
+                num_return_sequences=beam_kwargs["num_return_sequences"],
+                num_beams=beam_kwargs["num_beams"],
+            )
 
     @pytest.mark.generate
     def test_beam_search_generate_dict_outputs_use_cache(self):
@@ -644,7 +649,11 @@ class GenerationTesterMixin:
                 )
 
             self._check_outputs(
-                output_generate, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
+                output_generate,
+                model.config,
+                use_cache=True,
+                num_return_sequences=beam_kwargs["num_return_sequences"],
+                num_beams=beam_kwargs["num_beams"],
             )
 
     @require_accelerate
@@ -722,7 +731,12 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate,
+                model.config,
+                num_return_sequences=beam_kwargs["num_return_sequences"],
+                num_beams=beam_kwargs["num_beams"],
+            )
 
     @pytest.mark.generate
     def test_generate_without_input_ids(self):
@@ -807,7 +821,12 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate,
+                model.config,
+                num_return_sequences=beam_kwargs["num_return_sequences"],
+                num_beams=beam_kwargs["num_beams"],
+            )
 
     # TODO: @gante check why it is flaky
     @is_flaky()
@@ -909,7 +928,12 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate,
+                model.config,
+                num_return_sequences=beam_kwargs["num_return_sequences"],
+                num_beams=beam_kwargs["num_beams"],
+            )
 
     @pytest.mark.generate
     def test_contrastive_generate(self):
@@ -2140,9 +2164,9 @@ class GenerationTesterMixin:
         # check whether we still need the overwrites
         self._test_attention_implementation("flash_attention_2")
 
-    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1):
-        num_sequences_in_output = output.sequences.shape[0]
-        batch_size = num_sequences_in_output / num_return_sequences
+    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+        input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
+        internal_batch_size = input_batch_size * num_beams
 
         seq_length = getattr(self.model_tester, "seq_length", None)
         seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
@@ -2159,19 +2183,21 @@ class GenerationTesterMixin:
             seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
 
         # scores
-        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
+        self._check_scores(internal_batch_size, output.scores, length=gen_len, config=config)
 
         # unprocessed logits
-        self._check_logits(num_sequences_in_output, output.logits, config=config)
+        self._check_logits(internal_batch_size, output.logits, config=config)
 
         # Attentions
         if self.has_attentions:
             if config.is_encoder_decoder:
                 # encoder
-                self._check_encoder_attention_for_generate(output.encoder_attentions, batch_size, config, seq_length)
+                self._check_encoder_attention_for_generate(
+                    output.encoder_attentions, input_batch_size, config, seq_length
+                )
                 # decoder
                 self._check_attentions_for_generate(
-                    num_sequences_in_output,
+                    internal_batch_size,
                     output.decoder_attentions,
                     min_length=1,
                     max_length=output.sequences.shape[-1],
@@ -2183,7 +2209,7 @@ class GenerationTesterMixin:
                 attentions = output.attentions if not use_cache else output.attentions[1:]
                 min_length = seq_length if not use_cache else seq_length + 1
                 self._check_attentions_for_generate(
-                    num_sequences_in_output,
+                    internal_batch_size,
                     attentions=attentions,
                     min_length=min_length,
                     max_length=output.sequences.shape[-1],
@@ -2195,12 +2221,12 @@ class GenerationTesterMixin:
         if config.is_encoder_decoder:
             # encoder
             self._check_encoder_hidden_states_for_generate(
-                output.encoder_hidden_states, batch_size, config, seq_length
+                output.encoder_hidden_states, input_batch_size, config, seq_length
             )
 
             # decoder
             self._check_hidden_states_for_generate(
-                num_sequences_in_output,
+                internal_batch_size,
                 output.decoder_hidden_states,
                 min_length=1,
                 max_length=output.sequences.shape[-1],
@@ -2212,7 +2238,7 @@ class GenerationTesterMixin:
             hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
             min_length = seq_length if not use_cache else seq_length + 1
             self._check_hidden_states_for_generate(
-                num_sequences_in_output,
+                internal_batch_size,
                 hidden_states,
                 min_length=min_length,
                 max_length=output.sequences.shape[-1],
@@ -2243,7 +2269,7 @@ class GenerationTesterMixin:
                 past_key_values = output.past_key_values
                 past_sequence_length = output.sequences.shape[-1] - 1
                 self._check_past_key_values_for_generate(
-                    num_sequences_in_output,
+                    internal_batch_size,
                     past_key_values,
                     seq_length=past_sequence_length,
                     config=config,
