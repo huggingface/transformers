@@ -162,7 +162,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(inputs_image["pixel_values"], list)
         self.assertTrue(len(inputs_image["pixel_values"]) == 2)
         self.assertIsInstance(inputs_image["pixel_values"][0], list)
-        self.assertTrue(len(inputs_image["pixel_values"][0]) == 2)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 2)
         self.assertIsInstance(inputs_image["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
@@ -182,7 +182,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(inputs_url["pixel_values"], list)
         self.assertTrue(len(inputs_url["pixel_values"]) == 2)
         self.assertIsInstance(inputs_url["pixel_values"][0], list)
-        self.assertTrue(len(inputs_url["pixel_values"][0]) == 2)
+        self.assertTrue(len(inputs_url["pixel_values"]) == 2)
         self.assertIsInstance(inputs_url["pixel_values"][0][0], torch.Tensor)
         # fmt: off
         input_ids = inputs_url["input_ids"]
