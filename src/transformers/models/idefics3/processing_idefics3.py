@@ -17,23 +17,18 @@ Processor class for Idefics3.
 """
 
 import re
-import sys
+from itertools import accumulate
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
 
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 logger = logging.get_logger(__name__)
 
@@ -241,20 +236,37 @@ class Idefics3Processor(ProcessorMixin):
             **kwargs,
         )
 
-        # Temporary fix for "padding_side" in init_kwargs
-        output_kwargs["text_kwargs"].pop("padding_side", None)
-
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
         n_images_in_text = []
         n_images_in_images = []
         inputs = BatchFeature()
 
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not isinstance(text, list) and not isinstance(text[0], str):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            n_images_in_text = [sample.count(self.image_token.content) for sample in text]
+
         if images is not None:
             if is_image_or_image_url(images):
                 images = [[images]]
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
-                images = [images]
+                if text is not None:
+                    if sum(n_images_in_text) != len(images):
+                        raise ValueError(
+                            f"The total number of {self.image_token.content} tokens in the prompts should be the same as the number of images passed."
+                            f" Found {sum(n_images_in_text)} {self.image_token.content} tokens and {len(images)} images."
+                        )
+                    # Reorganize the images to match the prompts
+                    cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
+                    images = [
+                        images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
+                        for i in range(len(n_images_in_text))
+                    ]
+                else:
+                    images = [images]
             elif (
                 not isinstance(images, list)
                 and not isinstance(images[0], list)
@@ -272,10 +284,10 @@ class Idefics3Processor(ProcessorMixin):
             inputs.update(image_inputs)
 
         if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            if n_images_in_images != n_images_in_text:
+                raise ValueError(
+                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
+                )
 
             image_rows = inputs.pop("rows", [[0] * len(text)])
             image_cols = inputs.pop("cols", [[0] * len(text)])
@@ -286,8 +298,6 @@ class Idefics3Processor(ProcessorMixin):
 
             prompt_strings = []
             for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
-                n_images_in_text.append(sample.count(image_token))
-
                 # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
                 image_prompt_strings = []
                 for n_rows, n_cols in zip(sample_rows, sample_cols):
@@ -313,11 +323,6 @@ class Idefics3Processor(ProcessorMixin):
 
             text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
-
-            if n_images_in_images != n_images_in_text:
-                raise ValueError(
-                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
-                )
 
         return inputs
 
