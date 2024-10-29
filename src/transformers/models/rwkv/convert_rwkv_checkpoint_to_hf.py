@@ -116,7 +116,16 @@ def convert_rmkv_checkpoint_to_hf_format(
     state_dict = convert_state_dict(state_dict)
 
     # 4. Split in shards and save
-    shards, index = split_torch_state_dict_into_shards(state_dict)
+    state_dict_split = split_torch_state_dict_into_shards(state_dict)
+    shards = index = None
+    for tensors in state_dict_split.filename_to_tensors.values():
+        shards = {tensor: state_dict[tensor] for tensor in tensors}
+    if state_dict_split.is_sharded:
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
+
     for shard_file, shard in shards.items():
         torch.save(shard, os.path.join(output_dir, shard_file))
 

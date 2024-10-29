@@ -572,7 +572,15 @@ def convert_checkpoint_from_megatron_to_transformers(args):
 
     # Store the state_dict to file.
     max_shard_size = int(args.max_shard_size) if args.max_shard_size.isdigit() else args.max_shard_size
-    shards, index = split_torch_state_dict_into_shards(output_state_dict, max_shard_size=max_shard_size)
+    state_dict_split = split_torch_state_dict_into_shards(output_state_dict, max_shard_size=max_shard_size)
+    shards = index = None
+    for tensors in state_dict_split.filename_to_tensors.values():
+        shards = {tensor: state_dict[tensor] for tensor in tensors}
+    if state_dict_split.is_sharded:
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
 
     # Save the model
     for shard_file, shard in shards.items():
