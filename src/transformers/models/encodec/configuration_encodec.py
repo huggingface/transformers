@@ -104,6 +104,7 @@ class EncodecConfig(PretrainedConfig):
     ```"""
 
     model_type = "encodec"
+    loss_type = "Encodec"
 
     def __init__(
         self,

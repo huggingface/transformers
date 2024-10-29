@@ -864,65 +864,30 @@ class EncodecModel(EncodecPreTrainedModel):
         if audio_codes is not None and audio_scales is None:
             raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
 
-        reconstruction_loss = None
-        commitment_loss = None
-
-        if audio_scales is None and audio_codes is None:
+        if audio_codes is None:
             audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, return_dict=False)
-
-            if return_loss:
-                embeddings = self.encoder(input_values)
-                _, quantization_steps = self.quantizer.encode(embeddings, bandwidth)
-
-                commitment_loss = torch.tensor(0.0, device=input_values.device)
-                for residual, quantize in quantization_steps:
-                    loss = F.mse_loss(quantize.permute(0, 2, 1), residual.permute(0, 2, 1))
-                    commitment_loss += loss
-                commitment_loss *= self.commitment_weight
 
         decoded_output = self.decode(audio_codes, audio_scales)
         audio_values = decoded_output.audio_values[:, :, : input_values.shape[-1]]
 
-        if return_loss:
-            # Time domain loss
-            time_loss = F.l1_loss(audio_values, input_values)
-            print(f"Time loss: {time_loss.item()}")
+        outputs = {
+            "audio_codes": audio_codes,
+            "audio_values": audio_values,
+        }
 
-            # Frequency domain loss
-            scales = [2**i for i in range(5, 12)]
-            frequency_loss = 0.0
-            for scale in scales:
-                n_fft = scale
-                hop_length = scale // 4
-                S_x = self.compute_mel_spectrogram(input_values, n_fft, hop_length, n_mels=64)
-                S_x_hat = self.compute_mel_spectrogram(audio_values, n_fft, hop_length, n_mels=64)
-                l1 = F.l1_loss(S_x_hat, S_x)
-                l2 = F.mse_loss(S_x_hat, S_x)
-                frequency_loss += l1 + l2
-
-            frequency_loss = frequency_loss / (len(scales) * 2)
-            print(f"Average frequency loss: {frequency_loss.item()}")
-
-            # Combine losses
-            lambda_t = 1.0  # look at this further, not sure why the need for a weight here
-            lambda_f = 1.0
-            reconstruction_loss = lambda_t * time_loss + lambda_f * frequency_loss
-            print(f"Reconstruction loss: {reconstruction_loss.item()}")
-
-            if commitment_loss is not None:
-                print(f"Commitment loss: {commitment_loss.item()}")
-
-        audio_values_to_return = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
+        if self.training and self.loss_function is not None:
+            reconstruction_loss, commitment_loss = self.loss_function(
+                model=self,
+                input_values=input_values,
+                audio_values=audio_values
+            )
+            outputs["reconstruction_loss"] = reconstruction_loss
+            outputs["commitment_loss"] = commitment_loss
 
         if not return_dict:
-            return (audio_codes, audio_values_to_return, reconstruction_loss, commitment_loss)
+            return tuple(outputs.values())
 
-        return EncodecOutput(
-            audio_codes=audio_codes,
-            audio_values=audio_values_to_return,
-            reconstruction_loss=reconstruction_loss,
-            commitment_loss=commitment_loss,
-        )
+        return EncodecOutput(**outputs)
 
 
 """

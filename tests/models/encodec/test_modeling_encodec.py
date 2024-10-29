@@ -240,7 +240,8 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 discriminator_optimizer.zero_grad()
 
                 # Generate fake audio with the generator
-                outputs = model(input_values, return_dict=True, return_loss=True)
+                with torch.no_grad():
+                    outputs = model(input_values, return_dict=True)
                 fake_audio = outputs.audio_values.detach()  # Detach to prevent gradients flowing to the generator
 
                 real_logits, _ = discriminator(real_audio)
@@ -258,9 +259,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # Train Generator
             generator_optimizer.zero_grad()
 
-            # Generate fake audio again (this time gradients flow back to the generator)
-            outputs = model(input_values, return_dict=True, return_loss=True)
-            fake_audio = outputs.audio_values  # Do not detach
+            # Generate fake audio and compute losses
+            outputs = model(input_values, return_dict=True)
+            fake_audio = outputs.audio_values
 
             # Compute generator adversarial loss and feature matching loss
             fake_logits, fake_features = discriminator(fake_audio)
@@ -271,14 +272,13 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 fake_logits=fake_logits, num_discriminators=discriminator.num_discriminators
             )
 
-            # Feature matching loss (Equation 2 in paper)
+            # Feature matching loss
             fm_loss = compute_feature_matching_loss(
                 real_features=real_features,
                 fake_features=fake_features,
                 num_discriminators=discriminator.num_discriminators,
             )
 
-            # Combine losses using the Balancer
             losses_to_balance = {
                 "reconstruction_loss": outputs.reconstruction_loss,
                 "g_adv_loss": g_adv_loss,
@@ -288,9 +288,8 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # Model output (the reconstructed audio)
             model_output = outputs.audio_values
 
-            balancer.backward(losses_to_balance, model_output)
+            balancer.backward(losses=losses_to_balance, input=model_output)
 
-            # Add commitment loss separately as per paper
             if outputs.commitment_loss is not None:
                 outputs.commitment_loss.backward()
 
@@ -303,10 +302,12 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 print("Discriminator not updated this epoch")
             print(f"Generator adversarial loss: {g_adv_loss.item():.4f}")
             print(f"Feature matching loss: {fm_loss.item():.4f}")
-            print(f"Reconstruction loss (no commit): {outputs.reconstruction_loss.item():.4f}")
+            print(f"Reconstruction loss: {outputs.reconstruction_loss.item():.4f}")
             if outputs.commitment_loss is not None:
                 print(f"Commitment loss: {outputs.commitment_loss.item():.4f}")
-            total_gen_loss = outputs.reconstruction_loss.item() + g_adv_loss.item() + fm_loss.item()
+            total_gen_loss = (
+                    outputs.reconstruction_loss.item() + g_adv_loss.item() + fm_loss.item()
+            )
             if outputs.commitment_loss is not None:
                 total_gen_loss += outputs.commitment_loss.item()
             print(f"Total generator loss (before balancing): {total_gen_loss:.4f}\n")
