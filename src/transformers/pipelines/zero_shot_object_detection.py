@@ -130,8 +130,16 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
         if isinstance(image, (str, Image.Image)):
             inputs = {"image": image, "candidate_labels": candidate_labels}
-        else:
+        elif isinstance(image, dict):
             inputs = image
+        elif isinstance(image, list):
+            return list(
+                super().__call__(
+                    ({"image": img, "candidate_labels": labels} for img, labels in zip(image, candidate_labels)),
+                    **kwargs,
+                )
+            )
+
         results = super().__call__(inputs, **kwargs)
         return results
 
@@ -147,6 +155,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return preprocess_params, {}, postprocess_params
 
     def preprocess(self, inputs, timeout=None):
+        print("inputs", inputs)
         image = load_image(inputs["image"], timeout=timeout)
         candidate_labels = inputs["candidate_labels"]
         if isinstance(candidate_labels, str):
