@@ -180,7 +180,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(len(inputs_url["input_ids"]) == 1)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
         self.assertIsInstance(inputs_url["pixel_values"], list)
-        self.assertTrue(len(inputs_url["pixel_values"]) == 1)
+        self.assertTrue(len(inputs_url["pixel_values"]) == 2)
         self.assertIsInstance(inputs_url["pixel_values"][0], list)
         self.assertTrue(len(inputs_url["pixel_values"][0]) == 2)
         self.assertIsInstance(inputs_url["pixel_values"][0][0], torch.Tensor)
