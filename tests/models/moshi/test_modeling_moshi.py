@@ -656,16 +656,21 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                         )
 
     @pytest.mark.generate
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    @parameterized.expand([(1,), (2,)])
+    def test_generate_from_inputs_embeds_decoder_only(self, num_beams):
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, inputs_dict = self._get_input_ids_and_config()
 
             model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "num_beams": num_beams,
+                "do_sample": False,
+            }
 
             # Traditional way of generating text
-            outputs_from_ids = model.generate(
-                input_ids, max_new_tokens=5, return_dict_in_generate=True, output_scores=True, **inputs_dict
-            )
+            outputs_from_ids = model.generate(input_ids, max_new_tokens=5, **generation_kwargs, **inputs_dict)
             self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
@@ -674,8 +679,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 input_ids,
                 inputs_embeds=inputs_embeds,
                 max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
+                **generation_kwargs,
                 **inputs_dict,
             )
 
@@ -686,8 +690,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 input_ids,
                 inputs_embeds=random_embeds,
                 max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
+                **generation_kwargs,
                 **inputs_dict,
             )
             for i in range(len(outputs_from_rand_embeds.scores)):
@@ -697,8 +700,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             outputs_from_embeds_wo_ids = model.generate(
                 inputs_embeds=inputs_embeds,
                 max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
+                **generation_kwargs,
                 **inputs_dict,
             )
             self.assertListEqual(
@@ -788,13 +790,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @slow
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_eager_matches_sdpa_generate(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
+        """Overwritten -- mochi has custom inputs and custom output checks"""
 
         max_new_tokens = 5
-
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_sdpa:

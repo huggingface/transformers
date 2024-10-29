@@ -15,6 +15,7 @@
 
 
 import copy
+import gc
 import inspect
 import tempfile
 import unittest
@@ -33,6 +34,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -668,29 +670,6 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
-
-            # for VLMs inputs embeds won't match input ids unless images are encoded and merged with ids properly
-            # no quick fix available, since obtaining image embeddings step is very model-specific
-            if any(name in model.__class__.__name__.lower() for name in ("blip", "llava", "paligemma")):
-                prepare_inputs_for_generation_args = set(
-                    inspect.signature(model.prepare_inputs_for_generation).parameters
-                )
-                # `inputs_embeds` input is well supported when `cache_positions` is used, because it means the modeling
-                # code is up to date with our most recent standards
-                if (
-                    "inputs_embeds" in prepare_inputs_for_generation_args
-                    and "cache_positions" in prepare_inputs_for_generation_args
-                ):
-                    input_embeds = model.get_input_embeddings()(inputs_dict["input_ids"])
-                    beam_kwargs.update({"inputs_embeds": input_embeds})
-                    output_generate2 = self._beam_sample_generate(
-                        model=model,
-                        input_ids=None,
-                        inputs_dict={},
-                        beam_kwargs=beam_kwargs,
-                    )
-
-                    torch.testing.assert_close(output_generate[:, input_embeds.shape[1] :], output_generate2)
 
     @pytest.mark.generate
     def test_beam_sample_generate_dict_output(self):
@@ -1568,7 +1547,8 @@ class GenerationTesterMixin:
                     )
 
     @pytest.mark.generate
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    @parameterized.expand([(1,), (2,)])
+    def test_generate_from_inputs_embeds_decoder_only(self, num_beams):
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
         for model_class in self.all_generative_model_classes:
@@ -1595,11 +1575,15 @@ class GenerationTesterMixin:
                 continue
 
             input_ids = inputs_dict.pop("input_ids")
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "num_beams": num_beams,
+                "do_sample": False,
+            }
 
             # Traditional way of generating text
-            outputs_from_ids = model.generate(
-                input_ids, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
-            )
+            outputs_from_ids = model.generate(input_ids, max_new_tokens=5, **generation_kwargs)
             self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
@@ -1608,8 +1592,7 @@ class GenerationTesterMixin:
                 input_ids,
                 inputs_embeds=inputs_embeds,
                 max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
+                **generation_kwargs,
             )
             self.assertListEqual(outputs_from_ids.sequences.tolist(), outputs_from_embeds.sequences.tolist())
 
@@ -1620,15 +1603,14 @@ class GenerationTesterMixin:
                 input_ids,
                 inputs_embeds=random_embeds,
                 max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
+                **generation_kwargs,
             )
             for i in range(len(outputs_from_rand_embeds.scores)):
                 self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
 
             # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
             outputs_from_embeds_wo_ids = model.generate(
-                inputs_embeds=inputs_embeds, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
+                inputs_embeds=inputs_embeds, max_new_tokens=5, **generation_kwargs
             )
             self.assertListEqual(
                 outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
@@ -2045,6 +2027,86 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
+
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
+            inputs_dict = {}
+            for input_name, input_data in original_inputs_dict.items():
+                if isinstance(input_data, torch.Tensor) and input_data.dtype in [torch.float32, torch.bfloat16]:
+                    inputs_dict[input_name] = input_data.to(torch.float16)
+                else:
+                    inputs_dict[input_name] = input_data
+            main_input = inputs_dict[model_class.main_input_name]
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                del model
+                gc.collect()
+
+                generate_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "do_sample": False,
+                    "return_dict_in_generate": True,
+                    "output_scores": True,
+                }
+
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+                res_sdpa = model_sdpa.generate(**inputs_dict, **generate_kwargs)
+                del model_sdpa
+                gc.collect()
+
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                    attn_implementation="eager",
+                ).to(torch_device)
+                res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
+                del model_eager
+                gc.collect()
+
+                # Eager and SDPA are very similar, but not exactly the same. Because we are using random models, this
+                # test would be flaky if we only checked the sequences. Two situations in which this test passes:
+                # 1. The sequences are the same
+                # 2. The sequences are different, but the scores up until the first mismatch are nearly identical
+                output_matches = res_eager.sequences == res_sdpa.sequences
+                has_matching_outputs = output_matches.all()
+                has_matching_scores = None
+                if not has_matching_outputs:
+                    input_length = main_input.shape[1]
+                    for batch_idx in range(res_eager.sequences.shape[0]):
+                        batch_matches = output_matches[batch_idx]
+                        if batch_matches.all():
+                            continue
+                        first_mismatch_idx = batch_matches.int().argmin()  # gets the index of the first False
+                        first_mismatch_idx -= input_length  # scores doesn't include data regarding input tokens
+                        sdpa_first_mismatch_scores = res_sdpa.scores[first_mismatch_idx][batch_idx]
+                        eager_first_mismatch_scores = res_eager.scores[first_mismatch_idx][batch_idx]
+                        has_matching_scores = torch.allclose(
+                            sdpa_first_mismatch_scores, eager_first_mismatch_scores, rtol=1e-3, atol=1e-3
+                        )
+                        if not has_matching_scores:
+                            break
+
+                self.assertTrue(has_matching_outputs or has_matching_scores)
 
     def _check_outputs(self, output, main_input, config, use_cache=False, num_return_sequences=1):
         # we can be sure what is batch size from main input but seq length depends on model type and whether input is text/audio/image
