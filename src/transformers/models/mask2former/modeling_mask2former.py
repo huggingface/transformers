@@ -1345,8 +1345,8 @@ class Mask2FormerPixelDecoder(nn.Module):
         # We compute level_start_index_list separately from the tensor version level_start_index
         # to avoid iterating over a tensor which breaks torch.compile/export.
         level_start_index_list = [0]
-        for h, w in spatial_shapes_list[:-1]:
-            level_start_index_list.append(level_start_index_list[-1] + h * w)
+        for height, width in spatial_shapes_list[:-1]:
+            level_start_index_list.append(level_start_index_list[-1] + height * width)
         split_sizes = [None] * self.num_feature_levels
         for i in range(self.num_feature_levels):
             if i < self.num_feature_levels - 1:
