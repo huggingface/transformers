@@ -238,8 +238,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
             # and replace the old suffix with the new one.
             # Useful when we have a class like `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`
             # where a model extends another model, but is used for a different task.
-            if old_class_name.startswith(self.default_old_name) and new_class_name.startswith(self.default_name):
-                self.patterns[old_class_name[len(self.default_old_name) :]] = new_class_name[len(self.default_name) :]
+            if old_class_name.startswith(self.old_name) and new_class_name.startswith(self.default_name):
+                self.patterns[old_class_name[len(self.old_name) :]] = new_class_name[len(self.default_name) :]
 
     def preserve_case_replace(self, text):
         # Create a regex pattern to match all variations

@@ -5,15 +5,12 @@
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import inspect
-from typing import Dict, List, Optional, Tuple, Union
-
-import numpy as np
-import torch
+from typing import Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, select_best_resolution
-from ...image_transforms import convert_to_rgb
-from ...image_utils import ImageInput, to_numpy_array
+from ...image_utils import (
+    ImageInput,
+)
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
     PaddingStrategy,
@@ -23,228 +20,20 @@ from ...tokenization_utils import (
     TruncationStrategy,
 )
 from ...utils import logging
-from ...utils.import_utils import is_vision_available
 from ..auto import AutoTokenizer
+from .image_processing_aria import AriaImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
-if is_vision_available():
-    from PIL import Image, ImageOps
 
-def get_split_image(
-    image: ImageInput,
-    split_ratio: List[List[int]],
-    patch_size: int,
-) -> List[ImageInput]:
-    """
-    Split image into multiple patches
-
-    Args:
-        image (ImageInput): Input image.
-        split_ratio (2d numpy array): dimension size (M,2)
-        patch_size (int): image patch size
-
-    Returns:
-        List[ImageInput]: List of splitted images.
-    """
-    (ratio_height, ratio_width) = select_best_resolution((image.height, image.width), split_ratio)
-    resize_width = patch_size * ratio_width
-    resize_height = patch_size * ratio_height
-    blocks = ratio_width * ratio_height
-    resized_img = image.resize((resize_width, resize_height))
-    processed_images = []
-    for i in range(blocks):
-        box = (
-            (i % (resize_width // patch_size)) * patch_size,
-            (i // (resize_width // patch_size)) * patch_size,
-            ((i % (resize_width // patch_size)) + 1) * patch_size,
-            ((i // (resize_width // patch_size)) + 1) * patch_size,
-        )
-        # split the image
-        split_img = resized_img.crop(box)
-        processed_images.append(split_img)
-    assert len(processed_images) == blocks
-    if len(processed_images) != 1:
-        processed_images.insert(0, image)
-    return processed_images
-
-
-def keep_ratio_resize_and_pixel_mask(img: ImageInput, max_size, min_size=336, padding_value=0):
-    """
-    Resize an image while maintaining aspect ratio and create a pixel mask.
-
-    Args:
-        img (ImageInput): Input image.
-        max_size (int): Maximum size for the larger dimension of the image.
-        min_size (int, optional): Minimum size for the smaller dimension. Defaults to 336.
-        padding_value (int, optional): Value used for padding. Defaults to 0.
-
-    Returns:
-        tuple: A tuple containing:
-            - ImageInput: Resized and padded image.
-            - torch.Tensor: Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
-                - True (1) values indicate pixels that belong to the original resized image.
-                - False (0) values indicate pixels that are part of the padding.
-              The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
-    """
-    img = img.convert("RGB")
-    # rescale the given image, keep the aspect ratio
-    scale = max_size / max(img.size)
-
-    w, h = img.size
-    if w >= h:
-        new_size = (max_size, max(int(h * scale), min_size))  # w, h
-    else:
-        new_size = (max(int(w * scale), min_size), max_size)  # w, h
-
-    img_resized = img.resize(new_size, resample=Image.Resampling.BICUBIC)
-
-    # padding the right/bottom
-    padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
-    img_padded = ImageOps.expand(img_resized, (0, 0, padding_right, padding_bottom), fill=padding_value)
-
-    # Create a pixel mask
-    pixel_mask = torch.zeros(max_size, max_size)
-    pixel_mask[: new_size[1], : new_size[0]] = 1
-    pixel_mask = pixel_mask.bool()
-    return img_padded, pixel_mask
-
-
-class AriaVisionProcessor(BaseImageProcessor):
-    """
-    A vision processor for the Aria model that handles image preprocessing.
-    """
-
-    def __init__(
-        self,
-        max_image_size=980,
-        min_image_size=336,
-        image_mean=None,
-        image_std=None,
-        **kwargs,
-    ):
-        """
-        Initialize the AriaVisionProcessor.
-
-        Args:
-            max_image_size (int, optional): Maximum image size. Defaults to 980.
-            min_image_size (int, optional): Minimum image size. Defaults to 336.
-            mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
-            std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
-        """
-        super().__init__(**kwargs)
-
-        if image_mean is None:
-            image_mean = [0.5, 0.5, 0.5]
-        if image_std is None:
-            image_std = [0.5, 0.5, 0.5]
-        self.max_image_size = max_image_size
-        self.min_image_size = min_image_size
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-        # we make the transform a property so that it is lazily initialized,
-        # this could avoid the error "TypeError: Object of type Normalize is not JSON serializable"
-        # when we used save_pretrained or from_pretrained.
-        self._transform = None
-        self._set_processor_class("AriaProcessor")
-
-    def preprocess(
-        self,
-        images: Union[ImageInput, List[ImageInput]],
-        max_image_size: Optional[int] = 980,
-        min_image_size: Optional[int] = 336,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        split_image: Optional[bool] = False,
-        split_ratio: Optional[List[Tuple[int]]] = None,
-        do_convert_rgb: Optional[bool] = True,
-        do_normalize: Optional[bool] = True,
-    ):
-        """
-        Process a list of images.
-
-        Args:
-            images (list): List of ImageInput objects.
-            max_image_size (int, optional): Override the default max image size. Defaults to None.
-            return_tensors (str or TensorType, optional): The type of tensor to return. Defaults to "pt".
-            split_image (bool, optional): Whether to split the image. Defaults to False.
-            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
-        Returns:
-            BatchFeature: A BatchFeature object containing:
-                - 'pixel_values': Tensor of processed image pixel values.
-                - 'pixel_mask': Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
-                    - True (1) values indicate pixels that belong to the original resized image.
-                    - False (0) values indicate pixels that are part of the padding.
-                  The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
-                - 'num_crops': Tensor of the number of crops for each image.
-        """
-        if split_ratio is None:
-            split_ratio = [
-                (1, 2),
-                (1, 3),
-                (1, 4),
-                (1, 5),
-                (1, 6),
-                (1, 7),
-                (1, 8),
-                (2, 4),
-                (2, 3),
-                (2, 2),
-                (2, 1),
-                (3, 1),
-                (3, 2),
-                (4, 1),
-                (4, 2),
-                (5, 1),
-                (6, 1),
-                (7, 1),
-                (8, 1),
-            ]
-        max_size = self.max_image_size if max_image_size is None else max_image_size
-        min_size = self.min_image_size if min_image_size is None else min_image_size
-
-        if max_size not in [490, 980]:
-            raise ValueError("max_image_size must be either 490 or 980")
-
-        if not isinstance(images, list):
-            images = [images]
-
-        pixel_values = []
-        pixel_masks = []
-        num_crops = None
-
-        for image in images:
-            if split_image:
-                crop_images = get_split_image(image, split_ratio, max_size)
-            else:
-                crop_images = [image]
-            if num_crops is None or len(crop_images) > num_crops:
-                num_crops = len(crop_images)
-            for crop_image in crop_images:
-                img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
-                if do_convert_rgb:
-                    img_padded = convert_to_rgb(img_padded)
-                img_padded = to_numpy_array(img_padded).T
-                if do_normalize:
-                    img_padded = self.normalize(img_padded, self.image_mean, self.image_std)
-                pixel_values.append(img_padded)
-                pixel_masks.append(pixel_mask)
-        return BatchFeature(
-            data={
-                "pixel_values": np.stack(pixel_values, axis=0),
-                "pixel_mask": np.stack(pixel_masks, axis=0),
-                "num_crops": num_crops,
-            },
-            tensor_type=return_tensors,
-        )
 
 
 class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
     Args:
-        image_processor(AriaVisionProcessor): The AriaVisionProcessor to use for image preprocessing.
+        image_processor(AriaImageProcessor): The AriaImageProcessor to use for image preprocessing.
         tokenizer(AutoTokenizer): The AutoTokenizer to use for tokenizing the text.
         patch_size(int): The patch size to use for the image processor.
         chat_template(str): The chat template to use for the tokenizer.
@@ -258,7 +47,7 @@ class AriaProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: AriaVisionProcessor = None,
+        image_processor: AriaImageProcessor = None,
         tokenizer: Union[AutoTokenizer, str] = None,
         patch_size: int = 490,
         chat_template: str = None,
@@ -271,7 +60,7 @@ class AriaProcessor(ProcessorMixin):
         self.size_conversion = size_conversion
 
         if image_processor is None:
-            self.image_processor = AriaVisionProcessor(max_image_size=patch_size)
+            self.image_processor = AriaImageProcessor(max_image_size=patch_size)
         else:
             self.image_processor = image_processor
 
@@ -415,9 +204,9 @@ class AriaProcessor(ProcessorMixin):
         image_processor_path = (
             image_processor_path if image_processor_path is not None else pretrained_model_name_or_path
         )
-        image_processor = AriaVisionProcessor.from_pretrained(
+        image_processor = AriaImageProcessor.from_pretrained(
             image_processor_path,
-            **cls._extract_kwargs(AriaVisionProcessor.from_pretrained, **kwargs),
+            **cls._extract_kwargs(AriaImageProcessor.from_pretrained, **kwargs),
         )
         if "use_fast" in kwargs:
             logger.warning("use_fast is not supported for AriaProcessor. Ignoring...")

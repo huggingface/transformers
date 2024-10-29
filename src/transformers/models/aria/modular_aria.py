@@ -13,8 +13,18 @@ from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, select_best_resolution
-from ...image_transforms import convert_to_rgb
-from ...image_utils import ImageInput, to_numpy_array
+from ...image_transforms import (
+    convert_to_rgb,
+    resize,
+    to_channel_dimension_format,
+)
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    get_image_size,
+    to_numpy_array,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
@@ -43,6 +53,7 @@ from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
 
 
 logger = logging.get_logger(__name__)
+
 
 if is_vision_available():
     from PIL import Image, ImageOps
@@ -88,88 +99,6 @@ try:
 except ImportError:
     logger.warning("`grouped_gemm` is not installed, using sequential GEMM, which is slower.")
     experts_gemm = sequential_gemm
-
-
-def get_split_image(
-    image: ImageInput,
-    split_ratio: List[List[int]],
-    patch_size: int,
-) -> List[ImageInput]:
-    """
-    Split image into multiple patches
-
-    Args:
-        image (ImageInput): Input image.
-        split_ratio (2d numpy array): dimension size (M,2)
-        patch_size (int): image patch size
-
-    Returns:
-        List[ImageInput]: List of splitted images.
-    """
-    (ratio_height, ratio_width) = select_best_resolution((image.height, image.width), split_ratio)
-    resize_width = patch_size * ratio_width
-    resize_height = patch_size * ratio_height
-    blocks = ratio_width * ratio_height
-    resized_img = image.resize((resize_width, resize_height))
-    processed_images = []
-    for i in range(blocks):
-        box = (
-            (i % (resize_width // patch_size)) * patch_size,
-            (i // (resize_width // patch_size)) * patch_size,
-            ((i % (resize_width // patch_size)) + 1) * patch_size,
-            ((i // (resize_width // patch_size)) + 1) * patch_size,
-        )
-        # split the image
-        split_img = resized_img.crop(box)
-        processed_images.append(split_img)
-    assert len(processed_images) == blocks
-    if len(processed_images) != 1:
-        processed_images.insert(0, image)
-    return processed_images
-
-
-def keep_ratio_resize_and_pixel_mask(img: ImageInput, max_size, min_size=336, padding_value=0):
-    """
-    Resize an image while maintaining aspect ratio and create a pixel mask.
-
-    Args:
-        img (ImageInput): Input image.
-        max_size (int): Maximum size for the larger dimension of the image.
-        min_size (int, optional): Minimum size for the smaller dimension. Defaults to 336.
-        padding_value (int, optional): Value used for padding. Defaults to 0.
-
-    Returns:
-        tuple: A tuple containing:
-            - ImageInput: Resized and padded image.
-            - torch.Tensor: Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
-                - True (1) values indicate pixels that belong to the original resized image.
-                - False (0) values indicate pixels that are part of the padding.
-              The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
-    """
-    img = img.convert("RGB")
-    # rescale the given image, keep the aspect ratio
-    scale = max_size / max(img.size)
-
-    w, h = img.size
-    if w >= h:
-        new_size = (max_size, max(int(h * scale), min_size))  # w, h
-    else:
-        new_size = (max(int(w * scale), min_size), max_size)  # w, h
-
-    img_resized = img.resize(new_size, resample=Image.Resampling.BICUBIC)
-
-    # padding the right/bottom
-    padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
-    img_padded = ImageOps.expand(img_resized, (0, 0, padding_right, padding_bottom), fill=padding_value)
-
-    # Create a pixel mask
-    pixel_mask = torch.zeros(max_size, max_size)
-    pixel_mask[: new_size[1], : new_size[0]] = 1
-    pixel_mask = pixel_mask.bool()
-    return img_padded, pixel_mask
-
-
-logger = logging.get_logger(__name__)
 
 
 class IdentityOp(torch.nn.Module):
@@ -441,8 +370,74 @@ class AriaProjector(nn.Module):
 
         return out
 
+def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
+    """
+    Divides an image into patches of a specified size.
 
-class AriaVisionProcessor(BaseImageProcessor):
+    Args:
+        image (`np.array`):
+            The input image.
+        patch_size (`int`):
+            The size of each patch.
+        input_data_format (`ChannelDimension` or `str`):
+            The channel dimension format of the input image.
+
+    Returns:
+        list: A list of np.array representing the patches.
+    """
+    patches = []
+    height, width = get_image_size(image, channel_dim=input_data_format)
+    for i in range(0, height, patch_size):
+        for j in range(0, width, patch_size):
+            if input_data_format == ChannelDimension.LAST:
+                patch = image[i : i + patch_size, j : j + patch_size]
+            else:
+                patch = image[:, i : i + patch_size, j : j + patch_size]
+            patches.append(patch)
+
+    return patches
+
+def keep_ratio_resize_and_pixel_mask(img: ImageInput, max_size, min_size=336, padding_value=0):
+    """
+    Resize an image while maintaining aspect ratio and create a pixel mask.
+
+    Args:
+        img (ImageInput): Input image.
+        max_size (int): Maximum size for the larger dimension of the image.
+        min_size (int, optional): Minimum size for the smaller dimension. Defaults to 336.
+        padding_value (int, optional): Value used for padding. Defaults to 0.
+
+    Returns:
+        tuple: A tuple containing:
+            - ImageInput: Resized and padded image.
+            - torch.Tensor: Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
+                - True (1) values indicate pixels that belong to the original resized image.
+                - False (0) values indicate pixels that are part of the padding.
+              The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
+    """
+    img = img.convert("RGB")
+    # rescale the given image, keep the aspect ratio
+    scale = max_size / max(img.size)
+
+    w, h = img.size
+    if w >= h:
+        new_size = (max_size, max(int(h * scale), min_size))  # w, h
+    else:
+        new_size = (max(int(w * scale), min_size), max_size)  # w, h
+
+    img_resized = img.resize(new_size, resample=Image.Resampling.BICUBIC)
+
+    # padding the right/bottom
+    padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
+    img_padded = ImageOps.expand(img_resized, (0, 0, padding_right, padding_bottom), fill=padding_value)
+
+    # Create a pixel mask
+    pixel_mask = torch.zeros(max_size, max_size, dtype=bool)
+    pixel_mask[: new_size[1], : new_size[0]] = 1
+    return img_padded, pixel_mask
+
+
+class AriaImageProcessor(BaseImageProcessor):
     """
     A vision processor for the Aria model that handles image preprocessing.
     """
@@ -456,7 +451,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         **kwargs,
     ):
         """
-        Initialize the AriaVisionProcessor.
+        Initialize the AriaImageProcessor.
 
         Args:
             max_image_size (int, optional): Maximum image size. Defaults to 980.
@@ -480,7 +475,6 @@ class AriaVisionProcessor(BaseImageProcessor):
         # when we used save_pretrained or from_pretrained.
         self._transform = None
         self._set_processor_class("AriaProcessor")
-
 
     def preprocess(
         self,
@@ -548,7 +542,7 @@ class AriaVisionProcessor(BaseImageProcessor):
 
         for image in images:
             if split_image:
-                crop_images = get_split_image(image, split_ratio, max_size)
+                crop_images = self.get_image_patches(image, split_ratio, max_size, max_size)[1:]
             else:
                 crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
@@ -571,12 +565,78 @@ class AriaVisionProcessor(BaseImageProcessor):
             tensor_type=return_tensors,
         )
 
+    # Copied from models.llava_next.image_preprocessing_llava_next.LlavaNextImageProcessor.get_image_patches
+    def get_image_patches(
+        self,
+        image: np.array,
+        grid_pinpoints,
+        size: tuple,
+        patch_size: int,
+        resample: PILImageResampling,
+        data_format: ChannelDimension,
+        input_data_format: ChannelDimension,
+    ) -> List[np.array]:
+        """
+        Process an image with variable resolutions by dividing it into patches.
+
+        Args:
+            image (np.array):
+                The input image to be processed.
+            grid_pinpoints (List):
+                A string representation of a list of possible resolutions.
+            size (`tuple`):
+                Size to resize the original image to.
+            patch_size (`int`):
+                Size of the patches to divide the image into.
+            resample (`PILImageResampling`):
+                Resampling filter to use if resizing the image.
+            data_format (`ChannelDimension` or `str`):
+                The channel dimension format for the output image.
+            input_data_format (`ChannelDimension` or `str`):
+                The channel dimension format of the input image.
+
+        Returns:
+            List[np.array]: A list of NumPy arrays containing the processed image patches.
+        """
+        if not isinstance(grid_pinpoints, list):
+            raise TypeError("grid_pinpoints must be a list of possible resolutions.")
+
+        possible_resolutions = grid_pinpoints
+
+        image_size = get_image_size(image, channel_dim=input_data_format)
+        best_resolution = select_best_resolution(image_size, possible_resolutions)
+        resized_image = self._resize_for_patching(
+            image, best_resolution, resample=resample, input_data_format=input_data_format
+        )
+        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=input_data_format)
+
+        patches = divide_to_patches(padded_image, patch_size=patch_size, input_data_format=input_data_format)
+
+        # make sure that all patches are in the input data format
+        patches = [
+            to_channel_dimension_format(patch, channel_dim=data_format, input_channel_dim=input_data_format)
+            for patch in patches
+        ]
+
+        resized_original_image = resize(
+            image,
+            size=size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
+
+        image_patches = [resized_original_image] + patches
+
+        return image_patches
+
+
 
 class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
     Args:
-        image_processor(AriaVisionProcessor): The AriaVisionProcessor to use for image preprocessing.
+        image_processor(AriaImageProcessor): The AriaImageProcessor to use for image preprocessing.
         tokenizer(AutoTokenizer): The AutoTokenizer to use for tokenizing the text.
         patch_size(int): The patch size to use for the image processor.
         chat_template(str): The chat template to use for the tokenizer.
@@ -590,7 +650,7 @@ class AriaProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: AriaVisionProcessor = None,
+        image_processor: AriaImageProcessor = None,
         tokenizer: Union[AutoTokenizer, str] = None,
         patch_size: int = 490,
         chat_template: str = None,
@@ -603,7 +663,7 @@ class AriaProcessor(ProcessorMixin):
         self.size_conversion = size_conversion
 
         if image_processor is None:
-            self.image_processor = AriaVisionProcessor(max_image_size=patch_size)
+            self.image_processor = AriaImageProcessor(max_image_size=patch_size)
         else:
             self.image_processor = image_processor
 
@@ -747,9 +807,9 @@ class AriaProcessor(ProcessorMixin):
         image_processor_path = (
             image_processor_path if image_processor_path is not None else pretrained_model_name_or_path
         )
-        image_processor = AriaVisionProcessor.from_pretrained(
+        image_processor = AriaImageProcessor.from_pretrained(
             image_processor_path,
-            **cls._extract_kwargs(AriaVisionProcessor.from_pretrained, **kwargs),
+            **cls._extract_kwargs(AriaImageProcessor.from_pretrained, **kwargs),
         )
         if "use_fast" in kwargs:
             logger.warning("use_fast is not supported for AriaProcessor. Ignoring...")
@@ -1301,6 +1361,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         logits = outputs[0]
 
+        loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, config=self.config)
 
