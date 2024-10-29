@@ -277,7 +277,7 @@ class PixtralVisionModelIntegrationTest(unittest.TestCase):
         model = PixtralVisionModel.from_pretrained("hf-internal-testing/pixtral-12b", load_in_4bit=True)
 
         prompt = "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
-        image_file = "https://pixtral-vl.github.io/static/images/view.jpg"
+        image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
