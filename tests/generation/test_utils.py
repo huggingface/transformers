@@ -1544,20 +1544,16 @@ class GenerationTesterMixin:
                     )
 
     @pytest.mark.generate
-    @parameterized.expand([(1,), (2,)])
-    def test_generate_from_inputs_embeds(self, num_beams):
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
         """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            # Ignore:
-            # a) eos (to always output 20 tokens) and pad (so we don't try to infer the attn mask from the input_ids,
-            #   which would cause a mismatch),
-            config.pad_token_id = config.eos_token_id = -1
-            # b) embedding scaling, the scaling factor applied after embeding from input_ids (requires knowledge of the
-            #   variable that holds the scaling factor, which is model-dependent)
+            # Ignore embedding scaling, the scaling factor applied after embeding from input_ids (requires knowledge
+            # of the variable that holds the scaling factor, which is model-dependent)
             if hasattr(config, "scale_embedding"):
                 config.scale_embedding = False
 
@@ -1578,19 +1574,18 @@ class GenerationTesterMixin:
                 "output_scores": True,
                 "num_beams": num_beams,
                 "do_sample": False,
+                "max_new_tokens": 5,
+                "min_new_tokens": 5,  # generate exactly 5 tokens
             }
 
             # Traditional way of generating text
-            outputs_from_ids = model.generate(input_ids, max_new_tokens=5, **generation_kwargs)
+            outputs_from_ids = model.generate(input_ids, **generation_kwargs, **inputs_dict)
             self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs_from_embeds = model.generate(
-                input_ids,
-                inputs_embeds=inputs_embeds,
-                max_new_tokens=5,
-                **generation_kwargs,
+                input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
             self.assertListEqual(outputs_from_ids.sequences.tolist(), outputs_from_embeds.sequences.tolist())
 
@@ -1598,17 +1593,14 @@ class GenerationTesterMixin:
             # same, but the logits will almost surely be different)
             random_embeds = torch.rand_like(inputs_embeds)
             outputs_from_rand_embeds = model.generate(
-                input_ids,
-                inputs_embeds=random_embeds,
-                max_new_tokens=5,
-                **generation_kwargs,
+                input_ids, inputs_embeds=random_embeds, **generation_kwargs, **inputs_dict
             )
             for i in range(len(outputs_from_rand_embeds.scores)):
                 self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
 
             # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
             outputs_from_embeds_wo_ids = model.generate(
-                inputs_embeds=inputs_embeds, max_new_tokens=5, **generation_kwargs
+                inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
             self.assertListEqual(
                 outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
@@ -1917,7 +1909,7 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     @require_torch_gpu
     @slow
-    def test_generate_compile(self, name, end_to_end):
+    def test_generate_compile(self, _, end_to_end):
         """
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results. Tests
         end-to-end compilation and forward pass compilation only.
