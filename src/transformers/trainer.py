@@ -34,7 +34,7 @@ import time
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -358,6 +358,11 @@ class Trainer:
         optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your
             model and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
+        optimizer_cls_and_kwargs (`Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]`, *optional*):
+            A tuple containing the optimizer class and keyword arguments to use.
+            Overrides `optim` and `optim_args` in `args`. Incompatible with the `optimizers` argument.
+
+            Unlike `optimizers`, this argument avoids the need to place model parameters on the correct devices before initializing the Trainer.
         preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`, *optional*):
             A function that preprocess the logits right before caching them at each evaluation step. Must take two
             tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
@@ -401,7 +406,8 @@ class Trainer:
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        optimizers: Tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
+        optimizer_cls_and_kwargs: Optional[Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]] = None,
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         if args is None:
@@ -603,6 +609,9 @@ class Trainer:
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
         self.optimizer, self.lr_scheduler = optimizers
+        self.optimizer_cls_and_kwargs = optimizer_cls_and_kwargs
+        if self.optimizer_cls_and_kwargs is not None and self.optimizer is not None:
+            raise RuntimeError("Passing both `optimizers` and `optimizer_cls_and_kwargs` arguments is incompatible.")
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
@@ -1171,7 +1180,10 @@ class Trainer:
                 },
             ]
 
-            optimizer_cls, optimizer_kwargs = self.get_optimizer_cls_and_kwargs(self.args, opt_model)
+            if self.optimizer_cls_and_kwargs is not None:
+                optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
+            else:
+                optimizer_cls, optimizer_kwargs = self.get_optimizer_cls_and_kwargs(self.args, opt_model)
 
             # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
             # e.g. for GaLore optimizer.
