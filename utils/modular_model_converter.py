@@ -912,6 +912,7 @@ VARIABLES_AT_THE_BEGINNING = [
     "_CONFIG_FOR_DOC",
 ]
 
+
 def get_module_name(node: cst.ImportFrom) -> str:
     """Recursively get the fully dotted name of a module in a cst.ImportFrom."""
     if m.matches(node, m.Name()):
@@ -921,9 +922,12 @@ def get_module_name(node: cst.ImportFrom) -> str:
         return f"{get_module_name(node.value)}.{node.attr.value}"
     return ""
 
-def append_new_import_node(node: cst.CSTNode, unused_imports: set[str], imports_to_keep: dict[str, cst.CSTNode], current_idx: int):
+
+def append_new_import_node(
+    node: cst.CSTNode, unused_imports: set[str], imports_to_keep: dict[str, cst.CSTNode], current_idx: int
+):
     """Insert the new `node` to the dict of `imports_to_keep` in-place, if it is not part of the `unused_imports`.
-    This function takes cares of aggregating similar ImportFrom, i.e. if we ever saw a statement such as 
+    This function takes cares of aggregating similar ImportFrom, i.e. if we ever saw a statement such as
     `from typing import Any`, and later another one `from typing import List`, we will aggregate as
     `from typing import Any, List` in a single statement.
     """
@@ -934,7 +938,8 @@ def append_new_import_node(node: cst.CSTNode, unused_imports: set[str], imports_
         module_name = current_idx
 
     # If we have a new import from with the same module name, write new names to the same import statement
-    names_to_keep = [name for name in imports_to_keep[module_name].body[0].names] if module_name in imports_to_keep else []
+    names_to_keep = list(imports_to_keep[module_name].body[0].names) if module_name in imports_to_keep else []
+
     for name in import_node.names:
         name_value = name.evaluated_name
         if name_value not in unused_imports:
@@ -972,7 +977,9 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
             for second_idx, stmt_node in enumerate(node.body.body):
                 append_new_import_node(stmt_node, unused_imports, new_statements, second_idx)
             if len(new_statements) > 0:
-                imports_to_keep[idx] = node.with_changes(body=node.body.with_changes(body=list(new_statements.values())))
+                imports_to_keep[idx] = node.with_changes(
+                    body=node.body.with_changes(body=list(new_statements.values()))
+                )
         else:
             append_new_import_node(node, unused_imports, imports_to_keep, idx)
 
@@ -1212,7 +1219,8 @@ class ModularFileMapper(ModuleMapper):
             relative_dependency_order = self.compute_relative_order(all_dependencies_to_add)
             nodes_to_add = {
                 dep: (relative_dependency_order[dep], self.global_nodes[dep])
-                for dep in all_dependencies_to_add if dep not in file_to_update.keys()
+                for dep in all_dependencies_to_add
+                if dep not in file_to_update.keys()
             }
 
         # Add the class node itself to the nodes to add
@@ -1252,7 +1260,11 @@ class ModularFileMapper(ModuleMapper):
         all_imports = self.imports.copy()
         all_imports_code = {self.python_module.code_for_node(node).strip() for node in all_imports}
         for file, mapper in self.visited_modules.items():
-            new_imports = [node for node in mapper.imports if mapper.python_module.code_for_node(node).strip() not in all_imports_code]
+            new_imports = [
+                node
+                for node in mapper.imports
+                if mapper.python_module.code_for_node(node).strip() not in all_imports_code
+            ]
             new_imports_code = {mapper.python_module.code_for_node(node).strip() for node in new_imports}
             all_imports.extend(new_imports)
             all_imports_code.update(new_imports_code)
