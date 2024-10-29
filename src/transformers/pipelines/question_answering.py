@@ -127,8 +127,8 @@ def select_starts_ends(
     undesired_tokens_mask = undesired_tokens == 0.0
 
     # Make sure non-context indexes in the tensor cannot contribute to the softmax
-    start = np.where(undesired_tokens_mask, -10000.0, start)
-    end = np.where(undesired_tokens_mask, -10000.0, end)
+    start = np.where(undesired_tokens_mask, -10000.0, start.float())
+    end = np.where(undesired_tokens_mask, -10000.0, end.float())
 
     # Normalize logits and spans to retrieve the answer
     start = np.exp(start - start.max(axis=-1, keepdims=True))
