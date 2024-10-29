@@ -1544,7 +1544,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
     def test_generation_config_is_loaded_with_model(self):
-        # Note: `hf-internal-testing/tiny-random-MistralForCausalLM` has a `generation_config.json` 
+        # Note: `hf-internal-testing/tiny-random-MistralForCausalLM` has a `generation_config.json`
         # containing `bos_token_id: 1`
 
         # 1. Load without further parameters
