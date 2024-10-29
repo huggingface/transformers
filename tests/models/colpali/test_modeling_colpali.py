@@ -14,15 +14,19 @@
 # limitations under the License.
 """Testing suite for the PyTorch ColPali model."""
 
+import gc
 import unittest
+from typing import ClassVar
 
 import torch
+from datasets import load_dataset
 from parameterized import parameterized
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from transformers import (
     ColPaliForRetrieval,
+    ColPaliProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -294,3 +298,50 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pass because ColPali requires `attention_mask is not None`")
     def test_sdpa_can_compile_dynamic(self):
         pass
+
+
+@require_torch
+class ColPaliModelIntegrationTest(unittest.TestCase):
+    model_name: ClassVar[str] = "vidore/colpali-v1.2-hf"
+
+    def setUp(self):
+        self.processor = ColPaliProcessor.from_pretrained(self.model_name)
+
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    @slow
+    def test_model_integration_test(self):
+        """
+        Test if the model is able to retrieve the correct pages for a small and easy dataset.
+        """
+        model = ColPaliForRetrieval.from_pretrained(
+            "vidore/colpali-v1.2-hf",
+            torch_dtype=torch.bfloat16,
+            device_map=torch_device,
+        ).eval()
+
+        # Load the test dataset
+        ds = load_dataset("vidore/document-retrieval-test", split="test")
+
+        # Preprocess the examples
+        batch_images = self.processor.process_images(ds["image"]).to(model.device)
+        batch_queries = self.processor.process_queries(ds["query"]).to(model.device)
+
+        # Run inference
+        with torch.inference_mode():
+            image_embeddings = model(**batch_images).embeddings
+            query_embeddings = model(**batch_queries).embeddings
+
+        # Compute retrieval scores
+        scores = self.processor.score_retrieval(
+            qs=query_embeddings,
+            ps=image_embeddings,
+        )  # (len(qs), len(ps))
+
+        assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
+        assert scores.shape == (len(ds), len(ds)), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"
+
+        # Check if the maximum scores per row are in the diagonal of the matrix score
+        self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
