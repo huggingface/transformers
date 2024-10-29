@@ -1092,13 +1092,13 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
         )
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
+    def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
         Get reference points for each feature map. Used in decoder.
 
         Args:
-            spatial_shapes (`torch.LongTensor`):
-                Spatial shapes of each feature map, has shape of `(num_feature_levels, 2)`.
+            spatial_shapes_list (`list` of `tuple`):
+                Spatial shapes of the backbone feature maps as a list of tuples.
             valid_ratios (`torch.FloatTensor`):
                 Valid ratios of each feature map, has shape of `(batch_size, num_feature_levels, 2)`.
             device (`torch.device`):
@@ -1107,7 +1107,7 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
             `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
         """
         reference_points_list = []
-        for lvl, (height, width) in enumerate(spatial_shapes):
+        for lvl, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
