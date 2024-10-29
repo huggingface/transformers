@@ -1168,115 +1168,117 @@ class ModularFileMapper(ModuleMapper):
 
         return relative_order
 
-    def add_class_node(self, class_name: str, node: cst.CSTNode, files: dict[str, dict]) -> tuple[dict, str]:
-        """Return a single class node (and all its dependency nodes), to be added to the `files`. It creates the new
-        class node based on the inherited classes if needed.
-        """
-        bases = [k.value.value for k in node.bases if k.value.value in self.model_specific_imported_objects]
-        if len(bases) > 1:
-            raise ValueError(
-                f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {*bases,}."
-            )
 
-        file_type = find_file_type(class_name)
-        file_to_update = files[file_type]
+def add_class_node(modular_mapper: ModularFileMapper, class_name: str, node: cst.CSTNode, files: dict[str, dict]) -> tuple[dict, str]:
+    """Return a single class node (and all its dependency nodes), to be added to the `files`. It creates the new
+    class node based on the inherited classes if needed.
+    """
+    bases = [k.value.value for k in node.bases if k.value.value in modular_mapper.model_specific_imported_objects]
+    if len(bases) > 1:
+        raise ValueError(
+            f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {*bases,}."
+        )
 
-        # We need to replace the class node with the super class node
-        if len(bases) == 1:
-            super_class = bases[0]
-            super_file_name = self.model_specific_imported_objects[super_class]
+    file_type = find_file_type(class_name)
+    file_to_update = files[file_type]
 
-            # Get the mapper corresponding to the inherited class
-            mapper = self.visited_modules[super_file_name]
-            # Rename the super class according to the exact same rule we used when renaming the whole module
-            renamer = self.renamers[super_file_name]
-            renamed_super_class = preserve_case_replace(super_class, renamer.patterns, renamer.default_name)
-            renamed_super_class = convert_to_camelcase(renamed_super_class, renamer.old_name, renamer.default_old_name)
+    # We need to replace the class node with the super class node
+    if len(bases) == 1:
+        super_class = bases[0]
+        super_file_name = modular_mapper.model_specific_imported_objects[super_class]
 
-            # Create the new class node
-            updated_node = replace_class_node(mapper, node, renamed_super_class)
+        # Get the mapper corresponding to the inherited class
+        mapper = modular_mapper.visited_modules[super_file_name]
+        # Rename the super class according to the exact same rule we used when renaming the whole module
+        renamer = modular_mapper.renamers[super_file_name]
+        renamed_super_class = preserve_case_replace(super_class, renamer.patterns, renamer.default_name)
+        renamed_super_class = convert_to_camelcase(renamed_super_class, renamer.old_name, renamer.default_old_name)
 
-            # The node was modified -> look for all dependencies (recursively) of the new node
-            new_node_dependencies = augmented_dependencies_for_class_node(updated_node, mapper)
-            all_dependencies_to_add = find_all_dependencies(
-                dependency_mapping=mapper.class_dependency_mapping,
-                initial_dependencies=new_node_dependencies,
-                initial_checked_dependencies=set(file_to_update.keys()),
-            )
+        # Create the new class node
+        updated_node = replace_class_node(mapper, node, renamed_super_class)
 
-            relative_dependency_order = mapper.compute_relative_order(all_dependencies_to_add)
-            nodes_to_add = {
-                dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
-            }
+        # The node was modified -> look for all dependencies (recursively) of the new node
+        new_node_dependencies = augmented_dependencies_for_class_node(updated_node, mapper)
+        all_dependencies_to_add = find_all_dependencies(
+            dependency_mapping=mapper.class_dependency_mapping,
+            initial_dependencies=new_node_dependencies,
+            initial_checked_dependencies=set(file_to_update.keys()),
+        )
 
-        # No super class, just check functions and assignments dependency in the imports from other model-specific files
-        else:
-            updated_node = node
-            # The node was NOT modified -> no need to look for dependencies recursively
-            all_dependencies_to_add = dependencies_for_class_node(updated_node, self.global_nodes)
+        relative_dependency_order = mapper.compute_relative_order(all_dependencies_to_add)
+        nodes_to_add = {
+            dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
+        }
 
-            relative_dependency_order = self.compute_relative_order(all_dependencies_to_add)
-            nodes_to_add = {
-                dep: (relative_dependency_order[dep], self.global_nodes[dep])
-                for dep in all_dependencies_to_add
-                if dep not in file_to_update.keys()
-            }
+    # No super class, just check functions and assignments dependency in the imports from other model-specific files
+    else:
+        updated_node = node
+        # The node was NOT modified -> no need to look for dependencies recursively
+        all_dependencies_to_add = dependencies_for_class_node(updated_node, modular_mapper.global_nodes)
 
-        # Add the class node itself to the nodes to add
-        class_idx = max(relative_dependency_order.values()) + 1 if len(relative_dependency_order) > 0 else 0
-        nodes_to_add[class_name] = (class_idx, updated_node)
+        relative_dependency_order = modular_mapper.compute_relative_order(all_dependencies_to_add)
+        nodes_to_add = {
+            dep: (relative_dependency_order[dep], modular_mapper.global_nodes[dep])
+            for dep in all_dependencies_to_add
+            if dep not in file_to_update.keys()
+        }
 
-        return nodes_to_add, file_type
+    # Add the class node itself to the nodes to add
+    class_idx = max(relative_dependency_order.values()) + 1 if len(relative_dependency_order) > 0 else 0
+    nodes_to_add[class_name] = (class_idx, updated_node)
 
-    def create_modules(self) -> dict[str, cst.Module]:
-        """Create all the new modules based on visiting the modular file. It replaces all classes as necesary."""
-        files = defaultdict(dict)
-        current_file_indices = defaultdict(lambda: 0)
+    return nodes_to_add, file_type
 
-        # For each class defined in modular, potentially replace the node and add it with its dependencies
-        for class_name, node in self.classes.items():
-            nodes_to_add, file_type = self.add_class_node(class_name, node, files)
-            # Sort the nodes according to their relative order
-            nodes_to_add = sorted(nodes_to_add.items(), key=lambda x: x[1][0])
-            # Write all nodes to file
-            for dependency, (_, node) in nodes_to_add:
-                # This is used to keep certain variables at the beginning of the file
-                try:
-                    # The -1000 is arbitrary -> just keep it bigger than the list
-                    idx = -1000 + VARIABLES_AT_THE_BEGINNING.index(dependency)
-                except ValueError:
-                    idx = current_file_indices[file_type]
-                    current_file_indices[file_type] += 1
-                files[file_type][dependency] = {"insert_idx": idx, "node": node}
 
-        # Add the __all__ statement to files at the end
-        for file_type, node in self.all_all_to_add.items():
-            idx = current_file_indices[file_type]
-            files[file_type]["__all__"] = {"insert_idx": idx, "node": node}
+def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
+    """Create all the new modules based on visiting the modular file. It replaces all classes as necesary."""
+    files = defaultdict(dict)
+    current_file_indices = defaultdict(lambda: 0)
 
-        # Aggregate all the imports statements (we look for duplicates with the code_for_node, not the nodes themselves because
-        # they are wrapped in SimpleStatementLine or If which could have different newlines, blanks etc)
-        all_imports = self.imports.copy()
-        all_imports_code = {self.python_module.code_for_node(node).strip() for node in all_imports}
-        for file, mapper in self.visited_modules.items():
-            new_imports = [
-                node
-                for node in mapper.imports
-                if mapper.python_module.code_for_node(node).strip() not in all_imports_code
-            ]
-            new_imports_code = {mapper.python_module.code_for_node(node).strip() for node in new_imports}
-            all_imports.extend(new_imports)
-            all_imports_code.update(new_imports_code)
+    # For each class defined in modular, potentially replace the node and add it with its dependencies
+    for class_name, node in modular_mapper.classes.items():
+        nodes_to_add, file_type = add_class_node(modular_mapper, class_name, node, files)
+        # Sort the nodes according to their relative order
+        nodes_to_add = sorted(nodes_to_add.items(), key=lambda x: x[1][0])
+        # Write all nodes to file
+        for dependency, (_, node) in nodes_to_add:
+            # This is used to keep certain variables at the beginning of the file
+            try:
+                # The -1000 is arbitrary -> just keep it bigger than the list
+                idx = -1000 + VARIABLES_AT_THE_BEGINNING.index(dependency)
+            except ValueError:
+                idx = current_file_indices[file_type]
+                current_file_indices[file_type] += 1
+            files[file_type][dependency] = {"insert_idx": idx, "node": node}
 
-        # Find the correct imports, and write the new modules
-        for file, body in files.items():
-            new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-            needed_imports = get_needed_imports(body, all_imports)
-            full_module = needed_imports + new_body
-            new_module = cst.Module(body=full_module, header=self.python_module.header)
-            files[file] = new_module
+    # Add the __all__ statement to files at the end
+    for file_type, node in modular_mapper.all_all_to_add.items():
+        idx = current_file_indices[file_type]
+        files[file_type]["__all__"] = {"insert_idx": idx, "node": node}
 
-        return files
+    # Aggregate all the imports statements (we look for duplicates with the code_for_node, not the nodes themselves because
+    # they are wrapped in SimpleStatementLine or If which could have different newlines, blanks etc)
+    all_imports = modular_mapper.imports.copy()
+    all_imports_code = {modular_mapper.python_module.code_for_node(node).strip() for node in all_imports}
+    for file, mapper in modular_mapper.visited_modules.items():
+        new_imports = [
+            node
+            for node in mapper.imports
+            if mapper.python_module.code_for_node(node).strip() not in all_imports_code
+        ]
+        new_imports_code = {mapper.python_module.code_for_node(node).strip() for node in new_imports}
+        all_imports.extend(new_imports)
+        all_imports_code.update(new_imports_code)
+
+    # Find the correct imports, and write the new modules
+    for file, body in files.items():
+        new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
+        needed_imports = get_needed_imports(body, all_imports)
+        full_module = needed_imports + new_body
+        new_module = cst.Module(body=full_module, header=modular_mapper.python_module.header)
+        files[file] = new_module
+
+    return files
 
 
 def convert_modular_file(modular_file, old_model_name=None, new_model_name=None, cst_transformers=None):
@@ -1292,7 +1294,7 @@ def convert_modular_file(modular_file, old_model_name=None, new_model_name=None,
         if cst_transformers is None:
             cst_transformers = ModularFileMapper(module, model_name, old_model_name, new_model_name)
         wrapper.visit(cst_transformers)
-        for file, module in cst_transformers.create_modules().items():
+        for file, module in create_modules(cst_transformers).items():
             if module != {}:
                 # Get relative path starting from src/transformers/
                 relative_path = re.search(
