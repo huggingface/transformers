@@ -477,7 +477,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel, GenerationMixin):
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        # mask out pad-token-ids in labels for BC
+        # Mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
             logger.warning_once(
                 "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. ",
@@ -577,7 +577,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel, GenerationMixin):
             mean_resizing=mean_resizing,
         )
 
-        # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings

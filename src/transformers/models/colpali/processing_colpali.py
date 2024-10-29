@@ -20,7 +20,7 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Union
+from typing import ClassVar, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -148,6 +148,9 @@ class ColPaliProcessor(ProcessorMixin):
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
+    visual_prompt_prefix: ClassVar[str] = "Describe the image."
+    query_prefix: ClassVar[str] = "Question: "
+
     def __init__(
         self,
         image_processor=None,
@@ -183,30 +186,15 @@ class ColPaliProcessor(ProcessorMixin):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
+        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is custom
+        wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
+        both text and images at the same time.
 
-        The usage for ColPali fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
-        the prompt in `text`, and will be placed after the prompt. This is because attention is handled differently for
-        the prefix and the suffix. For instance,
-        ```python
-        image = PIL_cow_image
-        prompt = "answer en Where is the cow standing?"
-        suffix = "on the beach"
-        inputs = processor(text=prompt, images=image, suffix=suffix)
-        ```
-        Here `inputs` will contain the `input_ids` and `token_type_ids` that follow
-        ```python
-        inputs["input_ids"][:, 256:]
-        # tensor([[     2,   6006,    603,    573,  13910,   9980, 235336,    108,    477,   573,   8318]])
-        inputs["token_type_ids"][:, 256:]
-        tensor([[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]])
-        ```
-        Meaning the last three tokens are of "label" ("suffix") type while the other ones are of "prefix" type.
-
+        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
+        [`~LlamaTokenizerFast.__call__`].
+        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
+        [`~SiglipImageProcessor.__call__`].
+        Please refer to the doctsring of the above two methods for more information.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -224,22 +212,15 @@ class ColPaliProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            suffix (`str`, `List[str]`, `List[List[str]]`):
-                The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/colpali/README.md
-                for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
-              is provided, the `input_ids` will also contain the suffix input ids.
+            - **input_ids** -- List of token ids to be fed to a model.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **labels** -- Labels compatible with training if `suffix` is not None
-
-        Main method to prepare for the model one or several queries or images.
         """
         output_kwargs = self._merge_kwargs(
             ColPaliProcessorKwargs,
@@ -263,7 +244,7 @@ class ColPaliProcessor(ProcessorMixin):
             elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
                 raise ValueError("images must be an image, list of images or list of list of images")
 
-            texts_doc = ["Describe the image."] * len(images)
+            texts_doc = [self.visual_prompt_prefix] * len(images)
             images = [image.convert("RGB") for image in images]
 
             input_strings = [
@@ -302,17 +283,15 @@ class ColPaliProcessor(ProcessorMixin):
                 text = [text]
             elif not (isinstance(text, list) and isinstance(text[0], str)):
                 raise ValueError("Text must be a string or a list of strings")
-            prefix = "Question: "
 
             if suffix is None:
-                suffix = "<pad>" * 10
+                suffix = self.query_augmentation_token * 10
             texts_query: List[str] = []
 
             for query in text:
-                query = self.tokenizer.bos_token + prefix + query
+                query = self.tokenizer.bos_token + self.query_prefix + query
                 query += suffix  # add suffix (pad tokens)
-                # NOTE: Make input ISO to PaliGemma's processor
-                query += "\n"
+                query += "\n"  # make input ISO to PaliGemma's processor
                 texts_query.append(query)
 
             output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
@@ -345,14 +324,46 @@ class ColPaliProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
+    @property
+    def query_augmentation_token(self) -> str:
+        """
+        Return the query augmentation token.
+        Query augmentation buffers are used as reasoning buffers during inference.
+        """
+        return self.tokenizer.pad_token
+
     def process_images(
         self,
         images: ImageInput = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Process images for indexing.
-        This method is a wrapper around the `__call__` method of [`ColPaliProcessor`].
+        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
+        [`ColPaliProcessor.__call__`].
+
+        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         return self.__call__(images=images, **kwargs)
 
@@ -362,12 +373,35 @@ class ColPaliProcessor(ProcessorMixin):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Process queries for indexing.
-        This method is a wrapper around the `__call__` method of [`ColPaliProcessor`].
+        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
+        [`ColPaliProcessor.__call__`].
+
+        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
         """
         return self.__call__(text=text, **kwargs)
 
-    def post_process_retrieval(
+    def score_retrieval(
         self,
         qs: List[torch.Tensor],
         ps: List[torch.Tensor],
@@ -410,3 +444,22 @@ class ColPaliProcessor(ProcessorMixin):
         assert scores.shape[0] == len(qs), f"Expected {len(qs)} scores, got {scores.shape[0]}"
 
         return scores
+
+    def get_n_patches(
+        self,
+        image_size: Tuple[int, int],  # for API consistency wrt to colpali-engine's interpretability module
+        patch_size: int,
+    ) -> Tuple[int, int]:
+        """
+        Return the number of patches (n_patches_x, n_patches_y) for the give image along the two image axis.
+        """
+        n_patches_x = self.image_processor.size["width"] // patch_size
+        n_patches_y = self.image_processor.size["height"] // patch_size
+
+        return n_patches_x, n_patches_y
+
+    def get_image_mask(self, batch_images: BatchFeature) -> torch.Tensor:
+        """
+        Return an image mask that indicates which input tokens correspond to visual tokens.
+        """
+        return batch_images.input_ids == self.image_token_id

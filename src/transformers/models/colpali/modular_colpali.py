@@ -362,7 +362,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         """
         return self.__call__(text=text, **kwargs)
 
-    def post_process_retrieval(
+    def score_retrieval(
         self,
         qs: List[torch.Tensor],
         ps: List[torch.Tensor],
