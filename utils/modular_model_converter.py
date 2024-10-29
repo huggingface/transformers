@@ -422,11 +422,12 @@ class SuperTransformer(cst.CSTTransformer):
         self.all_bases = all_bases or []
         self.transformer = ReplaceMethodCallTransformer(set(self.all_bases))
 
-    def update_body(self, existing_body, new_statements):
+    def update_body(self, existing_body, new_statements, func_name):
         """
         Helper method to update the body by removing duplicates before adding new statements.
         `existing_body` is the body of the original method, the parent class
         `new_statements` are the additional statements
+        `func_name` is the name of the method being updated
         """
         deduplicated_new_body = []
         existing_nodes = set()
@@ -453,6 +454,8 @@ class SuperTransformer(cst.CSTTransformer):
             existing_nodes.add(comment_less_code)
 
         for node in new_statements:
+            if is_call_to_super(node, func_name):
+                continue
             code = self.python_module.code_for_node(node)
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
@@ -482,7 +485,7 @@ class SuperTransformer(cst.CSTTransformer):
         for expr in node.body:
             if is_call_to_super(expr, func_name):
                 has_super_call = True
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body, func_name))
             else:
                 expr = expr.visit(self.transformer)
             if m.matches(expr, DOCSTRING_NODE):
@@ -632,6 +635,9 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "FeatureExtractor": "feature_extractor",
+    "ProcessorKwargs": "processing",
+    "ImagesKwargs": "processing",
+    "TextKwargs": "processing",
 }
 
 
@@ -809,8 +815,9 @@ class ModularConverterTransformer(CSTTransformer):
                             f"You are importing {self.python_module.code_for_node(imported_)} from the modeling file. Import from the `configuration_xxxx.py` file instead"
                         )
                     if import_statement not in self.transformers_imports:
-                        if "models" not in import_statement:
-                            import_statement = "models." + import_statement
+                        # for relative imports
+                        if "transformers" not in import_statement and "models" not in import_statement:
+                            import_statement = "transformers.models." + import_statement
                         if "transformers" not in import_statement:
                             import_statement = "transformers." + import_statement
                         source_code = get_module_source_from_name(import_statement)
@@ -966,13 +973,13 @@ class ModularConverterTransformer(CSTTransformer):
                             dependency in file_to_update.keys()
                             and dependency in class_finder.first_lvl_dependency_mapping[class_name]
                         ):
-                            # If dependency is defined, but not used, raise error
-                            calls = m.findall(original_node, m.Call(func=m.Name(dependency)))
+                            # If dependency is defined, but not used, raise warning
+                            calls = m.findall(original_node, m.Name(dependency))
                             if not calls and not is_empty_node and dependency not in all_bases:
-                                raise ValueError(
-                                    f"""You defined `{dependency}` in the modular_{self.model_name}.py, it should be used
-                                    when you define `{class_name}`, as it is one of it's direct dependencies. Make sure
-                                    you use it in the `__init__` function."""
+                                logger.warning(
+                                    f"You defined `{dependency}` in the modular_{self.model_name}.py, but it is not used in `{class_name}`."
+                                    f" This usually means that `{dependency}` is not needed in the modular file, unless it is implicitly used"
+                                    f" in the parent class `{super_class}`."
                                 )
                     self.inserted_deps.append(dependency)
 

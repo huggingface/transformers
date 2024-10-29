@@ -68,6 +68,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.files == ["all"]:
         args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
+        args.files += glob.glob("examples/**/modular_*.py", recursive=True)
     non_matching_files = 0
     for modular_file_path in args.files:
         non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)
