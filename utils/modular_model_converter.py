@@ -1019,7 +1019,7 @@ class ModularFileMapper(ModuleMapper):
         # fmt: on
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        """When visiting imports from model-specific files (i.e. `transformers.models.xxx`) we get the code, parse it,
+        """When visiting imports from modeling files (i.e. `transformers.models.xxx`) we get the code, parse it,
         and save it in `self.model_specific_modules` to later visit. The imported objects are saved in `self.model_specific_imported_objects`.
         """
         import_statement = self.python_module.code_for_node(node.module)
@@ -1080,7 +1080,7 @@ class ModularFileMapper(ModuleMapper):
     def leave_Module(self, node):
         """When we leave the modular file, we do the following in order:
         1. compute the nested (recursive) function dependencies
-        2. for each model-specific file found in the imports, rename it with the new model name, visit it, and update
+        2. for each modeling file found in the imports, rename it with the new model name, visit it, and update
         its dependency graph with the new function and assignment definitions found in the modular
         3. update the modular dependency graph with the imported functions and assignments (found when visiting the matching files)
         """
@@ -1090,7 +1090,7 @@ class ModularFileMapper(ModuleMapper):
         # 1. compute the nested (recursive) function dependencies
         self.function_recursive_dependency_mapping = self._compute_recursive_function_dependencies()
 
-        # 2. for each model-specific file found in the imports, rename it with the new model name, visit it, and update dependencies
+        # 2. for each modeling file found in the imports, rename it with the new model name, visit it, and update dependencies
         self.visited_modules = {}
         self.renamers = {}
         for file, module in self.model_specific_modules.items():
@@ -1114,7 +1114,7 @@ class ModularFileMapper(ModuleMapper):
         self.merge_model_specific_imports(self.visited_modules)
 
     def merge_model_specific_imports(self, visited_modules):
-        """Merge the model-specific imported functions and assignments to the modular nodes and dependency graph,
+        """Merge the functions and assignments imported from the modeling files to the modular nodes and dependency graph,
         based on the visited files."""
         self.start_lines_file_mapping = {}
         self.added_objects_file_mapping = {}
@@ -1212,7 +1212,7 @@ def add_class_node(
             dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
         }
 
-    # No super class, just check functions and assignments dependency in the imports from other model-specific files
+    # No super class, just check functions and assignments dependency in the imports from other modeling files
     else:
         updated_node = node
         # The node was NOT modified -> no need to look for dependencies recursively
