@@ -160,9 +160,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(len(inputs_image["input_ids"]) == 1)
         self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
         self.assertIsInstance(inputs_image["pixel_values"], list)
-        self.assertTrue(len(inputs_image["pixel_values"]) == 2)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 1)
         self.assertIsInstance(inputs_image["pixel_values"][0], list)
-        self.assertTrue(len(inputs_image["pixel_values"]) == 2)
+        self.assertTrue(len(inputs_image["pixel_values"][0]) == 2)
         self.assertIsInstance(inputs_image["pixel_values"][0][0], torch.Tensor)
 
         # fmt: off
@@ -171,7 +171,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             input_ids[0].tolist(),
             # Equivalent to ["USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END][IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the difference between these two images? ASSISTANT:"]
             [21510, 1058, 1032, 10, 10, 12, 10, 10, 13, 10, 10, 12, 10, 10, 13, 1010, 7493, 1681, 1278, 6592, 2396, 2576, 2295, 8061, 1063, 1349, 4290, 16002, 41150, 1058]
-        )
+                    )
         # fmt: on
 
         # Test passing in a url
@@ -180,9 +180,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(len(inputs_url["input_ids"]) == 1)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
         self.assertIsInstance(inputs_url["pixel_values"], list)
-        self.assertTrue(len(inputs_url["pixel_values"]) == 2)
+        self.assertTrue(len(inputs_url["pixel_values"]) == 1)
         self.assertIsInstance(inputs_url["pixel_values"][0], list)
-        self.assertTrue(len(inputs_url["pixel_values"]) == 2)
+        self.assertTrue(len(inputs_url["pixel_values"][0]) == 2)
         self.assertIsInstance(inputs_url["pixel_values"][0][0], torch.Tensor)
         # fmt: off
         input_ids = inputs_url["input_ids"]
