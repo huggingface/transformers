@@ -1,9 +1,5 @@
-import argparse
-import json
-import logging
+from logging import Logger
 import os
-import sys
-from statistics import mean
 from threading import Event, Thread
 from time import perf_counter, sleep
 from typing import Optional
@@ -19,47 +15,9 @@ from psycopg2.extensions import register_adapter
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.INFO)
-formatter = logging.Formatter("[%(levelname)s - %(asctime)s] %(message)s")
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-
 os.environ["TOKENIZERS_PARALLELISM"] = "1"
 torch.set_float32_matmul_precision("high")
 register_adapter(dict, Json)
-
-
-def parse_arguments():
-    """
-    Parse command line arguments for the benchmarking CLI.
-    """
-    parser = argparse.ArgumentParser(description="CLI for benchmarking the huggingface/transformers.")
-
-    parser.add_argument(
-        "branch",
-        type=str,
-        help="The branch name on which the benchmarking is performed.",
-    )
-
-    parser.add_argument(
-        "commit_id",
-        type=str,
-        help="The commit hash on which the benchmarking is performed.",
-    )
-
-    parser.add_argument(
-        "commit_msg",
-        type=str,
-        help="The commit message associated with the commit, truncated to 70 characters.",
-    )
-
-    args = parser.parse_args()
-
-    return args.branch, args.commit_id, args.commit_msg
 
 
 def collect_metrics(benchmark_id, continue_metric_collection):
@@ -82,7 +40,7 @@ def collect_metrics(benchmark_id, continue_metric_collection):
     conn.close()
 
 
-def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
+def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
     continue_metric_collection = Event()
     metrics_thread = None
     try:
@@ -401,8 +359,3 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
     continue_metric_collection.set()
     if metrics_thread is not None:
         metrics_thread.join()
-
-
-if __name__ == "__main__":
-    branch, commit_id, commit_msg = parse_arguments()
-    run_benchmark(branch, commit_id, commit_msg, num_tokens_to_generate=20)
