@@ -119,9 +119,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         return updated_node.with_changes(value=update)
 
     def leave_ClassDef(self, original_node, updated_node):
-        return updated_node.with_changes(
-            name=cst.Name(convert_to_camelcase(updated_node.name.value, self.old_name, self.default_old_name))
-        )
+        new_name = convert_to_camelcase(updated_node.name.value, self.old_name, self.default_old_name)
+        return updated_node.with_changes(name=cst.Name(new_name))
 
 
 DOCSTRING_NODE = m.SimpleStatementLine(
@@ -288,21 +287,27 @@ class SuperTransformer(cst.CSTTransformer):
                     deduplicated_new_body.append(node)
                     existing_nodes.add(comment_less_code)
 
+        deduplicated_new_body = self._fix_post_init_location(deduplicated_new_body)
+
+        return deduplicated_new_body
+    
+    def _fix_post_init_location(self, new_body: list[cst.CSTNode]):
+        """Fix the location of the `post_init()` in the new body, if we added statements after the call to
+        `super()` (it needs to be the very last statement called)"""
         # Fix the post_init() that has to be last
-        for i, node in enumerate(deduplicated_new_body):
+        for i, node in enumerate(new_body):
             code = self.python_module.code_for_node(node)
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
-            if "self.post_init(" in comment_less_code and i < len(deduplicated_new_body) - 1:
+            if "self.post_init(" in comment_less_code and i < len(new_body) - 1:
                 # Remove it and add it again at the end
-                deduplicated_new_body.pop(i)
-                deduplicated_new_body.append(node)
+                new_body.pop(i)
+                new_body.append(node)
                 break
-
-        return deduplicated_new_body
+        return new_body
 
     def _fix_init_location(self, new_body):
-        """Fix the location of the super()__init__ in the new body, if we had new statements before it."""
+        """Fix the location of the `super().__init__()` in the new body, if we had new statements before it."""
         start_index = 0
         for i, node in enumerate(new_body):
             if m.matches(node, DOCSTRING_NODE) and i == start_index:
@@ -394,15 +399,15 @@ def find_all_dependencies(
         start_entity (str | None, *optional*):
             A key of `dependency_mapping`, indicating from which entity to start the search.
         initial_dependencies (set | None, *optional*):
-            If `start_entity` is not provided, this can be used as an alternative. In this case, `initial_dependencies`
-            the search will continue from all the entities in `initial_dependencies`, if they are in `dependency_mapping`.
+            If `start_entity` is not provided, this can be used as an alternative. In this case, the search will continue
+            from all the entities in `initial_dependencies`, if they are in `dependency_mapping`.
         initial_checked_dependencies (set | None, *optional*):
             If provided, entities already present in `initial_checked_dependencies` will not be part of the returned dependencies.
         return_parent (bool, *optional*):
             If `True`, will return a list consisting of tuples (dependency, parent) instead of a simple set of dependencies. Note
             that the order of the items in the list reflects the traversal order. Thus, no parent can ever appear before childs.
     Returns:
-        A set of all the dependencies, or a list containing parents as well if `return_parent=True`.
+        A set of all the dependencies, or a list of tuples `(dependency, parent)` if `return_parent=True`.
 
     Example:
     Given the following structure in the `modular_xxx.py` file:
@@ -470,7 +475,8 @@ ASSIGNMENTS_TO_KEEP = {
 
 
 class ClassDependencyMapper(CSTVisitor):
-    """A visitor which is designed to analyze a single class node to get all its dependencies that are mutual with `global_names`.
+    """A visitor which is designed to analyze a single class node to get all its dependencies that are shared with the set of
+    `global_names`.
     This class is used through the 2 convenient class methods.
     """
 
@@ -512,7 +518,10 @@ class ClassDependencyMapper(CSTVisitor):
 
 class ModuleMapper(CSTVisitor, ABC):
     """An abstract visitor class which analyses a module, creating a mapping of dependencies for classes and functions.
-    It defines common visiting patterns between the modular file and the model-specific module files that will be visited.
+    Class dependencies are computed with `compute_class_dependencies()`, while function dependencies are stored in
+    `self.function_recursive_dependency_mapping` (can be computed by `_compute_recursive_function_dependencies()`).
+    It defines common visiting patterns (i.e. common visit_xxx/leave_xxx functions) between the modular file and the
+    modeling files that will be visited.
     """
 
     METADATA_DEPENDENCIES = (ParentNodeProvider, PositionProvider)
@@ -523,14 +532,14 @@ class ModuleMapper(CSTVisitor, ABC):
         self.classes: Dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes
         self.imports = []                                          # stores all import statements
         self.functions: Dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
-        self.function_call_dependency_mapping = defaultdict(set)   # 1st-level function dependency mapping
+        self.function_dependency_mapping = defaultdict(set)        # immediate function dependency mapping (i.e. dependencies immediately in the function definition)
         self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
-        self.current_function = None
+        self.current_function = None                               # this keeps track of the current module-scope function
         # fmt: on
 
     def visit_SimpleStatementLine(self, node):
         """
-        Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT' and all import statements
+        Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT'` and all import statements
         are extracted and saved in their corresponding dict. They are then used when updating dependency mappings.
         """
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -565,21 +574,16 @@ class ModuleMapper(CSTVisitor, ABC):
         """Record class nodes to create their dependencies at the end."""
         self.classes[node.name.value] = node
 
-    def visit_Call(self, node: cst.Call):
-        """This is used to create a mapping from top-level functions to functions called inside them.
-        Important note: we only rely on direct Call to the functions here, not indirect mentions (such as assigning a variable with the function,
-        add calling the variable later). This should be enough as the `modular_xxx` and `modeling_xxx` structures should be as simple as possible.
-        """
+    def visit_Name(self, node: cst.Call):
+        """This is used to create a mapping from module-scope functions to objects used inside them."""
         if self.current_function is not None:
-            # Simple function calls such as foo()
-            if m.matches(node.func, m.Name()):
-                self.function_call_dependency_mapping[self.current_function].add(node.func.value)
+            self.function_dependency_mapping[self.current_function].add(node.value)
 
     def leave_Module(self, node):
-        """When leaving the module, we finally create the `function_call_recursive_dependency_mapping`, then we
-        compute the dependencies for all recorded classes based on all the nodes we visited.
-        We also store the position of each global scoped node to allow sorting the dependencies based on their
-        position in the code later. We use the PositionProvider metadata wrapper for this.
+        """When leaving the module, we store the position of each global scoped node to allow sorting the dependencies
+        based on their position in the code later. We use the PositionProvider metadata wrapper for this.
+        We also make sure to update `self.function_dependency_mapping` so that it contains only names recorded in
+        `self.global_nodes`.
         """
         # assign all nodes
         self.global_nodes = {**self.assignments, **self.classes, **self.functions}
@@ -588,39 +592,55 @@ class ModuleMapper(CSTVisitor, ABC):
         for id, node in self.global_nodes.items():
             self.start_lines[id] = self.get_metadata(cst.metadata.PositionProvider, node).start.line
 
+        # Since we added every Name as part of `self.function_dependency_mapping`, we now remove those that
+        # are not part of the recorded objects (i.e. built-in variables, imports, etc)
+        global_objects = set(self.global_nodes.keys())
+        for function_name, dependencies in self.function_dependency_mapping.items():
+            self.function_dependency_mapping[function_name] = {dep for dep in dependencies if dep in global_objects}
+
     def _compute_recursive_function_dependencies(self) -> dict[str, set]:
-        """Based on the 1st level function dependency mapping, create the recursive dependency mapping."""
+        """Based on immediate dependency mapping, create the recursive dependency mapping. For example, given the
+        following file:
+        ```
+        def foo():
+            pass
+        
+        def bar():
+            foo()
+        
+        def test():
+            bar()
+        ```
+        this visitor can only record immediate dependencies, i.e. it will record the following
+        `self.function_dependency_mapping = {"test": {"bar"}, "bar": {"foo}}`. This function is used to create
+        the recursive mapping, i.e. `recursive_dependencies = {"test": {"bar", "foo"}, "bar": {"foo}}`.
+        """
         recursive_dependencies = {}
-        for function_name in self.function_call_dependency_mapping.keys():
-            # We need to check if they are present in self.functions to avoid built-in functions
-            all_dependencies = {
-                dep
-                for dep in find_all_dependencies(self.function_call_dependency_mapping, start_entity=function_name)
-                if dep in self.functions.keys()
-            }
+        for function_name in self.function_dependency_mapping.keys():
+            all_dependencies = find_all_dependencies(self.function_dependency_mapping, start_entity=function_name)
             recursive_dependencies[function_name] = all_dependencies
         return recursive_dependencies
 
-    def augment_dependencies_with_functions(self, dependencies: set) -> set:
-        """For a set of `dependencies`, augment them by adding all potential functions which are dependencies of
-        the functions present in the `dependencies`.
+    def augment_dependencies_with_functions(self, dependencies: set[str]) -> set[str]:
+        """For a set of `dependencies`, augment them by adding all potential dependencies of the **functions** present
+        in the `dependencies`.
         """
         new_dependencies = dependencies.copy()
         # Go through the set of dependencies
         for dep in tuple(dependencies):
-            if dep in self.function_call_recursive_dependency_mapping.keys():
-                new_dependencies.update(self.function_call_recursive_dependency_mapping[dep])
+            if dep in self.function_recursive_dependency_mapping.keys():
+                new_dependencies.update(self.function_recursive_dependency_mapping[dep])
         return new_dependencies
 
     def compute_class_dependencies(self):
-        """For each visited class, find its dependencies based on visited the current file + potential merged dependencies.
+        """For each visited class, find its dependencies based on visiting the current file + potential merged dependencies.
         Note: This function takes care of updating `global_nodes` and `function_call_recursive_dependency_mapping` as well after the
         merge with other files dependencies.
         """
         # Correctly re-set the global nodes at this point
         self.global_nodes = {**self.assignments, **self.classes, **self.functions}
         # Create the global mapping of recursive dependencies for functions
-        self.function_call_recursive_dependency_mapping = self._compute_recursive_function_dependencies()
+        self.function_recursive_dependency_mapping = self._compute_recursive_function_dependencies()
 
         self.class_dependency_mapping = {}
         for class_name, class_node in self.classes.items():
@@ -634,16 +654,22 @@ class ModuleMapper(CSTVisitor, ABC):
 
 
 class ModelFileMapper(ModuleMapper):
-    """A mapper designed for model-specific files (i.e. a `transformers.models.xxx` file). When encountering such a file
+    """A mapper designed to parse modeling files (like `modeling_llama.py`). When encountering such a file
     in the `modular_xxx.py` file, we need to correctly visit it and merge the dependencies of the modular and current file.
     For this reason, this class should only be instantiated from the class method `visit_and_merge_dependencies`, which takes
-    care of correctly merging dependencies, then finalizes all dependency graph computations."""
+    care of correctly merging dependencies, then finalizes all dependency graph computations.
+    Note that we only merge functions and assignments here, as classes will be treated later on as they may be modified.
+    For example, if you redefine `apply_rotary_pos_emb()` in the modular, the new node should be used in the dependencies
+    of the modeling files as well.
+    """
 
     def __init__(self, python_module: cst.Module):
         super().__init__(python_module)
 
-    def compute_relative_order(self, missing_dependencies: set) -> dict[str, int]:
-        """Compute the relative order that the `missing_dependencies` should have between themselves in the output file."""
+    def compute_relative_order(self, missing_dependencies: set[str]) -> dict[str, int]:
+        """Compute in which relative order the `missing_dependencies` should appear when the nodes are added to the final file that
+        will be created based on the modular.
+        """
         relative_order = {}
         idx = 0
         classes = sorted(
@@ -710,7 +736,7 @@ class ModelFileMapper(ModuleMapper):
         """
         # Add/overwrite all needed function nodes and dependencies
         self.functions.update(functions)
-        self.function_call_dependency_mapping.update(function_call_mapping)
+        self.function_dependency_mapping.update(function_call_mapping)
 
     def _merge_assignments(self, assignments: dict[str, cst.CSTNode]):
         """Update the global nodes with the assignment from the modular file.
@@ -746,10 +772,10 @@ class ModelFileMapper(ModuleMapper):
 
 def replace_class_node(mapper: ModelFileMapper, class_node: cst.ClassDef, renamed_super_class: str):
     """
-    Replace a class node which inherits from an imported model-class. This function works in the following way:
-    - start from the class node of the inherited class
-    - replace all methods with the same name with the ones defined in the modular
-    - append all new methods defined in the modular
+    Replace a class node which inherits from another modeling class. This function works in the following way:
+    - start from the base class node of the inherited class (a cst.Node)
+    - replace all methods of the base node with the methods defined in the child class
+    - append all new methods defined in the child class
     - replace all calls to super() with the unravelled code
 
                     |    ```python                          |               |    ```python
@@ -869,7 +895,10 @@ TYPE_TO_FILE_TYPE = {
 
 
 def find_file_type(class_name: str) -> str:
-    """Based on a class name, find the file type corresponding to the class."""
+    """Based on a class name, find the file type corresponding to the class.
+    If the class name is `LlamaConfig` it will return `configuration`. 
+    The list of suffixes is in `TYPE_TO_FILE_TYPE`. If there are no match, we match by default to `modeling`
+    """
     match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
     match = re.search(rf"({match_pattern})$", class_name)
     if match:
@@ -879,14 +908,18 @@ def find_file_type(class_name: str) -> str:
     return file_type
 
 
-# These top-level variables will always appear the very beginning of the file, in the order they are defined in
+# These top-level variables will always appear at the very beginning of the file, in the order they are defined in
 # this list (this is to avoid having variables at weird places, even if they are not used before)
-VARIABLES_AT_THE_BEGINNING = [
+VARIABLES_AT_THE_BEGINNING = (
     "logger",
     "_CHECKPOINT_FOR_DOC",
     "_CONFIG_FOR_DOC",
-]
+)
 
+# These specific modeling imports should not be visited as other modeling files
+IMPORTS_TO_SKIP_IN_MODULAR = (
+    "auto.modeling_auto",
+)
 
 def get_module_name(node: cst.ImportFrom) -> str:
     """Recursively get the fully dotted name of a module in a cst.ImportFrom."""
@@ -925,7 +958,8 @@ def append_new_import_node(
 
 def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """Get all the imports needed in the `body`, from the list of `all_imports`.
-    Note: we need to use `isinstance` on assignements, m.matches apparently does not work here yet!
+    `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
+    Note: we need to use `isinstance` on scope assignements, m.matches apparently does not work here yet!
     """
     new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
     wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
@@ -947,7 +981,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     # Note that dicts implicitly keep the order of insertion
     imports_to_keep = {}
     for idx, node in enumerate(all_imports):
-        if m.matches(node, m.If()):
+        if m.matches(node, m.If()): # handle safe imports
             new_statements = {}
             for second_idx, stmt_node in enumerate(node.body.body):
                 append_new_import_node(stmt_node, unused_imports, new_statements, second_idx)
@@ -969,9 +1003,32 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     return usual_import_nodes + protected_import_nodes
 
 
+def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
+    """Split the `__all__` assignment found in the modular between each corresponding files."""
+    all_all_per_file = {}
+    assign_node = node.body[0]
+    if isinstance(assign_node.value, cst.List):
+        # Extract the elements from the list
+        all_all_to_add = defaultdict(list)
+        for element in assign_node.value.elements:
+            if isinstance(element.value, cst.SimpleString):
+                # Remove quotes and add the string to the elements list
+                class_name = element.value.value
+                file = find_file_type(element.value.evaluated_value)
+                all_all_to_add[file] += [class_name]
+        for file, new_alls in all_all_to_add.items():
+            new_node = assign_node.with_changes(
+                value=cst.List(
+                    elements=[cst.Element(value=cst.SimpleString(value=k)) for k in new_alls]
+                )
+            )
+            all_all_per_file[file] = node.with_changes(body=[new_node])
+    return all_all_per_file
+
+
 class ModularFileMapper(ModuleMapper):
-    """This is a Mapper for a modular file. It visits the whole file, recording dependency, then visits all model-specific
-    files that should be visited, and manages their mutual dependencies.
+    """This is a Mapper to visit a modular file (like `modular_llama.py`). It visits the whole file, recording dependency,
+    then visits all imported modeling files (like `modeling_llama.py`), and manages their mutual dependencies.
     Calling the method `create_modules()` after visit will create all modules based on this modular file.
     """
 
@@ -991,10 +1048,10 @@ class ModularFileMapper(ModuleMapper):
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from model-specific files (i.e. `transformers.models.xxx`) we get the code, parse it,
-        and record it in `self.model_specific_modules`. The imported objects are recorded in `self.model_specific_imported_objects`.
+        and save it in `self.model_specific_modules` to later visit. The imported objects are saved in `self.model_specific_imported_objects`.
         """
         import_statement = self.python_module.code_for_node(node.module)
-        if "auto.modeling_auto" in import_statement:
+        if any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR):
             return
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
@@ -1022,7 +1079,7 @@ class ModularFileMapper(ModuleMapper):
                 )
 
     def visit_SimpleStatementLine(self, node):
-        """If we visit an import statement not previously visited, record it. If we visit a top-level assignment,
+        """If we visit an import statement not previously visited, record it. If we visit a module-scope assignment,
         simply record it or, if it is `__all__`, split it between files where we should dispatch it.
         """
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -1046,36 +1103,22 @@ class ModularFileMapper(ModuleMapper):
                 if assigned_variable != "__all__":
                     self.assignments[assigned_variable] = node
                 else:
-                    assign_node = node.body[0]
-                    if isinstance(assign_node.value, cst.List):
-                        # Extract the elements from the list
-                        all_all_to_add = defaultdict(list)
-                        for element in assign_node.value.elements:
-                            if isinstance(element.value, cst.SimpleString):
-                                # Remove quotes and add the string to the elements list
-                                class_name = element.value.value
-                                file = find_file_type(element.value.evaluated_value)
-                                all_all_to_add[file] += [class_name]
-                        for file, new_alls in all_all_to_add.items():
-                            new_node = assign_node.with_changes(
-                                value=cst.List(
-                                    elements=[cst.Element(value=cst.SimpleString(value=k)) for k in new_alls]
-                                )
-                            )
-                            self.all_all_to_add[file] = node.with_changes(body=[new_node])
+                    self.all_all_to_add = split_all_assignment(node)
 
     def leave_Module(self, node):
         """When we leave the modular file, we do the following in order:
-        - compute recursive function dependencies
-        - for each model-specific file found in the imports, rename it with the new model name, visit it, and update
+        1. compute the nested (recursive) function dependencies
+        2. for each model-specific file found in the imports, rename it with the new model name, visit it, and update
         its dependency graph with the new function and assignment definitions found in the modular
-        - update the modular dependency graph with the imported functions and assignments (found when visiting the matching files)
+        3. update the modular dependency graph with the imported functions and assignments (found when visiting the matching files)
         """
+        # Takes care of finalizing our visit
         super().leave_Module(node)
 
-        self.function_call_recursive_dependency_mapping = self._compute_recursive_function_dependencies()
+        # 1. compute the nested (recursive) function dependencies
+        self.function_recursive_dependency_mapping = self._compute_recursive_function_dependencies()
 
-        # Now, visit every model-specific files found in the imports, and merge their dependencies
+        # 2. for each model-specific file found in the imports, rename it with the new model name, visit it, and update dependencies
         self.visited_modules = {}
         self.renamers = {}
         for file, module in self.model_specific_modules.items():
@@ -1087,19 +1130,16 @@ class ModularFileMapper(ModuleMapper):
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
                 self.functions,
-                self.function_call_dependency_mapping,
+                self.function_dependency_mapping,
                 self.assignments,
                 self.start_lines,
             )
             # We record it so that we can rename classes later the exact same way
             self.renamers[file] = renamer
 
-        # In turn, we need to add the imported functions/assignments to the dependencies of the modular mapper, using the
+        # 3. in turn, we need to add the imported functions/assignments to the dependencies of the modular mapper, using the
         # definitions found in the visited files
         self.merge_model_specific_imports(self.visited_modules)
-
-        # Re-assign all nodes
-        self.global_nodes = {**self.assignments, **self.classes, **self.functions}
 
     def merge_model_specific_imports(self, visited_modules):
         """Merge the model-specific imported functions and assignments to the modular nodes and dependency graph,
@@ -1113,9 +1153,9 @@ class ModularFileMapper(ModuleMapper):
             if object_name in visited_module.functions and object_name not in self.functions:
                 self.functions[object_name] = visited_module.functions[object_name]
                 self.added_objects_file_mapping[object_name] = file
-                dependencies = visited_module.function_call_recursive_dependency_mapping.get(object_name, None)
+                dependencies = visited_module.function_recursive_dependency_mapping.get(object_name, None)
                 if dependencies is not None:
-                    self.function_call_recursive_dependency_mapping[object_name] = dependencies
+                    self.function_recursive_dependency_mapping[object_name] = dependencies
                     for dep in dependencies:
                         self.added_objects_file_mapping[dep] = file
                         self.functions[dep] = visited_module.global_nodes[dep]
@@ -1125,8 +1165,13 @@ class ModularFileMapper(ModuleMapper):
                 self.added_objects_file_mapping[object_name] = file
                 self.assignments[object_name] = visited_module.assignments[object_name]
 
+        # Do not forget to re-assign all nodes after the merge
+        self.global_nodes = {**self.assignments, **self.classes, **self.functions}
+
     def compute_relative_order(self, missing_dependencies: set) -> dict[str, int]:
-        """Compute the relative order that the `missing_dependencies` should have between themselves in the output file."""
+        """Compute in which relative order the `missing_dependencies` should appear when the nodes are added to the final file that
+        will be created based on the modular.
+        """
         relative_order = {}
         idx = 0
 
