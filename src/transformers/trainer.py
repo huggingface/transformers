@@ -2276,9 +2276,9 @@ class Trainer:
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
         use_accelerator_prepare = True if model is self.model else False
-        
+
         if use_accelerator_prepare and self.is_fsdp_enabled:
-            #In case of auto_find_batch_size=True
+            # In case of auto_find_batch_size=True
             # Remove FSDP wrapping from sub-models.
             self.model = extract_model_from_parallel(self.model, recursive=True)
             # configure fsdp plugin for qlora if any
