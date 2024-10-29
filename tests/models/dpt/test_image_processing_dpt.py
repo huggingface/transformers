@@ -170,8 +170,8 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
 
     def test_call_segmentation_maps(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # Initialize image_processor
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         maps = []
@@ -180,7 +180,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             maps.append(torch.zeros(image.shape[-2:]).long())
 
         # Test not batched input
-        encoding = image_processing(image_inputs[0], maps[0], return_tensors="pt")
+        encoding = image_processor(image_inputs[0], maps[0], return_tensors="pt")
         self.assertEqual(
             encoding["pixel_values"].shape,
             (
@@ -203,7 +203,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(encoding["labels"].max().item() <= 255)
 
         # Test batched
-        encoding = image_processing(image_inputs, maps, return_tensors="pt")
+        encoding = image_processor(image_inputs, maps, return_tensors="pt")
         self.assertEqual(
             encoding["pixel_values"].shape,
             (
@@ -228,7 +228,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (PIL images)
         image, segmentation_map = prepare_semantic_single_inputs()
 
-        encoding = image_processing(image, segmentation_map, return_tensors="pt")
+        encoding = image_processor(image, segmentation_map, return_tensors="pt")
         self.assertEqual(
             encoding["pixel_values"].shape,
             (
@@ -253,7 +253,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test batched input (PIL images)
         images, segmentation_maps = prepare_semantic_batch_inputs()
 
-        encoding = image_processing(images, segmentation_maps, return_tensors="pt")
+        encoding = image_processor(images, segmentation_maps, return_tensors="pt")
         self.assertEqual(
             encoding["pixel_values"].shape,
             (
@@ -276,16 +276,16 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(encoding["labels"].max().item() <= 255)
 
     def test_reduce_labels(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # Initialize image_processor
+        image_processor = self.image_processing_class(**self.image_processor_dict)
 
         # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
         image, map = prepare_semantic_single_inputs()
-        encoding = image_processing(image, map, return_tensors="pt")
+        encoding = image_processor(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 150)
 
-        image_processing.do_reduce_labels = True
-        encoding = image_processing(image, map, return_tensors="pt")
+        image_processor.do_reduce_labels = True
+        encoding = image_processor(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)

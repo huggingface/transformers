@@ -290,6 +290,144 @@ class DPTImageProcessor(BaseImageProcessor):
         label[label == 254] = 255
         return label
 
+    def _preprocess(
+        self,
+        image: ImageInput,
+        do_reduce_labels: bool = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        keep_aspect_ratio: bool = None,
+        ensure_multiple_of: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: bool = None,
+        size_divisor: int = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        # Adapted from transformers.models.beit.image_processing_beit
+
+        if do_reduce_labels:
+            image = self.reduce_label(image)
+
+        if do_resize:
+            image = self.resize(
+                image=image,
+                size=size,
+                resample=resample,
+                keep_aspect_ratio=keep_aspect_ratio,
+                ensure_multiple_of=ensure_multiple_of,
+                input_data_format=input_data_format,
+            )
+
+        if do_rescale:
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+
+        if do_normalize:
+            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+
+        if do_pad:
+            image = self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
+
+        return image
+
+    def _preprocess_image(
+        self,
+        image: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        keep_aspect_ratio: bool = None,
+        ensure_multiple_of: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: bool = None,
+        size_divisor: int = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """Preprocesses a single image."""
+        # Adapted from transformers.models.beit.image_processing_beit
+        # All transformations expect numpy arrays.
+        image = to_numpy_array(image)
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
+        image = self._preprocess(
+            image,
+            do_reduce_labels=False,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            keep_aspect_ratio=keep_aspect_ratio,
+            ensure_multiple_of=ensure_multiple_of,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisor=size_divisor,
+            input_data_format=input_data_format,
+        )
+        if data_format is not None:
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        return image
+
+    def _preprocess_segmentation_map(
+        self,
+        segmentation_map: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        keep_aspect_ratio: bool = None,
+        ensure_multiple_of: int = None,
+        do_reduce_labels: bool = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """Preprocesses a single segmentation map."""
+        # Adapted from transformers.models.beit.image_processing_beit
+        # All transformations expect numpy arrays.
+        segmentation_map = to_numpy_array(segmentation_map)
+        # Add an axis to the segmentation maps for transformations.
+        if segmentation_map.ndim == 2:
+            segmentation_map = segmentation_map[None, ...]
+            added_dimension = True
+            input_data_format = ChannelDimension.FIRST
+        else:
+            added_dimension = False
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
+        segmentation_map = self._preprocess(
+            image=segmentation_map,
+            do_reduce_labels=do_reduce_labels,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            keep_aspect_ratio=keep_aspect_ratio,
+            ensure_multiple_of=ensure_multiple_of,
+            do_normalize=False,
+            do_rescale=False,
+            input_data_format=input_data_format,
+        )
+        # Remove extra axis if added
+        if added_dimension:
+            segmentation_map = np.squeeze(segmentation_map, axis=0)
+        segmentation_map = segmentation_map.astype(np.int64)
+        return segmentation_map
+
     def __call__(self, images, segmentation_maps=None, **kwargs):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
         # be passed in as positional arguments.
@@ -409,97 +547,44 @@ class DPTImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+        images = [
+            self._preprocess_image(
+                image=img,
+                do_resize=do_resize,
+                do_rescale=do_rescale,
+                do_normalize=do_normalize,
+                do_pad=do_pad,
+                size=size,
+                resample=resample,
+                keep_aspect_ratio=keep_aspect_ratio,
+                ensure_multiple_of=ensure_multiple_of,
+                rescale_factor=rescale_factor,
+                image_mean=image_mean,
+                image_std=image_std,
+                size_divisor=size_divisor,
+                data_format=data_format,
+                input_data_format=input_data_format,
             )
+            for img in images
+        ]
 
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+        data = {"pixel_values": images}
 
-        if do_resize:
-            images = [
-                self.resize(
-                    image=image,
+        if segmentation_maps is not None:
+            segmentation_maps = [
+                self._preprocess_segmentation_map(
+                    segmentation_map=segmentation_map,
+                    do_reduce_labels=do_reduce_labels,
+                    do_resize=do_resize,
                     size=size,
                     resample=resample,
                     keep_aspect_ratio=keep_aspect_ratio,
                     ensure_multiple_of=ensure_multiple_of,
                     input_data_format=input_data_format,
                 )
-                for image in images
+                for segmentation_map in segmentation_maps
             ]
-
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_pad:
-            images = [
-                self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
-
-        if segmentation_maps is not None:
-            segmentation_maps = [to_numpy_array(segmentation_map) for segmentation_map in segmentation_maps]
-
-            # Add channel dimension if missing - needed for certain transformations
-            if segmentation_maps[0].ndim == 2:
-                added_channel_dim = True
-                segmentation_maps = [segmentation_map[None, ...] for segmentation_map in segmentation_maps]
-                input_data_format = ChannelDimension.FIRST
-            else:
-                added_channel_dim = False
-                if input_data_format is None:
-                    input_data_format = infer_channel_dimension_format(segmentation_maps[0], num_channels=1)
-
-            if do_reduce_labels:
-                segmentation_maps = [self.reduce_label(segmentation_map) for segmentation_map in segmentation_maps]
-
-            if do_resize:
-                segmentation_maps = [
-                    self.resize(
-                        image=segmentation_map,
-                        size=size,
-                        resample=resample,
-                        keep_aspect_ratio=keep_aspect_ratio,
-                        ensure_multiple_of=ensure_multiple_of,
-                        input_data_format=input_data_format,
-                    )
-                    for segmentation_map in segmentation_maps
-                ]
-
-            if do_pad:
-                segmentation_maps = [
-                    self.pad_image(
-                        image=segmentation_map, size_divisor=size_divisor, input_data_format=input_data_format
-                    )
-                    for segmentation_map in segmentation_maps
-                ]
-
-            # Remove extra channel dimension if added for processing
-            if added_channel_dim:
-                segmentation_maps = [segmentation_map.squeeze(0) for segmentation_map in segmentation_maps]
-            segmentation_maps = [segmentation_map.astype(np.int64) for segmentation_map in segmentation_maps]
 
             data["labels"] = segmentation_maps
 
