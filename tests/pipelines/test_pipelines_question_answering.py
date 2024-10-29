@@ -27,12 +27,17 @@ from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
+    is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
     require_torch_or_tf,
     slow,
 )
+
+
+if is_torch_available():
+    import torch
 
 from .test_pipelines_common import ANY
 
@@ -157,6 +162,34 @@ class QAPipelineTests(unittest.TestCase):
     def test_small_model_pt(self):
         question_answerer = pipeline(
             "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
+        )
+
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
+    def test_small_model_pt_fp16(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            torch_dtype=torch.float16,
+        )
+
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
+    def test_small_model_pt_bf16(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            torch_dtype=torch.bfloat16,
         )
 
         outputs = question_answerer(

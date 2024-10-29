@@ -127,8 +127,8 @@ def select_starts_ends(
     undesired_tokens_mask = undesired_tokens == 0.0
 
     # Make sure non-context indexes in the tensor cannot contribute to the softmax
-    start = np.where(undesired_tokens_mask, -10000.0, start.float())
-    end = np.where(undesired_tokens_mask, -10000.0, end.float())
+    start = np.where(undesired_tokens_mask, -10000.0, start)
+    end = np.where(undesired_tokens_mask, -10000.0, end)
 
     # Normalize logits and spans to retrieve the answer
     start = np.exp(start - start.max(axis=-1, keepdims=True))
@@ -540,8 +540,14 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
-            start_ = output["start"]
-            end_ = output["end"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                start_ = output["start"].to(torch.float32)
+            else:
+                start_ = output["start"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                end_ = output["end"].to(torch.float32)
+            else:
+                end_ = output["end"]
             example = output["example"]
             p_mask = output["p_mask"]
             attention_mask = (
