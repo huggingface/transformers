@@ -262,7 +262,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "InstructBlipQFormerModel",
     "InstructBlipVideoVisionModel",
     "InstructBlipVideoQFormerModel",
-    "Kosmos2_5ForConditionalGeneration",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
