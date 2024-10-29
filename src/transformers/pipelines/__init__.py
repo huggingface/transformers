@@ -392,7 +392,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("Salesforce/blip-image-captioning-base", "89b09ea"),
+                "pt": ("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", "2c9ba3b"),
             }
         },
         "type": "multimodal",

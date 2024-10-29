@@ -237,7 +237,7 @@ class ImageTextToTextPipeline(Pipeline):
                 The text to be used for generation. If a list of strings is passed, the length of the list should be the
                 same as the number of images. Text can also follow the chat format: a list of dictionaries where each
                 dictionary represents a message in a conversation. Each dictionary should have two keys: 'role' and
-                'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a dictionary
+                'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of dictionary
                 containing the text of the message and the type of the message. The type of the message can be either
                 'text' or 'image'. If the type is 'image', no text is needed.
             return_tensors (`bool`, *optional*, defaults to `False`):
