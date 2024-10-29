@@ -74,6 +74,38 @@ class OlmoLayerNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(OlmoLayerNorm)
 
 
+# copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Olmo
+class OlmoRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        LlamaRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+ALL_LAYERNORM_LAYERS.append(OlmoRMSNorm)
+
+
+def get_layer_norm(norm_type: str, hidden_size: int, eps: float = 1e-6) -> nn.Module:
+    if norm_type == "default":
+        return OlmoLayerNorm(hidden_size)
+    if norm_type == "rms":
+        return OlmoRMSNorm(hidden_size, eps=eps)
+    raise NotImplementedError(f"No OLMo layer norm implementation of given type: {norm_type}")
+
+
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
 # TODO(joao): add me back asap :)
 class OlmoRotaryEmbedding(nn.Module):
@@ -551,8 +583,8 @@ class OlmoDecoderLayer(nn.Module):
         self.self_attn = OLMO_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = OlmoMLP(config)
-        self.input_layernorm = OlmoLayerNorm(config.hidden_size)
-        self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
+        self.input_layernorm = get_layer_norm(config.layer_norm_type, config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = get_layer_norm(config.layer_norm_type, config.hidden_size, config.rms_norm_eps)
 
     # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     # TODO(joao): add me back asap :)
@@ -762,7 +794,7 @@ class OlmoModel(OlmoPreTrainedModel):
         self.layers = nn.ModuleList(
             [OlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = OlmoLayerNorm(config.hidden_size)
+        self.norm = get_layer_norm(config.layer_norm_type, config.hidden_size, config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing

@@ -119,6 +119,8 @@ def write_model(
             f"model.layers.{layer_i}.mlp.gate_proj.weight": gate_proj_weight,
             f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"transformer.blocks.{layer_i}.ff_out.weight"],
             f"model.layers.{layer_i}.mlp.up_proj.weight": up_proj_weight,
+            f"model.layers.{layer_i}.input_layernorm.weight": loaded.get(f"transformer.blocks.{layer_i}.attn_norm.weight"),
+            f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded.get(f"transformer.blocks.{layer_i}.ff_norm.weight"),
         }
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
@@ -134,6 +136,7 @@ def write_model(
     # TODO: Deal with weight-tying
     state_dict = {
         "model.embed_tokens.weight": loaded["transformer.wte.weight"],
+        "model.norm.weight": loaded.get("transformer.ln_f.weight"),
         "lm_head.weight": loaded["transformer.ff_out.weight"]
         if "transformer.ff_out.weight" in loaded
         else loaded["transformer.wte.weight"],
@@ -170,6 +173,8 @@ def write_model(
         bos_token_id=None,
         eos_token_id=olmo_config["eos_token_id"],
         tie_word_embeddings=olmo_config.get("weight_tying", True),
+        layer_norm_type=olmo_config.get("layer_norm_type", "default"),
+        rms_norm_eps=olmo_config.get("layer_norm_eps", 1e-5),
         rope_theta=base,
         clip_qkv=olmo_config.get("clip_qkv"),
     )
