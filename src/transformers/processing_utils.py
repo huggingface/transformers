@@ -874,12 +874,13 @@ class ProcessorMixin(PushToHubMixin):
         else:
             # kwargs is a flat dictionary
             for key in kwargs:
-                if key not in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
-                    logger.warning_once(
-                        f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
-                    )
-                elif key not in used_keys:
-                    output_kwargs["common_kwargs"][key] = kwargs[key]
+                if key not in used_keys:
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                        output_kwargs["common_kwargs"][key] = kwargs[key]
+                    else:
+                        logger.warning_once(
+                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                        )
 
         # all modality-specific kwargs are updated with common kwargs
         for modality in output_kwargs:
