@@ -1859,8 +1859,8 @@ class OffloadedStaticCache(StaticCache):
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize
             the static cache.
-        max_batch_size (`int`): The max batch size with which the model will be used.
-
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`Union[str, torch.device]`):
@@ -1882,7 +1882,7 @@ class OffloadedStaticCache(StaticCache):
             Off-loaded value cache tensors. First one will be on device, where-as the others are
             off-loaded.
         max_batch_size (`int`):
-            The max batch size with which this cache can be used.
+            The maximum batch size with which this cache can be used.
         max_cache_len (`int`):
             The maximum sequence length with which this cache can be used.
         device (`torch.device`):
