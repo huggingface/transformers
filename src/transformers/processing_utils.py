@@ -1076,6 +1076,8 @@ class ProcessorMixin(PushToHubMixin):
         chat_template: Optional[str] = None,
         tokenize: bool = False,
         return_dict: bool = False,
+        num_frames: int = None,
+        video_load_backend: str = "opencv",
         processor_kwargs: Dict = {},
         **kwargs,
     ) -> str:
@@ -1107,6 +1109,11 @@ class ProcessorMixin(PushToHubMixin):
                 Whether to tokenize the output or not.
             return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+            num_frames (`int`, *optional*):
+                Number of frames to sample uniformly. If not passed, the whole video is loaded.
+            backend (`str`, *optional*, defaults to `"opencv"`):
+                The backend to use when loading the video which will be used only when there are videos in the conversation.
+                Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
             processor_kwargs (`Dict[str: Any]`, *optional*):
                 Additional kwargs to pass to the processor. Used when `return_dict=True` and `tokenize=True`.
             **kwargs:

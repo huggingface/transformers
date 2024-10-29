@@ -550,6 +550,8 @@ def load_video(video: Union[str, "VideoInput"], num_frames: int = None, backend:
             The video to convert to the numpy array format. Can be a link to video or local path.
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly. If not passed, the whole video is loaded.
+        backend (`str`, *optional*, defaults to `"opencv"`):
+            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
 
     Returns:
         `np.array`: A numpy array of shape (num_frames, channels, height, width).
