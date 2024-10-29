@@ -477,7 +477,6 @@ ASSIGNMENTS_TO_KEEP = {
 class ClassDependencyMapper(CSTVisitor):
     """A visitor which is designed to analyze a single class node to get all its dependencies that are shared with the set of
     `global_names`.
-    This class is used through the 2 convenient class methods.
     """
 
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
@@ -495,25 +494,25 @@ class ClassDependencyMapper(CSTVisitor):
             if not m.matches(parent_node, m.Annotation()):
                 self.dependencies.add(node.value)
 
-    @classmethod
-    def dependencies_for_node(cls, node: cst.ClassDef, global_names: set) -> set:
-        """Create dependencies for a node in the `ModuleMapper`."""
-        temp_module = cst.Module(body=[node])
-        wrapper = MetadataWrapper(temp_module)
-        visitor = cls(node.name.value, global_names)
-        wrapper.visit(visitor)
-        return visitor.dependencies
 
-    @classmethod
-    def dependencies_for_new_node(cls, updated_node: cst.ClassDef, mapper: "ModuleMapper") -> set:
-        """Create dependencies for a node in the `ModularFileMapper` (which may have been changed by
-        `replace_call_to_super`).
-        """
-        temp_module = cst.Module(body=[updated_node])
-        wrapper = MetadataWrapper(temp_module)
-        visitor = cls(updated_node.name.value, set(mapper.global_nodes.keys()))
-        wrapper.visit(visitor)
-        return mapper.augment_dependencies_with_functions(visitor.dependencies)
+def dependencies_for_class_node(node: cst.ClassDef, global_names: set) -> set:
+    """Create immediate dependencies for a class node based on the `global_names`."""
+    temp_module = cst.Module(body=[node])
+    wrapper = MetadataWrapper(temp_module)
+    visitor = ClassDependencyMapper(node.name.value, global_names)
+    wrapper.visit(visitor)
+    return visitor.dependencies
+
+
+def augmented_dependencies_for_class_node(node: cst.ClassDef, mapper: "ModuleMapper") -> set:
+    """Create augmented dependencies for a class node based on a `mapper`.
+    Augmented dependencies means immediate dependencies + recursive function dependencies.
+    """
+    temp_module = cst.Module(body=[node])
+    wrapper = MetadataWrapper(temp_module)
+    visitor = ClassDependencyMapper(node.name.value, set(mapper.global_nodes.keys()))
+    wrapper.visit(visitor)
+    return mapper.augment_dependencies_with_functions(visitor.dependencies)
 
 
 class ModuleMapper(CSTVisitor, ABC):
@@ -644,7 +643,7 @@ class ModuleMapper(CSTVisitor, ABC):
 
         self.class_dependency_mapping = {}
         for class_name, class_node in self.classes.items():
-            dependencies = ClassDependencyMapper.dependencies_for_node(class_node, set(self.global_nodes.keys()))
+            dependencies = dependencies_for_class_node(class_node, set(self.global_nodes.keys()))
             # Corretcly augment class dependencies with all needed functions
             self.class_dependency_mapping[class_name] = self.augment_dependencies_with_functions(dependencies)
 
@@ -1198,7 +1197,7 @@ class ModularFileMapper(ModuleMapper):
             updated_node = replace_class_node(mapper, node, renamed_super_class)
 
             # The node was modified -> look for all dependencies (recursively) of the new node
-            new_node_dependencies = ClassDependencyMapper.dependencies_for_new_node(updated_node, mapper)
+            new_node_dependencies = augmented_dependencies_for_class_node(updated_node, mapper)
             all_dependencies_to_add = find_all_dependencies(
                 dependency_mapping=mapper.class_dependency_mapping,
                 initial_dependencies=new_node_dependencies,
@@ -1214,7 +1213,7 @@ class ModularFileMapper(ModuleMapper):
         else:
             updated_node = node
             # The node was NOT modified -> no need to look for dependencies recursively
-            all_dependencies_to_add = ClassDependencyMapper.dependencies_for_node(updated_node, self.global_nodes)
+            all_dependencies_to_add = dependencies_for_class_node(updated_node, self.global_nodes)
 
             relative_dependency_order = self.compute_relative_order(all_dependencies_to_add)
             nodes_to_add = {
