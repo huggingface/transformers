@@ -773,7 +773,8 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     @unittest.skip(
         reason="IDEFICS has specific requirements for working with inputs embeds like passing also the ids and pixels"
     )
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    @parameterized.expand([(1,), (2,)])
+    def test_generate_from_inputs_embeds_decoder_only(self, num_beams):
         pass
 
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
