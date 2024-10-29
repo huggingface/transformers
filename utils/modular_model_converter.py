@@ -54,6 +54,7 @@ def get_module_source_from_name(module_name: str) -> str:
         source_code = file.read()
     return source_code
 
+
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
@@ -66,12 +67,12 @@ def preserve_case_replace(text, patterns: dict, default_name: str):
 
     return compiled_regex.sub(replace, text)
 
+
 def convert_to_camelcase(text, old_name: str, default_old_name: str):
     # Regex pattern to match consecutive uppercase letters and lowercase the first set
-    result = re.sub(
-        rf"^({old_name})(?=[a-z]+)", lambda m: default_old_name, text, flags=re.IGNORECASE, count=1
-    )
+    result = re.sub(rf"^({old_name})(?=[a-z]+)", lambda m: default_old_name, text, flags=re.IGNORECASE, count=1)
     return result
+
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     """A transformer that replaces `old_name` with `new_name` in comments, string and any references.
@@ -118,7 +119,9 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         return updated_node.with_changes(value=update)
 
     def leave_ClassDef(self, original_node, updated_node):
-        return updated_node.with_changes(name=cst.Name(convert_to_camelcase(updated_node.name.value, self.old_name, self.default_old_name)))
+        return updated_node.with_changes(
+            name=cst.Name(convert_to_camelcase(updated_node.name.value, self.old_name, self.default_old_name))
+        )
 
 
 DOCSTRING_NODE = m.SimpleStatementLine(
@@ -843,7 +846,9 @@ def replace_class_node(mapper: ModelFileMapper, class_node: cst.ClassDef, rename
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
     new_module = MetadataWrapper(temp_module)
-    new_replacement_class = new_module.visit(SuperTransformer(temp_module, original_methods, updated_methods, all_bases))
+    new_replacement_class = new_module.visit(
+        SuperTransformer(temp_module, original_methods, updated_methods, all_bases)
+    )
     new_replacement_body = new_replacement_class.body[0].body  # get the indented block
 
     # Use decorators redefined in `modular_xxx.py` if any
@@ -861,6 +866,7 @@ TYPE_TO_FILE_TYPE = {
     "ImageProcessor": "image_processing",
     "FeatureExtractor": "feature_extractor",
 }
+
 
 def find_file_type(class_name: str) -> str:
     """Based on a class name, find the file type corresponding to the class."""
