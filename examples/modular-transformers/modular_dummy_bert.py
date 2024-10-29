@@ -7,6 +7,9 @@ from transformers.models.bert.modeling_bert import BertModel
 from ...modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 
 
+_CHECKPOINT_FOR_DOC = "fake-org/dummy-bert"
+
+
 class DummyBertModel(BertModel):
     def forward(
         self,

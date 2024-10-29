@@ -34,6 +34,9 @@ from ...utils import (
 from .configuration_dummy_bert import DummyBertConfig
 
 
+_CHECKPOINT_FOR_DOC = "fake-org/dummy-bert"
+
+
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DummyBertConfig"
 
@@ -1025,7 +1028,6 @@ class DummyBertModel(DummyBertPreTrainedModel):
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
-        return super().forward(input_ids)
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
