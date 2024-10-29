@@ -82,6 +82,7 @@ class PixtralVisionConfig(PretrainedConfig):
         hidden_act="gelu",
         attention_dropout=0.0,
         rope_theta=10000.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -97,3 +98,4 @@ class PixtralVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rope_theta = rope_theta
         self.head_dim = hidden_size // num_attention_heads
+        self.initializer_range = initializer_range
