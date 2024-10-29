@@ -367,12 +367,15 @@ class ZoeDepthRelativeDepthEstimationHead(nn.Module):
         self.projection = None
         if config.add_projection:
             self.projection = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+            self.projection_act = nn.ReLU()
 
         features = config.fusion_hidden_size
         self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
         self.conv2 = nn.Conv2d(features // 2, config.num_relative_features, kernel_size=3, stride=1, padding=1)
+        self.conv2_act = nn.ReLU()
         self.conv3 = nn.Conv2d(config.num_relative_features, 1, kernel_size=1, stride=1, padding=0)
+        self.conv3_act = nn.ReLU()
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
@@ -380,16 +383,16 @@ class ZoeDepthRelativeDepthEstimationHead(nn.Module):
 
         if self.projection is not None:
             hidden_states = self.projection(hidden_states)
-            hidden_states = nn.ReLU()(hidden_states)
+            hidden_states = self.projection_act(hidden_states)
 
         hidden_states = self.conv1(hidden_states)
         hidden_states = self.upsample(hidden_states)
         hidden_states = self.conv2(hidden_states)
-        hidden_states = nn.ReLU()(hidden_states)
+        hidden_states = self.conv2_act(hidden_states)
         # we need the features here (after second conv + ReLu)
         features = hidden_states
         hidden_states = self.conv3(hidden_states)
-        hidden_states = nn.ReLU()(hidden_states)
+        hidden_states = self.conv3_act(hidden_states)
 
         predicted_depth = hidden_states.squeeze(dim=1)
 
