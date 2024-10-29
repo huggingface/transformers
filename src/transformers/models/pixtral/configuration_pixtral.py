@@ -52,6 +52,8 @@ class PixtralVisionConfig(PretrainedConfig):
             Dropout probability for the attention layers.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
