@@ -281,7 +281,7 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_flat, "##：")
                 self.assertEqual(decoded_list, "##：")
 
-    def test_extra_sepcial_tokens_multimodal(self):
+    def test_extra_special_tokens_multimodal(self):
         special_tokens_list = [
             "bos_token",
             "eos_token",
@@ -293,7 +293,7 @@ class TokenizerUtilsTest(unittest.TestCase):
             "additional_special_tokens",
         ]
         llama_tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        llama_tokenizer.is_multimodal = True
+        llama_tokenizer.extra_special_tokens = ["image_token", "boi_token", "eoi_token"]
         self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list)
         with tempfile.TemporaryDirectory() as tmpdirname:
             llama_tokenizer.save_pretrained(tmpdirname)

@@ -1400,7 +1400,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
-        self.is_multimodal = kwargs.pop("is_multimodal", False)
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
@@ -1440,9 +1439,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         super().__init__(**kwargs)
 
-        if self.is_multimodal:
-            extra_special_tokens = ["image_token", "video_token", "boi_token", "eoi_token", "image_boundary_token"]
-            self._set_model_specific_special_tokens(special_tokens=extra_special_tokens)
+        self.extra_special_tokens = kwargs.pop("extra_special_tokens", [])
+        self._set_model_specific_special_tokens(special_tokens=self.extra_special_tokens)
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -2404,8 +2402,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Let's make sure we properly save the special tokens and flag whether it is a multimodal tokenizer.
         tokenizer_config.update(self.special_tokens_map)
-        if self.is_multimodal and "is_multimodal" not in tokenizer_config:
-            tokenizer_config["is_multimodal"] = True
+        if "extra_special_tokens" not in tokenizer_config:
+            tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
 
         if self.chat_template is not None:
             if isinstance(self.chat_template, dict):
