@@ -136,6 +136,8 @@ def write_model(
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
 
         for k, v in state_dict.items():
+            if v is None:
+                continue
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
@@ -153,6 +155,8 @@ def write_model(
     }
 
     for k, v in state_dict.items():
+        if v is None:
+            continue
         index_dict["weight_map"][k] = filename
         param_count += v.numel()
     torch.save(state_dict, os.path.join(tmp_model_path, filename))
