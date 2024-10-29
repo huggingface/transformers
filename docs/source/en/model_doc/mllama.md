@@ -39,19 +39,12 @@ Otherwise if you see CUDA-side index erros when generating, use the below code t
 
 
 ```python
-pre_expansion_embeddings = model.language_model.lm_head.weight.data
-mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-n = pre_expansion_embeddings.size()[0]
-sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+old_embeddings = model.get_output_embeddings()
 
-
-num_new_tokens = 1 # 1 for the `"<|image|>"` token
-lm_head_weights = model.language_model.lm_head.weight
-
-new_token_embedding = torch.stack(tuple(dist.sample() for _ in range(num_new_tokens)), dim=0).to(device=lm_head_weights.device, dtype=lm_head_weights.dtype)
-lm_head_weights.data = torch.cat([lm_head_weights.data, new_token_embedding], dim=0)
-lm_head_weights.num_embeddings = lm_head_weights.data.shape[0]
+num_tokens = model.vocab_size + 1
+resized_embeddings = model._get_resized_lm_head(old_embeddings, new_num_tokens=num_tokens, mean_resizing=True)
+resized_embeddings.requires_grad_(old_embeddings.weight.requires_grad)
+model.set_output_embeddings(resized_embeddings)
 ```
 </Tip>
 
