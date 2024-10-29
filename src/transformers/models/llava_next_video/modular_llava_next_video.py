@@ -309,7 +309,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         video_features = torch.split(video_features, frames, dim=0)
         return video_features
 
-    @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class="LlavaNextVideoConfig")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
