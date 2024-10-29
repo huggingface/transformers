@@ -490,9 +490,13 @@ class ClassDependencyMapper(CSTVisitor):
     def visit_Name(self, node):
         if node.value != self.class_name and node.value in self.global_names:
             parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-            # If it is only an annotation, do not add dependency
-            if not m.matches(parent_node, m.Annotation()):
-                self.dependencies.add(node.value)
+            # If it is only an annotation inside a method definition, do not add dependency (however, do it for
+            # annotations that are variable definitions, i.e. for Kwargs classes)
+            if m.matches(parent_node, m.Annotation()):
+                grand_parent = self.get_metadata(cst.metadata.ParentNodeProvider, parent_node)
+                if m.matches(grand_parent, m.Param() | m.FunctionDef()):
+                    return
+            self.dependencies.add(node.value)
 
 
 def dependencies_for_class_node(node: cst.ClassDef, global_names: set) -> set:
@@ -890,6 +894,9 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "FeatureExtractor": "feature_extractor",
+    "ProcessorKwargs": "processing",
+    "ImagesKwargs": "processing",
+    "TextKwargs": "processing",
 }
 
 
