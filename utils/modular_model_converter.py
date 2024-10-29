@@ -1215,7 +1215,8 @@ def get_class_node_and_dependencies(
     # No super class, just check functions and assignments dependency in the imports from other modeling files
     else:
         updated_node = node
-        # The node was NOT modified -> no need to look recursively for other class dependencies (they should all be defined)
+        # The node was NOT modified -> no need to look recursively for other class dependencies. Indeed, even if they are not
+        # already defined (which would mean a weird order of the code in the modular...), they will be in the future
         all_dependencies_to_add = augmented_dependencies_for_class_node(updated_node, modular_mapper)
 
         relative_dependency_order = modular_mapper.compute_relative_order(all_dependencies_to_add)
