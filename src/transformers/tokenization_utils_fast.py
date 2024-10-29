@@ -30,7 +30,7 @@ from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
-from .convert_slow_tokenizer import TikTokenConverter, convert_slow_tokenizer
+from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils import PreTrainedTokenizer
@@ -892,35 +892,3 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
 
 
-def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
-    """
-    Converts given `tiktoken` encoding to `PretrainedTokenizerFast` and saves the configuration of converted tokenizer
-    on disk.
-
-    Args:
-        encoding (`tiktoken.Encoding`):
-            Tokenizer from `tiktoken` library. Can be loaded with `tiktoken.get_encoding`.
-        output_dir (`str`):
-            Save path for converted tokenizer configuration file.
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(exist_ok=True)
-
-    save_file = output_dir / "tiktoken" / TIKTOKEN_VOCAB_FILE
-    tokenizer_file = output_dir / TOKENIZER_FILE
-
-    save_file_absolute = str(save_file.absolute())
-    output_file_absolute = str(tokenizer_file.absolute())
-
-    try:
-        from tiktoken.load import dump_tiktoken_bpe
-
-        dump_tiktoken_bpe(encoding._mergeable_ranks, save_file_absolute)
-    except ImportError:
-        raise ValueError(
-            "`tiktoken` is required to save a `tiktoken` file. Install it with " "`pip install tiktoken`."
-        )
-
-    TikTokenConverter(
-        vocab_file=save_file_absolute, pattern=encoding._pat_str, additional_special_tokens=encoding._special_tokens
-    ).tokenizer().save(output_file_absolute)
