@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ColPali checkpoint."""
+"""Convert ColPali weights."""
 
 import argparse
 from pathlib import Path
@@ -30,8 +30,8 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-ORIGINAL_DTYPE = torch.float16
-TOLERANCE = 2e-3
+ORIGINAL_DTYPE = torch.bfloat16
+TOLERANCE = 1e-2
 
 
 # Copied from https://huggingface.co/vidore/colpali-v1.2-merged/blob/main/config.json
@@ -74,6 +74,50 @@ ORIGINAL_CONFIG = {
     },
 }
 
+TEST_IMAGES = [
+    Image.new("RGB", (32, 32), color="white"),
+    Image.new("RGB", (16, 16), color="black"),
+]
+TEST_QUERIES = [
+    "What is the organizational structure for our R&D department?",
+    "Can you provide a breakdown of last year’s financial performance?",
+]
+
+ORIGINAL_IMAGE_OUTPUTS_SLICE = {
+    "slice": (slice(None), slice(3), slice(3)),
+    "value": torch.FloatTensor(
+        [
+            [
+                [-0.06103515625, 0.0849609375, 0.1943359375],
+                [-0.052001953125, 0.0859375, 0.125],
+                [-0.08740234375, 0.0703125, 0.189453125],
+            ],
+            [
+                [0.043212890625, 0.0211181640625, 0.06689453125],
+                [0.046142578125, 0.01422119140625, 0.1416015625],
+                [-0.07421875, 0.103515625, 0.1669921875],
+            ],
+        ]
+    ),
+}
+ORIGINAL_QUERY_OUTPUTS_SLICE = {
+    "slice": (slice(None), slice(3), slice(3)),
+    "value": torch.FloatTensor(
+        [
+            [
+                [0.162109375, -0.0206298828125, 0.09716796875],
+                [-0.107421875, -0.1162109375, 0.028076171875],
+                [-0.0458984375, -0.1123046875, -0.055908203125],
+            ],
+            [
+                [0.1650390625, -0.019775390625, 0.0966796875],
+                [-0.09228515625, -0.11181640625, 0.06396484375],
+                [-0.1298828125, -0.06396484375, 0.1171875],
+            ],
+        ]
+    ),
+}
+
 
 def get_torch_device(device: str = "auto") -> str:
     """
@@ -114,11 +158,10 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     print(f"Device: {device}")
 
     # Load the original model's state_dict
-    # TODO: replace with new state_dict URL (.pth file)
     original_state_dict: Dict[str, torch.Tensor] = torch.hub.load_state_dict_from_url(
-        "vidore/colpali-v1.2-merged",
+        "https://huggingface.co/vidore/colpali-v1.2-merged-state_dict/resolve/main/colpali_v1_2_merged_state_dict.pth",
         map_location="cpu",
-    )["model"]
+    )
 
     # Format the state_dict keys
     original_state_dict = remove_model_prefix(original_state_dict)
@@ -159,29 +202,35 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
         raise ValueError(f"Incompatible keys: {disjoint_keys}")
 
     # Sanity checks: forward pass with images and queries
-    images = [
-        Image.new("RGB", (32, 32), color="white"),
-        Image.new("RGB", (16, 16), color="black"),
-    ]
-    queries = [
-        "Is attention really all you need?",
-        "Are Benjamin, Antoine, Merve, and Jo best friends?",
-    ]
-
     processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2-merged"))
 
-    batch_queries = processor(text=queries).to(device)
-    batch_images = processor(images=images).to(device)
+    batch_images = processor.process_images(images=TEST_IMAGES).to(device)
+    batch_queries = processor.process_queries(text=TEST_QUERIES).to(device)
 
+    # Predict with the new model
     with torch.no_grad():
         outputs_images_new = model(**batch_images, return_dict=True).embeddings
-        outputs_queries_new = model(**batch_queries.copy(), return_dict=True).embeddings
+        outputs_queries_new = model(**batch_queries, return_dict=True).embeddings
 
-    if outputs_images_original.shape != outputs_images_new.shape:
-        raise ValueError("Output shapes do not match for images forward pass")
+    # Compare the outputs with the original model
+    mae_images = torch.mean(
+        torch.abs(
+            outputs_images_new[ORIGINAL_IMAGE_OUTPUTS_SLICE["slice"]].to(ORIGINAL_DTYPE)
+            - ORIGINAL_IMAGE_OUTPUTS_SLICE["value"].to(outputs_images_new.device).to(ORIGINAL_DTYPE)
+        )
+    )
+    mae_queries = torch.mean(
+        torch.abs(
+            outputs_queries_new[ORIGINAL_QUERY_OUTPUTS_SLICE["slice"]].to(ORIGINAL_DTYPE)
+            - ORIGINAL_QUERY_OUTPUTS_SLICE["value"].to(outputs_queries_new.device).to(ORIGINAL_DTYPE)
+        )
+    )
 
-    if outputs_queries_original.shape != outputs_queries_new.shape:
-        raise ValueError("Output shapes do not match for query forward pass")
+    print(f"Mean Absolute Error (MAE) for images: {mae_images}")
+    print(f"Mean Absolute Error (MAE) for queries: {mae_queries}")
+
+    if mae_images > TOLERANCE or mae_queries > TOLERANCE:
+        raise ValueError("Mean Absolute Error (MAE) is greater than the tolerance")
 
     # Save the model
     if push_to_hub:
