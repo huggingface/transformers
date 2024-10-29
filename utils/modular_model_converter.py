@@ -1169,7 +1169,9 @@ class ModularFileMapper(ModuleMapper):
         return relative_order
 
 
-def add_class_node(modular_mapper: ModularFileMapper, class_name: str, node: cst.CSTNode, files: dict[str, dict]) -> tuple[dict, str]:
+def add_class_node(
+    modular_mapper: ModularFileMapper, class_name: str, node: cst.CSTNode, files: dict[str, dict]
+) -> tuple[dict, str]:
     """Return a single class node (and all its dependency nodes), to be added to the `files`. It creates the new
     class node based on the inherited classes if needed.
     """
@@ -1262,9 +1264,7 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     all_imports_code = {modular_mapper.python_module.code_for_node(node).strip() for node in all_imports}
     for file, mapper in modular_mapper.visited_modules.items():
         new_imports = [
-            node
-            for node in mapper.imports
-            if mapper.python_module.code_for_node(node).strip() not in all_imports_code
+            node for node in mapper.imports if mapper.python_module.code_for_node(node).strip() not in all_imports_code
         ]
         new_imports_code = {mapper.python_module.code_for_node(node).strip() for node in new_imports}
         all_imports.extend(new_imports)
