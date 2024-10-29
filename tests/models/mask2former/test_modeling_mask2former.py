@@ -17,10 +17,10 @@
 import unittest
 
 import numpy as np
-from packaging import version
 
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
     require_timm,
     require_torch,
@@ -484,7 +484,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.loss is not None)
 
     def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
+        if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         image_processor = self.default_image_processor
