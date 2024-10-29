@@ -926,7 +926,6 @@ class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         encoder_attention_mask=None,
         position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
-        spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
@@ -959,7 +958,11 @@ class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
         if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            offset_normalizer = torch.tensor(
+                [[shape[1], shape[0]] for shape in spatial_shapes_list],
+                dtype=torch.long,
+                device=reference_points.device,
+            )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
@@ -1003,7 +1006,6 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         reference_points=None,
-        spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
@@ -1018,8 +1020,6 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
                 Position embeddings, to be added to `hidden_states`.
             reference_points (`torch.FloatTensor`, *optional*):
                 Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes of the backbone feature maps.
             spatial_shapes_list (`list` of `tuple`):
                 Spatial shapes of the backbone feature maps as a list of tuples.
             level_start_index (`torch.LongTensor`, *optional*):
@@ -1038,7 +1038,6 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
             encoder_attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
             output_attentions=output_attentions,
@@ -1128,7 +1127,6 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
         inputs_embeds=None,
         attention_mask=None,
         position_embeddings=None,
-        spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
         valid_ratios=None,
@@ -1147,8 +1145,6 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
             position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
             spatial_shapes_list (`list` of `tuple`):
                 Spatial shapes of each feature map as a list of tuples.
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
@@ -1185,7 +1181,6 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
                 attention_mask,
                 position_embeddings=position_embeddings,
                 reference_points=reference_points,
-                spatial_shapes=spatial_shapes,
                 spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 output_attentions=output_attentions,
@@ -1330,7 +1325,6 @@ class Mask2FormerPixelDecoder(nn.Module):
                 inputs_embeds=input_embeds_flat,
                 attention_mask=masks_flat,
                 position_embeddings=level_pos_embed_flat,
-                spatial_shapes=spatial_shapes,
                 spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 valid_ratios=valid_ratios,

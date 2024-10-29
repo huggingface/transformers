@@ -483,7 +483,6 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.loss is not None)
 
-    @slow
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
