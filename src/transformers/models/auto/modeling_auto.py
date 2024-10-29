@@ -775,6 +775,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("idefics3", "Idefics3ForConditionalGeneration"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
+        ("kosmos-2.5", "Kosmos2_5ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
