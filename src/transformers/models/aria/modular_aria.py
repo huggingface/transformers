@@ -1,19 +1,20 @@
 import inspect
 import os
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import trunc_normal_
-from torchvision import transforms
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, select_best_resolution
-from ...image_utils import ImageInput
+from ...image_transforms import convert_to_rgb
+from ...image_utils import ImageInput, to_numpy_array
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
@@ -26,7 +27,7 @@ from ...tokenization_utils import (
 from ...utils import (
     logging,
 )
-from ...utils.import_utils import is_torch_available, is_vision_available
+from ...utils.import_utils import is_vision_available
 from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -272,7 +273,7 @@ class AriaConfig(PretrainedConfig):
                 1225: 128,
                 4900: 256,
             }
-        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
+        self.projector_patch_to_query_dict = projector_patch_to_query_dict.copy()
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"
@@ -324,14 +325,14 @@ class AriaCrossAttention(nn.Module):
     Aria Cross-Attention module.
 
     Args:
-        kv_dim (int): Dimension of key and value.
-        in_features (int): Embedding dimension.
-        num_heads (int): Number of attention heads.
-        drop_out_rate (float): Dropout rate. Default is 0.
+        config (AriaConfig): the configuration to use.
     """
 
-    def __init__(self, kv_dim, in_features, num_heads, drop_out_rate=0):
+    def __init__(self, config: AriaConfig, dropout_rate: float = 0):
         super().__init__()
+        in_features = config.vision_config.hidden_size
+        num_heads = config.vision_config.num_attention_heads
+        kv_dim = config.vision_config.hidden_size
         self.num_heads = num_heads
         self.q_proj = nn.Linear(in_features, in_features, bias=False)
         self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
@@ -341,7 +342,7 @@ class AriaCrossAttention(nn.Module):
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
         self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
         self.linear = nn.Linear(in_features, in_features)
-        self.dropout = nn.Dropout(drop_out_rate)
+        self.dropout = nn.Dropout(dropout_rate)
 
         self.layer_norm = nn.LayerNorm(in_features)
         self.layer_norm_kv = nn.LayerNorm(kv_dim)
@@ -377,17 +378,10 @@ class AriaCrossAttention(nn.Module):
 
 class AriaProjector(nn.Module):
     """
-    A projection module with one cross attention layer and one AriaGeluDense layer, which projects ViT's outputs into MoE's inputs.
+    A projection module with one cross-attention layer and one AriaGeluDense layer, which projects ViT's outputs into MoE's inputs.
 
     Args:
-        patch_to_query_dict (dict): Maps patch numbers to their corresponding query numbers,
-            e.g., {1225: 128, 4900: 256}. This allows for different query sizes based on image resolution.
-        in_features (int): Embedding dimension.
-        num_heads (int): Number of attention heads.
-        kv_dim (int): Dimension of key and value.
-        hidden_features (int): Hidden dimension of the feed-forward network.
-        output_dim (int): Output dimension.
-        norm_layer (nn.Module): Normalization layer. Default is nn.LayerNorm.
+        config (AriaConfig): the configuration to use.
 
     Outputs:
         A tensor with the shape of (batch_size, query_number, output_dim)
@@ -398,7 +392,7 @@ class AriaProjector(nn.Module):
         config: AriaConfig,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.patch_to_query_dict = config.projector_patch_to_query_dict
         self.in_features = config.vision_config.hidden_size
@@ -411,7 +405,7 @@ class AriaProjector(nn.Module):
 
         trunc_normal_(self.query, std=0.02)
 
-        self.cross_attn = AriaCrossAttention(self.kv_dim, self.in_features, self.num_heads)
+        self.cross_attn = AriaCrossAttention(config)
 
         self.layer_norm = nn.LayerNorm(self.in_features)
         self.feed_forward = AriaGeluDense(self.in_features, self.hidden_features, self.output_dim)  # TODO: Aria Projector MMLP
@@ -496,7 +490,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         split_image: Optional[bool] = False,
         split_ratio: Optional[List[Tuple[int]]] = None,
-        do_rescale: Optional[bool] = True,
+        do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
     ):
         """
@@ -545,7 +539,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         if max_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
-        if isinstance(images, ImageInput):
+        if not isinstance(images, list):
             images = [images]
 
         pixel_values = []
@@ -561,17 +555,17 @@ class AriaVisionProcessor(BaseImageProcessor):
                 num_crops = len(crop_images)
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
-                if do_rescale:
-                    img_padded = transforms.ToTensor()(img_padded)
+                if do_convert_rgb:
+                    img_padded = convert_to_rgb(img_padded)
+                img_padded = to_numpy_array(img_padded).T
                 if do_normalize:
                     img_padded = self.normalize(img_padded, self.image_mean, self.image_std)
                 pixel_values.append(img_padded)
                 pixel_masks.append(pixel_mask)
-
         return BatchFeature(
             data={
-                "pixel_values": torch.stack(pixel_values),
-                "pixel_mask": torch.stack(pixel_masks),
+                "pixel_values": np.stack(pixel_values, axis=0),
+                "pixel_mask": np.stack(pixel_masks, axis=0),
                 "num_crops": num_crops,
             },
             tensor_type=return_tensors,
@@ -601,8 +595,12 @@ class AriaProcessor(ProcessorMixin):
         patch_size: int = 490,
         chat_template: str = None,
         image_token: str = "<|img|>",
+        size_conversion: Optional[Dict] = None,
     ):
         super().__init__(chat_template=chat_template)
+        if size_conversion is None:
+            size_conversion = {490: 128, 980: 256}
+        self.size_conversion = size_conversion
 
         if image_processor is None:
             self.image_processor = AriaVisionProcessor(max_image_size=patch_size)
@@ -682,7 +680,6 @@ class AriaProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
         if images is not None:
             image_inputs = self.image_processor(
                 images,
@@ -691,8 +688,7 @@ class AriaProcessor(ProcessorMixin):
                 split_image=split_image,
             )
             # expand the image_token according to the num_crops and tokens per image
-            size_conversion = {490: 128, 980: 256}
-            tokens_per_image = size_conversion[image_inputs.pixel_values.shape[2]]
+            tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
 
             prompt_strings = []
             num_crops = image_inputs.pop("num_crops") * tokens_per_image
@@ -1305,22 +1301,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         logits = outputs[0]
 
-        loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1).to(shift_logits.device),
-            )
+            loss = self.loss_function(logits=logits, labels=labels, config=self.config)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

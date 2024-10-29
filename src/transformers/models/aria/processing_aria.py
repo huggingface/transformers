@@ -5,14 +5,15 @@
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import inspect
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
-from torchvision import transforms
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, select_best_resolution
-from ...image_utils import ImageInput
+from ...image_transforms import convert_to_rgb
+from ...image_utils import ImageInput, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import (
     PaddingStrategy,
@@ -21,13 +22,14 @@ from ...tokenization_utils import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import is_vision_available, logging
+from ...utils import logging
+from ...utils.import_utils import is_vision_available
 from ..auto import AutoTokenizer
 
 
 logger = logging.get_logger(__name__)
 
-if is_vision_available:
+if is_vision_available():
     from PIL import Image, ImageOps
 
 def get_split_image(
@@ -148,18 +150,6 @@ class AriaVisionProcessor(BaseImageProcessor):
         self._transform = None
         self._set_processor_class("AriaProcessor")
 
-    @property
-    def transform(self):
-        if self._transform is None:
-            # Recreate the transform when accessed
-            self._transform = transforms.Compose(
-                [
-                    transforms.ToTensor(),
-                    transforms.Normalize(self.image_mean, self.image_std),
-                ]
-            )
-        return self._transform
-
     def preprocess(
         self,
         images: Union[ImageInput, List[ImageInput]],
@@ -167,7 +157,9 @@ class AriaVisionProcessor(BaseImageProcessor):
         min_image_size: Optional[int] = 336,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         split_image: Optional[bool] = False,
-        split_ratio: Optional[List[List[int]]] = None,
+        split_ratio: Optional[List[Tuple[int]]] = None,
+        do_convert_rgb: Optional[bool] = True,
+        do_normalize: Optional[bool] = True,
     ):
         """
         Process a list of images.
@@ -177,7 +169,7 @@ class AriaVisionProcessor(BaseImageProcessor):
             max_image_size (int, optional): Override the default max image size. Defaults to None.
             return_tensors (str or TensorType, optional): The type of tensor to return. Defaults to "pt".
             split_image (bool, optional): Whether to split the image. Defaults to False.
-            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios.
+            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
         Returns:
             BatchFeature: A BatchFeature object containing:
                 - 'pixel_values': Tensor of processed image pixel values.
@@ -215,7 +207,7 @@ class AriaVisionProcessor(BaseImageProcessor):
         if max_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
-        if isinstance(images, Image.Image):
+        if not isinstance(images, list):
             images = [images]
 
         pixel_values = []
@@ -231,14 +223,17 @@ class AriaVisionProcessor(BaseImageProcessor):
                 num_crops = len(crop_images)
             for crop_image in crop_images:
                 img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
-                img_padded = self.transform(img_padded)
+                if do_convert_rgb:
+                    img_padded = convert_to_rgb(img_padded)
+                img_padded = to_numpy_array(img_padded).T
+                if do_normalize:
+                    img_padded = self.normalize(img_padded, self.image_mean, self.image_std)
                 pixel_values.append(img_padded)
                 pixel_masks.append(pixel_mask)
-
         return BatchFeature(
             data={
-                "pixel_values": torch.stack(pixel_values),
-                "pixel_mask": torch.stack(pixel_masks),
+                "pixel_values": np.stack(pixel_values, axis=0),
+                "pixel_mask": np.stack(pixel_masks, axis=0),
                 "num_crops": num_crops,
             },
             tensor_type=return_tensors,
@@ -268,8 +263,12 @@ class AriaProcessor(ProcessorMixin):
         patch_size: int = 490,
         chat_template: str = None,
         image_token: str = "<|img|>",
+        size_conversion: Optional[Dict] = None,
     ):
         super().__init__(chat_template=chat_template)
+        if size_conversion is None:
+            size_conversion = {490: 128, 980: 256}
+        self.size_conversion = size_conversion
 
         if image_processor is None:
             self.image_processor = AriaVisionProcessor(max_image_size=patch_size)
@@ -349,7 +348,6 @@ class AriaProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
         if images is not None:
             image_inputs = self.image_processor(
                 images,
@@ -358,8 +356,7 @@ class AriaProcessor(ProcessorMixin):
                 split_image=split_image,
             )
             # expand the image_token according to the num_crops and tokens per image
-            size_conversion = {490: 128, 980: 256}
-            tokens_per_image = size_conversion[image_inputs.pixel_values.shape[2]]
+            tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
 
             prompt_strings = []
             num_crops = image_inputs.pop("num_crops") * tokens_per_image

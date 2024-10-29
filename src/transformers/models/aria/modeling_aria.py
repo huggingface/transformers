@@ -146,13 +146,14 @@ class AriaCrossAttention(nn.Module):
     Aria Cross-Attention module.
 
     Args:
-        kv_dim (int): Dimension of key and value.
-        in_features (int): Embedding dimension.
-        num_heads (int): Number of attention heads.
-        drop_out_rate (float): Dropout rate. Default is 0.
+        config (AriaConfig): the configuration to use.
     """
-    def __init__(self, kv_dim, in_features, num_heads, drop_out_rate=0):
+
+    def __init__(self, config: AriaConfig, dropout_rate: float = 0):
         super().__init__()
+        in_features = config.vision_config.hidden_size
+        num_heads = config.vision_config.num_attention_heads
+        kv_dim = config.vision_config.hidden_size
         self.num_heads = num_heads
         self.q_proj = nn.Linear(in_features, in_features, bias=False)
         self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
@@ -162,11 +163,10 @@ class AriaCrossAttention(nn.Module):
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
         self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
         self.linear = nn.Linear(in_features, in_features)
-        self.dropout = nn.Dropout(drop_out_rate)
+        self.dropout = nn.Dropout(dropout_rate)
 
         self.layer_norm = nn.LayerNorm(in_features)
         self.layer_norm_kv = nn.LayerNorm(kv_dim)
-
 
     def forward(self, x, hidden_states, attn_mask=None, add_residual=False):
         """
@@ -199,17 +199,10 @@ class AriaCrossAttention(nn.Module):
 
 class AriaProjector(nn.Module):
     """
-    A projection module with one cross attention layer and one AriaGeluDense layer, which projects ViT's outputs into MoE's inputs.
+    A projection module with one cross-attention layer and one AriaGeluDense layer, which projects ViT's outputs into MoE's inputs.
 
     Args:
-        patch_to_query_dict (dict): Maps patch numbers to their corresponding query numbers,
-            e.g., {1225: 128, 4900: 256}. This allows for different query sizes based on image resolution.
-        in_features (int): Embedding dimension.
-        num_heads (int): Number of attention heads.
-        kv_dim (int): Dimension of key and value.
-        hidden_features (int): Hidden dimension of the feed-forward network.
-        output_dim (int): Output dimension.
-        norm_layer (nn.Module): Normalization layer. Default is nn.LayerNorm.
+        config (AriaConfig): the configuration to use.
 
     Outputs:
         A tensor with the shape of (batch_size, query_number, output_dim)
@@ -220,7 +213,7 @@ class AriaProjector(nn.Module):
         config: AriaConfig,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.patch_to_query_dict = config.projector_patch_to_query_dict
         self.in_features = config.vision_config.hidden_size
@@ -233,7 +226,7 @@ class AriaProjector(nn.Module):
 
         trunc_normal_(self.query, std=0.02)
 
-        self.cross_attn = AriaCrossAttention(self.kv_dim, self.in_features, self.num_heads)
+        self.cross_attn = AriaCrossAttention(config)
 
         self.layer_norm = nn.LayerNorm(self.in_features)
         self.feed_forward = AriaGeluDense(
@@ -2115,20 +2108,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1).to(shift_logits.device),
-            )
+            loss = self.loss_function(logits=logits, labels=labels, config=self.config)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
