@@ -1146,11 +1146,11 @@ class ProcessorMixin(PushToHubMixin):
                 text=prompt,
                 images=images if images else None,
                 videos=videos if videos else None,
-                text_kwargs = {
+                text_kwargs={
                     "padding": kwargs.get("padding", False),
                     "truncation": kwargs.get("truncation", False),
                     "max_length": kwargs.get("max_length", None),
-                    },
+                },
                 return_tensors=kwargs.get("return_tensors", None),
             )
             if return_dict:
