@@ -648,7 +648,10 @@ _import_structure = {
         "OwlViTVisionConfig",
     ],
     "models.paligemma": ["PaliGemmaConfig"],
-    "models.colpali": ["ColPaliConfig"],
+    "models.colpali": [
+        "ColPaliConfig",
+        "ColPaliProcessor",
+    ],
     "models.patchtsmixer": ["PatchTSMixerConfig"],
     "models.patchtst": ["PatchTSTConfig"],
     "models.pegasus": [
@@ -1761,7 +1764,6 @@ else:
     _import_structure["models.colpali"].extend(
         [
             "ColPaliForRetrieval",
-            "ColPaliProcessor",
         ]
     )
     _import_structure["models.conditional_detr"].extend(
@@ -5166,6 +5168,7 @@ if TYPE_CHECKING:
     from .models.cohere import CohereConfig
     from .models.colpali import (
         ColPaliConfig,
+        ColPaliProcessor,
     )
     from .models.conditional_detr import (
         ConditionalDetrConfig,
