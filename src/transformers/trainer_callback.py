@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import IntervalStrategy, has_length
+from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -555,7 +555,7 @@ class DefaultFlowCallback(TrainerCallback):
 
         # Save
         if (
-            args.save_strategy == IntervalStrategy.STEPS
+            args.save_strategy == SaveStrategy.STEPS
             and state.save_steps > 0
             and state.global_step % state.save_steps == 0
         ):
@@ -565,7 +565,7 @@ class DefaultFlowCallback(TrainerCallback):
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
-            if args.save_strategy != IntervalStrategy.NO:
+            if args.save_strategy not in [SaveStrategy.NO, SaveStrategy.BEST]:
                 control.should_save = True
 
         return control
@@ -580,7 +580,7 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_evaluate = True
 
         # Save
-        if args.save_strategy == IntervalStrategy.EPOCH:
+        if args.save_strategy == SaveStrategy.EPOCH:
             control.should_save = True
 
         return control

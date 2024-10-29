@@ -16,13 +16,18 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
     prepare_image_inputs,
 )
 
+
+if is_torch_available():
+    import torch
+
+    from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 if is_vision_available():
     from transformers import SuperPointImageProcessor
@@ -70,6 +75,23 @@ class SuperPointImageProcessingTester(unittest.TestCase):
             torchify=torchify,
         )
 
+    def prepare_keypoint_detection_output(self, pixel_values):
+        max_number_keypoints = 50
+        batch_size = len(pixel_values)
+        mask = torch.zeros((batch_size, max_number_keypoints))
+        keypoints = torch.zeros((batch_size, max_number_keypoints, 2))
+        scores = torch.zeros((batch_size, max_number_keypoints))
+        descriptors = torch.zeros((batch_size, max_number_keypoints, 16))
+        for i in range(batch_size):
+            random_number_keypoints = np.random.randint(0, max_number_keypoints)
+            mask[i, :random_number_keypoints] = 1
+            keypoints[i, :random_number_keypoints] = torch.rand((random_number_keypoints, 2))
+            scores[i, :random_number_keypoints] = torch.rand((random_number_keypoints,))
+            descriptors[i, :random_number_keypoints] = torch.rand((random_number_keypoints, 16))
+        return SuperPointKeypointDescriptionOutput(
+            loss=None, keypoints=keypoints, scores=scores, descriptors=descriptors, mask=mask, hidden_states=None
+        )
+
 
 @require_torch
 @require_vision
@@ -110,3 +132,33 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         pre_processed_images = image_processor.preprocess(image_inputs)
         for image in pre_processed_images["pixel_values"]:
             self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
+
+    @require_torch
+    def test_post_processing_keypoint_detection(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs()
+        pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
+        outputs = self.image_processor_tester.prepare_keypoint_detection_output(**pre_processed_images)
+
+        def check_post_processed_output(post_processed_output, image_size):
+            for post_processed_output, image_size in zip(post_processed_output, image_size):
+                self.assertTrue("keypoints" in post_processed_output)
+                self.assertTrue("descriptors" in post_processed_output)
+                self.assertTrue("scores" in post_processed_output)
+                keypoints = post_processed_output["keypoints"]
+                all_below_image_size = torch.all(keypoints[:, 0] <= image_size[1]) and torch.all(
+                    keypoints[:, 1] <= image_size[0]
+                )
+                all_above_zero = torch.all(keypoints[:, 0] >= 0) and torch.all(keypoints[:, 1] >= 0)
+                self.assertTrue(all_below_image_size)
+                self.assertTrue(all_above_zero)
+
+        tuple_image_sizes = [(image.size[0], image.size[1]) for image in image_inputs]
+        tuple_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tuple_image_sizes)
+
+        check_post_processed_output(tuple_post_processed_outputs, tuple_image_sizes)
+
+        tensor_image_sizes = torch.tensor([image.size for image in image_inputs]).flip(1)
+        tensor_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tensor_image_sizes)
+
+        check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)
