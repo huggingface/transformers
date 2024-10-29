@@ -492,19 +492,8 @@ class PipelineTesterMixin:
                     yield copy.deepcopy(random.choice(examples))
 
             out = []
-            # check if pipeline call signature has more than one argument
-            # in this case, we can't use a single generator, we need to collate the data first
-            input_signature = {
-                k: v for k, v in inspect.signature(pipeline.__call__).parameters.items() if k not in ("kwargs", "args")
-            }
-            if len(input_signature) > 1:
-                data_list = list(data(10))
-                # collate data_list
-                data_dict = {k: [d[k] for d in data_list] for k in data_list[0]}
-                out = pipeline(**data_dict, batch_size=4)
-            else:
-                for item in pipeline(data(10), batch_size=4):
-                    out.append(item)
+            for item in pipeline(data(10), batch_size=4):
+                out.append(item)
             self.assertEqual(len(out), 10)
 
         run_batch_test(pipeline, examples)

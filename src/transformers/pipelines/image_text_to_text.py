@@ -30,7 +30,7 @@ from .base import Pipeline, build_pipeline_init_args
 if is_vision_available():
     from PIL import Image
 
-    from ..image_utils import load_images
+    from ..image_utils import load_images, valid_images
 
 
 if is_torch_available():
@@ -264,6 +264,15 @@ class ImageTextToTextPipeline(Pipeline):
         """
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
+        if images is not None and text is None and not valid_images(images):
+            """
+            Supports the following format
+            - {"image": image, "text": text}
+            - [{"image": image, "text": text}]
+            - Generator and datasets
+            This is a common pattern in other multimodal pipelines, so we support it here as well.
+            """
+            return super().__call__(images, **kwargs)
 
         if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
