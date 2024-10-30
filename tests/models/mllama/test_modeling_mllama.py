@@ -126,7 +126,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
-    _torch_compile_test_ckpt = "nltpt/Llama-3.2-11B-Vision"
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)

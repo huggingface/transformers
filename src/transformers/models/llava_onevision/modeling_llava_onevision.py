@@ -657,7 +657,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
         if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
             raise ValueError(
-                "You cannot specify both pixel_values/pixel_values_videos and inputs_embeds at the same time, and must specify either one"
+                "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
+                "and must specify either one"
             )
 
         if inputs_embeds is None:
