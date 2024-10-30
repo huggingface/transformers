@@ -293,28 +293,29 @@ class TokenizerUtilsTest(unittest.TestCase):
             "additional_special_tokens",
         ]
         llama_tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        llama_tokenizer.extra_special_tokens = ["image_token", "boi_token", "eoi_token"]
+        llama_tokenizer.extra_special_tokens = {
+            "boi_token": "<unk>",
+            "eoi_token": "<s>",
+            "image_token": "</s>",
+        }
         self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list)
         with tempfile.TemporaryDirectory() as tmpdirname:
             llama_tokenizer.save_pretrained(tmpdirname)
 
             # load back and check we have extra special tokens set
             loaded_tokenizer = LlamaTokenizerFast.from_pretrained(tmpdirname)
-            multimodal_special_tokens_list = special_tokens_list + ["image_token", "boi_token", "eoi_token"]
+            multimodal_special_tokens_list = special_tokens_list + ["boi_token", "eoi_token", "image_token"]
             self.assertListEqual(loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
 
-            # if we set an image_token_id then we can get an "image_token" as str that matches the id
-            loaded_tokenizer.image_token_id = 0
-            self.assertTrue(loaded_tokenizer.image_token == loaded_tokenizer.convert_ids_to_tokens(0))
+            # We set an image_token_id before, so we can get an "image_token" as str that matches the id
+            self.assertTrue(loaded_tokenizer.image_token == "</s>")
+            self.assertTrue(loaded_tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("</s>"))
 
         # save one more time and make sure the image token can get loaded back
         with tempfile.TemporaryDirectory() as tmpdirname:
             loaded_tokenizer.save_pretrained(tmpdirname)
-            loaded_tokenizer_with_image_token = LlamaTokenizerFast.from_pretrained(tmpdirname)
-            self.assertTrue(
-                loaded_tokenizer_with_image_token.image_token
-                == loaded_tokenizer_with_image_token.convert_ids_to_tokens(0)
-            )
+            loaded_tokenizer_with_extra_tokens = LlamaTokenizerFast.from_pretrained(tmpdirname)
+            self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "</s>")
 
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):

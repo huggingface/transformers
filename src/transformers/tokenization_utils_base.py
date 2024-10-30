@@ -1098,8 +1098,11 @@ class SpecialTokensMixin:
             else:
                 attr_as_tokens = getattr(self, key_without_id)
                 return self.convert_tokens_to_ids(attr_as_tokens) if attr_as_tokens is not None else None
+
+        if key not in self.__dict__:
+            raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         else:
-            super().__getattr__(key)
+            return super().__getattr__(key)
 
     @property
     def special_tokens_map(self) -> Dict[str, Union[str, List[str]]]:
@@ -1179,11 +1182,12 @@ class SpecialTokensMixin:
         This allows us to dynamically add new model-type specific tokens after initilizing the tokenizer.
         For example: if the model tokenizers is multimodal, we can support special image or audio tokens.
         """
-        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + special_tokens
-        self._special_tokens_map.update({token: None for token in special_tokens})
-        for key, value in self.init_kwargs.items():
-            if key in special_tokens and isinstance(value, (str, AddedToken)):
+        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
+        for key, value in special_tokens.items():
+            if isinstance(value, (str, AddedToken)):
                 self._special_tokens_map[key] = value
+            else:
+                raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
 
 
 ENCODE_KWARGS_DOCSTRING = r"""
@@ -1439,7 +1443,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         super().__init__(**kwargs)
 
-        self.extra_special_tokens = kwargs.pop("extra_special_tokens", [])
+        self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
         self._set_model_specific_special_tokens(special_tokens=self.extra_special_tokens)
 
     @property
@@ -2400,10 +2404,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
-        # Let's make sure we properly save the special tokens and flag whether it is a multimodal tokenizer.
+        # Let's make sure we properly save the special tokens
         tokenizer_config.update(self.special_tokens_map)
         if "extra_special_tokens" not in tokenizer_config:
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
+            tokenizer_config.update(self.extra_special_tokens)
 
         if self.chat_template is not None:
             if isinstance(self.chat_template, dict):
