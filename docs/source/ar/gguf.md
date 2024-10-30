@@ -2,7 +2,7 @@
 
 تُستخدم صيغة ملف GGUF لتخزين النماذج للاستدلال باستخدام [GGML](https://github.com/ggerganov/ggml) والمكتبات الأخرى التي تعتمد عليه، مثل [llama.cpp](https://github.com/ggerganov/llama.cpp) أو [whisper.cpp](https://github.com/ggerganov/whisper.cpp) الشهيرة جدًا.
 
-إنها صيغة ملف [مدعومة من قبل Hugging Face Hub](https://huggingface.co/docs/hub/en/gguf) مع ميزات تسمح بالتفتيش السريع للتوابع والبيانات الوصفية داخل الملف.
+إنها صيغة ملف [مدعومة من قبل Hugging Face Hub](https://huggingface.co/docs/hub/en/gguf) مع ميزات تسمح بالفحص السريع للموترات والبيانات الوصفية داخل الملف.
 
 تم تصميم تنسيق الملف هذا كـ "تنسيق ملف واحد" حيث يحتوي ملف واحد عادةً على كل من سمات التكوين ومفردات المحلل اللغوي والسمات الأخرى، بالإضافة إلى جميع التوابع التي سيتم تحميلها في النموذج. تأتي هذه الملفات بتنسيقات مختلفة وفقًا لنوع التكميم في الملف. نلقي نظرة موجزة على بعضها [هنا](https://huggingface.co/docs/hub/en/gguf#quantization-types).
 
