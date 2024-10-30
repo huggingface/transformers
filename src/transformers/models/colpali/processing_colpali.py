@@ -403,8 +403,8 @@ class ColPaliProcessor(ProcessorMixin):
 
     def score_retrieval(
         self,
-        qs: Union[torch.Tensor, List[torch.Tensor]],
-        ps: Union[torch.Tensor, List[torch.Tensor]],
+        query_embeddings: Union[torch.Tensor, List[torch.Tensor]],
+        passage_embeddings: Union[torch.Tensor, List[torch.Tensor]],
         batch_size: int = 128,
     ) -> torch.Tensor:
         """
@@ -413,8 +413,8 @@ class ColPaliProcessor(ProcessorMixin):
         image of a document page.
 
         Args:
-            qs (`List[torch.Tensor]`): List of query embeddings.
-            ps (`List[torch.Tensor]`): List of passage embeddings.
+            query_embeddings (`List[torch.Tensor]`): List of query embeddings.
+            passage_embeddings (`List[torch.Tensor]`): List of passage embeddings.
             batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
 
         Returns:
@@ -422,26 +422,31 @@ class ColPaliProcessor(ProcessorMixin):
                 (device=cpu, dtype=float32).
         """
 
-        if len(qs) == 0:
+        if len(query_embeddings) == 0:
             raise ValueError("No queries provided")
-        if len(ps) == 0:
+        if len(passage_embeddings) == 0:
             raise ValueError("No passages provided")
 
-        if qs[0].device != ps[0].device:
+        if query_embeddings[0].device != passage_embeddings[0].device:
             raise ValueError("Queries and passages must be on the same device")
 
-        scores_list: List[torch.Tensor] = []
+        scores: List[torch.Tensor] = []
 
-        for i in range(0, len(qs), batch_size):
-            scores_batch: List[torch.Tensor] = []
-            qs_batch = torch.nn.utils.rnn.pad_sequence(qs[i : i + batch_size], batch_first=True, padding_value=0)
-            for j in range(0, len(ps), batch_size):
-                ps_batch = torch.nn.utils.rnn.pad_sequence(ps[j : j + batch_size], batch_first=True, padding_value=0)
-                scores_batch.append(torch.einsum("bnd,csd->bcns", qs_batch, ps_batch).max(dim=3)[0].sum(dim=2))
-            scores_list.append(torch.cat(scores_batch, dim=1).cpu())
+        for i in range(0, len(query_embeddings), batch_size):
+            batch_scores: List[torch.Tensor] = []
+            batch_queries = torch.nn.utils.rnn.pad_sequence(
+                query_embeddings[i : i + batch_size], batch_first=True, padding_value=0
+            )
+            for j in range(0, len(passage_embeddings), batch_size):
+                batch_passages = torch.nn.utils.rnn.pad_sequence(
+                    passage_embeddings[j : j + batch_size], batch_first=True, padding_value=0
+                )
+                batch_scores.append(
+                    torch.einsum("bnd,csd->bcns", batch_queries, batch_passages).max(dim=3)[0].sum(dim=2)
+                )
+            scores.append(torch.cat(batch_scores, dim=1).cpu())
 
-        scores = torch.cat(scores_list, dim=0).to(torch.float32)
-        assert scores.shape[0] == len(qs), f"Expected {len(qs)} scores, got {scores.shape[0]}"
+        scores = torch.cat(scores, dim=0).to(torch.float32)
 
         return scores
 
