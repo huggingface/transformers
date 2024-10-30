@@ -88,14 +88,14 @@ ORIGINAL_IMAGE_OUTPUTS_SLICE = {
     "value": torch.FloatTensor(
         [
             [
-                [-0.06103515625, 0.0849609375, 0.1943359375],
-                [-0.052001953125, 0.0859375, 0.125],
-                [-0.08740234375, 0.0703125, 0.189453125],
+                [-0.0576171875, 0.08251953125, 0.197265625],
+                [-0.054443359375, 0.09912109375, 0.138671875],
+                [-0.09228515625, 0.07275390625, 0.189453125],
             ],
             [
-                [0.043212890625, 0.0211181640625, 0.06689453125],
-                [0.046142578125, 0.01422119140625, 0.1416015625],
-                [-0.07421875, 0.103515625, 0.1669921875],
+                [0.07861328125, 0.032958984375, 0.0478515625],
+                [0.0595703125, 0.0223388671875, 0.1240234375],
+                [-0.07470703125, 0.1064453125, 0.1640625],
             ],
         ]
     ),
@@ -105,14 +105,14 @@ ORIGINAL_QUERY_OUTPUTS_SLICE = {
     "value": torch.FloatTensor(
         [
             [
-                [0.162109375, -0.0206298828125, 0.09716796875],
-                [-0.107421875, -0.1162109375, 0.028076171875],
-                [-0.0458984375, -0.1123046875, -0.055908203125],
+                [0.162109375, -0.020263671875, 0.09619140625],
+                [-0.09619140625, -0.1171875, 0.0213623046875],
+                [-0.05078125, -0.109375, -0.050537109375],
             ],
             [
-                [0.1650390625, -0.019775390625, 0.0966796875],
-                [-0.09228515625, -0.11181640625, 0.06396484375],
-                [-0.1298828125, -0.06396484375, 0.1171875],
+                [0.1650390625, -0.020263671875, 0.0966796875],
+                [-0.0966796875, -0.11083984375, 0.068359375],
+                [-0.1298828125, -0.06201171875, 0.1181640625],
             ],
         ]
     ),
@@ -176,18 +176,12 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
 
     # Load the untrained model
-    model = ColPaliForRetrieval(config=config).to(device).eval()
+    model = ColPaliForRetrieval(config=config).to(device).to(ORIGINAL_DTYPE).eval()
     print("Created model with new config and randomly initialized weights")
 
-    # NOTE: The model was initialized with float32 weights. We need to convert it to the desired precision.
-    # Using `model.to(ORIGINAL_DTYPE)` also converts the hyperparameters to the desired precision, which is not desired.
-    # Hence, we need to manually convert the weights to the desired precision.
-    for param in model.parameters():
-        param.data = param.data.to(ORIGINAL_DTYPE)
-    print(f"Converted the new model weights to `{ORIGINAL_DTYPE}`")
-
-    # Load the original weights
+    # Load the original weights with the correct dtype
     model.load_state_dict(original_state_dict)
+    model = model.to(ORIGINAL_DTYPE)
     print("Loaded original model weights")
 
     # Tie the weights (following ColPali's `__init__`` step)
@@ -215,19 +209,27 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     # Compare the outputs with the original model
     mae_images = torch.mean(
         torch.abs(
-            outputs_images_new[ORIGINAL_IMAGE_OUTPUTS_SLICE["slice"]].to(ORIGINAL_DTYPE)
+            outputs_images_new[ORIGINAL_IMAGE_OUTPUTS_SLICE["slice"]]
             - ORIGINAL_IMAGE_OUTPUTS_SLICE["value"].to(outputs_images_new.device).to(ORIGINAL_DTYPE)
         )
     )
     mae_queries = torch.mean(
         torch.abs(
-            outputs_queries_new[ORIGINAL_QUERY_OUTPUTS_SLICE["slice"]].to(ORIGINAL_DTYPE)
+            outputs_queries_new[ORIGINAL_QUERY_OUTPUTS_SLICE["slice"]]
             - ORIGINAL_QUERY_OUTPUTS_SLICE["value"].to(outputs_queries_new.device).to(ORIGINAL_DTYPE)
         )
     )
 
     print(f"Mean Absolute Error (MAE) for images: {mae_images}")
     print(f"Mean Absolute Error (MAE) for queries: {mae_queries}")
+
+    torch.allclose(
+        outputs_images_new[ORIGINAL_IMAGE_OUTPUTS_SLICE["slice"]],
+        ORIGINAL_IMAGE_OUTPUTS_SLICE["value"].to(outputs_images_new.device).to(ORIGINAL_DTYPE),
+        rtol=TOLERANCE,
+    )
+
+    breakpoint()
 
     if mae_images > TOLERANCE or mae_queries > TOLERANCE:
         raise ValueError("Mean Absolute Error (MAE) is greater than the tolerance")
