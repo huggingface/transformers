@@ -1279,6 +1279,7 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,
                 "use_cache": getattr(config, "use_cache", False),  # Some models don't support the cache
                 "dola_layers": "low",
+                "bad_words_ids": [[model.config.image_token_index]] if hasattr(model.config, "image_token_index") else None,
             }
             output_dola = model.generate(**generation_kwargs, **inputs_dict)
             self._check_outputs(output_dola, model.config, use_cache=getattr(config, "use_cache", False))
