@@ -387,6 +387,7 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
+    "models.diffllama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
     "models.dinov2": ["Dinov2Config"],
     "models.distilbert": [
@@ -524,7 +525,6 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
-    "models.diffllama": ["DiffLlamaConfig"],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -2073,6 +2073,16 @@ else:
             "DetrPreTrainedModel",
         ]
     )
+    _import_structure["models.diffllama"].extend(
+        [
+            "DiffLlamaForCausalLM",
+            "DiffLlamaForQuestionAnswering",
+            "DiffLlamaForSequenceClassification",
+            "DiffLlamaForTokenClassification",
+            "DiffLlamaModel",
+            "DiffLlamaPreTrainedModel",
+        ]
+    )
     _import_structure["models.dinat"].extend(
         [
             "DinatBackbone",
@@ -2553,16 +2563,6 @@ else:
             "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.diffllama"].extend(
-        [
-            "DiffLlamaForCausalLM",
-            "DiffLlamaForQuestionAnswering",
-            "DiffLlamaForSequenceClassification",
-            "DiffLlamaForTokenClassification",
-            "DiffLlamaModel",
-            "DiffLlamaPreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(
