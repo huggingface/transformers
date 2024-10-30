@@ -541,7 +541,7 @@ VIDEO_DECODERS = {
 }
 
 
-def load_video(video: Union[str, "VideoInput"], num_frames: int = None, backend: str = "opencv") -> np.array:
+def load_video(video: Union[str, "VideoInput"], num_frames: Optional[int] = None, backend: str = "opencv") -> np.array:
     """
     Loads `video` to a numpy array.
 
