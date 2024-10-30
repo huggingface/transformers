@@ -16,14 +16,35 @@
 Image/Text processor class for OneFormer
 """
 
-from typing import List
+from typing import Dict, List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
+
+class OneFormerImagesKwargs(ImagesKwargs):
+    segmentation_maps: Optional[ImageInput]
+    task_inputs: Optional[Union[TextInput, PreTokenizedInput]]
+    instance_id_to_semantic_id: Optional[Dict[int, int]]
+    pad_and_return_pixel_mask: Optional[bool]
+    ignore_index: Optional[int]
+    do_reduce_labels: bool
+    repo_path: Optional[str]
+    class_info_file: Optional[str]
+    num_text: Optional[int]
+    num_labels: Optional[int]
+
+
+class OneFormerProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: OneFormerImagesKwargs
+    _defaults = {}
 
 
 class OneFormerProcessor(ProcessorMixin):
@@ -37,9 +58,9 @@ class OneFormerProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
-        max_seq_len (`int`, *optional*, defaults to 77)):
+        max_seq_length (`int`, *optional*, defaults to 77):
             Sequence length for input text list.
-        task_seq_len (`int`, *optional*, defaults to 77):
+        task_seq_length (`int`, *optional*, defaults to 77):
             Sequence length for input task token.
     """
 
@@ -48,22 +69,23 @@ class OneFormerProcessor(ProcessorMixin):
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(
-        self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
+        self,
+        image_processor=None,
+        tokenizer=None,
+        max_seq_length: int = 77,
+        task_seq_length: int = 77,
     ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
+        super().__init__(image_processor, tokenizer)
+
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
 
-        super().__init__(image_processor, tokenizer)
-
-    def _preprocess_text(self, text_list=None, max_length=77):
-        if text_list is None:
-            raise ValueError("tokens cannot be None.")
-
+    def _preprocess_text(self, text_list: PreTokenizedInput, max_length: int = 77):
         tokens = self.tokenizer(text_list, padding="max_length", max_length=max_length, truncation=True)
 
         attention_masks, input_ids = tokens["attention_mask"], tokens["input_ids"]
@@ -76,7 +98,35 @@ class OneFormerProcessor(ProcessorMixin):
         token_inputs = torch.cat(token_inputs, dim=0)
         return token_inputs
 
-    def __call__(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
+    @staticmethod
+    def _check_args(
+        images: Optional[ImageInput] = None,
+        task_inputs: Optional[Union[TextInput, PreTokenizedInput]] = None,
+    ):
+        if task_inputs is None:
+            raise ValueError("You have to specify the task_inputs. Found None.")
+        elif images is None:
+            raise ValueError("You have to specify the images. Found None.")
+
+        if isinstance(task_inputs, str):
+            task_inputs = [task_inputs]
+
+        if not isinstance(task_inputs, List) or not task_inputs:
+            raise TypeError("task_inputs should be a string or a list of strings.")
+
+        if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
+            raise ValueError("task_inputs must be semantic, instance, or panoptic.")
+
+        return task_inputs
+
+    def __call__(
+        self,
+        images: Optional[ImageInput] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[OneFormerProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several task input(s) and image(s). This method forwards the
         `task_inputs` and `kwargs` arguments to CLIPTokenizer's [`~CLIPTokenizer.__call__`] if `task_inputs` is not
@@ -108,36 +158,28 @@ class OneFormerProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        if task_inputs is None:
-            raise ValueError("You have to specify the task_input. Found None.")
-        elif images is None:
-            raise ValueError("You have to specify the image. Found None.")
+        output_kwargs = self._merge_kwargs(
+            OneFormerProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
+        task_inputs = output_kwargs["images_kwargs"].pop("task_inputs", None)
+        task_inputs = self._check_args(images, task_inputs)
 
-        if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
-            raise ValueError("task_inputs must be semantic, instance, or panoptic.")
+        encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **output_kwargs["images_kwargs"])
 
-        encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **kwargs)
-
-        if isinstance(task_inputs, str):
-            task_inputs = [task_inputs]
-
-        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
-            task_token_inputs = []
-            for task in task_inputs:
-                task_input = f"the task is {task}"
-                task_token_inputs.append(task_input)
-            encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
-        else:
-            raise TypeError("Task Inputs should be a string or a list of strings.")
+        task_token_inputs = []
+        for task in task_inputs:
+            task_input = f"the task is {task}"
+            task_token_inputs.append(task_input)
+        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
 
         if hasattr(encoded_inputs, "text_inputs"):
-            texts_list = encoded_inputs.text_inputs
-
-            text_inputs = []
-            for texts in texts_list:
-                text_input_list = self._preprocess_text(texts, max_length=self.max_seq_length)
-                text_inputs.append(text_input_list.unsqueeze(0))
-
+            text_inputs = [
+                self._preprocess_text(texts, max_length=self.max_seq_length).unsqueeze(0)
+                for texts in encoded_inputs.text_inputs
+            ]
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
         return encoded_inputs
@@ -148,36 +190,21 @@ class OneFormerProcessor(ProcessorMixin):
         task_inputs. Please refer to the docstring of this method for more information.
         """
 
-        if task_inputs is None:
-            raise ValueError("You have to specify the task_input. Found None.")
-        elif images is None:
-            raise ValueError("You have to specify the image. Found None.")
-
-        if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
-            raise ValueError("task_inputs must be semantic, instance, or panoptic.")
+        task_inputs = self._check_args(images, task_inputs)
 
         encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
 
-        if isinstance(task_inputs, str):
-            task_inputs = [task_inputs]
-
-        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
-            task_token_inputs = []
-            for task in task_inputs:
-                task_input = f"the task is {task}"
-                task_token_inputs.append(task_input)
-            encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
-        else:
-            raise TypeError("Task Inputs should be a string or a list of strings.")
+        task_token_inputs = []
+        for task in task_inputs:
+            task_input = f"the task is {task}"
+            task_token_inputs.append(task_input)
+        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
 
         if hasattr(encoded_inputs, "text_inputs"):
-            texts_list = encoded_inputs.text_inputs
-
-            text_inputs = []
-            for texts in texts_list:
-                text_input_list = self._preprocess_text(texts, max_length=self.max_seq_length)
-                text_inputs.append(text_input_list.unsqueeze(0))
-
+            text_inputs = [
+                self._preprocess_text(texts, max_length=self.max_seq_length).unsqueeze(0)
+                for texts in encoded_inputs.text_inputs
+            ]
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
         return encoded_inputs
