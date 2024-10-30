@@ -38,7 +38,16 @@
 "<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]</s>"
 ```
 
-لاحظ أن محلل اللغة قد أضاف هذه المرة الرموز التحكمية [INST] و[/INST] للإشارة إلى بداية ونهاية رسائل المستخدم (ولكن ليس رسائل المساعد!). تم تدريب Mistral-instruct على هذه الرموز، ولكن لم يتم تدريب BlenderBot عليها.
+لاحظ كيف أضاف المجزىء اللغوى tokenizer رموز التحكم [INST] و [/INST] للإشارة إلى بداية ونهاية رسائل المستخدم (ولكن ليس رسائل المساعد!) ، وتم تكثيف المحادثة بأكملها في سلسلة نصية واحدة. إذا استخدمنا tokenize=True ، وهو الإعداد الافتراضي ، فسيتم أيضًا تقسيم تلك السلسلة إلى رموز.
+
+حاول الآن استخدام نفس الشفرة، لكن مع استبدال النموذج بـ HuggingFaceH4/zephyr-7b-beta ، وستحصل على:
+```text
+<|user|>
+Hello, how are you?</s>
+<|assistant|>
+I'm doing great. How can I help you today?</s>
+<|user|>
+I'd like to show off how chat templating works!</s>
 
 ## كيف أستخدم قوالب الدردشة؟
 
