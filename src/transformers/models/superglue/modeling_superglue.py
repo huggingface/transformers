@@ -333,7 +333,11 @@ class SuperGlueAttentionalGNN(nn.Module):
                     .flip(1)
                     .reshape(batch_size, num_keypoints, self.descriptor_dim)
                 )
-                gnn_mask = mask.reshape(-1, 2, num_keypoints).flip(1).reshape(batch_size, num_keypoints) if mask is not None else None
+                gnn_mask = (
+                    mask.reshape(-1, 2, num_keypoints).flip(1).reshape(batch_size, num_keypoints)
+                    if mask is not None
+                    else None
+                )
             elif layer_type == "self":
                 source = descriptors
                 gnn_mask = mask if mask is not None else None
@@ -655,11 +659,12 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             descriptors[i, :, : _descriptors.shape[1], :] = _descriptors
             mask[i, :, : _mask.shape[1]] = _mask
 
-        keypoints[:, :, :, 0] = keypoints[:, :, :, 0] * width
-        keypoints[:, :, :, 1] = keypoints[:, :, :, 1] * height
+        absolute_keypoints = keypoints.clone()
+        absolute_keypoints[:, :, :, 0] = absolute_keypoints[:, :, :, 0] * width
+        absolute_keypoints[:, :, :, 1] = absolute_keypoints[:, :, :, 1] * height
 
         matches, matching_scores, hidden_states, attentions = self._match_image_pair(
-            keypoints,
+            absolute_keypoints,
             descriptors,
             scores,
             height,
