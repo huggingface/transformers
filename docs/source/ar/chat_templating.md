@@ -91,7 +91,7 @@ print(tokenizer.decode(outputs[0]))
 
 سيؤدي هذا إلى ما يلي:
 
-```النص
+```text
 <|system|>
 You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
