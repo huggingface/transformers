@@ -106,7 +106,7 @@ Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopte
 
 ## هل هناك قنوات معالجة أوتوماتيكية للدردشة؟
 
-نعم هناك! تدعم خطوط أنابيب التوليد النصي لدينا إدخالات الدردشة، مما يجعل من السهل استخدام نماذج الدردشة. في الماضي، كنا نستخدم فئة "ConversationalPipeline" مخصصة، ولكن تم الآن إيقافها وتم دمج وظائفها في [`TextGenerationPipeline`]. دعونا نجرب مثال Zephyr مرة أخرى، ولكن هذه المرة باستخدام خط أنابيب:
+نعم يوجد ! تدعم قنوات المعالجة توليد النصوص مدخلات الدردشة ، مما يُسهّل استخدام نماذج الدردشة . في الماضي ، كنا نستخدم فئة "ConversationalPipeline" المُخصّصة ، ولكن تم الآن إيقافها وتم دمج وظائفها في [TextGenerationPipeline]. دعونا نجرّب مثال Zephyr مرة أخرى ، ولكن هذه المرة باستخدام قناة معالجة:
 
 ```python
 from transformers import pipeline
