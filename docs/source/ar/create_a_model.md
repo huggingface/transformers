@@ -295,7 +295,7 @@ ViTImageProcessor {
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=True) # تكوين العمود الفقري والعنق
+config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=True) # تكوين الجزء الأساسي والجزء الوسيط
 model = MaskFormerForInstanceSegmentation(config) # الرأس
 ```
 
