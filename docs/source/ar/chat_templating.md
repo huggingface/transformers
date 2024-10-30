@@ -126,7 +126,7 @@ print(pipe(messages, max_new_tokens=128)[0]['generated_text'][-1]) # طباعة 
 {'role': 'assistant', 'content': "Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all."}
 ```
 
-سيتولى خط الأنابيب جميع تفاصيل التحليل اللغوي واستدعاء `apply_chat_template` نيابة عنك - بمجرد حصول النموذج على قالب دردشة، كل ما عليك فعله هو تهيئة خط الأنابيب وتمريره إلى قائمة الرسائل!
+سيُراعي قناة المعالجة جميع تفاصيل تقسيم النص إلى رموز واستدعاء apply_chat_template نيابةً عنك - بمجرد أن يصبح لِدى النموذج قالب دردشة ، فكل ما تحتاج إلى القيام به هو تهيئة قناة معالجة وتمرير قائمة الرسائل إليها!
 
 ## ما هي "مطالبات التوليد"؟
 
