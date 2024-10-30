@@ -294,9 +294,9 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
         llama_tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
         llama_tokenizer.extra_special_tokens = {
-            "boi_token": "<unk>",
-            "eoi_token": "<s>",
-            "image_token": "</s>",
+            "boi_token": "<image_start>",
+            "eoi_token": "<image_end>",
+            "image_token": "<image>",
         }
         self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list)
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -308,14 +308,14 @@ class TokenizerUtilsTest(unittest.TestCase):
             self.assertListEqual(loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
 
             # We set an image_token_id before, so we can get an "image_token" as str that matches the id
-            self.assertTrue(loaded_tokenizer.image_token == "</s>")
-            self.assertTrue(loaded_tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("</s>"))
+            self.assertTrue(loaded_tokenizer.image_token == "<image>")
+            self.assertTrue(loaded_tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
 
         # save one more time and make sure the image token can get loaded back
         with tempfile.TemporaryDirectory() as tmpdirname:
             loaded_tokenizer.save_pretrained(tmpdirname)
             loaded_tokenizer_with_extra_tokens = LlamaTokenizerFast.from_pretrained(tmpdirname)
-            self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "</s>")
+            self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "<image>")
 
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):
