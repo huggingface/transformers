@@ -33,6 +33,8 @@ from huggingface_hub import (
     ImageSegmentationInput,
     ImageToTextInput,
     ObjectDetectionInput,
+    QuestionAnsweringInput,
+    VideoClassificationInput,
     ZeroShotImageClassificationInput,
 )
 
@@ -45,11 +47,13 @@ from transformers.pipelines import (
     ImageSegmentationPipeline,
     ImageToTextPipeline,
     ObjectDetectionPipeline,
+    QuestionAnsweringPipeline,
+    VideoClassificationPipeline,
     ZeroShotImageClassificationPipeline,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
-    require_decord,
+    require_av,
     require_pytesseract,
     require_timm,
     require_torch,
@@ -129,6 +133,8 @@ task_to_pipeline_and_spec_mapping = {
     "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
+    "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
+    "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
@@ -214,8 +220,6 @@ class PipelineTesterMixin:
                     image_processor_names.append(cls_name)
                 elif "FeatureExtractor" in cls_name:
                     feature_extractor_names.append(cls_name)
-                else:
-                    raise ValueError(f"Unknown processor class: {cls_name}")
 
             # Processor classes are not in tiny models JSON file, so extract them from the mapping
             # processors are mapped to instance, e.g. "XxxProcessor"
@@ -242,11 +246,11 @@ class PipelineTesterMixin:
                 commit=commit,
                 torch_dtype=torch_dtype,
             )
+            at_least_one_model_is_tested = True
+
         if task in task_to_pipeline_and_spec_mapping:
             pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
             compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
-
-            at_least_one_model_is_tested = True
 
         if not at_least_one_model_is_tested:
             self.skipTest(
@@ -721,14 +725,14 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch_or_tf
     @require_vision
-    @require_decord
+    @require_av
     def test_pipeline_video_classification(self):
         self.run_task_tests(task="video-classification")
 
     @is_pipeline_test
     @require_vision
-    @require_decord
     @require_torch
+    @require_av
     def test_pipeline_video_classification_fp16(self):
         self.run_task_tests(task="video-classification", torch_dtype="float16")
 
@@ -912,6 +916,8 @@ def parse_args_from_docstring_by_indentation(docstring):
 
 
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
+    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout"]
+
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
     docstring_args = set(parse_args_from_docstring_by_indentation(docstring))
     hub_args = set(get_arg_names_from_hub_spec(hub_spec))
@@ -928,6 +934,11 @@ def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
     ):
         hub_args.remove(js_generate_args[0])
         docstring_args.remove(docstring_generate_args[0])
+
+    # Special casing 2: We permit some transformers-only arguments that don't affect pipeline output
+    for arg in ALLOWED_TRANSFORMERS_ONLY_ARGS:
+        if arg in docstring_args and arg not in hub_args:
+            docstring_args.remove(arg)
 
     if hub_args != docstring_args:
         error = [f"{pipeline_class.__name__} differs from JS spec {hub_spec.__name__}"]
