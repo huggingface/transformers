@@ -288,7 +288,7 @@ messages = [
 ]
 ```
 
-والآن، دعنا نطبق قالب الدردشة ونولد استجابة:
+الآن، لنقم نطبق قالب الدردشة ونولد رد:
 
 ```python
 inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
