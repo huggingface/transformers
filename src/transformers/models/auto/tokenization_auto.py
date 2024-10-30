@@ -424,8 +424,8 @@ else:
             (
                 "got-ocr2",
                 (
-                    "GOTOCR2Tokenizer",
-                    "GOTOCR2TokenizerFast" if is_tokenizers_available() else None,
+                    "GotOcr2Tokenizer",
+                    "GotOcr2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("qwen2_audio", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
