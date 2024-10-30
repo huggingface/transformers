@@ -816,7 +816,7 @@ class RobertaModel(RobertaPreTrainedModel):
 
     _no_split_modules = ["RobertaEmbeddings", "RobertaLayer"]
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -830,9 +830,6 @@ class RobertaModel(RobertaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        # Error out here. Why? Because `RobertaEmbeddings` is defined but not used.
-        # no, because it's defined, and RobertaModel should use RobertaEmbedding
-        # here if initialized that way it won't use the new embedding.
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
