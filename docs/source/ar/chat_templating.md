@@ -266,8 +266,20 @@ model_input = tokenizer.apply_chat_template(
 
 ### مثال كامل على استخدام الأداة
 
-دعونا نمر عبر مثال على استخدام الأداة، خطوة بخطوة. لهذا المثال، سنستخدم نموذج Hermes-2-
-## إعداد محادثة للبوت الخاص بنا:
+
+سنستعرض مثالاً على استخدام الأدوات خطوة بخطوة . في هذا المثال ، سنستخدم نموذج Hermes-2-Pro بحجم 8 مليارات معامل ، نظرًا لأنه أحد أعلى نماذج استخدام الأدوات أداءً في فئة حجمه وقت كتابة هذا النص . إذا كان لديك الذاكرة الكافية ، فيمكنك النظر في استخدام نموذج أكبر بدلاً من ذلك مثل Command-R أو Mixtral-8x22B ، وكلاهما يدعم استخدام الأدوات ويوفر أداءً أقوى .
+
+
+أولاً ، لنقم بتحميل نموذجنا و tokenizer الخاص بنا:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+checkpoint = "NousResearch/Hermes-2-Pro-Llama-3-8B"
+
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 
 ```python
 messages = [
