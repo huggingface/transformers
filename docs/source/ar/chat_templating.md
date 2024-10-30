@@ -100,7 +100,9 @@ How many helicopters can a human eat in one sitting?</s>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
 
-أوه، لقد كان الأمر سهلاً بعد كل شيء!
+كان ذلك سهلاً بعد كل شيء !
+
+
 
 ## هل هناك خط أنابيب أوتوماتيكي للدردشة؟
 
