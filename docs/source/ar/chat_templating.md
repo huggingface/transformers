@@ -450,7 +450,7 @@ model_input = tokenizer.apply_chat_template(
 {%- endfor %}
 ```
 
-إذا أعجبك هذا، فإليك نسخة جاهزة لوضعها في كودك. يتضمن الخط المفرد أيضًا دعمًا مفيدًا [لإرشادات التوليد](#what-are-generation-prompts)، ولكن لاحظ أنه لا يضيف رموز BOS أو EOS! إذا كان نموذجك يتوقع تلك، فلن يتم إضافتها تلقائيًا بواسطة "apply_chat_template" - بمعنى آخر، سيتم توكين النص باستخدام "add_special_tokens=False". هذا لتجنب التضارب المحتمل بين القالب ومنطق "add_special_tokens". إذا كان نموذجك يتوقع رموزًا خاصة، فتأكد من إضافتها إلى القالب!
+إذا أعجبك هذا، فإليك نسخة جاهزة لوضعها في كودك. يتضمن الخط المفرد أيضًا دعمًا مفيدًا [لإرشادات التوليد](#what-are-generation-prompts)، ولكن لاحظ أنه لا يضيف رموز BOS أو EOS! إذا كان نموذجك يتوقع هذه الرموز، فلن يتم إضافتها تلقائيًا بواسطة "apply_chat_template" - بمعنى آخر، سيتم تجزئة النص باستخدام "add_special_tokens=False". هذا لتجنب التعارضات المحتملة بين القالب ومنطق "add_special_tokens". إذا كان نموذجك يتوقع رموزًا خاصة، فتأكد من إضافتها إلى القالب!
 
 ```python
 tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
