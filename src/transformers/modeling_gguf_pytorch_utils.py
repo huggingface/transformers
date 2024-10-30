@@ -70,9 +70,9 @@ class LlamaTensorProcessor(TensorProcessor):
             if None in (num_heads, num_kv_heads):
                 return weights, name
             if ".attn_q." in name:
-                weights = reverse_permute_weights(weights, num_heads, num_heads)
+                weights = _reverse_permute_weights(weights, num_heads, num_heads)
             elif ".attn_k." in name:
-                weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
+                weights = _reverse_permute_weights(weights, num_heads, num_kv_heads)
         return {"weights": weights, "name": name, "metadata": {}}
 
 
@@ -82,7 +82,7 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
             tensor_key_mapping = kwargs.get("tensor_key_mapping")
             config = kwargs.get("config", {})
             if tensor_key_mapping:
-                split_moe_expert_tensor(weights, config, name, tensor_key_mapping)
+                _split_moe_expert_tensor(weights, config, name, tensor_key_mapping)
                 return {
                     "weights": weights,
                     "name": None,  # Signal to skip further processing
@@ -102,9 +102,9 @@ class BloomTensorProcessor(TensorProcessor):
             num_heads = config["n_head"]
             n_embed = config["hidden_size"]
             if "weight" in name:
-                weights = reverse_reshape_weights(weights, num_heads, n_embed)
+                weights = _reverse_reshape_weights(weights, num_heads, n_embed)
             else:
-                weights = reverse_reshape_bias(weights, num_heads, n_embed)
+                weights = _reverse_reshape_bias(weights, num_heads, n_embed)
         return {"weights": weights, "name": name, "metadata": {}}
 
 
@@ -137,7 +137,7 @@ class GPT2TensorProcessor(TensorProcessor):
             name = "lm_head.weight"
             parsed_parameters = kwargs.get("parsed_parameters", {})
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
-            name = None # Signal to skip further processing
+            name = None  # Signal to skip further processing
         return {
             "weights": weights,
             "name": name,
@@ -329,7 +329,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     return parsed_parameters
 
 
-def reverse_permute_weights(weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None) -> np.ndarray:
+def _reverse_permute_weights(weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None) -> np.ndarray:
     # Original permutation implementation
     # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L1402-L1408
     if num_kv_heads is not None and n_head != num_kv_heads:
@@ -340,7 +340,7 @@ def reverse_permute_weights(weights: np.ndarray, n_head: int, num_kv_heads: Opti
     return w.swapaxes(2, 1).reshape(weights.shape)
 
 
-def reverse_reshape_weights(weights: np.ndarray, n_head: int, n_embed: int):
+def _reverse_reshape_weights(weights: np.ndarray, n_head: int, n_embed: int):
     # Original reshape implementation
     # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L972-L985
     q, k, v = np.array_split(weights, 3, axis=0)
@@ -353,7 +353,7 @@ def reverse_reshape_weights(weights: np.ndarray, n_head: int, n_embed: int):
     return qkv_weights.reshape(n_head * 3 * (n_embed // n_head), n_embed)
 
 
-def reverse_reshape_bias(weights: np.ndarray, n_head: int, n_embed: int):
+def _reverse_reshape_bias(weights: np.ndarray, n_head: int, n_embed: int):
     # Original reshape implementation
     # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L986-L998
     q_bias, k_bias, v_bias = np.array_split(weights, 3)
@@ -366,7 +366,7 @@ def reverse_reshape_bias(weights: np.ndarray, n_head: int, n_embed: int):
     return qkv_bias
 
 
-def split_moe_expert_tensor(
+def _split_moe_expert_tensor(
     weights: np.ndarray, parsed_parameters: Dict[str, Dict], name: str, tensor_key_mapping: dict
 ):
     # Original merge implementation
