@@ -446,7 +446,7 @@ If you're using a `pipeline` object, all you need to do is to pass the assistant
 >>> pipe = pipeline(
 ...     "text-generation",
 ...     model="meta-llama/Llama-3.1-8B",
-...     assistant_model="meta-llama/Llama-3.2-1B",  # This extra line is all that's needed!
+...     assistant_model="meta-llama/Llama-3.2-1B",  # This extra line is all that's needed, also works with UAD
 ...     torch_dtype=torch.bfloat16
 >>> )
 >>> pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
