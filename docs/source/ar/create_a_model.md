@@ -213,9 +213,7 @@ DistilBertConfig {
 ```
 
 <Tip>
-
-افتراضيًا، سيحاول [`AutoTokenizer`] تحميل محلل نحوي سريع. يمكنك تعطيل هذا السلوك عن طريق تعيين `use_fast=False` في `from_pretrained`.
-
+افتراضيًا، سيحاول [`AutoTokenizer`] تحميل مجزئ نصوص سريع. يمكنك تعطيل هذا السلوك عن طريق تعيين `use_fast=False` في `from_pretrained`.
 </Tip>
 
 ## معالج الصور
