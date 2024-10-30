@@ -12,7 +12,7 @@
 pip install optimum[exporters-tf]
 ```
 
-للاطلاع على جميع الحجج المتاحة، راجع [وثائق 🤗 Optimum](https://huggingface.co/docs/optimum/main/en/exporters/tflite/usage_guides/export_a_model)، أو عرض المساعدة في سطر الأوامر:
+للاطلاع على جميع المغامﻻت المتاحة، راجع [وثائق 🤗 Optimum](https://huggingface.co/docs/optimum/main/en/exporters/tflite/usage_guides/export_a_model)، أو عرض المساعدة في سطر الأوامر:
 
 ```bash
 optimum-cli export tflite --help
