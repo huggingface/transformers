@@ -55,6 +55,145 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
 GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["tensors"].keys())
 
 
+class TensorProcessor:
+    def process(self, weights, name, **kwargs):
+        return {
+            "weights": weights,
+            "name": name,
+            "metadata": {}
+        }
+
+
+class LlamaTensorProcessor(TensorProcessor):
+    def process(self, weights, name, **kwargs):
+        if ".attn_k." in name or ".attn_q." in name:
+            config = kwargs.get('config', {})
+            num_heads = config.get('num_attention_heads')
+            num_kv_heads = config.get('num_key_value_heads')
+
+            if None in (num_heads, num_kv_heads):
+                return weights, name
+            if ".attn_q." in name:
+                weights = reverse_permute_weights(weights, num_heads, num_heads)
+            elif ".attn_k." in name:
+                weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
+        return {
+            "weights": weights,
+            "name": name,
+            "metadata": {}
+        }
+
+class Qwen2MoeTensorProcessor(TensorProcessor):
+    def process(self, weights, name, **kwargs):
+        if "_exp" in name:
+            tensor_key_mapping = kwargs.get('tensor_key_mapping')
+            config = kwargs.get('config', {})
+            if tensor_key_mapping:
+                split_moe_expert_tensor(weights, config, name, tensor_key_mapping)
+                return {
+            "weights": weights,
+            "name": None, # Signal to skip further processing
+            "metadata": {}
+        }
+        if "ffn_gate_inp_shexp" in name:
+            # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
+            # quantized one is (2048)
+            weights = np.expand_dims(weights, axis=0)
+        return {
+            "weights": weights,
+            "name": name,
+            "metadata": {}
+        }
+
+class BloomTensorProcessor(TensorProcessor):
+    def process(self, weights, name, **kwargs):
+        if "attn_qkv" in name:
+            config = kwargs.get('config', {})
+            num_heads = config["n_head"]
+            n_embed = config["hidden_size"]
+            if "weight" in name:
+                weights = reverse_reshape_weights(weights, num_heads, n_embed)
+            else:
+                weights = reverse_reshape_bias(weights, num_heads, n_embed)
+        return {
+            "weights": weights,
+            "name": name,
+            "metadata": {}
+        }
+
+class T5TensorProcessor(TensorProcessor):
+    def process(self, weights, name, **kwargs):
+        bid = None
+        for chunk in name.split("."):
+            if chunk.isdigit(): 
+                bid = int(chunk)
+                break
+        return {
+            "weights": weights,
+            "name": name,
+            "metadata": {
+                "bid": bid
+            }
+        }
+
+class GPT2TensorProcessor(TensorProcessor):
+    def process(self, weights, name, **kwargs):
+        # Original transpose implementation
+        # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L2060-L2061
+        if (
+            "attn_qkv.weight" in name
+            or "ffn_down.weight" in name
+            or "ffn_up.weight" in name
+            or "attn_output.weight" in name
+        ):
+            weights = weights.T
+
+        # Handle special case for output.weight
+        if name == "output.weight":
+            # output.weight has conflicts with attn_output.weight in name checking
+            # Store the tensor directly and signal to skip further processing
+            name = "lm_head.weight"
+            parsed_parameters = kwargs.get('parsed_parameters', {})
+            parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
+            name = None
+        return {
+                "weights": weights,
+                "name": name,  # Signal to skip further processing
+                "metadata": {}
+            }
+
+class MambaTensorProcessor(TensorProcessor):
+    def process(self, weights, name, **kwargs):
+        if "ssm_d" in name and "bias" not in name and "weight" not in name:
+            # ssm_d has conflicts with ssm_dt in name checking
+            # we have to explicitly check that name is exactly ssm_d
+            name = name.replace("ssm_d", "mixer.D")
+        if "ssm_conv1d.weight" in name:
+            # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
+            # quantized one is (5120, 4)
+            weights = np.expand_dims(weights, axis=1)
+        if "ssm_a" in name:
+            # Original exponential implementation
+            # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
+            weights = np.log(-weights)
+        return {
+                "weights": weights,
+                "name": name,
+                "metadata": {}
+            }
+
+
+TENSOR_PROCESSORS = {
+    "llama": LlamaTensorProcessor(),
+    "qwen2moe": Qwen2MoeTensorProcessor(),
+    "bloom": BloomTensorProcessor(),
+    "t5": T5TensorProcessor(),
+    "t5encoder": T5TensorProcessor(),
+    "gpt2": GPT2TensorProcessor(),
+    "mamba": MambaTensorProcessor(),
+}
+
+
 def read_field(reader, field):
     value = reader.fields[field]
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
@@ -177,73 +316,26 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
     if return_tensors:
         tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
+        processor = TENSOR_PROCESSORS.get(architecture, TensorProcessor())
 
         for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
             name = tensor.name
-
             weights = dequantize(tensor.data, tensor.tensor_type)
 
-            if architecture == "llama" and (".attn_k." in name or ".attn_q." in name):
-                num_heads = parsed_parameters["config"]["num_attention_heads"]
-                num_kv_heads = parsed_parameters["config"]["num_key_value_heads"]
-                if ".attn_q." in name:
-                    weights = reverse_permute_weights(weights, num_heads, num_heads)
-                elif ".attn_k." in name:
-                    weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
+            result = processor.process(
+                weights=weights,
+                name=name,
+                config=parsed_parameters.get('config', {}),
+                tensor_key_mapping=tensor_key_mapping,
+                parsed_parameters=parsed_parameters
+            )
 
-            if architecture == "qwen2moe":
-                if "_exp" in name:
-                    split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
-                    continue
-                if "ffn_gate_inp_shexp" in name:
-                    # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
-                    # quantized one is (2048)
-                    weights = np.expand_dims(weights, axis=0)
+            weights = result["weights"]
+            name = result["name"]
+            bid = result["metadata"].get("bid")
 
-            if architecture == "bloom" and "attn_qkv" in name:
-                num_heads = parsed_parameters["config"]["n_head"]
-                n_embed = parsed_parameters["config"]["hidden_size"]
-                if "weight" in name:
-                    weights = reverse_reshape_weights(weights, num_heads, n_embed)
-                else:
-                    weights = reverse_reshape_bias(weights, num_heads, n_embed)
-
-            bid = None
-            if architecture in ("t5", "t5encoder"):
-                for chunk in name.split("."):
-                    if chunk.isdigit():
-                        bid = int(chunk)
-                        break
-
-            if architecture == "gpt2":
-                if (
-                    "attn_qkv.weight" in name
-                    or "ffn_down.weight" in name
-                    or "ffn_up.weight" in name
-                    or "attn_output.weight" in name
-                ):
-                    # Original transpose implementation
-                    # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L2060-L2061
-                    weights = weights.T
-                if name == "output.weight":
-                    # output.weight has conflicts with attn_output.weight in name checking
-                    # we have to explicitly check that name is exactly output.weight
-                    name = "lm_head.weight"
-                    parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
-                    continue
-            if architecture == "mamba":
-                if "ssm_d" in name and "bias" not in name and "weight" not in name:
-                    # ssm_d has conflicts with ssm_dt in name checking
-                    # we have to explicitly check that name is exactly ssm_d
-                    name = name.replace("ssm_d", "mixer.D")
-                if "ssm_conv1d.weight" in name:
-                    # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
-                    # quantized one is (5120, 4)
-                    weights = np.expand_dims(weights, axis=1)
-                if "ssm_a" in name:
-                    # Original exponential implementation
-                    # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
-                    weights = np.log(-weights)
+            if result["name"] is None:
+                continue
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name.format(bid=bid) in name:
