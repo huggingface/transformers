@@ -27,6 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -657,7 +658,7 @@ class XLMPredLayer(nn.Module):
     """,
     XLM_START_DOCSTRING,
 )
-class XLMWithLMHeadModel(XLMPreTrainedModel):
+class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
     def __init__(self, config):
@@ -675,6 +676,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         self.pred_layer.proj = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # Overwritten -- this model uses config options to prepare inputs
+
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id
 

@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import IntervalStrategy, has_length
+from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -272,7 +272,9 @@ class TrainerCallback:
         model ([`PreTrainedModel`] or `torch.nn.Module`):
             The model being trained.
         tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
+            The tokenizer used for encoding the data. This is deprecated in favour of `processing_class`.
+        processing_class ([`PreTrainedTokenizer` or `BaseImageProcessor` or `ProcessorMixin` or `FeatureExtractionMixin`]):
+            The processing class used for encoding the data. Can be a tokenizer, a processor, an image processor or a feature extractor.
         optimizer (`torch.optim.Optimizer`):
             The optimizer used for the training steps.
         lr_scheduler (`torch.optim.lr_scheduler.LambdaLR`):
@@ -344,6 +346,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_pre_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called before the optimizer step but after gradient clipping. Useful for monitoring gradients.
+        """
+        pass
+
     def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after the optimizer step but before gradients are zeroed out. Useful for monitoring gradients.
@@ -397,12 +405,12 @@ class TrainerCallback:
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
 
-    def __init__(self, callbacks, model, tokenizer, optimizer, lr_scheduler):
+    def __init__(self, callbacks, model, processing_class, optimizer, lr_scheduler):
         self.callbacks = []
         for cb in callbacks:
             self.add_callback(cb)
         self.model = model
-        self.tokenizer = tokenizer
+        self.processing_class = processing_class
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
@@ -475,6 +483,9 @@ class CallbackHandler(TrainerCallback):
         control.should_save = False
         return self.call_event("on_step_begin", args, state, control)
 
+    def on_pre_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_pre_optimizer_step", args, state, control)
+
     def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_optimizer_step", args, state, control)
 
@@ -509,7 +520,7 @@ class CallbackHandler(TrainerCallback):
                 state,
                 control,
                 model=self.model,
-                tokenizer=self.tokenizer,
+                processing_class=self.processing_class,
                 optimizer=self.optimizer,
                 lr_scheduler=self.lr_scheduler,
                 train_dataloader=self.train_dataloader,
@@ -544,7 +555,7 @@ class DefaultFlowCallback(TrainerCallback):
 
         # Save
         if (
-            args.save_strategy == IntervalStrategy.STEPS
+            args.save_strategy == SaveStrategy.STEPS
             and state.save_steps > 0
             and state.global_step % state.save_steps == 0
         ):
@@ -554,7 +565,7 @@ class DefaultFlowCallback(TrainerCallback):
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
-            if args.save_strategy != IntervalStrategy.NO:
+            if args.save_strategy not in [SaveStrategy.NO, SaveStrategy.BEST]:
                 control.should_save = True
 
         return control
@@ -569,7 +580,7 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_evaluate = True
 
         # Save
-        if args.save_strategy == IntervalStrategy.EPOCH:
+        if args.save_strategy == SaveStrategy.EPOCH:
             control.should_save = True
 
         return control

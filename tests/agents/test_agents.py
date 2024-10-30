@@ -20,7 +20,14 @@ import uuid
 import pytest
 
 from transformers.agents.agent_types import AgentText
-from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
+from transformers.agents.agents import (
+    AgentMaxIterationsError,
+    CodeAgent,
+    ManagedAgent,
+    ReactCodeAgent,
+    ReactJsonAgent,
+    Toolbox,
+)
 from transformers.agents.default_tools import PythonInterpreterTool
 from transformers.testing_utils import require_torch
 
@@ -61,7 +68,6 @@ Thought: I should multiply 2 by 3.6452. special_marker
 Code:
 ```py
 result = 2**3.6452
-print(result)
 ```<end_code>
 """
     else:  # We're at step 2
@@ -174,7 +180,6 @@ Action:
         assert isinstance(output, float)
         assert output == 7.2904
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
-        assert float(agent.logs[1]["observation"].strip()) - 12.511648 < 1e-6
         assert agent.logs[2]["tool_call"] == {
             "tool_arguments": "final_answer(7.2904)",
             "tool_name": "code interpreter",
@@ -227,7 +232,7 @@ Action:
 
         # check that python_interpreter base tool does not get added to code agents
         agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_llm, add_base_tools=True)
-        assert len(agent.toolbox.tools) == 6  # added final_answer tool + 5 base tools (excluding interpreter)
+        assert len(agent.toolbox.tools) == 7  # added final_answer tool + 6 base tools (excluding interpreter)
 
     def test_function_persistence_across_steps(self):
         agent = ReactCodeAgent(
@@ -235,3 +240,19 @@ Action:
         )
         res = agent.run("ok")
         assert res[0] == 0.5
+
+    def test_init_managed_agent(self):
+        agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_functiondef)
+        managed_agent = ManagedAgent(agent, name="managed_agent", description="Empty")
+        assert managed_agent.name == "managed_agent"
+        assert managed_agent.description == "Empty"
+
+    def test_agent_description_gets_correctly_inserted_in_system_prompt(self):
+        agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_functiondef)
+        managed_agent = ManagedAgent(agent, name="managed_agent", description="Empty")
+        manager_agent = ReactCodeAgent(
+            tools=[], llm_engine=fake_react_code_functiondef, managed_agents=[managed_agent]
+        )
+        assert "You can also give requests to team members." not in agent.system_prompt
+        assert "<<managed_agents_descriptions>>" not in agent.system_prompt
+        assert "You can also give requests to team members." in manager_agent.system_prompt
