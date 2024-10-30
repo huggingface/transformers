@@ -28,14 +28,14 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modular_diffllama"] = [
+    _import_structure["modular_diff_llama"] = [
         "DiffLlamaConfig",
         "DiffLlamaForCausalLM",
         "DiffLlamaModel",
     ]
 
 if TYPE_CHECKING:
-    from .modular_diffllama import DiffLlamaConfig
+    from .modular_diff_llama import DiffLlamaConfig
 
     try:
         if not is_torch_available():
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modular_diffllama import (
+        from .modular_diff_llama import (
             DiffLlamaForCausalLM,
             DiffLlamaModel,
         )
