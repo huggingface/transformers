@@ -747,7 +747,9 @@ class ModelFileMapper(ModuleMapper):
         """
         # Add/overwrite all needed function nodes and dependencies
         self.functions.update(functions)
-        self.object_dependency_mapping.update({obj: dep for obj, dep in object_mapping.items() if obj in functions.keys()})
+        self.object_dependency_mapping.update(
+            {obj: dep for obj, dep in object_mapping.items() if obj in functions.keys()}
+        )
 
     def _merge_assignments(self, assignments: dict[str, cst.CSTNode], object_mapping: dict[str, set]):
         """Update the global nodes with the assignment from the modular file.
@@ -1040,12 +1042,14 @@ class ModularFileMapper(ModuleMapper):
         and save it in `self.model_specific_modules` to later visit. The imported objects are saved in `self.model_specific_imported_objects`.
         """
         import_module = self.python_module.code_for_node(node.module)
-        import_statement = "."*len(node.relative) + import_module
+        import_statement = "." * len(node.relative) + import_module
         if any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR):
             return
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
-                _import = re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement)
+                _import = re.search(
+                    rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement
+                )
                 if _import:
                     source = _import.group(1)
                     if source == "modeling" and "Config" in self.python_module.code_for_node(imported_):
@@ -1081,7 +1085,7 @@ class ModularFileMapper(ModuleMapper):
                 self.imports.append(node)
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 import_module = self.python_module.code_for_node(node.body[0].module)
-                import_statement = "."*len(node.body[0].relative) + import_module
+                import_statement = "." * len(node.body[0].relative) + import_module
                 if not (
                     re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement)
                     and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
