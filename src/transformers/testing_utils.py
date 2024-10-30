@@ -40,7 +40,6 @@ from unittest import mock
 from unittest.mock import patch
 
 import urllib3
-from packaging import version
 
 from transformers import logging as transformers_logging
 
