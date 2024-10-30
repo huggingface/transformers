@@ -140,7 +140,7 @@ messages = [
 ]
 ```
 
-هكذا يبدو الأمر بدون مطالبة التوليد، باستخدام قالب ChatML الذي رأيناه في مثال Zephyr:
+إليك كيف سيبدو ذلك بدون موجه توليد نصوص ، بالنسبة لنموذج يستخدم تنسيق "ChatML" القياسي :
 
 ```python
 tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
