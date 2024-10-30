@@ -68,7 +68,7 @@ tokenizer.save_pretrained(output_dir)
 
 vision_tokenizer = AutoTokenizer.save_pretrained(output_dir)
 vision_tokenizer.image_token = "IMAGE"
-```
+vision_tokenizer.image_token_id
 
 ## PreTrainedTokenizer
 
