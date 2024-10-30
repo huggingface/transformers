@@ -46,7 +46,7 @@ Initially, an image is processed using a pre-trained convolutional neural networ
 >>> from PIL import Image
 >>> from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
@@ -92,6 +92,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## RTDetrImageProcessor
 
 [[autodoc]] RTDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+
+## RTDetrImageProcessorFast
+
+[[autodoc]] RTDetrImageProcessorFast
     - preprocess
     - post_process_object_detection
 
