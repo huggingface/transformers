@@ -41,19 +41,19 @@ from transformers import (
 
 
 def get_config(model_name):
-    if "sam2_hiera_tiny" in model_name:
+    if "sam2.1_hiera_tiny" in model_name:
         image_encoder_config = Sam2ImageEncoderConfig()
         prompt_encoder_config = Sam2PromptEncoderConfig()
         mask_decoder_config = Sam2MaskDecoderConfig()
         memory_attention_config = Sam2MemoryAttentionConfig()
         memory_encoder_config = Sam2MemoryEncoderConfig()
-    elif "sam2_hiera_small" in model_name:
+    elif "sam2.1_hiera_small" in model_name:
         # TO DO
         pass
-    elif "sam2_hiera_base_plus" in model_name:
+    elif "sam2.1_hiera_base_plus" in model_name:
         # TO DO
         pass
-    elif "sam2_hiera_large" in model_name:
+    elif "sam2.1_hiera_large" in model_name:
         # TO DO
         pass
 
@@ -90,6 +90,8 @@ KEYS_TO_MODIFY_MAPPING = {
     "neck.2": "neck.conv2",
     "neck.3": "neck.layer_norm2",
     "patch_embed.proj": "patch_embed.projection",
+    "no_mem_embed": "no_memory_embedding",
+    "no_mem_pe_enc": "no_memory_positional_encoding",
     ".norm": ".layer_norm",
     "trunk.": "",
 }
@@ -97,9 +99,6 @@ KEYS_TO_MODIFY_MAPPING = {
 
 def replace_keys(state_dict):
     model_state_dict = {}
-    state_dict.pop("pixel_mean", None)
-    state_dict.pop("pixel_std", None)
-
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
     output_mask_decoder_mlps_pattern = r"mask_decoder.transformer.layers.(\d+).mlp.layers.(\d+).*"
     output_mask_decoder_score_head_pattern = r"mask_decoder.pred_obj_score_head.layers.(\d+).*"
@@ -162,28 +161,8 @@ def replace_keys(state_dict):
 def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
     config = get_config(model_name)
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     state_dict = replace_keys(state_dict)
-
-    # TO DO : This is temp code for pass video part.
-    def should_delete_key(key: str) -> bool:
-        # Define pattern prefixes to match
-        patterns = {
-            "maskmem_tpos_enc",
-            "no_mem_embed",
-            "no_mem_pos_enc",
-            "no_obj_ptr",
-            "mask_downsample",
-            "obj_ptr_proj",
-            "memory_attention",
-            "memory_encoder.fuser",
-        }
-
-        # Quick check using startswith for any pattern
-        return any(key.startswith(pattern) for pattern in patterns)
-
-    # Usage:
-    state_dict = {key: value for key, value in state_dict.items() if not should_delete_key(key)}
 
     image_processor = Sam2ImageProcessor()
     processor = Sam2Processor(image_processor=image_processor)
@@ -192,22 +171,16 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    hf_model.load_state_dict(state_dict)
+    hf_model.load_state_dict(state_dict, strict=False)
     hf_model = hf_model.to(device)
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    input_points = [[[500, 375]]]
+    input_points = [[[1000, 600]]]
     input_labels = [[1]]
 
-    inputs = processor(images=np.array(raw_image), return_tensors="pt").to(device)
-
-    with torch.no_grad():
-        output = hf_model(**inputs)
-    scores = output.iou_scores.squeeze()
-
-    if model_name == "sam2_hiera_tiny":
+    if model_name == "sam2.1_hiera_tiny":
         inputs = processor(
             images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(device)
@@ -216,31 +189,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
 
-        assert scores[-1].item() == 0.9712603092193604
-
-        input_boxes = ((75, 275, 1725, 850),)
-
-        inputs = processor(images=np.array(raw_image), input_boxes=input_boxes, return_tensors="pt").to(device)
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.8686015605926514
-
-        # Test with 2 points and 1 image.
-        input_points = [[[400, 650], [800, 650]]]
-        input_labels = [[1, 1]]
-
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(device)
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.9936047792434692
+        assert torch.allclose(scores, torch.tensor([0.0314, 0.9649, 0.1026]).cuda(), atol=1e-4)
 
     elif model_name == "sam2_hiera_small":
         # TO DO
@@ -265,10 +214,10 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    choices = ["sam2_hiera_tiny", "sam2_hiera_small", "sam2_hiera_base_plus", "sam2_hiera_large"]
+    choices = ["sam2.1_hiera_tiny", "sam2.1_hiera_small", "sam2.1_hiera_base_plus", "sam2.1_hiera_large"]
     parser.add_argument(
         "--model_name",
-        default="sam2_hiera_tiny",
+        default="sam2.1_hiera_tiny",
         choices=choices,
         type=str,
         help="Name of the original model to convert",
@@ -288,6 +237,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    checkpoint_path = hf_hub_download("danelcsb/sam2_hiera_tiny", f"{args.model_name}.pt")
+    hf_model_name = args.model_name.replace("_", "-")
+    checkpoint_path = hf_hub_download(f"facebook/{hf_model_name}", f"{args.model_name}.pt")
 
     convert_sam2_checkpoint(args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)

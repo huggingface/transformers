@@ -435,6 +435,7 @@ class Sam2PositionalEmbedding(nn.Module):
         if input_shape is not None:
             coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
             coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+        coordinates.to(torch.float32)
 
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
@@ -504,6 +505,9 @@ class Sam2PromptEncoder(nn.Module):
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
+        # torch.where and expanding the labels tensor is required by the ONNX export
+        point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
+
         # This is required for the ONNX export. The dtype, device need to be explicitely
         # specificed as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
@@ -511,9 +515,6 @@ class Sam2PromptEncoder(nn.Module):
             point_embedding,
             torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
         )
-
-        # torch.where and expanding the labels tensor is required by the ONNX export
-        point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
         point_embedding = torch.where(
             (labels == 0)[:, :, :, None],
@@ -2058,6 +2059,8 @@ SAM2_INPUTS_DOCSTRING = r"""
     SAM2_START_DOCSTRING,
 )
 class Sam2Model(Sam2PreTrainedModel):
+    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+
     def __init__(self, config):
         super().__init__(config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
@@ -2067,6 +2070,15 @@ class Sam2Model(Sam2PreTrainedModel):
         self.mask_decoder = Sam2MaskDecoder(config.mask_decoder_config)
         self.memory_attention = Sam2MemoryAttention(config.memory_attention_config)
         self.memory_encoder = Sam2MemoryEncoder(config.memory_encoder_config)
+
+        # a single token to indicate no memory embedding from previous frames
+        self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, config.image_encoder_config.fpn_hidden_size))
+        self.no_memory_positional_encoding = torch.nn.Parameter(
+            torch.zeros(1, 1, config.image_encoder_config.fpn_hidden_size)
+        )
+        nn.init.trunc_normal_(self.no_memory_embedding, std=0.02)
+        nn.init.trunc_normal_(self.no_memory_positional_encoding, std=0.02)
+        self.directly_add_no_memory_embedding = config.directly_add_no_memory_embedding
 
         if torch.cuda.is_available():
             try:
@@ -2143,8 +2155,6 @@ class Sam2Model(Sam2PreTrainedModel):
         input_masks: Optional[torch.LongTensor] = None,
         image_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2158,8 +2168,8 @@ class Sam2Model(Sam2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoModel, AutoProcessor
 
-        >>> model = AutoModel.from_pretrained("facebook/sam-vit-base")
-        >>> processor = AutoProcessor.from_pretrained("facebook/sam-vit-base")
+        >>> model = AutoModel.from_pretrained("danelcsb/sam2.1_hiera_tiny")
+        >>> processor = AutoProcessor.from_pretrained("danelcsb/sam2.1_hiera_tiny")
 
         >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
         >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -2264,13 +2274,16 @@ class Sam2Model(Sam2PreTrainedModel):
         feature_maps = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
         vision_position_embeddings = [x.flatten(2).permute(2, 0, 1) for x in vision_position_embeddings]
 
+        if self.directly_add_no_memory_embedding:
+            feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
+
         high_res_features = [
             feat.permute(1, 2, 0).view(1, -1, *feat_size)
             for feat, feat_size in zip(feature_maps, self.config._bb_feat_sizes)
         ]
 
         low_res_masks, iou_predictions, mask_decoder_attentions, _ = self.mask_decoder(
-            image_embeddings=image_embeddings,
+            image_embeddings=high_res_features[-1],
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,

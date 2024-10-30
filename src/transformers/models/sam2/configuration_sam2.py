@@ -172,7 +172,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         iou_head_hidden_dim=256,
         use_high_res_features=True,
         iou_prediction_use_sigmoid=True,
-        dynamic_multimask_via_stability=False,
+        dynamic_multimask_via_stability=True,
         dynamic_multimask_stability_delta=0.05,
         dynamic_multimask_stability_thresh=0.98,
         pred_obj_scores=True,
@@ -418,6 +418,17 @@ class Sam2Config(PretrainedConfig):
         memory_attention_config = memory_attention_config if memory_attention_config is not None else {}
         memory_encoder_config = memory_encoder_config if memory_encoder_config is not None else {}
 
+        if isinstance(image_encoder_config, Sam2ImageEncoderConfig):
+            image_encoder_config = image_encoder_config.to_dict()
+        if isinstance(prompt_encoder_config, Sam2PromptEncoderConfig):
+            prompt_encoder_config = prompt_encoder_config.to_dict()
+        if isinstance(mask_decoder_config, Sam2MaskDecoderConfig):
+            mask_decoder_config = mask_decoder_config.to_dict()
+        if isinstance(memory_attention_config, Sam2MemoryAttentionConfig):
+            memory_attention_config = memory_attention_config.to_dict()
+        if isinstance(memory_encoder_config, Sam2MemoryEncoderConfig):
+            memory_encoder_config = memory_encoder_config.to_dict()
+
         self.image_encoder_config = Sam2ImageEncoderConfig(**image_encoder_config)
         self.prompt_encoder_config = Sam2PromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = Sam2MaskDecoderConfig(**mask_decoder_config)
@@ -439,7 +450,7 @@ class Sam2Config(PretrainedConfig):
         self.max_cond_frames_in_attn = -1
         # on the first frame whether to directly add the no-memory embedding to the image feature
         # (instead of using the transformer encoder)
-        self.directly_add_no_mem_embed = True
+        self.directly_add_no_memory_embedding = True
         # whether to use high-resolution feature maps in the SAM mask decoder
         self.use_high_res_features_in_sam = True
         # whether to output multiple (3) masks for the first click on initial conditioning frames
