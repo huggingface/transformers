@@ -363,7 +363,7 @@ model = MaskFormerForInstanceSegmentation(config)
 
 ## مستخرج الميزات
 
-يقوم مستخرج الميزات بمعالجة المدخلات الصوتية. يرث من فئة الأساس [`~feature_extraction_utils.FeatureExtractionMixin`]، وقد يرث أيضًا من فئة [`SequenceFeatureExtractor`] لمعالجة المدخلات الصوتية.
+يقوم مُستخرج الميزات بمعالجة المدخلات الصوتية. يرث من فئة الأساس [`~feature_extraction_utils.FeatureExtractionMixin`]، وقد يرث أيضًا من فئة [`SequenceFeatureExtractor`] لمعالجة المدخلات الصوتية.
 
 للاستخدام، قم بإنشاء مستخرج ميزات مرتبط بالنموذج الذي تستخدمه. على سبيل المثال، قم بإنشاء مستخرج ميزات Wav2Vec2 الافتراضي إذا كنت تستخدم [Wav2Vec2](model_doc/wav2vec2) لتصنيف الصوت:
 
