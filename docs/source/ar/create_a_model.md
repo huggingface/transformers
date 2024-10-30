@@ -83,7 +83,7 @@ DistilBertConfig {
 
 <frameworkcontent>
 <pt>
-قم بتحميل سمات التكوين المخصصة الخاصة بك في النموذج:
+قم بتحميل خصائص التكوين المخصصة الخاصة بك في النموذج:
 
 ```py
 >>> from transformers import DistilBertModel
