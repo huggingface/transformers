@@ -22,7 +22,6 @@ import os.path
 import random
 import re
 import tempfile
-import time
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
@@ -38,8 +37,6 @@ from transformers import (
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
-    AutoTokenizer,
-    GenerationConfig,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -85,7 +82,6 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_flash_attn,
     require_non_xpu,
-    require_read_token,
     require_safetensors,
     require_torch,
     require_torch_accelerator,
@@ -207,6 +203,7 @@ class ModelTesterMixin:
     test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = True
+    _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -2998,70 +2995,6 @@ class ModelTesterMixin:
                     )[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            if model_class.__name__ not in [
-                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
-                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
-            ]:
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            model_forward_args = inspect.signature(model.forward).parameters
-            if any(argument not in model_forward_args for argument in ["inputs_embeds", "position_ids"]):
-                self.skipTest(reason="This model doesn't use `inputs_embeds` or `position_ids`.")
-            has_inputs_embeds_forwarding = "inputs_embeds" in set(
-                inspect.signature(model.prepare_inputs_for_generation).parameters.keys()
-            )
-            if not has_inputs_embeds_forwarding:
-                self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
-
-            # VLMs can't generate with embeds and pixels at the same time. We expect the user to pass merged
-            # embeds already
-            if model_class.__name__ in get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES):
-                inputs.pop("pixel_values", None)
-                inputs.pop("pixel_values_videos", None)
-                inputs.pop("pixel_values_images", None)
-
-            wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                # some models infer position ids/attn mask differently when input ids
-                # by check if pad_token let's make sure no padding is in input ids
-                not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
-                input_ids[input_ids == pad_token_id] = not_pad_token_id
-                del inputs["input_ids"]
-                inputs_embeds = wte(input_ids)
-                out_ids = model.generate(input_ids=input_ids, **inputs, max_new_tokens=2)[:, -2:]
-                out_embeds = model.generate(inputs_embeds=inputs_embeds, **inputs, max_new_tokens=2)
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-                decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
-                inputs_embeds = wte(encoder_input_ids)
-                decoder_inputs_embeds = wte(decoder_input_ids)
-                out_ids = model.generate(
-                    input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs, max_new_tokens=2
-                )[:, -2:]
-                out_embeds = model.generate(
-                    inputs_embeds=inputs_embeds,
-                    decoder_inputs_embeds=decoder_inputs_embeds,
-                    **inputs,
-                    max_new_tokens=2,
-                )
-            # NOTE: this test changes the order of FP ops, there may be tiny differences in the output
-            number_of_different_tokens = (out_ids != out_embeds).sum()
-            max_differences = int(out_ids.shape[0] * out_ids.shape[1] * 0.1)
-            self.assertTrue(number_of_different_tokens <= max_differences)  # accept up to 10% mismatch
-
     @require_non_xpu
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
@@ -3854,101 +3787,146 @@ class ModelTesterMixin:
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_generate_left_padding(self):
+    def test_attn_implementation_composite_models(self):
+        """
+        Tests if composite models can receive a dict object as attn_implementation, where each key should be
+        one of the sub-configs from the model's config.
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+        for model_class in self.all_model_classes:
+            if not self._is_composite:
+                self.skipTest("Model is not a composite model.")
 
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            sub_configs = {
+                key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
+            }
+
+            # set eager as it will be the one supported in all models
+            # we just need to test if passing 'attn_implementation' as a dict fails or not
+            attn_implementation_per_subconfig = {}
+            for key, sub_config in sub_configs.items():
+                attn_implementation_per_subconfig[key] = "eager"
+
+            config._attn_implementation = attn_implementation_per_subconfig
+            model = model_class(config)
+            for key in model.config:
+                if isinstance(getattr(model.config, key), PretrainedConfig):
+                    sub_config = getattr(model.config, key)
+                    self.assertTrue(sub_config._attn_implementation == "eager")
+
+            for name, submodule in model.named_modules():
+                class_name = submodule.__class__.__name__
+                if (
+                    "SdpaAttention" in class_name
+                    or "SdpaSelfAttention" in class_name
+                    or "FlashAttention" in class_name
+                ):
+                    raise ValueError("The eager model should not have SDPA/FA2 attention layers")
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_non_composite_models(self):
+        """
+        Tests if non-composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self.all_model_classes[0]._supports_sdpa or self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
 
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do left padding
-                dummy_attention_mask[:, :-1] = 0
-                dummy_attention_mask[:, -1:] = 1
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
 
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
 
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+                if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                    raise ValueError("The SDPA model should have SDPA attention layers")
 
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
 
-                self.assertTrue(torch.allclose(out, out_fa))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @is_flaky()
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
+        for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
 
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
+                vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
+                language_model_names = {"language_model", "model", "text_model"}
+                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
+                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
 
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do right padding
-                dummy_attention_mask[:, :-1] = 1
-                dummy_attention_mask[:, -1:] = 0
+                vision_model_sdpa = getattr(model, vision_model_name)
+                language_model_sdpa = getattr(model, language_model_name)
+                text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
+                vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
 
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
+                self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
 
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
+                self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                )
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
 
-                self.assertTrue(torch.allclose(out, out_fa))
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+                if not has_sdpa and any(module_attn == "sdpa" for module_attn in [text_attn, vision_attn]):
+                    raise ValueError("The SDPA model should have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -4012,7 +3990,6 @@ class ModelTesterMixin:
             # This means that the class needs to be instantiated much later, after `use_mask` is set, which means a significant refactor of the code.
             # However masking there is not done at any layers that matters (i.e self-attention), therefore we can safely deactivate it.
             deactivate_mask = "use_mask_token" in inspect.signature(model_class).parameters
-
             is_encoder_decoder = model.config.is_encoder_decoder
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -4020,30 +3997,12 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch_dtype,
                     attn_implementation="eager",
                 )
                 model_eager = model_eager.eval().to(torch_device)
-
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
@@ -4279,7 +4238,7 @@ class ModelTesterMixin:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
-            if config.model_type in ["idefics"]:
+            if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
             model = model_class(config)
 
@@ -4345,80 +4304,6 @@ class ModelTesterMixin:
                     _ = model(**inputs_dict)
 
     @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        max_new_tokens = 30
-
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(f"{model_class.__name__} does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                    attn_implementation="eager",
-                ).to(torch_device)
-
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa:
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
-                # Just test that a large cache works as expected
-                res_eager = model_eager.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                res_sdpa = model_sdpa.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(res_eager, res_sdpa))
-
-    @require_torch_sdpa
     def test_sdpa_matches_eager_sliding_window(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -4429,6 +4314,8 @@ class ModelTesterMixin:
             self.skipTest(f"No generative model classes for {self.__class__.__name__}")
 
         for model_class in self.all_generative_model_classes:
+            if model_class._supports_sdpa:
+                self.skipTest(reason="Model architecture does not support attentions")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             if config.model_type not in WINDOW_ATTENTION_MODELS:
@@ -4475,117 +4362,58 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_use_cache(self):
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        """
+        Tests if composite models can dispatch on FA2 if the sub-models support FA2.
+        The tests is needed as we handle differently composite models and we cannot check them
+        with above tests. If any of the sub-models does not support FA2, we'll raise an error when dispatching
+        that particular sub-model. Otherwise we dispatch safely in all sub-models, where "sub-models" are specific
+        backbone models (LM/vision/audio/etc)
+        """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        max_new_tokens = 30
+        if not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
+        torch_dtype = torch.float16
+        for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
             model = model_class(config)
+            if not self._is_composite:
+                self.skipTest("This model is not a composte model!")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
+                supports_fa2_all_modules = all(
+                    module._supports_flash_attn_2
+                    for name, module in model.named_modules()
+                    if isinstance(module, PreTrainedModel) and name != ""
                 )
+                if not supports_fa2_all_modules:
+                    with self.assertRaises(ValueError):
+                        model_fa2 = model_class.from_pretrained(
+                            tmpdirname, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+                        )
+                else:
+                    model_fa2 = model_class.from_pretrained(
+                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+                    )
+                    for key in model_fa2.config:
+                        if isinstance(getattr(model_fa2.config, key), PretrainedConfig):
+                            sub_config = getattr(model_fa2.config, key)
+                            self.assertTrue(sub_config._attn_implementation == "flash_attention_2")
 
-                # Generate with one batch only to test generation when attention mask will be None
-                # when real inputs are used, because there is no padding. See issue #32237 for more
-                dummy_input = dummy_input[:1, ...]
-                dummy_attention_mask = torch.ones_like(dummy_attention_mask[:1, ...])
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_reuse_cache(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        max_new_tokens = 2
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # run generate once to get filled cache
-                output = model.generate(
-                    dummy_input,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                    return_dict_in_generate=True,
-                )
-                past_key_values = output.past_key_values
-
-                # Try to continue generation from where we left, given that we have more than 1 new token to process
-                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
-                dummy_input_updated = torch.cat([dummy_input, output.sequences], dim=-1)
-                _ = model.generate(
-                    dummy_input_updated,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                    past_key_values=past_key_values,
-                )
+                    has_fa2 = False
+                    for name, submodule in model_fa2.named_modules():
+                        class_name = submodule.__class__.__name__
+                        if "FlashAttention" in class_name:
+                            has_fa2 = True
+                            break
+                    if not has_fa2:
+                        raise ValueError("The FA2 model should have FA2 layers")
 
     @require_flash_attn
     @require_torch_gpu
@@ -4679,7 +4507,7 @@ class ModelTesterMixin:
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
-                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.pad_token_id
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
 
                 model = (
                     model_class.from_pretrained(
@@ -4890,74 +4718,6 @@ class ModelTesterMixin:
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    def test_static_cache_matches_dynamic(self):
-        """
-        Tests that generating with static cache give almost same results as with dynamic cache.
-        This test does not compile the model and check only logits similarity for numerical precision
-        errors.
-        """
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(
-                reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
-            )
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
-                self.skipTest(f"{model_class.__name__} does not support static cache")
-
-            if not model_class._supports_cache_class:
-                self.skipTest(f"{model_class.__name__} does not support cache class")
-
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
-                self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
-
-            model = model_class(config).to(device=torch_device, dtype=torch.float32)
-            model.eval()
-
-            dynamic_out = model.generate(
-                **inputs, do_sample=False, max_new_tokens=10, output_logits=True, return_dict_in_generate=True
-            )
-            static_out = model.generate(
-                **inputs,
-                do_sample=False,
-                max_new_tokens=10,
-                cache_implementation="static",
-                output_logits=True,
-                return_dict_in_generate=True,
-            )
-            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-4))
-
-    # For now, Let's focus only on GPU for `torch.compile`
-    @slow
-    @require_torch_accelerator
-    @require_read_token
-    def test_torch_compile(self):
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-        torch.compiler.reset()
-        if not hasattr(self, "_torch_compile_test_ckpt"):
-            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
-        ckpt = self._torch_compile_test_ckpt
-
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-        batch_size = 1
-        n_iter = 3
-
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
-
-        model.generation_config.max_new_tokens = 4
-
-        model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead")
-
-        input_text = "Why dogs are cute?"
-        input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
-
-        for i in range(n_iter):
-            _ = model.generate(**input_ids, do_sample=False)
-
     @slow
     @require_torch_gpu
     def test_torch_compile_for_training(self):
@@ -5000,66 +4760,6 @@ class ModelTesterMixin:
         # check grad matches
         for name, param in model._orig_mod.named_parameters():
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
-
-    @slow
-    @require_torch_gpu  # Testing cuda graphs.
-    @require_read_token
-    def test_compile_cuda_graph_time(self):
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
-        # TODO felix: All models supporting `StaticCache` or `torch.compile` should be tested.
-        # At the moment, only llama, gemma and gemma2 are tested here!
-        if not hasattr(self, "_torch_compile_test_ckpt"):
-            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
-        ckpt = self._torch_compile_test_ckpt
-
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
-
-        cache_implementation = "static"
-        if model.config.model_type == "gemma2":
-            cache_implementation = "hybrid"
-
-        new_tokens = 50
-        gen_config = GenerationConfig(
-            max_new_tokens=new_tokens,
-            min_new_tokens=new_tokens,
-            use_cache=True,
-            pad_token_id=tokenizer.pad_token_id,
-            num_beams=1,
-            do_sample=False,
-            eos_token_id=None,  # This is required for min_new_tokens to actually have an effect.
-        )
-        model.generation_config.eos_token_id = None  # greedy_search falls back on this eos_token_id that we need to set to None as well for min_new_tokens to have an effect.
-
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-
-        inp = tokenizer("Why cats are cute?", return_tensors="pt").to(torch_device)
-
-        # First run: the first run warms up each graph, which does things like CuBlas or Triton benchmarking
-        start = time.perf_counter()
-        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
-        end = time.perf_counter()
-        graph_warmup_time = end - start
-
-        # Second run: CUDA Graph recording, and replays it
-        start = time.perf_counter()
-        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
-        end = time.perf_counter()
-        record_time = end - start
-
-        # Finally: we hit the optimized, CUDA Graph replay path
-        start = time.perf_counter()
-        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
-        end = time.perf_counter()
-        opt_time = end - start
-
-        # For the recording step, we expect only two cuda graphs and this step should be much faster than the first.
-        self.assertTrue(record_time < 0.15 * graph_warmup_time)
-        self.assertTrue(opt_time < record_time)
 
     def test_forward_with_num_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:

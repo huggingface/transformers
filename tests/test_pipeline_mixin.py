@@ -34,6 +34,7 @@ from huggingface_hub import (
     ImageToTextInput,
     ObjectDetectionInput,
     QuestionAnsweringInput,
+    VideoClassificationInput,
     ZeroShotImageClassificationInput,
 )
 
@@ -47,6 +48,7 @@ from transformers.pipelines import (
     ImageToTextPipeline,
     ObjectDetectionPipeline,
     QuestionAnsweringPipeline,
+    VideoClassificationPipeline,
     ZeroShotImageClassificationPipeline,
 )
 from transformers.testing_utils import (
@@ -132,6 +134,7 @@ task_to_pipeline_and_spec_mapping = {
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
     "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
+    "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
@@ -913,6 +916,8 @@ def parse_args_from_docstring_by_indentation(docstring):
 
 
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
+    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout"]
+
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
     docstring_args = set(parse_args_from_docstring_by_indentation(docstring))
     hub_args = set(get_arg_names_from_hub_spec(hub_spec))
@@ -929,6 +934,11 @@ def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
     ):
         hub_args.remove(js_generate_args[0])
         docstring_args.remove(docstring_generate_args[0])
+
+    # Special casing 2: We permit some transformers-only arguments that don't affect pipeline output
+    for arg in ALLOWED_TRANSFORMERS_ONLY_ARGS:
+        if arg in docstring_args and arg not in hub_args:
+            docstring_args.remove(arg)
 
     if hub_args != docstring_args:
         error = [f"{pipeline_class.__name__} differs from JS spec {hub_spec.__name__}"]

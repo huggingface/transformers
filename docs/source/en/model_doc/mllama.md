@@ -30,6 +30,25 @@ The Llama 3.2-Vision collection of multimodal large language models (LLMs) is a 
 - The text passed to the processor should have the `"<|image|>"` tokens where the images should be inserted.
 - The processor has its own `apply_chat_template` method to convert chat messages to text that can then be passed as text to the processor.
 
+
+<Tip warning={true}>
+
+Mllama has an extra token used as a placeholder for image positions in the text. It means that input ids and an input embedding layer will have an extra token. But since the weights for input and output embeddings are not tied, the `lm_head` layer has one less token and will fail if you want to calculate loss on image tokens or apply some logit processors. In case you are training, make sure to mask out special `"<|image|>"` tokens in the `labels` as the model should not be trained on predicting them.
+
+Otherwise if you see CUDA-side index erros when generating, use the below code to expand the `lm_head` by one more token. 
+
+
+```python
+old_embeddings = model.get_output_embeddings()
+
+num_tokens = model.vocab_size + 1
+resized_embeddings = model._get_resized_lm_head(old_embeddings, new_num_tokens=num_tokens, mean_resizing=True)
+resized_embeddings.requires_grad_(old_embeddings.weight.requires_grad)
+model.set_output_embeddings(resized_embeddings)
+```
+</Tip>
+
+
 ## Usage Example
 
 #### Instruct model
