@@ -57,19 +57,15 @@ GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["tensors"].keys
 
 class TensorProcessor:
     def process(self, weights, name, **kwargs):
-        return {
-            "weights": weights,
-            "name": name,
-            "metadata": {}
-        }
+        return {"weights": weights, "name": name, "metadata": {}}
 
 
 class LlamaTensorProcessor(TensorProcessor):
     def process(self, weights, name, **kwargs):
         if ".attn_k." in name or ".attn_q." in name:
-            config = kwargs.get('config', {})
-            num_heads = config.get('num_attention_heads')
-            num_kv_heads = config.get('num_key_value_heads')
+            config = kwargs.get("config", {})
+            num_heads = config.get("num_attention_heads")
+            num_kv_heads = config.get("num_key_value_heads")
 
             if None in (num_heads, num_kv_heads):
                 return weights, name
@@ -77,64 +73,50 @@ class LlamaTensorProcessor(TensorProcessor):
                 weights = reverse_permute_weights(weights, num_heads, num_heads)
             elif ".attn_k." in name:
                 weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
-        return {
-            "weights": weights,
-            "name": name,
-            "metadata": {}
-        }
+        return {"weights": weights, "name": name, "metadata": {}}
+
 
 class Qwen2MoeTensorProcessor(TensorProcessor):
     def process(self, weights, name, **kwargs):
         if "_exp" in name:
-            tensor_key_mapping = kwargs.get('tensor_key_mapping')
-            config = kwargs.get('config', {})
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            config = kwargs.get("config", {})
             if tensor_key_mapping:
                 split_moe_expert_tensor(weights, config, name, tensor_key_mapping)
                 return {
-            "weights": weights,
-            "name": None, # Signal to skip further processing
-            "metadata": {}
-        }
+                    "weights": weights,
+                    "name": None,  # Signal to skip further processing
+                    "metadata": {},
+                }
         if "ffn_gate_inp_shexp" in name:
             # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
             # quantized one is (2048)
             weights = np.expand_dims(weights, axis=0)
-        return {
-            "weights": weights,
-            "name": name,
-            "metadata": {}
-        }
+        return {"weights": weights, "name": name, "metadata": {}}
+
 
 class BloomTensorProcessor(TensorProcessor):
     def process(self, weights, name, **kwargs):
         if "attn_qkv" in name:
-            config = kwargs.get('config', {})
+            config = kwargs.get("config", {})
             num_heads = config["n_head"]
             n_embed = config["hidden_size"]
             if "weight" in name:
                 weights = reverse_reshape_weights(weights, num_heads, n_embed)
             else:
                 weights = reverse_reshape_bias(weights, num_heads, n_embed)
-        return {
-            "weights": weights,
-            "name": name,
-            "metadata": {}
-        }
+        return {"weights": weights, "name": name, "metadata": {}}
+
 
 class T5TensorProcessor(TensorProcessor):
     def process(self, weights, name, **kwargs):
         bid = None
         for chunk in name.split("."):
-            if chunk.isdigit(): 
+            if chunk.isdigit():
                 bid = int(chunk)
                 break
-        return {
-            "weights": weights,
-            "name": name,
-            "metadata": {
-                "bid": bid
-            }
-        }
+        return {"weights": weights, "name": name, "metadata": {"bid": bid}}
+
 
 class GPT2TensorProcessor(TensorProcessor):
     def process(self, weights, name, **kwargs):
@@ -153,14 +135,15 @@ class GPT2TensorProcessor(TensorProcessor):
             # output.weight has conflicts with attn_output.weight in name checking
             # Store the tensor directly and signal to skip further processing
             name = "lm_head.weight"
-            parsed_parameters = kwargs.get('parsed_parameters', {})
+            parsed_parameters = kwargs.get("parsed_parameters", {})
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
             name = None
         return {
-                "weights": weights,
-                "name": name,  # Signal to skip further processing
-                "metadata": {}
-            }
+            "weights": weights,
+            "name": name,  # Signal to skip further processing
+            "metadata": {},
+        }
+
 
 class MambaTensorProcessor(TensorProcessor):
     def process(self, weights, name, **kwargs):
@@ -176,11 +159,7 @@ class MambaTensorProcessor(TensorProcessor):
             # Original exponential implementation
             # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
             weights = np.log(-weights)
-        return {
-                "weights": weights,
-                "name": name,
-                "metadata": {}
-            }
+        return {"weights": weights, "name": name, "metadata": {}}
 
 
 TENSOR_PROCESSORS = {
@@ -325,9 +304,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             result = processor.process(
                 weights=weights,
                 name=name,
-                config=parsed_parameters.get('config', {}),
+                config=parsed_parameters.get("config", {}),
                 tensor_key_mapping=tensor_key_mapping,
-                parsed_parameters=parsed_parameters
+                parsed_parameters=parsed_parameters,
             )
 
             weights = result["weights"]
