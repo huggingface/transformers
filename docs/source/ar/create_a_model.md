@@ -146,7 +146,7 @@ DistilBertConfig {
 >>> model = DistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-أعد استخدام هذا نقطة التحقق لمهمة أخرى عن طريق التبديل إلى رأس نموذج مختلف. لمهمة الإجابة على الأسئلة، ستستخدم رأس النموذج [`DistilBertForQuestionAnswering`]. رأس الإجابة على الأسئلة مشابه لرأس التصنيف التسلسلي باستثناء أنه طبقة خطية أعلى حالات الإخراج المخفية.
+أعد استخدام هذا نقطة التحقق هذه لمهمة أخرى بسهولة، وذلك بتغيير رأس النموذج.ففي مهمة الإجابة على الأسئلة، ستستخدم رأس النموذج [`DistilBertForQuestionAnswering`]. رأس الإجابة على الأسئلة مشابه لرأس التصنيف التسلسلي باستثناء أنه طبقة خطية فوق مخرجات الحالات الكامنة.
 
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
