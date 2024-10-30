@@ -66,11 +66,11 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         apply_quantization_config(model, ct_quantization_config, run_compressed=True)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        pass
+        model.is_compressed_tensors_quantized = True
 
     @property
-    def is_trainable(self):
-        return False
+    def is_trainable(self) -> bool:
+        return True
 
     def is_serializable(self, safe_serialization=None):
-        return False
+        return True
