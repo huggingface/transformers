@@ -121,7 +121,7 @@ Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopte
 # Usage with multimodal LLMs
 
 For multimodal LLMs such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted in a similar way,
-with the only differenct that you need to pass input images/videos as well along with the text. Therefore each "content"
+with the only difference that you need to pass input images/videos as well along with the text. Therefore each "content"
 has to be a list containing either a text or an image/video content.
 
 Here's an example of preparing input for using `LLaVA` model:
