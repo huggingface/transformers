@@ -79,7 +79,7 @@ DistilBertConfig {
 
 ## النموذج
 
-الخطوة التالية هي إنشاء [نموذج](main_classes/models). النموذج - الذي يشار إليه أيضًا بشكل فضفاض باسم الهندسة المعمارية - يحدد ما تفعله كل طبقة وما هي العمليات التي تحدث. تُستخدم سمات مثل `num_hidden_layers` من التكوين لتحديد الهندسة المعمارية. تشترك جميع النماذج في فئة الأساس [`PreTrainedModel`] وبعض الطرق الشائعة مثل تغيير حجم تضمين الإدخال وتشذيب رؤوس الاهتمام الذاتي. بالإضافة إلى ذلك، فإن جميع النماذج هي أيضًا إما [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html)، [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) أو [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) فئة فرعية. وهذا يعني أن النماذج متوافقة مع كل استخدام إطار عملها الخاص.
+الخطوة التالية هي إنشاء [نموذج](main_classes/models). النموذج - ويُشار إليه أحيانًا باسم البنية - يُحدد وظيفة كل طبقة والعمليات الحسابية المُنفذة. تُستخدم خصائص مثل `num_hidden_layers` من التكوين لتحديد هذه البنية. تشترك جميع النماذج في  فئة أساسية واحدة هي [`PreTrainedModel`] وبعض الوظائف المُشتركة مثل غيير حجم مُدخلات الكلمات وتقليص رؤوس آلية الانتباه الذاتي. بالإضافة إلى ذلك، فإن جميع النماذج هي  فئات فرعية إما من [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html)، [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) أو [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) . هذا يعني النماذج متوافقة مع كل استخدام لإطار العمل الخاص بها.
 
 <frameworkcontent>
 <pt>
