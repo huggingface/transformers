@@ -223,9 +223,6 @@ AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassi
 يمكن أن يكون ملف `__init__.py` فارغًا، فهو موجود فقط حتى يتمكن Python من اكتشاف أن `resnet_model` يمكن استخدامه كموديل.
 
 <Tip warning={true}>
-يمكن أن يكون ملف `__init__.py` فارغًا، فهو موجود فقط حتى يتمكن Python من اكتشاف أن `resnet_model` يمكن استخدامه كموديل.
-
-<Tip warning={true}>
 
 إذا كنت تقوم بنسخ ملفات النمذجة من المكتبة، فسوف تحتاج إلى استبدال جميع الواردات النسبية في أعلى الملف
 لاستيرادها من حزمة `transformers`.
