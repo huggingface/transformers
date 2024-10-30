@@ -876,6 +876,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Example:
 
         ```python
         >>> from transformers import AutoTokenizer, GemmaForCausalLM

@@ -204,7 +204,7 @@ def get_indent_level(func):
 
 
 def parse_docstring(docstring):
-    args_pattern = re.compile(r"Args:\s*(.*?)\n\n", re.DOTALL)
+    args_pattern = re.compile(r"Args:\s*(.*?)\n", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
     args_section = args_match.group(1).strip() if args_match else None
