@@ -1,25 +1,21 @@
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...cache_utils import Cache, StaticCache
+from ...modeling_flash_attention_utils import _flash_attention_forward
+from ...utils import is_flash_attn_greater_or_equal_2_10, logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
-    repeat_kv,
-    apply_rotary_pos_emb,
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaModel,
     LlamaForCausalLM,
-)
-
-from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...utils import (
-    is_flash_attn_greater_or_equal_2_10,
-    logging
+    LlamaModel,
+    apply_rotary_pos_emb,
+    repeat_kv,
 )
 
 
@@ -27,8 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 class DiffLlamaConfig(LlamaConfig):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    model_type = "diffllama"
 
 
 class DiffLlamaAttention(LlamaAttention):
@@ -114,13 +109,17 @@ class DiffLlamaAttention(LlamaAttention):
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(query_states.dtype)
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(query_states.dtype)
+        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
+            query_states.dtype
+        )
+        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
+            query_states.dtype
+        )
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = torch.matmul(attn_weights, value_states)
         attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
-        
+
         attn_output = attn_output1 - lambda_full * attn_output2
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -140,7 +139,6 @@ class DiffLlamaAttention(LlamaAttention):
 
 
 class DiffLlamaFlashAttention2(DiffLlamaAttention):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -265,8 +263,12 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         attn_output = torch.cat([attn_output1, attn_output2], dim=-1)
         attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=2)
 
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(query_states.dtype)
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(query_states.dtype)
+        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
+            query_states.dtype
+        )
+        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
+            query_states.dtype
+        )
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = attn_output1 - lambda_full * attn_output2
@@ -364,7 +366,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -376,8 +377,12 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
 
         attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
 
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(query_states.dtype)
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(query_states.dtype)
+        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
+            query_states.dtype
+        )
+        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
+            query_states.dtype
+        )
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = attn_output1 - lambda_full * attn_output2
