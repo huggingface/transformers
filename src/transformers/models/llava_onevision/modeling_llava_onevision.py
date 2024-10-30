@@ -679,6 +679,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             )
             n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
             n_image_features = image_features.shape[0]
+
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -704,6 +705,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             )
             video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1)
+
             n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
             n_video_features = video_features.shape[0]
             if n_video_tokens != n_video_features:
