@@ -341,7 +341,7 @@ model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة ال
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
 config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=False, use_timm_backbone=True) # تكوين الجزء الأساسي والجزء الوسيط
-model = MaskFormerForInstanceSegmentation(config) # الرأس
+model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة النهائي
 ```
 
 يمكنك أيضًا تحميل تكوين العمود الفقري واستخدامه لإنشاء `TimmBackbone` أو تمريره إلى تكوين النموذج. سيتم تحميل العمود الفقري لـ Timm الأوزان المسبقة التدريب بشكل افتراضي. قم بتعيين `use_pretrained_backbone=False` لتحميل الأوزان المبدئية العشوائية.
