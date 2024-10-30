@@ -1144,6 +1144,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
 
+    def test_torch_compile_loss_func_compatibility(self):
+        from datasets import load_dataset
+        tiny_model = AutoModelForCausalLM.from_pretrained(
+            "/mnt/models/TinyLlama_v1.1", num_labels=5,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("/mnt/models/TinyLlama_v1.1")
+        tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
+        tiny_model.resize_token_embeddings(len(tokenizer))
+        tiny_model.config.pad_token_id = tokenizer.pad_token_id
+
+        dataset = load_dataset("yelp_review_full")["train"].select(range(100))
+        def tokenize_function(examples):
+            return tokenizer(
+                examples["text"],
+                max_length=20,
+                padding="max_length",
+                truncation=True
+            )
+        tokenized_datasets = dataset.map(tokenize_function, batched=True)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                learning_rate=1e-9,
+                torch_compile=True,
+                num_train_epochs=1,
+                logging_steps=1,
+            )
+            # with self.assertRaises(ValueError):
+            _ = Trainer(model=tiny_model, args=args, train_dataset=tokenized_datasets, tokenizer=tokenizer)  # noqa
+
     @require_peft
     @require_bitsandbytes
     def test_bnb_compile(self):
