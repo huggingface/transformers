@@ -76,6 +76,7 @@ from transformers.testing_utils import (
     require_non_xpu,
     require_optuna,
     require_peft,
+    require_python_311,
     require_ray,
     require_safetensors,
     require_schedulefree,
@@ -1144,6 +1145,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
 
+    @require_python_311
     def test_torch_compile_loss_func_compatibility(self):
         from datasets import load_dataset
 
