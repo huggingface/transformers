@@ -1086,8 +1086,8 @@ class StaticCache(Cache):
     Parameters:
         config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`):
-            The batch size with which the model will be used. Note that a new instance must be instantiated if a
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used. If you are manually setting the batch size, make sure to take into account the number of beams if you are running beam search
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
@@ -1112,7 +1112,7 @@ class StaticCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = StaticCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = StaticCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         StaticCache()
@@ -1123,21 +1123,15 @@ class StaticCache(Cache):
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
+        max_batch_size: int = None,
         max_cache_len: int = None,
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
-        max_batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
-        if max_batch_size is not None:
-            logger.warning_once(
-                f"The 'max_batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
-                "v4.46. Use the more precisely named 'batch_size' argument instead."
-            )
 
-        self.batch_size = batch_size or max_batch_size
+        self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
@@ -1155,7 +1149,7 @@ class StaticCache(Cache):
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
-        cache_shape = (self.batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
+        cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[idx]
@@ -1264,8 +1258,8 @@ class SlidingWindowCache(StaticCache):
     Parameters:
         config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`):
-            The batch size with which the model will be used. Note that a new instance must be instantiated if a
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
@@ -1290,7 +1284,7 @@ class SlidingWindowCache(StaticCache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = SlidingWindowCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = SlidingWindowCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         SlidingWindowCache()
@@ -1303,11 +1297,10 @@ class SlidingWindowCache(StaticCache):
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
+        max_batch_size: int = None,
         max_cache_len: int = None,
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
-        max_batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1319,11 +1312,10 @@ class SlidingWindowCache(StaticCache):
         max_cache_len = min(config.sliding_window, max_cache_len)
         super().__init__(
             config=config,
-            batch_size=batch_size,
+            max_batch_size=max_batch_size,
             max_cache_len=max_cache_len,
             device=device,
             dtype=dtype,
-            max_batch_size=max_batch_size,
             layer_device_map=layer_device_map,
         )
 
@@ -1564,8 +1556,8 @@ class HybridCache(Cache):
     Parameters:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`):
-            The batch size with which the model will be used. Note that a new instance must be instantiated if a
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
@@ -1590,7 +1582,7 @@ class HybridCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = HybridCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = HybridCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         HybridCache()
@@ -1601,19 +1593,13 @@ class HybridCache(Cache):
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
+        max_batch_size: int = None,
         max_cache_len: int = None,
         device: Union[torch.device, str] = "cpu",
         dtype: torch.dtype = torch.float32,
-        max_batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
-        if max_batch_size is not None:
-            logger.warning_once(
-                f"The 'max_batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
-                "v4.46. Use the more precisely named 'batch_size' argument instead."
-            )
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -1621,7 +1607,7 @@ class HybridCache(Cache):
                 "config and it's not set to None."
             )
         self.max_cache_len = max_cache_len
-        self.batch_size = batch_size or max_batch_size
+        self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
@@ -1636,9 +1622,9 @@ class HybridCache(Cache):
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        global_cache_shape = (self.batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
+        global_cache_shape = (self.max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
         sliding_cache_shape = (
-            self.batch_size,
+            self.max_batch_size,
             self.num_key_value_heads,
             min(config.sliding_window, max_cache_len),
             self.head_dim,
@@ -1749,8 +1735,8 @@ class MambaCache:
     Arguments:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`):
-            The batch size with which the model will be used. Note that a new instance must be instantiated if a
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
             The default `dtype` to use when initializing the layer.
@@ -1767,9 +1753,9 @@ class MambaCache:
         conv_kernel_size: (`int`):
             Model's convolution kernel size taken from config
         conv_states: (`torch.Tensor`):
-            A tensor of shape `[layer_idx, batch_size, intermediate_size, conv_kernel_size]` that holds convolutional states.
+            A tensor of shape `[layer_idx, max_batch_size, intermediate_size, conv_kernel_size]` that holds convolutional states.
         ssm_states: (`torch.Tensor`):
-            A tensor of shape `[layer_idx, batch_size, intermediate_size, ssm_state_size]` that holds ssm states
+            A tensor of shape `[layer_idx, max_batch_size, intermediate_size, ssm_state_size]` that holds ssm states
 
     Example:
 
@@ -1782,7 +1768,7 @@ class MambaCache:
         >>> inputs = tokenizer(text="My name is Mamba", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = MambaCache(config=model.config, batch_size=1, device=model.device, dtype=model.dtype)
+        >>> past_key_values = MambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values
         MambaCache()
@@ -1793,25 +1779,19 @@ class MambaCache:
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
+        max_batch_size: int = None,
         dtype: torch.dtype = torch.float16,
         device: Optional[Union[torch.device, str]] = None,
-        max_batch_size: Optional[int] = None,
     ):
-        if max_batch_size is not None:
-            logger.warning_once(
-                f"The 'max_batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
-                "v4.46. Use the more precisely named 'batch_size' argument instead."
-            )
         self.dtype = dtype
-        self.batch_size = batch_size or max_batch_size
+        self.max_batch_size = max_batch_size
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
 
         self.conv_states: torch.Tensor = torch.zeros(
             config.num_hidden_layers,
-            self.batch_size,
+            self.max_batch_size,
             self.intermediate_size,
             self.conv_kernel_size,
             device=device,
@@ -1819,7 +1799,7 @@ class MambaCache:
         )
         self.ssm_states: torch.Tensor = torch.zeros(
             config.num_hidden_layers,
-            self.batch_size,
+            self.max_batch_size,
             self.intermediate_size,
             self.ssm_state_size,
             device=device,
@@ -1870,8 +1850,6 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
-        batch_size (`int`, *optional*):
-            The batch size with which the model will be used.
         layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*): Mapping between the layers and its device.
 
     Attributes:
@@ -1921,15 +1899,9 @@ class OffloadedStaticCache(StaticCache):
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
-        batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
-        if batch_size is not None:
-            logger.warning_once(
-                f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
-                "v4.47. Use the more precisely named 'max_batch_size' argument instead."
-            )
-        self.max_batch_size = max_batch_size or batch_size
+        self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
