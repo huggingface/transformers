@@ -640,7 +640,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     assert not any(m.training for m in model.modules())
                     del model
 
-
     def test_peft_load_adapter_training_inference_mode_false(self):
         """
         When passing is_trainable=True, the LoRA modules should be in training mode and their parameters should have
