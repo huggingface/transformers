@@ -505,7 +505,7 @@ def read_video_pyav(video_path: str, num_frames: Optional[int] = None):
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-def read_video_torchvision(video_path: str, num_frames: int = None):
+def read_video_torchvision(video_path: str, num_frames: Optional[int] = None):
     """
     Decode the video with torchvision decoder.
 
