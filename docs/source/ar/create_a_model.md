@@ -308,7 +308,7 @@ model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة ال
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
 config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=False) # تكوين الجزء الأساسي والجزء الوسيط
-model = MaskFormerForInstanceSegmentation(config) # الرأس
+model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة النهائي
 ```
 
 يمكنك أيضًا تحميل تكوين العمود الفقري بشكل منفصل ثم تمريره إلى تكوين النموذج.
