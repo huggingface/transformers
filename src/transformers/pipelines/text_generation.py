@@ -368,11 +368,12 @@ class TextGenerationPipeline(Pipeline):
             generate_kwargs["generation_config"] = self.generation_config
 
         # If an assistant model is defined, use it to generate the response
-        # NOTE: assisted generation only supports batch size = 1
+        # NOTE: assisted generation currently only supports batch size = 1
         if in_b == 1:
             if self.assistant_model is not None:
                 generate_kwargs["assistant_model"] = self.assistant_model
             if self.assistant_tokenizer is not None:
+                generate_kwargs["tokenizer"] = self.tokenizer
                 generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
 
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)

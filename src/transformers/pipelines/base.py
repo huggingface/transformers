@@ -468,7 +468,8 @@ def load_assistant_model(
         loaded_assistant_tokenizer = None
     elif loaded_assistant_tokenizer is None:
         raise ValueError(
-            "The assistant model has a different tokenizer than the main model. You should pass the assistant tokenizer."
+            "The assistant model has a different tokenizer than the main model. You should pass the assistant "
+            "tokenizer."
         )
 
     return loaded_assistant_model, loaded_assistant_tokenizer
