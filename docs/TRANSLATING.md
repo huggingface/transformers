@@ -1,4 +1,4 @@
-# Translating the Transformers Documentation into Your Language
+# Translating the Transformers documentation into your language
 
 As part of our mission to democratize machine learning, we aim to make the Transformers library available in many more languages! Follow the steps below to help translate the documentation into your language.
 
