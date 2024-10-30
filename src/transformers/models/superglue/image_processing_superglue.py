@@ -472,7 +472,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        if len(outputs.mask) != len(target_sizes):
+        if outputs.mask.shape[0] * outputs.mask.shape[1] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
 
         if isinstance(target_sizes, List):
@@ -485,23 +485,17 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             image_pair_sizes = target_sizes
 
         keypoints = outputs.keypoints.clone()
-
-        for keypoints_pair, image_pair_size in zip(keypoints, image_pair_sizes):
-            keypoints0, keypoints1 = keypoints_pair[0], keypoints_pair[1]
-            image_size0, image_size1 = image_pair_size[0], image_pair_size[1]
-            keypoints0[:, 0] = keypoints0[:, 0] * image_size0[1]
-            keypoints0[:, 1] = keypoints0[:, 1] * image_size0[0]
-            keypoints1[:, 0] = keypoints1[:, 0] * image_size1[1]
-            keypoints1[:, 1] = keypoints1[:, 1] * image_size1[0]
-
+        keypoints = keypoints * image_pair_sizes.flip(1).reshape(1, 2, 1, 2)
         keypoints = keypoints.to(torch.int32)
 
         results = []
         for mask_pair, keypoints_pair, matches, scores in zip(
             outputs.mask, keypoints, outputs.matches[:, 0], outputs.matching_scores[:, 0]
         ):
-            mask0, mask1 = mask_pair[0] > 0, mask_pair[1] > 0
-            keypoints0, keypoints1 = keypoints_pair[0][mask0], keypoints_pair[1][mask1]
+            mask0 = mask_pair[0] > 0
+            mask1 = mask_pair[1] > 0
+            keypoints0 = keypoints_pair[0][mask0]
+            keypoints1 = keypoints_pair[1][mask1]
             matches0 = matches[mask0]
             scores0 = scores[mask0]
 
