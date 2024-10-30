@@ -165,6 +165,7 @@ class Sam2ImageSegmentationOutput(ModelOutput):
 
     iou_scores: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
+    image_embeddings: Tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -624,8 +625,8 @@ class Sam2MaskDecoder(nn.Module):
         self.upscale_layer_norm = Sam2LayerNorm(config.hidden_size // 4, data_format="channels_first")
         self.activation = ACT2FN[config.hidden_act]
 
-        self.use_high_res_features = config.use_high_res_features
-        if self.use_high_res_features:
+        self.use_high_resolution_features = config.use_high_resolution_features
+        if self.use_high_resolution_features:
             self.conv_s0 = nn.Conv2d(config.hidden_size, config.hidden_size // 8, kernel_size=1, stride=1)
             self.conv_s1 = nn.Conv2d(config.hidden_size, config.hidden_size // 4, kernel_size=1, stride=1)
 
@@ -670,7 +671,7 @@ class Sam2MaskDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
-        high_res_features: Optional[List[torch.Tensor]] = None,
+        high_resolution_features: Optional[List[torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -726,12 +727,12 @@ class Sam2MaskDecoder(nn.Module):
             batch_size * point_batch_size, num_channels, height, width
         )
 
-        if not self.use_high_res_features:
+        if not self.use_high_resolution_features:
             upscaled_embedding = self.upscale_conv1(image_embeddings)
             upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
             upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding))
         else:
-            feat_s0, feat_s1 = high_res_features
+            feat_s0, feat_s1 = high_resolution_features
             upscaled_embedding = self.upscale_conv1(image_embeddings) + feat_s1
             upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
             upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding) + feat_s0)
@@ -2071,6 +2072,9 @@ class Sam2Model(Sam2PreTrainedModel):
         self.memory_attention = Sam2MemoryAttention(config.memory_attention_config)
         self.memory_encoder = Sam2MemoryEncoder(config.memory_encoder_config)
 
+        self.use_high_resolution_features_in_sam = config.mask_decoder_config.use_high_resolution_features_in_sam
+        self.num_feature_levels = 3 if self.use_high_resolution_features_in_sam else 1
+
         # a single token to indicate no memory embedding from previous frames
         self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, config.image_encoder_config.fpn_hidden_size))
         self.no_memory_positional_encoding = torch.nn.Parameter(
@@ -2232,22 +2236,44 @@ class Sam2Model(Sam2PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            image_embeddings = vision_outputs[2][-1]
-            vision_position_embeddings = vision_outputs[2]
             feature_maps = vision_outputs[1]
+            vision_embeddings = vision_outputs[2]
 
             if output_hidden_states:
                 vision_hidden_states = vision_outputs[-2]
             if output_attentions:
                 vision_attentions = vision_outputs[-1]
 
+            if self.use_high_resolution_features_in_sam:
+                # precompute projected level 0 and level 1 features in SAM decoder
+                # to avoid running it again on every SAM click
+                feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
+                feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
+
+            feature_maps = feature_maps[-self.num_feature_levels :]
+            vision_embeddings = vision_embeddings[-self.num_feature_levels :]
+
+            # flatten NxCxHxW to HWxNxC
+            feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+            vision_embeddings = [
+                vision_embedding.flatten(2).permute(2, 0, 1) for vision_embedding in vision_embeddings
+            ]
+
+            if self.directly_add_no_memory_embedding:
+                feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
+
+            image_embeddings = [
+                feat.permute(1, 2, 0).view(1, -1, *feat_size)
+                for feat, feat_size in zip(feature_maps, self.config._bb_feat_sizes)
+            ]
+
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
 
-        if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
+        if input_points is not None and vision_embeddings[-1].shape[0] != input_points.shape[0]:
             raise ValueError(
                 "The batch size of the image embeddings and the input points must be the same. ",
-                "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
+                "Got {} and {} respectively.".format(vision_embeddings[-1].shape[0], input_points.shape[0]),
                 " if you want to pass multiple points for the same image, make sure that you passed ",
                 " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
                 " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
@@ -2260,39 +2286,17 @@ class Sam2Model(Sam2PreTrainedModel):
             input_masks=input_masks,
         )
 
-        if self.config.use_high_res_features_in_sam:
-            # precompute projected level 0 and level 1 features in SAM decoder
-            # to avoid running it again on every SAM click
-            feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
-            feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
-
-        num_feature_levels = 3 if self.config.use_high_res_features_in_sam else 1
-        feature_maps = feature_maps[-num_feature_levels:]
-        vision_position_embeddings = vision_position_embeddings[-num_feature_levels:]
-
-        # flatten NxCxHxW to HWxNxC
-        feature_maps = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
-        vision_position_embeddings = [x.flatten(2).permute(2, 0, 1) for x in vision_position_embeddings]
-
-        if self.directly_add_no_memory_embedding:
-            feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
-
-        high_res_features = [
-            feat.permute(1, 2, 0).view(1, -1, *feat_size)
-            for feat, feat_size in zip(feature_maps, self.config._bb_feat_sizes)
-        ]
-
         low_res_masks, iou_predictions, mask_decoder_attentions, _ = self.mask_decoder(
-            image_embeddings=high_res_features[-1],
+            image_embeddings=image_embeddings[-1],
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            high_res_features=high_res_features[:-1],
+            high_resolution_features=image_embeddings[:-1],
         )
 
         if not return_dict:
-            output = (iou_predictions, low_res_masks)
+            output = (iou_predictions, low_res_masks, image_embeddings)
             if output_hidden_states:
                 output = output + (vision_hidden_states,)
 
@@ -2303,58 +2307,11 @@ class Sam2Model(Sam2PreTrainedModel):
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_predictions,
             pred_masks=low_res_masks,
+            image_embeddings=image_embeddings,
             vision_hidden_states=vision_hidden_states,
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
         )
-
-
-def get_sdpa_settings():
-    if torch.cuda.is_available():
-        old_gpu = torch.cuda.get_device_properties(0).major < 7
-        # only use Flash Attention on Ampere (8.0) or newer GPUs
-        use_flash_attn = torch.cuda.get_device_properties(0).major >= 8
-        if not use_flash_attn:
-            warnings.warn(
-                "Flash Attention is disabled as it requires a GPU with Ampere (8.0) CUDA capability.",
-                category=UserWarning,
-                stacklevel=2,
-            )
-        # keep math kernel for PyTorch versions before 2.2 (Flash Attention v2 is only
-        # available on PyTorch 2.2+, while Flash Attention v1 cannot handle all cases)
-        pytorch_version = tuple(int(v) for v in torch.__version__.split(".")[:2])
-        if pytorch_version < (2, 2):
-            warnings.warn(
-                f"You are using PyTorch {torch.__version__} without Flash Attention v2 support. "
-                "Consider upgrading to PyTorch 2.2+ for Flash Attention v2 (which could be faster).",
-                category=UserWarning,
-                stacklevel=2,
-            )
-        math_kernel_on = pytorch_version < (2, 2) or not use_flash_attn
-    else:
-        old_gpu = True
-        use_flash_attn = False
-        math_kernel_on = True
-
-    return old_gpu, use_flash_attn, math_kernel_on
-
-
-def get_connected_components(mask):
-    """
-    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
-
-    Inputs:
-    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
-            background.
-
-    Outputs:
-    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
-              for foreground pixels and 0 for background pixels.
-    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
-              components for foreground pixels and 0 for background pixels.
-    """
-
-    return CUDA_KERNELS.get_connected_components(mask.to(torch.uint8).contiguous())
 
 
 def mask_to_box(masks: torch.Tensor):

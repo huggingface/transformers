@@ -146,14 +146,16 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
         iou_head_depth (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
         iou_head_hidden_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        use_high_res_features (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        use_high_resolution_features (`bool`, *optional*, defaults to `True`):
+            Whether to use high-resolution feature maps in the SAM mask decoder
         iou_prediction_use_sigmoid (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        dynamic_multimask_via_stability (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        dynamic_multimask_via_stability (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         dynamic_multimask_stability_delta (`<fill_type>`, *optional*, defaults to 0.05): <fill_docstring>
         dynamic_multimask_stability_thresh (`<fill_type>`, *optional*, defaults to 0.98): <fill_docstring>
         pred_obj_scores (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         pred_obj_scores_mlp (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         use_multimask_token_for_obj_ptr (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        feed_forward_hidden_act (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
         two_way_transformer_depth (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
         two_way_transformer_embedding_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
         two_way_transformer_num_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
@@ -170,7 +172,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         hidden_act="gelu",
         iou_head_depth=3,
         iou_head_hidden_dim=256,
-        use_high_res_features=True,
+        use_high_resolution_features=True,
         iou_prediction_use_sigmoid=True,
         dynamic_multimask_via_stability=True,
         dynamic_multimask_stability_delta=0.05,
@@ -195,7 +197,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.use_high_res_features = use_high_res_features
+        self.use_high_resolution_features = use_high_resolution_features
         self.iou_prediction_use_sigmoid = iou_prediction_use_sigmoid
         self.dynamic_multimask_via_stability = dynamic_multimask_via_stability
         self.dynamic_multimask_stability_delta = dynamic_multimask_stability_delta
@@ -225,14 +227,12 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        skip_lowest_resolutions (`int`, *optional*, defaults to 1):
-            The skip_lowest_resolutions parameter for the image encoder.
         hidden_size (`<fill_type>`, *optional*, defaults to 96): <fill_docstring>
         num_heads (`int`, *optional*, defaults to 1):
             Initial number of attention heads.
         num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
         image_size (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-        patch_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
+        patch_kernel_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
         patch_stride (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
         patch_padding (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -253,16 +253,15 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Window specifications for each stage.
         global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `(5, 7, 9)`):
             Blocks where global attention is used.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the model in the neck.
+        skip_lowest_resolutions (`int`, *optional*, defaults to 1):
+            The skip_lowest_resolutions parameter for the image encoder.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
             List of channel dimensions for the backbone.
+        fpn_hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
         fpn_kernel_size (`int`, *optional*, defaults to 1):
             Kernel size for convolutions in the neck.
-        stride (`int`, *optional*, defaults to 1):
-            Stride for convolutions in the neck.
-        padding (`int`, *optional*, defaults to 0):
-            Padding for convolutions in the neck.
+        fpn_stride (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        fpn_padding (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
         fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
             Levels for top-down FPN connections.
         fpn_interpolation_mode (`str`, *optional*, defaults to `"nearest"`):
@@ -451,8 +450,6 @@ class Sam2Config(PretrainedConfig):
         # on the first frame whether to directly add the no-memory embedding to the image feature
         # (instead of using the transformer encoder)
         self.directly_add_no_memory_embedding = True
-        # whether to use high-resolution feature maps in the SAM mask decoder
-        self.use_high_res_features_in_sam = True
         # whether to output multiple (3) masks for the first click on initial conditioning frames
         self.multimask_output_in_sam = True
         # the minimum and maximum number of clicks to use multimask_output_in_sam (only relevant when `multimask_output_in_sam=True`;
