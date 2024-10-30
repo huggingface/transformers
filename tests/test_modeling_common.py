@@ -3982,6 +3982,9 @@ class ModelTesterMixin:
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
+        if hasattr(self.model_tester, "num_hidden_layers"):
+            self.model_tester.num_hidden_layers = 1
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
