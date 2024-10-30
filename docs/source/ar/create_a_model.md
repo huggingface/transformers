@@ -302,7 +302,7 @@ model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة ال
 </hfoption>
 <hfoption id="random weights">
 
-قم بتعيين `use_pretrained_backbone=False` لتهيئة عمود فقري ResNet بشكل عشوائي.
+قم بتعيين `use_pretrained_backbone=False` لتهيئة جزء ResNet الأساسي بشكل عشوائي.
 
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
