@@ -138,7 +138,7 @@ DistilBertConfig {
 
 <frameworkcontent>
 <pt>
-على سبيل المثال، [`DistilBertForSequenceClassification`] هو نموذج DistilBERT الأساسي برأس تصنيف تسلسل. رأس التصنيف التسلسلي هو طبقة خطية أعلى المخرجات المجمعة.
+على سبيل المثال، [`DistilBertForSequenceClassification`] هو نموذج DistilBERT الأساس  مزودًا برأس تصنيف تسلسلي.  يُشكّل رأس التصنيف التسلسلي طبقة خطية فوق المخرجات المجمعة.
 
 ```py
 >>> from transformers import DistilBertForSequenceClassification
