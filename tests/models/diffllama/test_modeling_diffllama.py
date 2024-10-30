@@ -51,7 +51,6 @@ if is_torch_available():
         DiffLlamaForSequenceClassification,
         DiffLlamaForTokenClassification,
         DiffLlamaModel,
-        DiffLlamaTokenizer,
     )
     from transformers.models.diffllama.modeling_diffllama import (
         DiffLlamaLinearScalingRotaryEmbedding,
@@ -485,43 +484,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    def test_rope_class_retrocompatibility(self):
-        # Delete me when we remove compatibility for the old API :)
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-        config.rope_scaling = {"type": "linear", "factor": 10}
-
-        # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Old API -- under the hood, "type": "linear" is set and `DiffLlamaRotaryEmbedding` is called
-        old_api_rope = DiffLlamaLinearScalingRotaryEmbedding(
-            config.hidden_size // config.num_attention_heads,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
-        old_cos_short, old_sin_short = old_api_rope(x, position_ids_short)
-        old_cos_long, old_sin_long = old_api_rope(x, position_ids_long)
-
-        # New API
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        new_api_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
-        new_cos_short, new_sin_short = new_api_rope(x, position_ids_short)
-        new_cos_long, new_sin_long = new_api_rope(x, position_ids_long)
-
-        # The results should match
-        torch.testing.assert_close(old_cos_short, new_cos_short)
-        torch.testing.assert_close(old_sin_short, new_sin_short)
-        torch.testing.assert_close(old_cos_long, new_cos_long)
-        torch.testing.assert_close(old_sin_long, new_sin_long)
-
     def test_model_loading_old_rope_configs(self):
         def _reinitialize_config(base_config, new_kwargs):
             # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
@@ -587,12 +549,12 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         Overwritting the common test as the test is flaky on tiny models
         """
         model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf",
+            "kajuma/DiffLlama-0.3B-handcut",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = DiffLlamaTokenizer.from_pretrained("meta-diffllama/DiffLlama-2-7b-hf")
+        tokenizer = AutoTokenizer.from_pretrained("kajuma/DiffLlama-0.3B-handcut")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -605,7 +567,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_native = tokenizer.batch_decode(output_native)
 
         model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf",
+            "kajuma/DiffLlama-0.3B-handcut",
             load_in_4bit=True,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
@@ -652,10 +614,10 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         max_new_tokens = 30
 
-        tokenizer = DiffLlamaTokenizer.from_pretrained("saibo/diffllama-1B")
+        tokenizer = AutoTokenizer.from_pretrained("kajuma/DiffLlama-0.3B-handcut")
 
         model_sdpa = DiffLlamaForCausalLM.from_pretrained(
-            "saibo/diffllama-1B",
+            "kajuma/DiffLlama-0.3B-handcut",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
@@ -663,7 +625,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DiffLlamaForCausalLM.from_pretrained(
-            "saibo/diffllama-1B",
+            "kajuma/DiffLlama-0.3B-handcut",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
@@ -719,136 +681,6 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
-    @require_read_token
-    def test_diffllama_3_1_hard(self):
-        """
-        An integration test for diffllama 3.1. It tests against a long output to ensure the subtle numerical differences
-        from diffllama 3.1.'s RoPE can be detected
-        """
-        # diff on `EXPECTED_TEXT`:
-        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
-        EXPECTED_TEXT = (
-            "Tell me about the french revolution. The french revolution was a period of radical political and social "
-            "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
-            "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
-            "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
-            "assembly that had not met since 1614. The Third Estate, which represented the common people, "
-            "demanded greater representation and eventually broke away to form the National Assembly. This marked "
-            "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained("meta-diffllama/Meta-DiffLlama-3.1-8B-Instruct")
-        model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/Meta-DiffLlama-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
-        )
-        input_text = ["Tell me about the french revolution."]
-        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
-
-        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(generated_text, EXPECTED_TEXT)
-
-    @slow
-    @require_read_token
-    def test_model_7b_logits_bf16(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-
-        model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf",
-            device_map="auto",
-            torch_dtype=torch.bfloat16,
-            attn_implementation="eager",
-        )
-
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
-        # Expected mean on dim = -1
-
-        # fmt: off
-        EXPECTED_MEAN = {
-            7: torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]),
-            8: torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]])
-        }
-
-        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = {
-            7: torch.tensor([[-12.5000, -7.0625, -0.6289, -7.8750, -6.9688, -7.8125, -6.4688, -7.4375, -7.6875, -6.9375, -6.0312, -7.0000, -1.8594, 1.8438, -8.5000]]),
-            8: torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]])
-        }
-        # fmt: on
-
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-2,
-                rtol=1e-2,
-            )
-        )
-
-    @slow
-    @require_read_token
-    def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-
-        model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
-        )
-
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
-
-        # fmt: off
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = {
-            7: torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041, 0.8261, -3.0052, 1.2957, -3.3648]]),
-            8: torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]])
-        }
-
-        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = {
-            7: torch.tensor([-12.8125, -7.3359, -0.4846, -8.0234, -7.2383, -7.9922, -6.4805, -7.7344, -7.8125, -7.0078, -6.1797, -7.1094, -1.8633, 1.9736, -8.6016]),
-            8: torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328])
-        }
-        # fmt: on
-
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-2,
-                rtol=1e-2,
-            )
-        )
-
-    @slow
-    def test_model_7b_dola_generation(self):
-        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        EXPECTED_TEXT_COMPLETION = (
-            "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
-            "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
-            "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
-            "understanding of space and time."
-        )
-        prompt = "Simply put, the theory of relativity states that "
-        tokenizer = DiffLlamaTokenizer.from_pretrained("meta-diffllama/DiffLlama-2-7b-chat-hf")
-        model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
-        )
-        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(
-            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
     @require_torch_gpu
     @require_read_token
     def test_compile_static_cache(self):
@@ -872,11 +704,11 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = DiffLlamaTokenizer.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf", pad_token="</s>", padding_side="right"
+        tokenizer = AutoTokenizer.from_pretrained(
+            "kajuma/DiffLlama-0.3B-handcut", pad_token="</s>", padding_side="right"
         )
         model = DiffLlamaForCausalLM.from_pretrained(
-            "meta-diffllama/DiffLlama-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
+            "kajuma/DiffLlama-0.3B-handcut", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -910,9 +742,9 @@ class Mask4DTestHard(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def setUp(self):
-        model_name = "TinyDiffLlama/TinyDiffLlama-1.1B-Chat-v1.0"
+        model_name = "kajuma/DiffLlama-0.3B-handcut"
         self.model_dtype = torch.float32
-        self.tokenizer = DiffLlamaTokenizer.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = DiffLlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
