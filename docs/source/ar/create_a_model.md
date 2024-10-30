@@ -331,7 +331,7 @@ model = MaskFormerForInstanceSegmentation(config)
 ```python
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=True, use_timm_backbone=True) # تكوين العمود الفقري والعنق
+config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=True, use_timm_backbone=True) # تكوين الجزء الأساسي والجزء الوسيط
 model = MaskFormerForInstanceSegmentation(config) # الرأس
 ```
 
