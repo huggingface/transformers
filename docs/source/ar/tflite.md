@@ -18,7 +18,7 @@ pip install optimum[exporters-tf]
 optimum-cli export tflite --help
 ```
 
-لتصدير نقطة تفتيش نموذج من 🤗 Hub، على سبيل المثال، `google-bert/bert-base-uncased`، قم بتشغيل الأمر التالي:
+لتصدير نسخة النموذج ل 🤗 Hub، على سبيل المثال، `google-bert/bert-base-uncased`، قم بتشغيل الأمر التالي:
 
 ```bash
 optimum-cli export tflite --model google-bert/bert-base-uncased --sequence_length 128 bert_tflite/
