@@ -1030,7 +1030,7 @@ class TrainingArguments:
     use_cpu: bool = field(
         default=False,
         metadata={
-            "help": " Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
+            "help": "Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
         },
     )
     use_mps_device: bool = field(
