@@ -280,7 +280,7 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-الآن لإرسال النموذج إلى Hub، تأكد من تسجيل الدخول. إما تشغيل في المحطة الطرفية الخاصة بك:
+الآن لإرسال النموذج إلى Hub، تأكد من تسجيل الدخول. إما تشغيل في المحطة الأوامر الطرفية الخاصة بك:
 
 ```bash
 huggingface-cli login
