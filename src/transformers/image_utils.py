@@ -456,7 +456,7 @@ def read_video_opencv(video_path: str, num_frames: Optional[int] = None):
     return np.stack(frames)
 
 
-def read_video_decord(video_path: str, num_frames: int = None):
+def read_video_decord(video_path: str, num_frames: Optional[int] = None):
     """
     Decode the video with Decord decoder.
 
