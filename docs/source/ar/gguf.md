@@ -50,8 +50,16 @@
 في الوقت الحالي، بنيات النماذج المدعومة هي البنيات التي كانت شائعة جدًا على Hub، وهي:
 
 - LLaMa
-- ميسترال
+- Mistral
 - Qwen2
+- Qwen2Moe
+- Phi3
+- Bloom
+- Falcon
+- StableLM
+- GPT2
+- Starcoder2
+- T5
 
 ## مثال الاستخدام
 
