@@ -289,7 +289,7 @@ class SuperGlueAttentionalPropagation(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
-        attention_outputs = self.attention(descriptors, source, source, mask, output_attentions=output_attentions)
+        attention_outputs = self.attention(descriptors, source, source, mask=mask, output_attentions=output_attentions)
         output = attention_outputs[0]
         attention = attention_outputs[1:]
 
@@ -321,11 +321,9 @@ class SuperGlueAttentionalGNN(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
+        batch_size, num_keypoints, _ = descriptors.shape
         if output_hidden_states:
-            batch_size, _, num_keypoints, _ = descriptors.shape
-            all_hidden_states = all_hidden_states + (
-                descriptors.reshape(batch_size * 2, num_keypoints, self.descriptor_dim),
-            )
+            all_hidden_states = all_hidden_states + (descriptors,)
 
         for gnn_layer, layer_type in zip(self.layers, self.layers_types):
             if layer_type == "cross":
@@ -356,9 +354,9 @@ class SuperGlueAttentionalGNN(nn.Module):
             delta1 = gnn_outputs1[0]
 
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + concat_pairs(gnn_outputs0[1], gnn_outputs1[1])
+                all_hidden_states = all_hidden_states + gnn_outputs[1]
             if output_attentions:
-                all_attentions = all_attentions + concat_pairs(gnn_outputs0[2], gnn_outputs1[2])
+                all_attentions = all_attentions + gnn_outputs[2]
 
             descriptors[:, 0] = descriptors[:, 0] + delta0
             descriptors[:, 1] = descriptors[:, 1] + delta1
@@ -582,7 +580,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         matching_scores = torch.cat([matching_scores0, matching_scores1]).reshape(batch_size, 2, -1)
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (encoded_keypoints[1])
+            all_hidden_states = all_hidden_states + encoded_keypoints[1]
             all_hidden_states = all_hidden_states + gnn_outputs[1]
             all_hidden_states = all_hidden_states + (projected_descriptors,)
             all_hidden_states = tuple(
