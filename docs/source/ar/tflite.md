@@ -24,7 +24,7 @@ optimum-cli export tflite --help
 optimum-cli export tflite --model google-bert/bert-base-uncased --sequence_length 128 bert_tflite/
 ```
 
-يجب أن تشاهد السجلات التي تشير إلى التقدم وتعرض المكان الذي تم فيه حفظ `model.tflite` الناتج، مثل هذا:
+ستظهر لك السجلات  التي تُبيّن التقدم وموقع حفظ ملف  `model.tflite` الناتج، كما في المثال التالي:
 
 ```bash
 Validating TFLite model...
