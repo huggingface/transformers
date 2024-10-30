@@ -1008,7 +1008,6 @@ else:
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.llama"].append("LlamaTokenizer")
-    _import_structure["models.diffllama"].append("DiffLlamaTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -4740,9 +4739,6 @@ else:
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
-    _import_structure["models.diffllama"].extend(
-        ["FlaxDiffLlamaForCausalLM", "FlaxDiffLlamaModel", "FlaxDiffLlamaPreTrainedModel"]
-    )
     _import_structure["models.gemma"].extend(["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"])
     _import_structure["models.longt5"].extend(
         [
@@ -5914,7 +5910,6 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.deprecated.ernie_m import ErnieMTokenizer
         from .models.deprecated.xlm_prophetnet import XLMProphetNetTokenizer
-        from .models.diffllama import DiffLlamaTokenizer
         from .models.fnet import FNetTokenizer
         from .models.gemma import GemmaTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
@@ -8929,11 +8924,6 @@ if TYPE_CHECKING:
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
-        )
-        from .models.diffllama import (
-            FlaxDiffLlamaForCausalLM,
-            FlaxDiffLlamaModel,
-            FlaxDiffLlamaPreTrainedModel,
         )
         from .models.dinov2 import (
             FlaxDinov2ForImageClassification,
