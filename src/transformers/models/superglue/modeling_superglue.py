@@ -150,7 +150,7 @@ class KeypointMatchingOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
             Loss computed during training.
-        mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
+        mask (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
             Mask indicating which values in matches and matching_scores are keypoint matching information.
         matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
             Index of keypoint matched in the other image.
@@ -168,7 +168,7 @@ class KeypointMatchingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    mask: torch.FloatTensor = None
+    mask: torch.IntTensor = None
     matches: torch.FloatTensor = None
     matching_scores: torch.FloatTensor = None
     keypoints: torch.FloatTensor = None
@@ -244,7 +244,7 @@ class SuperGlueMultiHeadAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        mask: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         batch_dim, seq_len, _ = query.size()
@@ -285,7 +285,7 @@ class SuperGlueAttentionalPropagation(nn.Module):
         self,
         descriptors: torch.Tensor,
         source: torch.Tensor,
-        mask: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
@@ -314,7 +314,7 @@ class SuperGlueAttentionalGNN(nn.Module):
     def forward(
         self,
         descriptors: torch.Tensor,
-        mask: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Tuple], Optional[Tuple]]:
@@ -326,40 +326,35 @@ class SuperGlueAttentionalGNN(nn.Module):
             all_hidden_states = all_hidden_states + (descriptors,)
 
         for gnn_layer, layer_type in zip(self.layers, self.layers_types):
+            gnn_mask = None
             if layer_type == "cross":
-                source0, source1 = descriptors[:, 1], descriptors[:, 0]
-                mask0, mask1 = mask[:, 1], mask[:, 0]
+                source = (
+                    descriptors.reshape(-1, 2, num_keypoints, self.descriptor_dim)
+                    .flip(1)
+                    .reshape(batch_size, num_keypoints, self.descriptor_dim)
+                )
+                gnn_mask = mask.reshape(-1, 2, num_keypoints).flip(1).reshape(batch_size, num_keypoints) if mask is not None else None
             elif layer_type == "self":
-                source0, source1 = descriptors[:, 0], descriptors[:, 1]
-                mask0, mask1 = mask[:, 0], mask[:, 1]
+                source = descriptors
+                gnn_mask = mask if mask is not None else None
             else:
                 raise ValueError(f"Unrecognized layer type {layer_type}")
 
-            gnn_outputs0 = gnn_layer(
-                descriptors[:, 0],
-                source0,
-                mask0,
+            gnn_outputs = gnn_layer(
+                descriptors,
+                source,
+                mask=gnn_mask,
                 output_hidden_states=output_hidden_states,
                 output_attentions=output_attentions,
             )
-            gnn_outputs1 = gnn_layer(
-                descriptors[:, 1],
-                source1,
-                mask1,
-                output_hidden_states=output_hidden_states,
-                output_attentions=output_attentions,
-            )
-
-            delta0 = gnn_outputs0[0]
-            delta1 = gnn_outputs1[0]
+            delta = gnn_outputs[0]
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + gnn_outputs[1]
             if output_attentions:
                 all_attentions = all_attentions + gnn_outputs[2]
 
-            descriptors[:, 0] = descriptors[:, 0] + delta0
-            descriptors[:, 1] = descriptors[:, 1] + delta1
+            descriptors = descriptors + delta
         return descriptors, all_hidden_states, all_attentions
 
 
@@ -467,7 +462,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         scores: torch.Tensor,
         height: int,
         width: int,
-        mask: torch.Tensor = None,
+        mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple, Tuple]:
@@ -482,6 +477,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 Confidence scores of the keypoints detected in the image pair.
             height (`int`): Image height.
             width (`int`): Image width.
+            mask (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`, *optional*):
+                Mask indicating which values in the keypoints, matches and matching_scores tensors are keypoint matching
+                information.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors. Default to `config.output_attentions`.
             output_hidden_states (`bool`, *optional*):
@@ -514,7 +512,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         batch_size, _, num_keypoints, _ = keypoints.shape
         # (batch_size, 2, num_keypoints, 2) -> (batch_size * 2, num_keypoints, 2)
         keypoints = keypoints.reshape(batch_size * 2, num_keypoints, 2)
+        descriptors = descriptors.reshape(batch_size * 2, num_keypoints, self.config.descriptor_dim)
         scores = scores.reshape(batch_size * 2, num_keypoints)
+        mask = mask.reshape(batch_size * 2, num_keypoints) if mask is not None else None
 
         # Keypoint normalization
         keypoints = normalize_keypoints(keypoints, height, width)
@@ -523,23 +523,17 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         last_hidden_state = encoded_keypoints[0]
 
-        # (batch_size * 2, num_keypoints, descriptor_dim) -> (batch_size, 2, num_keypoints, descriptor_dim)
-        last_hidden_state = last_hidden_state.reshape(batch_size, 2, num_keypoints, self.config.descriptor_dim)
-
         # Keypoint MLP encoder.
         descriptors = descriptors + last_hidden_state
 
         # Multi-layer Transformer network.
         gnn_outputs = self.gnn(
             descriptors,
-            mask,
+            mask=mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
         descriptors = gnn_outputs[0]
-
-        # (batch_size, 2, num_keypoints, descriptor_dim) -> (batch_size * 2, num_keypoints, descriptor_dim)
-        descriptors = descriptors.reshape(batch_size * 2, num_keypoints, self.config.descriptor_dim)
 
         # Final MLP projection.
         projected_descriptors = self.final_projection(descriptors)
@@ -554,6 +548,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         scores = scores / self.config.descriptor_dim**0.5
 
         if mask is not None:
+            mask = mask.reshape(batch_size, 2, num_keypoints)
             mask0 = mask[:, 0].unsqueeze(-1).expand(-1, -1, num_keypoints)
             scores = scores.masked_fill(mask0 == 0, -1e9)
 
@@ -659,6 +654,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             scores[i, :, : _scores.shape[1]] = _scores
             descriptors[i, :, : _descriptors.shape[1], :] = _descriptors
             mask[i, :, : _mask.shape[1]] = _mask
+
+        keypoints[:, :, :, 0] = keypoints[:, :, :, 0] * width
+        keypoints[:, :, :, 1] = keypoints[:, :, :, 1] * height
 
         matches, matching_scores, hidden_states, attentions = self._match_image_pair(
             keypoints,
