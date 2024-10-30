@@ -472,8 +472,10 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        if outputs.mask.shape[0] * outputs.mask.shape[1] != len(target_sizes):
+        if outputs.mask.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
+        if not all(len(target_size) == 2 for target_size in target_sizes):
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         if isinstance(target_sizes, List):
             image_pair_sizes = torch.tensor(target_sizes)
@@ -485,7 +487,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             image_pair_sizes = target_sizes
 
         keypoints = outputs.keypoints.clone()
-        keypoints = keypoints * image_pair_sizes.flip(1).reshape(1, 2, 1, 2)
+        keypoints = keypoints * image_pair_sizes.flip(-1).reshape(-1, 2, 1, 2)
         keypoints = keypoints.to(torch.int32)
 
         results = []
