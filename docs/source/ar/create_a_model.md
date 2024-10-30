@@ -307,7 +307,7 @@ model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة ال
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=False) # تكوين العمود الفقري والعنق
+config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=False) # تكوين الجزء الأساسي والجزء الوسيط
 model = MaskFormerForInstanceSegmentation(config) # الرأس
 ```
 
