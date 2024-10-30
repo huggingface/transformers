@@ -204,7 +204,7 @@ DistilBertConfig {
 >>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-قم بإنشاء محلل نحوي سريع باستخدام فئة [`DistilBertTokenizerFast`] :
+قم بإنشاء مجزئ نصوص سريع باستخدام فئة [`DistilBertTokenizerFast`]:
 
 ```py
 >>> from transformers import DistilBertTokenizerFast
