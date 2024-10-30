@@ -80,7 +80,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
-    video_processor_class = "LlavaOnevisionVideoProcessor"
+    video_processor_class = "AutoVideoProcessor"
 
     def __init__(
         self,

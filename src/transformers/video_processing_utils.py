@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,22 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import copy
 import json
 import os
 import warnings
-from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import numpy as np
-import requests
-
 from .dynamic_module_utils import custom_object_save
-from .feature_extraction_utils import BatchFeature as BaseBatchFeature
+from .image_processing_base import BatchFeature
+from .image_processing_utils import BaseImageProcessor
+from .image_utils import load_video
 from .utils import (
-    IMAGE_PROCESSOR_NAME,
-    PushToHubMixin,
+    VIDEO_PROCESSOR_NAME,
     add_model_info_to_auto_map,
     add_model_info_to_custom_pipelines,
     cached_file,
@@ -36,62 +32,31 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_vision_available,
     logging,
 )
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 logger = logging.get_logger(__name__)
 
 
-# TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils
-# We override the class string here, but logic is the same.
-class BatchFeature(BaseBatchFeature):
-    r"""
-    Holds the output of the image processor specific `__call__` methods.
-
-    This class is derived from a python dictionary and can be used as a dictionary.
-
-    Args:
-        data (`dict`):
-            Dictionary of lists/arrays/tensors returned by the __call__ method ('pixel_values', etc.).
-        tensor_type (`Union[None, str, TensorType]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
-            initialization.
-    """
+INIT_SERVICE_KWARGS = [
+    "processor_class",
+    "video_processor_type",
+]
 
 
-# TODO: (Amy) - factor out the common parts of this and the feature extractor
-class ImageProcessingMixin(PushToHubMixin):
-    """
-    This is an image processor mixin used to provide saving/loading functionality for sequential and image feature
-    extractors.
-    """
-
-    _auto_class = None
-
+# initial design we keep the slow video processor which processed each frame with image processor
+# TODO: @raushan integrate video processor with torchvision to process the whole video at once
+class BaseVideoProcessor(BaseImageProcessor):
     def __init__(self, **kwargs):
-        """Set elements of `kwargs` as attributes."""
-        # This key was saved while we still used `XXXFeatureExtractor` for image processing. Now we use
-        # `XXXImageProcessor`, this attribute and its value are misleading.
-        kwargs.pop("feature_extractor_type", None)
-        # Pop "processor_class" as it should be saved as private attribute
-        self._processor_class = kwargs.pop("processor_class", None)
-        # Additional attributes without default values
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
+        super().__init__(**kwargs)
 
-    def _set_processor_class(self, processor_class: str):
-        """Sets processor class as an attribute."""
-        self._processor_class = processor_class
+    def __call__(self, videos, **kwargs) -> BatchFeature:
+        """Preprocess a video or a batch of videos."""
+        return self.preprocess(videos, **kwargs)
+
+    def preprocess(self, videos, **kwargs) -> BatchFeature:
+        raise NotImplementedError("Each video processor must implement its own preprocess method")
 
     @classmethod
     def from_pretrained(
@@ -105,24 +70,24 @@ class ImageProcessingMixin(PushToHubMixin):
         **kwargs,
     ):
         r"""
-        Instantiate a type of [`~image_processing_utils.ImageProcessingMixin`] from an image processor.
+        Instantiate a type of [`~video_processing_utils.VideoProcessorBase`] from an video processor.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
-                - a string, the *model id* of a pretrained image_processor hosted inside a model repo on
+                - a string, the *model id* of a pretrained video hosted inside a model repo on
                   huggingface.co.
-                - a path to a *directory* containing a image processor file saved using the
-                  [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
+                - a path to a *directory* containing a video processor file saved using the
+                  [`~video_processing_utils.VideoProcessorBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved image processor JSON *file*, e.g.,
+                - a path or url to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model image processor should be cached if the
+                Path to a directory in which a downloaded pretrained model video processor should be cached if the
                 standard cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the image processor files and override the cached versions if
+                Whether or not to force to (re-)download the video processor files and override the cached versions if
                 they exist.
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
@@ -146,41 +111,41 @@ class ImageProcessingMixin(PushToHubMixin):
                 </Tip>
 
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final image processor object. If `True`, then this
-                functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
-                consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
-                `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
+                If `False`, then this function returns just the final video processor object. If `True`, then this
+                functions returns a `Tuple(video_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
+                consisting of the key/value pairs whose keys are not video processor attributes: i.e., the part of
+                `kwargs` which has not been used to update `video_processor` and is otherwise ignored.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
-                The values in kwargs of any keys which are image processor attributes will be used to override the
-                loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
+                The values in kwargs of any keys which are video processor attributes will be used to override the
+                loaded values. Behavior concerning key/value pairs whose keys are *not* video processor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
 
         Returns:
-            A image processor of type [`~image_processing_utils.ImageProcessingMixin`].
+            A video processor of type [`~video_processing_utils.ImagVideoProcessorBase`].
 
         Examples:
 
         ```python
-        # We can't instantiate directly the base class *ImageProcessingMixin* so let's show the examples on a
-        # derived class: *CLIPImageProcessor*
-        image_processor = CLIPImageProcessor.from_pretrained(
-            "openai/clip-vit-base-patch32"
-        )  # Download image_processing_config from huggingface.co and cache.
-        image_processor = CLIPImageProcessor.from_pretrained(
+        # We can't instantiate directly the base class *VideoProcessorBase* so let's show the examples on a
+        # derived class: *LlavaOnevisionVideoProcessor*
+        video_processor = LlavaOnevisionVideoProcessor.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+        )  # Download video_processing_config from huggingface.co and cache.
+        video_processor = LlavaOnevisionVideoProcessor.from_pretrained(
             "./test/saved_model/"
-        )  # E.g. image processor (or model) was saved using *save_pretrained('./test/saved_model/')*
-        image_processor = CLIPImageProcessor.from_pretrained("./test/saved_model/preprocessor_config.json")
-        image_processor = CLIPImageProcessor.from_pretrained(
-            "openai/clip-vit-base-patch32", do_normalize=False, foo=False
+        )  # E.g. video processor (or model) was saved using *save_pretrained('./test/saved_model/')*
+        video_processor = LlavaOnevisionVideoProcessor.from_pretrained("./test/saved_model/preprocessor_config.json")
+        video_processor = LlavaOnevisionVideoProcessor.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", do_normalize=False, foo=False
         )
-        assert image_processor.do_normalize is False
-        image_processor, unused_kwargs = CLIPImageProcessor.from_pretrained(
-            "openai/clip-vit-base-patch32", do_normalize=False, foo=False, return_unused_kwargs=True
+        assert video_processor.do_normalize is False
+        video_processor, unused_kwargs = LlavaOnevisionVideoProcessor.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", do_normalize=False, foo=False, return_unused_kwargs=True
         )
-        assert image_processor.do_normalize is False
+        assert video_processor.do_normalize is False
         assert unused_kwargs == {"foo": False}
         ```"""
         kwargs["cache_dir"] = cache_dir
@@ -203,18 +168,18 @@ class ImageProcessingMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        video_processor_dict, kwargs = cls.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
 
-        return cls.from_dict(image_processor_dict, **kwargs)
+        return cls.from_dict(video_processor_dict, **kwargs)
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
-        Save an image processor object to the directory `save_directory`, so that it can be re-loaded using the
-        [`~image_processing_utils.ImageProcessingMixin.from_pretrained`] class method.
+        Save an video processor object to the directory `save_directory`, so that it can be re-loaded using the
+        [`~video_processing_utils.VideoProcessorBase.from_pretrained`] class method.
 
         Args:
             save_directory (`str` or `os.PathLike`):
-                Directory where the image processor JSON file will be saved (will be created if it does not exist).
+                Directory where the video processor JSON file will be saved (will be created if it does not exist).
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
@@ -252,10 +217,10 @@ class ImageProcessingMixin(PushToHubMixin):
             custom_object_save(self, save_directory, config=self)
 
         # If we save using the predefined names, we can load using `from_pretrained`
-        output_image_processor_file = os.path.join(save_directory, IMAGE_PROCESSOR_NAME)
+        output_video_processor_file = os.path.join(save_directory, VIDEO_PROCESSOR_NAME)
 
-        self.to_json_file(output_image_processor_file)
-        logger.info(f"Image processor saved in {output_image_processor_file}")
+        self.to_json_file(output_video_processor_file)
+        logger.info(f"Video processor saved in {output_video_processor_file}")
 
         if push_to_hub:
             self._upload_modified_files(
@@ -266,15 +231,15 @@ class ImageProcessingMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-        return [output_image_processor_file]
+        return [output_video_processor_file]
 
     @classmethod
-    def get_image_processor_dict(
+    def get_video_processor_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        image processor of type [`~image_processor_utils.ImageProcessingMixin`] using `from_dict`.
+        video processor of type [`~video_processing_utils.VideoProcessorBase`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -284,7 +249,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 specify the folder name here.
 
         Returns:
-            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
+            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the video processor object.
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -310,7 +275,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 )
             token = use_auth_token
 
-        user_agent = {"file_type": "image processor", "from_auto_class": from_auto_class}
+        user_agent = {"file_type": "video processor", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
@@ -320,32 +285,32 @@ class ImageProcessingMixin(PushToHubMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        old_image_processor_name = "preprocessor_config.json"
+        old_video_processor_name = "preprocessor_config.json"
         if os.path.isdir(pretrained_model_name_or_path):
-            image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
-            old_image_processor_file = os.path.join(pretrained_model_name_or_path, old_image_processor_name)
-            if not os.path.exists(image_processor_file) and os.path.exists(old_image_processor_name):
+            video_processor_file = os.path.join(pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME)
+            old_video_processor_file = os.path.join(pretrained_model_name_or_path, old_video_processor_name)
+            if not os.path.exists(video_processor_file) and os.path.exists(old_video_processor_file):
                 logger.warning_once(
-                    "You have image processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
+                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
+                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
                     "the file or load and save the processor back which renames it automatically. "
                     "Loading from `preprocessor.json` will be removed in v4.55."
                 )
-                image_processor_file = old_image_processor_file
+                video_processor_file = old_video_processor_file
         if os.path.isfile(pretrained_model_name_or_path):
-            resolved_image_processor_file = pretrained_model_name_or_path
+            resolved_video_processor_file = pretrained_model_name_or_path
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
-            image_processor_file = pretrained_model_name_or_path
-            resolved_image_processor_file = download_url(pretrained_model_name_or_path)
+            video_processor_file = pretrained_model_name_or_path
+            resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             try:
                 # try to load with an old config name first and if not successfull try with
                 # the new file name. In case we can load with old name successfully, raise a deprecation warning
-                image_processor_file = old_image_processor_name
-                resolved_image_processor_file = cached_file(
+                video_processor_file = old_video_processor_name
+                resolved_video_processor_file = cached_file(
                     pretrained_model_name_or_path,
-                    image_processor_file,
+                    video_processor_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -357,11 +322,11 @@ class ImageProcessingMixin(PushToHubMixin):
                     subfolder=subfolder,
                 )
             except EnvironmentError:
-                image_processor_file = IMAGE_PROCESSOR_NAME
+                video_processor_file = VIDEO_PROCESSOR_NAME
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_file = cached_file(
+                resolved_video_processor_file = cached_file(
                     pretrained_model_name_or_path,
-                    image_processor_file,
+                    video_processor_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -379,109 +344,109 @@ class ImageProcessingMixin(PushToHubMixin):
             except Exception:
                 # For any other exception, we throw a generic error.
                 raise EnvironmentError(
-                    f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                    f"Can't load video processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {IMAGE_PROCESSOR_NAME} file"
+                    f" directory containing a {VIDEO_PROCESSOR_NAME} file"
                 )
             else:
                 logger.warning_once(
-                    "You have image processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
+                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
+                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
                     "the file or load and save the processor back which renames it automatically. "
                     "Loading from `preprocessor.json` will be removed in v4.55."
                 )
 
         try:
-            # Load image_processor dict
-            with open(resolved_image_processor_file, "r", encoding="utf-8") as reader:
+            # Load video_processor dict
+            with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
-            image_processor_dict = json.loads(text)
+            video_processor_dict = json.loads(text)
 
         except json.JSONDecodeError:
             raise EnvironmentError(
-                f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
+                f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
             )
 
         if is_local:
-            logger.info(f"loading configuration file {resolved_image_processor_file}")
+            logger.info(f"loading configuration file {resolved_video_processor_file}")
         else:
             logger.info(
-                f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
+                f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
 
         if not is_local:
-            if "auto_map" in image_processor_dict:
-                image_processor_dict["auto_map"] = add_model_info_to_auto_map(
-                    image_processor_dict["auto_map"], pretrained_model_name_or_path
+            if "auto_map" in video_processor_dict:
+                video_processor_dict["auto_map"] = add_model_info_to_auto_map(
+                    video_processor_dict["auto_map"], pretrained_model_name_or_path
                 )
-            if "custom_pipelines" in image_processor_dict:
-                image_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    image_processor_dict["custom_pipelines"], pretrained_model_name_or_path
+            if "custom_pipelines" in video_processor_dict:
+                video_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    video_processor_dict["custom_pipelines"], pretrained_model_name_or_path
                 )
-        return image_processor_dict, kwargs
+        return video_processor_dict, kwargs
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, video_processor_dict: Dict[str, Any], **kwargs):
         """
-        Instantiates a type of [`~image_processing_utils.ImageProcessingMixin`] from a Python dictionary of parameters.
+        Instantiates a type of [`~video_processing_utils.VideoProcessorBase`] from a Python dictionary of parameters.
 
         Args:
-            image_processor_dict (`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the image processor object. Such a dictionary can be
+            video_processor_dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the video processor object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the
-                [`~image_processing_utils.ImageProcessingMixin.to_dict`] method.
+                [`~video_processing_utils.VideoProcessorBase.to_dict`] method.
             kwargs (`Dict[str, Any]`):
-                Additional parameters from which to initialize the image processor object.
+                Additional parameters from which to initialize the video processor object.
 
         Returns:
-            [`~image_processing_utils.ImageProcessingMixin`]: The image processor object instantiated from those
+            [`~video_processing_utils.VideoProcessorBase`]: The video processor object instantiated from those
             parameters.
         """
-        image_processor_dict = image_processor_dict.copy()
+        video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         # The `size` parameter is a dict and was previously an int or tuple in feature extractors.
-        # We set `size` here directly to the `image_processor_dict` so that it is converted to the appropriate
-        # dict within the image processor and isn't overwritten if `size` is passed in as a kwarg.
-        if "size" in kwargs and "size" in image_processor_dict:
-            image_processor_dict["size"] = kwargs.pop("size")
-        if "crop_size" in kwargs and "crop_size" in image_processor_dict:
-            image_processor_dict["crop_size"] = kwargs.pop("crop_size")
+        # We set `size` here directly to the `video_processor_dict` so that it is converted to the appropriate
+        # dict within the video processor and isn't overwritten if `size` is passed in as a kwarg.
+        if "size" in kwargs and "size" in video_processor_dict:
+            video_processor_dict["size"] = kwargs.pop("size")
+        if "crop_size" in kwargs and "crop_size" in video_processor_dict:
+            video_processor_dict["crop_size"] = kwargs.pop("crop_size")
 
-        image_processor = cls(**image_processor_dict)
+        video_processor = cls(**video_processor_dict)
 
-        # Update image_processor with kwargs if needed
+        # Update video_processor with kwargs if needed
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(image_processor, key):
-                setattr(image_processor, key, value)
+            if hasattr(video_processor, key):
+                setattr(video_processor, key, value)
                 to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
 
-        logger.info(f"Image processor {image_processor}")
+        logger.info(f"Video processor {video_processor}")
         if return_unused_kwargs:
-            return image_processor, kwargs
+            return video_processor, kwargs
         else:
-            return image_processor
+            return video_processor
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this image processor instance.
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
         output = copy.deepcopy(self.__dict__)
-        output["image_processor_type"] = self.__class__.__name__
+        output["video_processor_type"] = self.__class__.__name__
 
         return output
 
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]):
         """
-        Instantiates a image processor of type [`~image_processing_utils.ImageProcessingMixin`] from the path to a JSON
+        Instantiates a video processor of type [`~video_processing_utils.VideoProcessorBase`] from the path to a JSON
         file of parameters.
 
         Args:
@@ -489,54 +454,19 @@ class ImageProcessingMixin(PushToHubMixin):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A image processor of type [`~image_processing_utils.ImageProcessingMixin`]: The image_processor object
+            A video processor of type [`~video_processing_utils.VideoProcessorBase`]: The video_processor object
             instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
-        image_processor_dict = json.loads(text)
-        return cls(**image_processor_dict)
-
-    def to_json_string(self) -> str:
-        """
-        Serializes this instance to a JSON string.
-
-        Returns:
-            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
-        """
-        dictionary = self.to_dict()
-
-        for key, value in dictionary.items():
-            if isinstance(value, np.ndarray):
-                dictionary[key] = value.tolist()
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
-
-        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
-
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
-        """
-        Save this instance to a JSON file.
-
-        Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this image_processor instance's parameters will be saved.
-        """
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string())
-
-    def __repr__(self):
-        return f"{self.__class__.__name__} {self.to_json_string()}"
+        video_processor_dict = json.loads(text)
+        return cls(**video_processor_dict)
 
     @classmethod
-    def register_for_auto_class(cls, auto_class="AutoImageProcessor"):
+    def register_for_auto_class(cls, auto_class="AutoVideoProcessor"):
         """
-        Register this class with a given auto class. This should only be used for custom image processors as the ones
-        in the library are already mapped with `AutoImageProcessor `.
+        Register this class with a given auto class. This should only be used for custom video processors as the ones
+        in the library are already mapped with `AutoVideoProcessor `.
 
         <Tip warning={true}>
 
@@ -545,8 +475,8 @@ class ImageProcessingMixin(PushToHubMixin):
         </Tip>
 
         Args:
-            auto_class (`str` or `type`, *optional*, defaults to `"AutoImageProcessor "`):
-                The auto class to register this new image processor with.
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoVideoProcessor "`):
+                The auto class to register this new video processor with.
         """
         if not isinstance(auto_class, str):
             auto_class = auto_class.__name__
@@ -558,31 +488,23 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
+    def fetch_videos(self, video_url_or_urls: Union[str, List[str]]):
         """
-        Convert a single or a list of urls into the corresponding `PIL.Image` objects.
+        Convert a single or a list of urls into the corresponding `np.array` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0"
-                " Safari/537.36"
-            )
-        }
-        if isinstance(image_url_or_urls, list):
-            return [self.fetch_images(x) for x in image_url_or_urls]
-        elif isinstance(image_url_or_urls, str):
-            response = requests.get(image_url_or_urls, stream=True, headers=headers)
-            response.raise_for_status()
-            return Image.open(BytesIO(response.content))
+        if isinstance(video_url_or_urls, list):
+            return [self.fetch_videos(x) for x in video_url_or_urls]
+        elif isinstance(video_url_or_urls, str):
+            return load_video(video_url_or_urls)
         else:
-            raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(video_url_or_urls)}")
 
 
-ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)
-if ImageProcessingMixin.push_to_hub.__doc__ is not None:
-    ImageProcessingMixin.push_to_hub.__doc__ = ImageProcessingMixin.push_to_hub.__doc__.format(
-        object="image processor", object_class="AutoImageProcessor", object_files="image processor file"
+BaseVideoProcessor.push_to_hub = copy_func(BaseVideoProcessor.push_to_hub)
+if BaseVideoProcessor.push_to_hub.__doc__ is not None:
+    BaseVideoProcessor.push_to_hub.__doc__ = BaseVideoProcessor.push_to_hub.__doc__.format(
+        object="video processor", object_class="AutoVideoProcessor", object_files="video processor file"
     )

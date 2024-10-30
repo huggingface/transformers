@@ -385,6 +385,10 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
+def load_video(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = None) -> "PIL.Image.Image":
+    return image
+
+
 def validate_preprocess_arguments(
     do_rescale: Optional[bool] = None,
     rescale_factor: Optional[float] = None,

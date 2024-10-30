@@ -16,7 +16,7 @@
 
 from typing import Dict, List, Optional, Union
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import (
     convert_to_rgb,
     resize,
@@ -37,6 +37,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...video_processing_utils import BaseVideoProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -62,7 +63,7 @@ def make_batched_videos(videos) -> List[VideoInput]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
-class LlavaOnevisionVideoProcessor(BaseImageProcessor):
+class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
     r"""
     Constructs a LLaVa-Onevisino-Video video processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.
 
