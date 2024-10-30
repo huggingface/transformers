@@ -62,11 +62,10 @@ have to be modality related and can ne anything that the model often needs acces
 to three more special tokens.  
 
 ```python
-tokenizer = AutoTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf")
-tokenizer.extra_special_tokens = {"image_token": "<image>", "boi_token": "<image_start>", "eoi_token": "<image_end>"}
-tokenizer.save_pretrained(output_dir)
-
-vision_tokenizer = AutoTokenizer.from_pretrained(output_dir)
+vision_tokenizer = AutoTokenizer.from_pretrained(
+    "llava-hf/llava-1.5-7b-hf",
+    extra_special_tokens={"image_token": "<image>", "boi_token": "<image_start>", "eoi_token": "<image_end>"}
+)
 print(vision_tokenizer.image_token, vision_tokenizer.image_token_id)
 ("<image>", 32000)
 ```

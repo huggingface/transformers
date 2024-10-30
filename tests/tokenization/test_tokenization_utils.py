@@ -317,6 +317,18 @@ class TokenizerUtilsTest(unittest.TestCase):
             loaded_tokenizer_with_extra_tokens = LlamaTokenizerFast.from_pretrained(tmpdirname)
             self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "<image>")
 
+        # test that we can also indicate extra tokens during load time
+        extra_special_tokens = {
+            "boi_token": "<image_start>",
+            "eoi_token": "<image_end>",
+            "image_token": "<image>",
+        }
+        tokenizer = LlamaTokenizerFast.from_pretrained(
+            "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
+        )
+        self.assertTrue(tokenizer.image_token == "<image>")
+        self.assertTrue(tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
+
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
