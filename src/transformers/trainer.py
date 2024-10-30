@@ -233,7 +233,6 @@ if is_accelerate_available():
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
-        GradientAccumulationPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -2492,7 +2491,11 @@ class Trainer:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                     # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
-                    context = partial(self.accelerator.no_sync, model=model) if i == len(batch_samples) - 1 else contextlib.nullcontext
+                    context = (
+                        functools.partial(self.accelerator.no_sync, model=model)
+                        if i == len(batch_samples) - 1
+                        else contextlib.nullcontext
+                    )
                     with context():
                         tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 

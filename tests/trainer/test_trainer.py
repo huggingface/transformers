@@ -1146,8 +1146,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_torch_compile_loss_func_compatibility(self):
         from datasets import load_dataset
+
         tiny_model = AutoModelForCausalLM.from_pretrained(
-            "/mnt/models/TinyLlama_v1.1", num_labels=5,
+            "/mnt/models/TinyLlama_v1.1",
+            num_labels=5,
         )
 
         tokenizer = AutoTokenizer.from_pretrained("/mnt/models/TinyLlama_v1.1")
@@ -1156,13 +1158,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_model.config.pad_token_id = tokenizer.pad_token_id
 
         dataset = load_dataset("yelp_review_full")["train"].select(range(100))
+
         def tokenize_function(examples):
-            return tokenizer(
-                examples["text"],
-                max_length=20,
-                padding="max_length",
-                truncation=True
-            )
+            return tokenizer(examples["text"], max_length=20, padding="max_length", truncation=True)
+
         tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1171,7 +1170,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 torch_compile=True,
                 num_train_epochs=1,
-                logging_steps=1,
             )
             # with self.assertRaises(ValueError):
             _ = Trainer(model=tiny_model, args=args, train_dataset=tokenized_datasets, tokenizer=tokenizer)  # noqa
