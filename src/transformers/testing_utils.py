@@ -1293,16 +1293,6 @@ def require_jumanpp(test_case):
     return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
 
 
-def require_python_311(test_case):
-    """
-    Decorator marking a test that requires python 3.11
-    """
-
-    current_version = version.parse(sys.version.split()[0])
-    min_version = version.parse("3.11")
-    return unittest.skipUnless(current_version >= min_version, "test requires python v3.11+")(test_case)
-
-
 def require_cython(test_case):
     """
     Decorator marking a test that requires jumanpp

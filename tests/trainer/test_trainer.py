@@ -76,7 +76,6 @@ from transformers.testing_utils import (
     require_non_xpu,
     require_optuna,
     require_peft,
-    require_python_311,
     require_ray,
     require_safetensors,
     require_schedulefree,
@@ -271,6 +270,19 @@ class RepeatDataset:
 
     def __getitem__(self, i):
         return {"input_ids": self.x, "labels": self.x}
+
+
+class SequenceClassificationDataset:
+    def __init__(self, length=64, vocab_size=100, num_labels=5):
+        self.length = length
+        self.sequences = [torch.randint(0, vocab_size, (64,)).tolist() for _ in range(length)]
+        self.labels = torch.randint(0, num_labels, (length,)).tolist()
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, i):
+        return {"input_ids": self.sequences[i], "label": self.labels[i]}
 
 
 class DynamicShapesDataset:
@@ -1145,35 +1157,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
 
-    @require_python_311
     def test_torch_compile_loss_func_compatibility(self):
-        from datasets import load_dataset
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
 
-        tiny_model = AutoModelForCausalLM.from_pretrained(
-            "/mnt/models/TinyLlama_v1.1",
-            num_labels=5,
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained("/mnt/models/TinyLlama_v1.1")
-        tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
-        tiny_model.resize_token_embeddings(len(tokenizer))
-        tiny_model.config.pad_token_id = tokenizer.pad_token_id
-
-        dataset = load_dataset("yelp_review_full")["train"].select(range(100))
-
-        def tokenize_function(examples):
-            return tokenizer(examples["text"], max_length=20, padding="max_length", truncation=True)
-
-        tokenized_datasets = dataset.map(tokenize_function, batched=True)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 tmp_dir,
-                learning_rate=1e-9,
+                per_device_train_batch_size=2,
                 torch_compile=True,
-                num_train_epochs=1,
+                max_steps=1,  # compile happens on the first step
             )
-            _ = Trainer(model=tiny_model, args=args, train_dataset=tokenized_datasets, tokenizer=tokenizer)  # noqa
+            trainer = Trainer(model=tiny_llama, args=args, train_dataset=train_dataset)  # noqa
+            trainer.train()
 
     @require_peft
     @require_bitsandbytes
