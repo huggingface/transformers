@@ -323,7 +323,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         ).eval()
 
         # Load the test dataset
-        ds = load_dataset("vidore/document-retrieval-test", split="test")
+        ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
 
         # Preprocess the examples
         batch_images = self.processor.process_images(ds["image"]).to(model.device)
