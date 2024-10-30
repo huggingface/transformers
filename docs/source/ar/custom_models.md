@@ -210,8 +210,7 @@ AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassi
 
 </Tip>
 
-أولاً، تأكد من تعريف نموذجك بالكامل في ملف `.py`. يمكن أن يعتمد على الواردات النسبية إلى بعض الملفات الأخرى طالما أن جميع الملفات موجودة في نفس الدليل (لا ندعم الوحدات الفرعية لهذه الميزة حتى الآن). لمثالنا،
-سنحدد ملف `modeling_resnet.py` وملف `configuration_resnet.py` في مجلد باسم "resnet_model" في دليل العمل الحالي. يحتوي ملف التكوين على كود لـ `ResnetConfig` ويحتوي ملف النمذجة على كود لـ `ResnetModel` و`ResnetModelForImageClassification`.
+أولاً، تأكد من تعريف نموذجك بالكامل في ملف `.py`. يمكن أن يعتمد على الاستيراد النسبي لملفات أخرى طالما أن جميع الملفات موجودة في نفس الدليل (لا ندعم الوحدات الفرعية لهذه الميزة حتى الآن). في مثالنا، سنحدد ملف `modeling_resnet.py` وملف `configuration_resnet.py` في مجلد باسم "resnet_model" في دليل العمل الحالي. يحتوي ملف التكوين على كود لـ `ResnetConfig` ويحتوي ملف النمذجة على كود لـ `ResnetModel` و`ResnetModelForImageClassification`.
 
 ```
 .
