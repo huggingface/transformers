@@ -389,6 +389,7 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
+    "models.diff_llama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
     "models.dinov2": ["Dinov2Config"],
     "models.distilbert": [
@@ -2081,6 +2082,12 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.diff_llama"].extend(
+        [
+            "DiffLlamaForCausalLM",
+            "DiffLlamaModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -6864,6 +6871,10 @@ if TYPE_CHECKING:
             DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
+        )
+        from .models.diff_llama import (
+            DiffLlamaForCausalLM,
+            DiffLlamaModel,
         )
         from .models.dinat import (
             DinatBackbone,
