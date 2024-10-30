@@ -53,7 +53,7 @@ I'd like to show off how chat templating works!</s>
 
 كما رأيت في المثال السابق،  من السهل استخدام قوالب الدردشة. قم ببساطة بإنشاء قائمة من الرسائل، مع مفتاحي `role` و`content`، ثم قم بتمريرها إلى [`~PreTrainedTokenizer.apply_chat_template`] . بمجرد قيامك بذلك، ستحصل على مخرجات جاهزة للاستخدام! عند استخدام قوالب الدردشة كإدخال لتوليد نصوص بواسطة النموذج، فمن الجيد أيضًا استخدام `add_generation_prompt=True` لإضافة [مطالبات توليد النصوص](#what-are-generation-prompts).
 
-فيما يلي مثال على إعداد الإدخال لـ `model.generate()`، باستخدام نموذج المساعد `Zephyr`:
+فيما يلي مثال على إعداد الإدخال لـ `model.generate()`، باستخدام Zephyr مرة أخرى:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
