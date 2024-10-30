@@ -22,7 +22,7 @@ from typing import List, Union
 
 from transformers import LlamaModel, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
-
+from transformers.utils import auto_class_docstring, auto_docstring
 LLAMA_CLM_FORWARD = """The [`LlamaForCausalLM`] forward method, overrides the `__call__` special method.
 
     <Tip>
@@ -190,3 +190,33 @@ class AutoDocstringTest(unittest.TestCase):
         self.assertEqual(LLAMA_CLM_FORWARD, LlamaForCausalLM.forward.__doc__)
         self.assertEqual(LLAMA_DECODER, LlamaDecoderLayer.forward.__doc__)
 
+    def auto_doc(self):
+        COOL_CLASS_DOC = """
+        Args:
+            input_ids (some):
+            flash_attn_kwargs (FlashAttentionKwrargs):
+                parameters that are completely optional and that should be passed.
+            another_warg (something): should pass
+            and_another_on (this time):
+                I want
+                this to be
+                quite long
+"""
+
+        @auto_class_docstring
+        class MyCoolClass:
+            @auto_docstring
+            def __init__(input_ids, flash_attn_kwargs=None, another_warg=True, and_another_on=1):
+                r"""
+                Args:
+                    flash_attn_kwargs (FlashAttentionKwrargs):
+                        parameters that are completely optional and that should be passed.
+                    another_warg (something): should pass
+                    and_another_on (this time):
+                        I want
+                        this to be
+                        quite long
+                """
+                pass
+
+        self.assertEqual(MyCoolClass.__init__.__doc__, COOL_CLASS_DOC)

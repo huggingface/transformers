@@ -204,17 +204,22 @@ def get_indent_level(func):
 
 
 def parse_docstring(docstring):
-    args_pattern = re.compile(r"Args:\s*(.*?)\n", re.DOTALL)
+    args_pattern = args_pattern = re.compile(r"(Args:)(\n.*)?(\n)?$", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
-    args_section = args_match.group(1).strip() if args_match else None
+    args_section = args_match.group(2).lstrip('\n') if args_match else None
 
     params = {}
     if args_section:
-        param_pattern = re.compile(r"(\w+) (\(.*?\):\s*)(.*?)(?=\n\w|\Z)")
-        for param_match in param_pattern.finditer(args_section):
-            param_name = param_match.group(1)
-            params[param_name] = "".join(param_match.groups()[1:])
+        param_pattern = re.compile(r"^\s*(\w+)\s*\((.*?)\):\s*(.*?)(?=\n^\s*\w+\s*\(|\n\s*$)", re.DOTALL | re.MULTILINE)
+        for match in param_pattern.finditer(args_section):
+            param_name = match.group(1)
+            param_type = match.group(2)
+            param_description = match.group(3).strip()
+            params[param_name] = {
+                'type': param_type,
+                'description': param_description
+            }
     return params
 
 

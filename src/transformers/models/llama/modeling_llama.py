@@ -753,6 +753,11 @@ class LlamaModel(LlamaPreTrainedModel):
         Args:
             flash_attn_kwargs (FlashAttentionKwrargs):
                 parameters that are completely optional and that should be passed.
+            another_warg (something): should pass
+            and_another_on (this time):
+                I want
+                this to be
+                quite long
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
