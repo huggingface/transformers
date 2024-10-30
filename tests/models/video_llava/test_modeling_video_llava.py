@@ -267,7 +267,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # if we remove some images from inputs leaving only one
             # image number mismatch error should raise
             inputs["pixel_values_images"] = inputs["pixel_values_images"][:1]
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(**inputs)
 
     def test_video_only_input(self):
