@@ -176,12 +176,21 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
 
     # Load the untrained model
-    model = ColPaliForRetrieval(config=config).to(device).to(ORIGINAL_DTYPE).eval()
+    model = ColPaliForRetrieval(config=config).to(device).eval()
     print("Created model with new config and randomly initialized weights")
 
-    # Load the original weights with the correct dtype
+    # NOTE: The model was initialized with float32 weights. We need to convert it to the desired precision.
+    # There are two ways to set the model's dtype:
+    # - Using `model.from_pretrained(..., torch_dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
+    # - Using `model.to(dtype_precision)` converts all values - including the hyperparameters - to the desired precision.
+    # The following snippet allows a fine-grained control over the model's dtype, making sure that all
+    # the new weights' dtypes match the original model.
+    for param in model.parameters():
+        param.data = param.data.to(ORIGINAL_DTYPE)
+    print(f"Converted the new model weights to `{ORIGINAL_DTYPE}`")
+
+    # Load the original weights
     model.load_state_dict(original_state_dict)
-    model = model.to(ORIGINAL_DTYPE)
     print("Loaded original model weights")
 
     # Tie the weights (following ColPali's `__init__`` step)
