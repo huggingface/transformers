@@ -17,6 +17,7 @@ from ...image_transforms import (
     convert_to_rgb,
     resize,
     to_channel_dimension_format,
+    pad,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -341,7 +342,7 @@ class AriaProjector(nn.Module):
         # Removed weight inits compared to original:
         # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor]=None):
         """
         Forward pass of the Projector module.
 
@@ -352,10 +353,11 @@ class AriaProjector(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
-        batch_size = x.shape[0]
+        batch_size, num_patches = x.shape[0], x.shape[1]
 
-        query_num = self.patch_to_query_dict.get(x.shape[1], None)
-        assert query_num is not None, f"Query number for {x.shape[1]} patches is not provided"
+        if num_patches not in self.patch_to_query_dict.keys():
+            raise KeyError(f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}.")
+        query_num = self.patch_to_query_dict[num_patches]
 
         # Compared to original, simplify definition and use expand instead of repeat.
         queries = self.query[:query_num].unsqueeze(0).expand(batch_size, -1, -1)
@@ -370,6 +372,7 @@ class AriaProjector(nn.Module):
 
         return out
 
+# Copied from models.llava_next.image_processing_llava_next.py
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
     """
     Divides an image into patches of a specified size.
@@ -397,45 +400,45 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
 
     return patches
 
-def keep_ratio_resize_and_pixel_mask(img: ImageInput, max_size, min_size=336, padding_value=0):
+
+# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
     """
-    Resize an image while maintaining aspect ratio and create a pixel mask.
+    Computes the output image size given the input image size and the desired output size.
 
     Args:
-        img (ImageInput): Input image.
-        max_size (int): Maximum size for the larger dimension of the image.
-        min_size (int, optional): Minimum size for the smaller dimension. Defaults to 336.
-        padding_value (int, optional): Value used for padding. Defaults to 0.
-
-    Returns:
-        tuple: A tuple containing:
-            - ImageInput: Resized and padded image.
-            - torch.Tensor: Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
-                - True (1) values indicate pixels that belong to the original resized image.
-                - False (0) values indicate pixels that are part of the padding.
-              The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
+        image_size (`Tuple[int, int]`):
+            The input image size.
+        size (`int`):
+            The desired output size.
+        max_size (`int`, *optional*):
+            The maximum allowed output size.
     """
-    img = img.convert("RGB")
-    # rescale the given image, keep the aspect ratio
-    scale = max_size / max(img.size)
+    height, width = image_size
+    raw_size = None
+    if max_size is not None:
+        min_original_size = float(min((height, width)))
+        max_original_size = float(max((height, width)))
+        if max_original_size / min_original_size * size > max_size:
+            raw_size = max_size * min_original_size / max_original_size
+            size = int(round(raw_size))
 
-    w, h = img.size
-    if w >= h:
-        new_size = (max_size, max(int(h * scale), min_size))  # w, h
+    if (height <= width and height == size) or (width <= height and width == size):
+        oh, ow = height, width
+    elif width < height:
+        ow = size
+        if max_size is not None and raw_size is not None:
+            oh = int(raw_size * height / width)
+        else:
+            oh = int(size * height / width)
     else:
-        new_size = (max(int(w * scale), min_size), max_size)  # w, h
+        oh = size
+        if max_size is not None and raw_size is not None:
+            ow = int(raw_size * width / height)
+        else:
+            ow = int(size * width / height)
 
-    img_resized = img.resize(new_size, resample=Image.Resampling.BICUBIC)
-
-    # padding the right/bottom
-    padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
-    img_padded = ImageOps.expand(img_resized, (0, 0, padding_right, padding_bottom), fill=padding_value)
-
-    # Create a pixel mask
-    pixel_mask = torch.zeros(max_size, max_size, dtype=bool)
-    pixel_mask[: new_size[1], : new_size[0]] = 1
-    return img_padded, pixel_mask
-
+    return (oh, ow)
 
 class AriaImageProcessor(BaseImageProcessor):
     """
@@ -456,8 +459,8 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             max_image_size (int, optional): Maximum image size. Defaults to 980.
             min_image_size (int, optional): Minimum image size. Defaults to 336.
-            mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
-            std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
+            image_mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
+            image_std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
         """
         super().__init__(**kwargs)
 
@@ -541,21 +544,45 @@ class AriaImageProcessor(BaseImageProcessor):
         num_crops = None
 
         for image in images:
+            image = to_numpy_array(image)
             if split_image:
-                crop_images = self.get_image_patches(image, split_ratio, max_size, max_size)[1:]
+                crop_images = self.get_image_patches(image, split_ratio, max_size, max_size)
             else:
                 crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
                 num_crops = len(crop_images)
             for crop_image in crop_images:
-                img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
-                if do_convert_rgb:
-                    img_padded = convert_to_rgb(img_padded)
-                img_padded = to_numpy_array(img_padded).T
-                if do_normalize:
-                    img_padded = self.normalize(img_padded, self.image_mean, self.image_std)
-                pixel_values.append(img_padded)
+                # img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
+                # Compute
+                scale = max_size / max(crop_image.size)
+                # At this point the scale is the rescaling factor that would bring the image to max_size in its larger dimension
+
+                h, w = crop_image.size
+                print("SIZEEE:", crop_image.size)
+                if w >= h:
+                    new_size = (max(int(h * scale), min_size), max_size)  # h, w
+                else:
+                    new_size = (max_size, max(int(w * scale), min_size))  # h, w
+
+                # resize takes as input an array
+                crop_image_resized = resize(crop_image, new_size, resample=Image.Resampling.BICUBIC)
+
+                # padding the right/bottom
+                padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
+                crop_image_padded = pad(crop_image_resized, ((0, padding_bottom), (0, padding_right)))
+
+                # Create a pixel mask
+                pixel_mask = torch.zeros(max_size, max_size, dtype=bool)
+                pixel_mask[: new_size[1], : new_size[0]] = 1
                 pixel_masks.append(pixel_mask)
+
+                if do_convert_rgb:
+                    crop_image_padded = convert_to_rgb(crop_image_padded)
+
+                crop_image_padded = to_numpy_array(crop_image_padded).T
+                if do_normalize:
+                    crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std)
+                pixel_values.append(crop_image_padded)
         return BatchFeature(
             data={
                 "pixel_values": np.stack(pixel_values, axis=0),
@@ -565,7 +592,7 @@ class AriaImageProcessor(BaseImageProcessor):
             tensor_type=return_tensors,
         )
 
-    # Copied from models.llava_next.image_preprocessing_llava_next.LlavaNextImageProcessor.get_image_patches
+    # Modified from models.llava_next.image_preprocessing_llava_next.LlavaNextImageProcessor.get_image_patches
     def get_image_patches(
         self,
         image: np.array,
@@ -617,18 +644,7 @@ class AriaImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(patch, channel_dim=data_format, input_channel_dim=input_data_format)
             for patch in patches
         ]
-
-        resized_original_image = resize(
-            image,
-            size=size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-        )
-
-        image_patches = [resized_original_image] + patches
-
-        return image_patches
+        return patches
 
 
 
@@ -911,8 +927,8 @@ class AriaTopKRouter(nn.Module):
 
     # Simplify code a lot compared to original, since we do not need training.
     # Original: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/moe_lm.py#L170
-    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        logits = F.linear(input, self.weight)
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        logits = F.linear(hidden_states, self.weight)
         top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
         scores = F.softmax(top_logits, dim=-1)
 
@@ -1047,8 +1063,6 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
         self.experts = AriaGroupedMLP(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
         self.config = config
-        self.hidden_states_shape = None
-        self.reversed_input_permutation_mapping = None
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -1157,7 +1171,7 @@ class AriaForCausalLM(AriaPreTrainedModel, LlamaForCausalLM):
     config_class = AriaTextConfig
     _no_split_modules = ["AriaDecoderLayer"]
 
-    def __init__(self, config):
+    def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.model = AriaTextModel(config)
         self.vocab_size = config.vocab_size
@@ -1254,7 +1268,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position=None,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
@@ -1276,6 +1289,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_attentions (bool, optional): Whether to output attention weights.
             output_hidden_states (bool, optional): Whether to output hidden states.
             return_dict (bool, optional): Whether to return a ModelOutput object.
+            num_logits_to_keep (`int`, optional): Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
 
         Returns:
             Union[Tuple, AriaCausalLMOutputWithPast]: Model outputs.
