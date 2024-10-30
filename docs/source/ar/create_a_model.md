@@ -220,7 +220,7 @@ DistilBertConfig {
 
 يعالج معالج الصور بيانات الرؤية. وهو يرث من الفئة الأساسية [`~image_processing_utils.ImageProcessingMixin`].
 
-للاستخدام، قم بإنشاء معالج صور مرتبط بالنموذج الذي تستخدمه. على سبيل المثال، قم بإنشاء [`ViTImageProcessor`] افتراضي إذا كنت تستخدم [ViT](model_doc/vit) لتصنيف الصور:
+لبناء معالج صور خاص بالنموذج المستخدم، أنشئ مثلاً مُعالج  [`ViTImageProcessor`] افتراضيًا إذا كنت تستخدم [ViT](model_doc/vit) لتصنيف الصور:
 
 ```py
 >>> from transformers import ViTImageProcessor
