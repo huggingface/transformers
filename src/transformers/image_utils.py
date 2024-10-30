@@ -423,7 +423,7 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] =
     return indices
 
 
-def read_video_opencv(video_path: str, num_frames: int = None):
+def read_video_opencv(video_path: str, num_frames: Optional[int] = None):
     """
     Decode the video with open-cv decoder.
 
