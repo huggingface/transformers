@@ -42,8 +42,8 @@ DistilBertConfig {
 
 يعرض [`DistilBertConfig`] جميع الخصائص الافتراضية المستخدمة لبناء نموذج [`DistilBertModel`] أساسي. جميع الخصائص قابلة للتعديل، مما ييتيح مجالاً للتجريب. على سبيل المثال، يمكنك تعديل نموذج افتراضي لـ:
 
-- تجربة دالة تنشيط مختلفة مع معلمة `activation`.
-- استخدام نسبة إسقاط أعلى لاحتمالات الاهتمام مع معلمة `attention_dropout`.
+- تجربة دالة تنشيط مختلفة باستخدام معامل `activation`.
+- استخدام معدل إسقاط أعلى الاحتمالات الانتباه مع معامل  `attention_dropout`.
 
 ```py
 >>> my_config = DistilBertConfig(activation="relu", attention_dropout=0.4)
