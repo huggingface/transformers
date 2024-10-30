@@ -339,7 +339,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.full((batch_size, max_seq_len), True, dtype=torch.bool, device=inputs_embeds.device)
         image_to_overwrite[batch_indices, text_to_overwrite] = False
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+        if left_padding:
+            image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+        else:
+            mask = torch.ones_like(image_to_overwrite, dtype=torch.bool).cumsum(-1) - 1
+            padding_mask = mask <= new_token_positions[:, -1:].to(target_device)
+            image_to_overwrite &= padding_mask
 
         if image_to_overwrite.sum() != visual_features.shape[:-1].numel():
             visual_type = "videos" if num_frames == 8 else "images"
@@ -715,17 +720,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        if input_ids is not None:
-            img_token_not_enough = (input_ids == self.config.image_token_index).sum(
-                1
-            ).max() < self.config.image_seq_length
-            video_token_not_enough = (input_ids == self.config.video_token_index).sum(
-                1
-            ).max() < self.config.video_seq_length
-            legacy_processing = (img_token_not_enough and pixel_values_images is not None) or (
-                video_token_not_enough and pixel_values_videos is not None
-            )
-
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -736,7 +730,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             **kwargs,
         )
 
-        if legacy_processing or cache_position[0] == 0:
+        if cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values_images"] = pixel_values_images
