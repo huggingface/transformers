@@ -105,7 +105,8 @@ def convert_to_grayscale(
 
 def validate_and_format_image_pairs(images: ImageInput):
     error_message = (
-        "Input images must be a one of the following :" " - A pair of PIL images.",
+        "Input images must be a one of the following :",
+        " - A pair of PIL images.",
         " - A pair of 3D arrays.",
         " - A 4D array with shape (2, H, W, C).",
         " - A 5D array with shape (B, 2, H, W, C).",
@@ -188,9 +189,9 @@ def validate_and_format_image_pairs(images: ImageInput):
                 return _flatten_image_list_sequence(images)
         if is_valid_image(images):
             if is_pil_image(images):
-                raise ValueError
+                raise ValueError(error_message)
             if _is_3d_array(images):
-                raise ValueError
+                raise ValueError(error_message)
             if _is_4d_array(images):
                 return _flatten_image_list(images)
             if _is_5d_array(images):
