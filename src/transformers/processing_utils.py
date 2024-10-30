@@ -1143,7 +1143,7 @@ class ProcessorMixin(PushToHubMixin):
                     if vision_info["type"] == "image" and "image" in vision_info:
                         images.append(load_image(vision_info["image"]))
                     elif vision_info["type"] == "video" and "video" in vision_info:
-                        videos.append(load_video(vision_info["video"]))
+                        videos.append(load_video(vision_info["video"], num_frames=num_frames, backend=backend))
             return images, videos
 
         # we will have to return all processed inputs in a dict
