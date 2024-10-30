@@ -152,9 +152,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
             return {"loss": loss, "logits": logits}
         return {"logits": logits}
 ```
-في كلتا الحالتين، لاحظ كيف نرث من `PreTrainedModel` ونستدعي تهيئة الفئة الفائقة باستخدام `config`
-(مثلما تفعل عند كتابة وحدة `torch.nn.Module` عادية). السطر الذي يحدد `config_class` ليس إلزاميًا، ما لم
-ترغب في تسجيل نموذجك باستخدام الفئات التلقائية (راجع القسم الأخير).
+في كلتا الحالتين، لاحظ كيف نرث من `PreTrainedModel` ونستدعي مُهيئ الفئة الرئيسية باستخدام `config` (كما تفعل عند إنشاء وحدة `torch.nn.Module` عادية). ليس من الضروري تعريف `config_class` إلا إذا كنت ترغب في تسجيل نموذجك مع الفئات التلقائية (راجع القسم الأخير).
 
 <Tip>
 
