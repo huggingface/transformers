@@ -407,7 +407,7 @@ class PixtralPreTrainedModel(PreTrainedModel):
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
+            else self.config.initializer_range
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
