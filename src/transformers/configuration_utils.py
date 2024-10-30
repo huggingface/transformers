@@ -184,6 +184,9 @@ class PretrainedConfig(PushToHubMixin):
             Whether the model should use legacy TensorFlow losses. Legacy losses have variable output shapes and may
             not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
             v5.
+        loss_type (`str`, *optional*):
+            The type of loss that the model should use. It should be in `LOSS_MAPPING`'s keys, otherwise the loss will
+            be automatically infered from the model architecture.
     """
 
     model_type: str = ""
@@ -293,6 +296,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Attention implementation to use, if relevant.
         self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
+        self._attn_implementation_autoset = False
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -772,6 +776,10 @@ class PretrainedConfig(PushToHubMixin):
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def __iter__(self):
+        for attr in self.__dict__:
+            yield attr
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """

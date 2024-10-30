@@ -1,9 +1,13 @@
 import warnings
 from typing import List, Union
 
-import numpy as np
-
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
+from ..utils import (
+    add_end_docstrings,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -13,8 +17,6 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    import torch
-
     from ..models.auto.modeling_auto import MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -114,14 +116,19 @@ class DepthEstimationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs):
-        predicted_depth = model_outputs.predicted_depth
-        prediction = torch.nn.functional.interpolate(
-            predicted_depth.unsqueeze(1), size=model_outputs["target_size"], mode="bicubic", align_corners=False
+        outputs = self.image_processor.post_process_depth_estimation(
+            model_outputs,
+            # this acts as `source_sizes` for ZoeDepth and as `target_sizes` for the rest of the models so do *not*
+            # replace with `target_sizes = [model_outputs["target_size"]]`
+            [model_outputs["target_size"]],
         )
-        output = prediction.squeeze().cpu().numpy()
-        formatted = (output * 255 / np.max(output)).astype("uint8")
-        depth = Image.fromarray(formatted)
-        output_dict = {}
-        output_dict["predicted_depth"] = predicted_depth
-        output_dict["depth"] = depth
-        return output_dict
+
+        formatted_outputs = []
+        for output in outputs:
+            depth = output["predicted_depth"].detach().cpu().numpy()
+            depth = (depth - depth.min()) / (depth.max() - depth.min())
+            depth = Image.fromarray((depth * 255).astype("uint8"))
+
+            formatted_outputs.append({"predicted_depth": output["predicted_depth"], "depth": depth})
+
+        return formatted_outputs[0] if len(outputs) == 1 else formatted_outputs

@@ -34,6 +34,7 @@ from huggingface_hub import (
     ImageToTextInput,
     ObjectDetectionInput,
     QuestionAnsweringInput,
+    VideoClassificationInput,
     ZeroShotImageClassificationInput,
 )
 
@@ -47,11 +48,12 @@ from transformers.pipelines import (
     ImageToTextPipeline,
     ObjectDetectionPipeline,
     QuestionAnsweringPipeline,
+    VideoClassificationPipeline,
     ZeroShotImageClassificationPipeline,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
-    require_decord,
+    require_av,
     require_pytesseract,
     require_timm,
     require_torch,
@@ -132,6 +134,7 @@ task_to_pipeline_and_spec_mapping = {
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
     "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
+    "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
@@ -722,14 +725,14 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch_or_tf
     @require_vision
-    @require_decord
+    @require_av
     def test_pipeline_video_classification(self):
         self.run_task_tests(task="video-classification")
 
     @is_pipeline_test
     @require_vision
-    @require_decord
     @require_torch
+    @require_av
     def test_pipeline_video_classification_fp16(self):
         self.run_task_tests(task="video-classification", torch_dtype="float16")
 
