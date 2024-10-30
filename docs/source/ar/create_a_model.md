@@ -188,7 +188,7 @@ DistilBertConfig {
 
 </Tip>
 
-إذا قمت بتدريب محول رموز مخصص، فيمكنك إنشاء واحد من ملف *المفردات* الخاص بك:
+إذا دربت مجزئ النصوص خاص بك، فيمكنك إنشاء واحد من *قاموسك*:```
 
 ```py
 >>> from transformers import DistilBertTokenizer
