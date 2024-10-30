@@ -475,7 +475,7 @@ def read_video_decord(video_path: str, num_frames: Optional[int] = None):
     return frames
 
 
-def read_video_pyav(video_path: str, num_frames: int = None):
+def read_video_pyav(video_path: str, num_frames: Optional[int] = None):
     """
     Decode the video with PyAV decoder.
 
