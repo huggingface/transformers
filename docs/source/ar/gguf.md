@@ -79,7 +79,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 
 لإعادة التحويل إلى ملف `gguf`، نوصي باستخدام ملف [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py) من llama.cpp.
 
-فيما يلي كيفية إكمال البرنامج النصي أعلاه لحفظ النموذج وتصديره مرة أخرى إلى `gguf`:
+فيما يلي كيفية إكمال البرنامج النصي أعلاه لحفظ النموذج وإعادة تصديره مرة أخرى إلى `gguf`:
 
 ```py
 tokenizer.save_pretrained('directory')
