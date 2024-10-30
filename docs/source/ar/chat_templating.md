@@ -72,7 +72,7 @@ messages = [
 tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 print(tokenizer.decode(tokenized_chat[0]))
 ```
-سيؤدي هذا إلى سلسلة بتنسيق الإدخال الذي يتوقعه Zephyr.
+سيؤدي هذا إلى إنتاج سلسلة نصية بتنسيق الإدخال الذي يتوقعه Zephyr.
 
 ```النص
 <|system|>
