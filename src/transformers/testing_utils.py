@@ -29,7 +29,6 @@ import sys
 import tempfile
 import time
 import unittest
-from packaging import version
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import MISSING, fields
@@ -41,6 +40,7 @@ from unittest import mock
 from unittest.mock import patch
 
 import urllib3
+from packaging import version
 
 from transformers import logging as transformers_logging
 
@@ -1292,6 +1292,7 @@ def require_jumanpp(test_case):
     """
     return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
 
+
 def require_python_311(test_case):
     """
     Decorator marking a test that requires python 3.11
@@ -1300,7 +1301,6 @@ def require_python_311(test_case):
     current_version = version.parse(sys.version.split()[0])
     min_version = version.parse("3.11")
     return unittest.skipUnless(current_version >= min_version, "test requires python v3.11+")(test_case)
-
 
 
 def require_cython(test_case):
