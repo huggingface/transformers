@@ -933,18 +933,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
-    @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
-        # We remove the checks on `is_torch_sdpa_available()` and `cls._supports_sdpa` as Falcon supports SDPA from torch==2.0.0 (no requirement on 2.1).
-        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
-        if _is_bettertransformer:
-            return config
-
-        if not hard_check_only:
-            config._attn_implementation = "sdpa"
-        return config
-
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
@@ -1441,6 +1429,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -1663,19 +1652,33 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
         attention_mask=None,
         position_ids=None,
+        inputs_embeds=None,
+        past_key_values=None,
+        cache_position=None,
         pixel_values=None,
         image_hidden_states=None,
         image_attention_mask=None,
         use_cache=None,
-        cache_position=None,
         **kwargs,
     ):
+        # Overwritten -- custom processing based on `config.use_resampler`
+
+        model_inputs = {}
+        if image_hidden_states is not None:
+            if self.config.use_resampler:
+                model_inputs["perceiver_embeddings"] = image_hidden_states
+            else:
+                model_inputs["image_encoder_embeddings"] = image_hidden_states
+        else:
+            model_inputs["pixel_values"] = pixel_values
+
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         if past_key_values is not None:
-            if input_ids.shape[1] != cache_position.shape[0]:
+            if inputs_embeds is not None:
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:
                 input_ids = input_ids[:, cache_position]
                 if image_attention_mask is not None:
                     image_attention_mask = image_attention_mask[:, -input_ids.shape[1] :]
@@ -1690,19 +1693,17 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
                 # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
                 position_ids = position_ids.clone(memory_format=torch.contiguous_format)
 
-        model_inputs = {}
-        image_hidden_states = kwargs.pop("image_hidden_states", None)
-        if image_hidden_states is not None:
-            if self.config.use_resampler:
-                model_inputs["perceiver_embeddings"] = image_hidden_states
-            else:
-                model_inputs["image_encoder_embeddings"] = image_hidden_states
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs.update({"inputs_embeds": inputs_embeds, "input_ids": None})
         else:
-            model_inputs["pixel_values"] = pixel_values
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs.update(
+                {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+            )
 
         model_inputs.update(
             {
-                "input_ids": input_ids,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "cache_position": cache_position,
