@@ -125,8 +125,8 @@
 #     title: تشغيل التدريب على Amazon SageMaker
 #   - local: serialization
 #     title: التصدير إلى ONNX
-#   - local: tflite
-#     title: التصدير إلى TFLite
+  - local: tflite
+    title: التصدير إلى TFLite
 #   - local: torchscript
 #     title: التصدير إلى TorchScript
 #   - local: benchmarks
@@ -137,8 +137,8 @@
 #     title: موارد المجتمع
 #   - local: troubleshooting
 #     title: استكشاف الأخطاء وإصلاحها
-#   - local: gguf
-#     title: التوافق مع ملفات GGUF
+  - local: gguf
+    title: التوافق مع ملفات GGUF
   title: أدلة المطورين
 # - sections:
 #   - local: quantization/overview
