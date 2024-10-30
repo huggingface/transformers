@@ -311,7 +311,7 @@ config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbon
 model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة النهائي
 ```
 
-يمكنك أيضًا تحميل تكوين العمود الفقري بشكل منفصل ثم تمريره إلى تكوين النموذج.
+يمكنك أيضًا تحميل تكوين الجزء الأساسي بشكل منفصل، ثم تمريره إلى تكوين النموذج.```
 
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
