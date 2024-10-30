@@ -326,7 +326,7 @@ model = MaskFormerForInstanceSegmentation(config)
 
 يتم تحميل نماذج [timm](https://hf.co/docs/timm/index) داخل نموذج باستخدام `use_timm_backbone=True` أو باستخدام [`TimmBackbone`] و [`TimmBackboneConfig`].
 
-استخدم `use_timm_backbone=True` و `use_pretrained_backbone=True` لتحميل الأوزان المسبقة التدريب لـ timm للعمود الفقري.
+استخدم `use_timm_backbone=True` و `use_pretrained_backbone=True` لتحميل أوزان timm المُدرّبة مسبقًا للجزء الأساسي.
 
 ```python
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
