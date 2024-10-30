@@ -322,7 +322,7 @@ model = MaskFormerForInstanceSegmentation(config)
 ```
 
 </hfoption>
-</hfoptions id="timm backbone">
+<hfoption id="timm backbone">
 
 يتم تحميل نماذج [timm](https://hf.co/docs/timm/index) داخل نموذج باستخدام `use_timm_backbone=True` أو باستخدام [`TimmBackbone`] و [`TimmBackboneConfig`].
 
