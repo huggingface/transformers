@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 class DiffLlamaConfig(LlamaConfig):
-    model_type = "diffllama"
+    model_type = "diff_llama"
 
 
 class DiffLlamaAttention(LlamaAttention):
