@@ -402,7 +402,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
-def get_uniform_frame_indices(total_num_frames: int, num_frames: int = None):
+def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] = None):
     """
     Creates a numpy array for uniform sampling of `num_frame` frames from `total_num_frames`
     when loading a video.
