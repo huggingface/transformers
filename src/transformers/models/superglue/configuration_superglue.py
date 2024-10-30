@@ -73,18 +73,18 @@ class SuperGlueConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
         # Check whether all gnn_layers_types are either 'self' or 'cross'
-        if not all(layer_type in ["self", "cross"] for layer_type in gnn_layers_types):
+        if not all(layer_type in ["self", "cross"] for layer_type in self.gnn_layers_types):
             raise ValueError("All gnn_layers_types must be either 'self' or 'cross'")
 
         if descriptor_dim % num_heads != 0:
             raise ValueError("descriptor_dim % num_heads is different from zero")
 
-        self.descriptor_dim = descriptor_dim
         self.keypoint_encoder_sizes = (
             keypoint_encoder_sizes if keypoint_encoder_sizes is not None else [32, 64, 128, 256]
         )
-        self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
+        self.descriptor_dim = descriptor_dim
         self.keypoint_encoder_sizes = keypoint_encoder_sizes
         self.gnn_layers_types = gnn_layers_types
         self.num_heads = num_heads
