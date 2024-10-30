@@ -17,12 +17,10 @@
 import tempfile
 import unittest
 
-import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GraniteConfig, is_torch_available, set_seed
+from transformers import GraniteConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_bitsandbytes,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -303,9 +301,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "ibm/PowerLM-3b"
-
     def setUp(self):
         self.model_tester = GraniteModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GraniteConfig, hidden_size=37)
@@ -422,46 +417,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @require_read_token
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b",
-            load_in_4bit=True,
-            device_map={"": 0},
-            attn_implementation="flash_attention_2",
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
 
     @require_flash_attn
     @require_torch_gpu

@@ -26,7 +26,6 @@ from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_avail
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     backend_empty_cache,
-    require_bitsandbytes,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -316,9 +315,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "meta-llama/Llama-2-7b-hf"
-
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
 
@@ -584,43 +580,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
         with self.assertRaises(KeyError):
             config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
-
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @require_read_token
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
-
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
 
     @require_flash_attn
     @require_torch_gpu

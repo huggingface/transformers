@@ -301,10 +301,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="Generate needs input ids")
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
-
     @unittest.skip(reason="CPU offload is not yet supported")
     def test_cpu_offload(self):
         pass
