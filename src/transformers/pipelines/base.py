@@ -980,7 +980,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         # tweaks to the generation config.
         # 2 - load the assistant model if it is passed.
         self.assistant_model, self.assistant_tokenizer = load_assistant_model(
-            self.model, kwargs.get("assistant_model"), kwargs.get("assistant_tokenizer")
+            self.model, kwargs.pop("assistant_model", None), kwargs.pop("assistant_tokenizer", None)
         )
         if self.model.can_generate():
             self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None

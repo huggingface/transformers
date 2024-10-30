@@ -1,5 +1,4 @@
 import enum
-import warnings
 from typing import Dict
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available
@@ -192,12 +191,13 @@ class TextGenerationPipeline(Pipeline):
 
         if stop_sequence is not None:
             stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                warnings.warn(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    " the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+            generate_kwargs["eos_token_id"] = stop_sequence_ids
+
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -366,15 +366,6 @@ class TextGenerationPipeline(Pipeline):
         # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
-
-        # If an assistant model is defined, use it to generate the response
-        # NOTE: assisted generation currently only supports batch size = 1
-        if in_b == 1:
-            if self.assistant_model is not None:
-                generate_kwargs["assistant_model"] = self.assistant_model
-            if self.assistant_tokenizer is not None:
-                generate_kwargs["tokenizer"] = self.tokenizer
-                generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
 
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
         out_b = generated_sequence.shape[0]
