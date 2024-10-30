@@ -456,7 +456,7 @@ model_input = tokenizer.apply_chat_template(
 tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
 ```
 
-يغلف هذا القالب كل رسالة بين الرمزين "<|im_start|>" و "<|im_end|>"، ويكتب ببساطة الدور كسلسلة، مما يسمح بالمرونة في الأدوار التي تتدرب عليها. يبدو الإخراج كما يلي:
+يُحيط هذا القالب كل رسالة بين الرمزين "<|im_start|>" و "<|im_end|>"، ويكتب ببساطة الدور كسلسلة نصية، مما يسمح بالمرونة في الأدوار التي تتدرب عليها. يبدو الناتج كما يلي:
 
 ```text
 <|im_start|>system
