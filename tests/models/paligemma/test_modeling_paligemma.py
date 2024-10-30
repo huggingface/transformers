@@ -159,7 +159,8 @@ class PaliGemmaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
@@ -186,6 +187,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
@@ -233,6 +235,36 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
+
+    # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs through an error with explicit message saying what is wrong
+        when number of images don't match number of image tokens in the text.
+        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            _ = model(**input_dict)  # successfull forward with no modifications
+
+            # remove one image but leave the image token in text
+            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**input_dict)
+
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = input_dict["input_ids"][:1]
+            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -312,6 +344,16 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
 

@@ -180,10 +180,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
-        pass
-
-    @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
@@ -321,6 +317,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -336,11 +333,29 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         pass
 
     @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
+    def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_inference_padding_right(self):
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(
+        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
+    )
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token

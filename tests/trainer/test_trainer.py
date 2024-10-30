@@ -38,7 +38,11 @@ from parameterized import parameterized
 from requests.exceptions import HTTPError
 
 from transformers import (
+    AutoFeatureExtractor,
+    AutoImageProcessor,
+    AutoProcessor,
     AutoTokenizer,
+    DataCollatorForLanguageModeling,
     IntervalStrategy,
     PretrainedConfig,
     TrainerCallback,
@@ -46,6 +50,7 @@ from transformers import (
     get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
     logging,
+    set_seed,
 )
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
@@ -89,6 +94,7 @@ from transformers.testing_utils import (
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
     require_torchdynamo,
+    require_vision,
     require_wandb,
     slow,
     torch_device,
@@ -149,6 +155,19 @@ if is_accelerate_available():
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
 
+class StoreLossCallback(TrainerCallback):
+    """
+    Simple callback to store the loss.
+    """
+
+    def __init__(self):
+        self.losses = []
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if "loss" in logs:
+            self.losses.append(logs["loss"])
+
+
 class MockCudaOOMCallback(TrainerCallback):
     """
     Simple callback to simulate CUDA OOM error if
@@ -162,6 +181,26 @@ class MockCudaOOMCallback(TrainerCallback):
         # simulate OOM on the first step
         if state.train_batch_size >= self.batch_size_limit:
             raise RuntimeError("CUDA out of memory.")
+
+
+def ForCausalLMLoss(logits, labels, vocab_size, num_items_in_batch, disable_num_items_in_batch=False):
+    # Upcast to float if we need to compute the loss to avoid potential precision issues
+    logits = logits.float()
+    # Shift so that tokens < n predict n
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+
+    # Flatten the tokens
+    shift_logits = shift_logits.view(-1, vocab_size)
+    shift_labels = shift_labels.view(-1)
+    # Enable model parallelism
+    shift_labels = shift_labels.to(shift_logits.device)
+    if num_items_in_batch is None or disable_num_items_in_batch:
+        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="mean")
+    else:
+        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="sum")
+        loss = loss / num_items_in_batch
+    return loss
 
 
 class RegressionDataset:
@@ -434,6 +473,31 @@ if is_torch_available():
             loss = nn.functional.mse_loss(y, labels)
             return (loss, y)
 
+    class BasicTextGenerationModel(nn.Module):
+        def __init__(self, vocab_size, hidden_size):
+            super().__init__()
+            self.embedding = nn.Embedding(vocab_size, hidden_size)
+            self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
+            self.fc = nn.Linear(hidden_size, vocab_size)
+
+        def forward(self, input_ids, **kwargs):
+            embedded = self.embedding(input_ids)
+            lstm_out, _ = self.lstm(embedded)
+            logits = self.fc(lstm_out)
+            return logits
+
+    def create_dummy_dataset_for_text_generation(vocab_size, seq_length, num_samples):
+        import datasets
+        import numpy as np
+
+        # Create random input sequences
+        input_ids = np.random.randint(0, vocab_size, (num_samples, seq_length))
+
+        # Create a datasets.Dataset
+        dataset = datasets.Dataset.from_dict({"input_ids": input_ids, "labels": input_ids})
+
+        return dataset
+
     class TstLayer(nn.Module):
         def __init__(self, hidden_size):
             super().__init__()
@@ -672,8 +736,105 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
+    @slow
+    def test_gradient_accumulation_loss_alignment(self):
+        set_seed(42)
+        import datasets
+
+        model_name = "distilgpt2"
+        dataset_name = "wikitext"
+        dataset_config = "wikitext-2-raw-v1"
+        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:500]")
+        dataset = dataset.train_test_split(test_size=0.2)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        def tokenize_function(examples):
+            return tokenizer(examples["text"])
+
+        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
+
+        tokenizer.pad_token = tokenizer.eos_token
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+
+        def compute_loss(logits, labels, vocab_size, num_items_in_batch, disable_num_items_in_batch=False):
+            return ForCausalLMLoss(
+                logits["logits"], labels, vocab_size, num_items_in_batch, disable_num_items_in_batch
+            )
+
+        loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=False)
+
+        base_loss_callback = StoreLossCallback()
+
+        args_kwargs = {
+            "report_to": "none",
+            "logging_steps": 1,
+            "max_steps": 20,
+            "learning_rate": 3e-4,
+            "disable_tqdm": True,
+        }
+
+        args = TrainingArguments(
+            "./generation",
+            **args_kwargs,
+        )
+        trainer = Trainer(
+            model,
+            args,
+            train_dataset=tokenized_dataset["train"],
+            callbacks=[base_loss_callback],
+            compute_loss_func=loss_fn,
+            data_collator=data_collator,
+        )
+        trainer.train()
+
+        grad_accum_loss_callback = StoreLossCallback()
+        args = TrainingArguments(
+            "./generation",
+            **args_kwargs,
+            gradient_accumulation_steps=2,
+            per_device_train_batch_size=4,
+        )
+        set_seed(42)
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        trainer = Trainer(
+            model,
+            args,
+            train_dataset=tokenized_dataset["train"],
+            callbacks=[grad_accum_loss_callback],
+            compute_loss_func=loss_fn,
+            data_collator=data_collator,
+        )
+        trainer.train()
+
+        set_seed(42)
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        broken_loss_callback = StoreLossCallback()
+        loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=True)
+        trainer = Trainer(
+            model,
+            args,
+            train_dataset=tokenized_dataset["train"],
+            callbacks=[broken_loss_callback],
+            compute_loss_func=loss_fn,
+            data_collator=data_collator,
+        )
+        trainer.train()
+
+        # Calculate the difference between the base loss and the grad_accum loss
+        diff_truth = [base - grad for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)]
+        diff_broken = [base - grad for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
+        # These should be quite close
+        for diff in diff_truth:
+            self.assertLess(abs(diff), 0.1, f"Difference {diff} is not within 0.1")
+
+        # These should be very off
+        for diff in diff_broken:
+            self.assertGreater(abs(diff), 0.1, f"Difference {diff} is not greater than 0.1")
+
     def test_gradient_accumulation(self):
-        # Training with half the batch size but accumulation steps as 2 should give the same results.
+        # Training with half the batch size but accumulation steps as 2 should give the same training losses.
         trainer = get_regression_trainer(
             gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1
         )
@@ -1059,14 +1220,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 max_steps=10,
                 use_cpu=True,
             )
-            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+            trainer = Trainer(tiny_model, args, processing_class=tokenizer, train_dataset=train_dataset)
 
             trainer.train()
             parameters = dict(tiny_model.named_parameters())
             state = dataclasses.asdict(trainer.state)
 
             # Reinitialize trainer
-            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+            trainer = Trainer(tiny_model, args, processing_class=tokenizer, train_dataset=train_dataset)
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
@@ -3785,6 +3946,183 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
+
+    def test_trainer_saves_tokenizer(self):
+        MODEL_ID = "google-bert/bert-base-uncased"
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, use_fast=False)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=tokenizer,
+            )
+            trainer.save_model()
+
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+
+        # For tokenizers, there isn't a direct to_dict method and the properties stored in the configs e.g.
+        # saved tokens change overtime, so we check that two tokenizers are equal by comparing their encoded outputs
+        test_sentence = "This is a test sentence"
+        self.assertListEqual(
+            tokenizer(test_sentence, padding="max_length").input_ids,
+            reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
+        )
+
+    @require_vision
+    def test_trainer_saves_image_processor(self):
+        MODEL_ID = "openai/clip-vit-base-patch32"
+        image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=image_processor,
+            )
+            trainer.save_model()
+            reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(image_processor.to_dict(), reloaded_image_processor.to_dict())
+
+    def test_trainer_saves_feature_extractor(self):
+        MODEL_ID = "facebook/wav2vec2-base-960h"
+        feature_extractor = AutoFeatureExtractor.from_pretrained(MODEL_ID)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=feature_extractor,
+            )
+            trainer.save_model()
+
+            reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(feature_extractor.to_dict(), reloaded_feature_extractor.to_dict())
+
+    @require_vision
+    def test_trainer_saves_processor(self):
+        MODEL_ID = "openai/clip-vit-base-patch32"
+        image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, use_fast=False)
+        processor = AutoProcessor.from_pretrained(MODEL_ID)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            trainer = Trainer(
+                model=RegressionPreTrainedModel(config),
+                args=TrainingArguments(output_dir=tmp_dir),
+                processing_class=processor,
+            )
+            trainer.save_model()
+
+            reloaded_processor = AutoProcessor.from_pretrained(tmp_dir)
+            reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir)
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(reloaded_processor.to_dict(), processor.to_dict())
+
+        image_processor_dict = image_processor.to_dict()
+        reloaded_image_processor_dict = reloaded_image_processor.to_dict()
+        # When the processor is saved in the trainer, the _processor_class gets set in the reload_image_processor dict
+        image_processor_dict.pop("_processor_class")
+        reloaded_image_processor_dict.pop("_processor_class")
+        self.assertDictEqual(image_processor_dict, reloaded_image_processor_dict)
+
+        # For tokenizers, there isn't a direct to_dict method and the properties stored in the configs e.g.
+        # saved tokens change overtime, so we check that two tokenizers are equal by comparing their encoded outputs
+        test_sentence = "This is a test sentence"
+        self.assertListEqual(
+            tokenizer(test_sentence, padding="max_length").input_ids,
+            reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
+        )
+
+    def test_save_best_checkpoint(self):
+        freq = int(64 / self.batch_size)
+        total = int(self.n_epochs * 64 / self.batch_size)
+
+        # Case 1: args.metric_for_best_model == "accuracy".
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                output_dir=tmpdir,
+                learning_rate=0.1,
+                eval_strategy="epoch",
+                save_strategy="best",
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+            )
+            self.assertTrue(trainer.args.metric_for_best_model == "accuracy")
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_loss": 0.03, "eval_accuracy": 0.60, "epoch": 1.0},
+                    {"eval_loss": 0.02, "eval_accuracy": 0.65, "epoch": 2.0},
+                    {"eval_loss": 0.01, "eval_accuracy": 0.64, "epoch": 3.0},
+                ],
+            ):
+                trainer.train()
+
+                self.assertEqual(len(os.listdir(tmpdir)), 2)
+                self.check_saved_checkpoints(
+                    output_dir=tmpdir,
+                    freq=freq,
+                    total=total,
+                )
+
+        # Case 2: args.metric_for_best_model == "loss".
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                output_dir=tmpdir,
+                learning_rate=0.1,
+                eval_strategy="epoch",
+                save_strategy="best",
+                metric_for_best_model="loss",
+                compute_metrics=AlmostAccuracy(),
+            )
+            self.assertTrue(trainer.args.metric_for_best_model == "loss")
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_loss": 0.03, "eval_accuracy": 0.60, "epoch": 1.0},
+                    {"eval_loss": 0.02, "eval_accuracy": 0.65, "epoch": 2.0},
+                    {"eval_loss": 0.03, "eval_accuracy": 0.66, "epoch": 3.0},
+                ],
+            ):
+                trainer.train()
+
+                self.assertEqual(len(os.listdir(tmpdir)), 2)
+                self.check_saved_checkpoints(
+                    output_dir=tmpdir,
+                    freq=freq,
+                    total=total,
+                )
+
+        # Case 3: Metric name not provided; throw error.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(ValueError) as context:
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    output_dir=tmpdir,
+                    learning_rate=0.1,
+                    eval_strategy="epoch",
+                    save_strategy="best",
+                    compute_metrics=AlmostAccuracy(),
+                )
+
+            self.assertIn("`args.metric_for_best_model` must be provided", str(context.exception))
 
 
 @require_torch

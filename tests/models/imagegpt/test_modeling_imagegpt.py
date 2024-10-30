@@ -18,7 +18,7 @@ import inspect
 import unittest
 
 from transformers import ImageGPTConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, run_test_using_subprocess, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -256,6 +256,10 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
+
+    @run_test_using_subprocess
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        super().test_beam_search_generate_dict_outputs_use_cache()
 
     def setUp(self):
         self.model_tester = ImageGPTModelTester(self)

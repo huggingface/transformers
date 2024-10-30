@@ -72,7 +72,7 @@ else:
             ("deit", ("DeiTImageProcessor",)),
             ("depth_anything", ("DPTImageProcessor",)),
             ("deta", ("DetaImageProcessor",)),
-            ("detr", ("DetrImageProcessor",)),
+            ("detr", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("dinat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("dinov2", ("BitImageProcessor",)),
             ("donut-swin", ("DonutImageProcessor",)),
@@ -123,7 +123,7 @@ else:
             ("qwen2_vl", ("Qwen2VLImageProcessor",)),
             ("regnet", ("ConvNextImageProcessor",)),
             ("resnet", ("ConvNextImageProcessor",)),
-            ("rt_detr", "RTDetrImageProcessor"),
+            ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor",)),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
@@ -431,7 +431,9 @@ class AutoImageProcessor:
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_class is None and image_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
             # It could be in `config.image_processor_type``
             image_processor_class = getattr(config, "image_processor_type", None)
             if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:

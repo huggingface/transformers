@@ -21,7 +21,6 @@ import unittest
 
 import numpy as np
 from datasets import Audio, load_dataset
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -170,7 +169,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
-    input_name = "input_values"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
@@ -746,22 +744,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    # For now, Let's focus only on GPU for `torch.compile`
-    @slow
-    @require_torch_gpu
-    def test_torch_compile(self):
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        n_iter = 3
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.forward = torch.compile(model.forward)
-            for i in range(n_iter):
-                _ = model(inputs_dict["input_values"].to(torch_device))
-
     @is_flaky()
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
@@ -791,6 +773,7 @@ class MimiIntegrationTest(unittest.TestCase):
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
         model_id = "kyutai/mimi"
 
         model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
@@ -841,6 +824,7 @@ class MimiIntegrationTest(unittest.TestCase):
             "32": 1803071,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
         model_id = "kyutai/mimi"
 
         processor = AutoFeatureExtractor.from_pretrained(model_id)

@@ -820,6 +820,8 @@ class ProcessorMixin(PushToHubMixin):
             "common_kwargs": {},
         }
 
+        used_keys = set()
+
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
@@ -827,7 +829,12 @@ class ProcessorMixin(PushToHubMixin):
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
-                    default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                    value = (
+                        getattr(self.tokenizer, modality_key)
+                        if hasattr(self.tokenizer, modality_key)
+                        else tokenizer_init_kwargs[modality_key]
+                    )
+                    default_kwargs[modality][modality_key] = value
         # now defaults kwargs are updated with the tokenizers defaults.
         # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
@@ -846,18 +853,34 @@ class ProcessorMixin(PushToHubMixin):
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
                 elif modality_key in kwargs:
-                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                    # we get a modality_key instead of popping it because modality-specific processors
+                    # can have overlapping kwargs
+                    kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
                 if kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
-        # if something remains in kwargs, it belongs to common after flattening
-        if set(kwargs) & set(default_kwargs):
-            # here kwargs is dictionary-based since it shares keys with default set
-            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+                    used_keys.add(modality_key)
+
+        # Determine if kwargs is a flat dictionary or contains nested dictionaries
+        if any(key in default_kwargs for key in kwargs):
+            # kwargs is dictionary-based, and some keys match modality names
+            for modality, subdict in kwargs.items():
+                if modality in default_kwargs:
+                    for subkey, subvalue in subdict.items():
+                        if subkey not in used_keys:
+                            output_kwargs[modality][subkey] = subvalue
+                            used_keys.add(subkey)
         else:
-            # here it's a flat dict
-            output_kwargs["common_kwargs"].update(kwargs)
+            # kwargs is a flat dictionary
+            for key in kwargs:
+                if key not in used_keys:
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                        output_kwargs["common_kwargs"][key] = kwargs[key]
+                    else:
+                        logger.warning_once(
+                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                        )
 
         # all modality-specific kwargs are updated with common kwargs
         for modality in output_kwargs:

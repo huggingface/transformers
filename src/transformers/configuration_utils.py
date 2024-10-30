@@ -184,6 +184,9 @@ class PretrainedConfig(PushToHubMixin):
             Whether the model should use legacy TensorFlow losses. Legacy losses have variable output shapes and may
             not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
             v5.
+        loss_type (`str`, *optional*):
+            The type of loss that the model should use. It should be in `LOSS_MAPPING`'s keys, otherwise the loss will
+            be automatically infered from the model architecture.
     """
 
     model_type: str = ""
@@ -293,6 +296,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Attention implementation to use, if relevant.
         self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
+        self._attn_implementation_autoset = False
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -380,11 +384,14 @@ class PretrainedConfig(PushToHubMixin):
 
         non_default_generation_parameters = self._get_non_default_generation_parameters()
         if len(non_default_generation_parameters) > 0:
-            raise ValueError(
+            # TODO (joao): this should be an exception if the user has modified the loaded config. See #33886
+            warnings.warn(
                 "Some non-default generation parameters are set in the model config. These should go into either a) "
                 "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
-                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
-                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}"
+                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
+                "This warning will become an exception in the future."
+                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
+                UserWarning,
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -770,6 +777,10 @@ class PretrainedConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
+    def __iter__(self):
+        for attr in self.__dict__:
+            yield attr
+
     def to_diff_dict(self) -> Dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
@@ -1033,7 +1044,7 @@ class PretrainedConfig(PushToHubMixin):
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
             else:
-                decoder_config = None
+                default_config = None
 
         # If it is a composite model, we want to check the subconfig that will be used for generation
         self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
