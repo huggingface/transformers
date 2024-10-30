@@ -18,7 +18,9 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from sklearn.metrics import roc_curve
+from ..utils import is_sklearn_available
+if is_sklearn_available():
+    from sklearn.metrics import roc_curve
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
@@ -272,7 +274,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
 
         # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
-        if self.assistant_model.generation_config.assistant_confidence_threshold:
+        if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
             # update self.matches
             self.matches.extend([1] * num_matches)
             if len(self.probs) > len(self.matches):
@@ -283,7 +285,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             if excess_length > 0:
                 del self.probs[-excess_length:]
 
-            if len(self.probs) > 5:  # require at least 5 samples to calculate the ROC curve
+            if len(self.probs) > 5 and {0, 1}.issubset(self.matches):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
                 fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
                 fnr = 1 - tpr
 
