@@ -82,7 +82,7 @@ How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 ```
 
-الآن بعد أن تم تنسيق الإدخال بشكل صحيح لـ Zephyr، يمكننا استخدام النموذج لتوليد استجابة لسؤال المستخدم:
+الآن بعد أن تم تنسيق الإدخال بشكل صحيح لـ Zephyr، يمكننا استخدام النموذج لإنشاء رد على سؤال المستخدم:
 
 ```python
 outputs = model.generate(tokenized_chat, max_new_tokens=128)
