@@ -204,9 +204,9 @@ class PixtralProcessor(ProcessorMixin):
 
         if images is not None:
             if is_image_or_image_url(images):
-                images = [[images]]
-            elif isinstance(images, list) and is_image_or_image_url(images[0]):
                 images = [images]
+            elif isinstance(images, list) and is_image_or_image_url(images[0]):
+                images = images
             elif (
                 not isinstance(images, list)
                 and not isinstance(images[0], list)
@@ -215,7 +215,7 @@ class PixtralProcessor(ProcessorMixin):
                 raise ValueError(
                     "Invalid input images. Please provide a single image or a list of images or a list of list of images."
                 )
-            images = [[load_image(im) for im in sample] for sample in images]
+            images = [load_image(im) for im in images]
             image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
