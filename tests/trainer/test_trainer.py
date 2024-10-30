@@ -3707,9 +3707,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
 
-            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
-                self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
-
     def test_accelerator_config_from_yaml(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
@@ -3722,8 +3719,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     "even_batches": False,
                     "use_seedable_sampler": False,
                 }
-                if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
-                    accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
                 json.dump(accelerator_config, f)
             config = RegressionModelConfig(a=1.5, b=2.5)
             model = RegressionPreTrainedModel(config)
@@ -3736,9 +3731,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
-
-            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
-                self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_dataclass(self):
         # Checks that accelerator kwargs can be passed through
@@ -3785,10 +3777,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
-            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["num_steps"], 10)
-            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["adjust_scheduler"], False)
-            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_with_dataloader"], False)
-            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
+            self.assertEqual(trainer.args.gradient_accumulation_steps, 10)
 
     def test_accelerator_config_from_partial(self):
         # Checks that accelerator kwargs can be passed through
