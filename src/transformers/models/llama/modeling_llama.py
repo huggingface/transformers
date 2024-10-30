@@ -813,6 +813,8 @@ class LlamaModel(LlamaPreTrainedModel):
 
         self.gradient_checkpointing = False
         self._tp_plan = config._base_model_tp_plan
+        if config.pretraining_tp != 1:
+            logger.warn("`pretraining_tp` is deprecated, please use `tensor_parallel` method instead.")
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -340,9 +340,7 @@ def translate_to_torch_parallel_style(style: str):
     types.
     """
     if not isinstance(style, str):
-        raise ValueError(
-            f"Unsupported parallel style type {type(style)}, expected str"
-        )
+        raise ValueError(f"Unsupported parallel style type {type(style)}, expected str")
 
     if style == "colwise":
         return ColwiseParallel()

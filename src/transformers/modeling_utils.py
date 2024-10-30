@@ -5022,6 +5022,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_mesh (`torch.distributed.DeviceMesh`):
                 The device mesh to use for tensor parallelism.
         """
+
         # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
         # No op if `_tp_plan` attribute does not exist under the module.
         # This is a helper function to be used with `model.apply` to recursively
@@ -5029,9 +5030,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         def tplize(mod: torch.nn.Module) -> None:
             tp_plan = getattr(mod, "_tp_plan", None)
             if tp_plan:
-                logger.debug(
-                    f"Applying tensor parallel to {mod.__class__.__name__}: {tp_plan}"
-                )
+                logger.debug(f"Applying tensor parallel to {mod.__class__.__name__}: {tp_plan}")
                 # In model configs, we use a neutral type (string) to specify
                 # parallel styles, here we translate them into torch TP types.
                 # Using tree_map because `tp_plan` is a dict.
