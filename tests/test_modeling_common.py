@@ -4187,6 +4187,7 @@ class ModelTesterMixin:
                                         logits_eager = _logits_eager
 
                                     results = [torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol) for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)]
+                                    # If 80% batch elements have matched results, it's fine
                                     if np.mean(results) < 0.8:
                                         fail_cases.append(
                                             get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
