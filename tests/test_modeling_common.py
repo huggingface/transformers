@@ -4188,10 +4188,9 @@ class ModelTesterMixin:
 
                                     results = [torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol) for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)]
                                     if np.mean(results) < 0.8:
-                                        if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
-                                            )
+                                        fail_cases.append(
+                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                        )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
