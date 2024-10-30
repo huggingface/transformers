@@ -137,10 +137,10 @@ class GPT2TensorProcessor(TensorProcessor):
             name = "lm_head.weight"
             parsed_parameters = kwargs.get("parsed_parameters", {})
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
-            name = None
+            name = None # Signal to skip further processing
         return {
             "weights": weights,
-            "name": name,  # Signal to skip further processing
+            "name": name,
             "metadata": {},
         }
 
