@@ -1173,7 +1173,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 torch_compile=True,
                 num_train_epochs=1,
             )
-            # with self.assertRaises(ValueError):
             _ = Trainer(model=tiny_model, args=args, train_dataset=tokenized_datasets, tokenizer=tokenizer)  # noqa
 
     @require_peft
