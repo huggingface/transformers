@@ -1,6 +1,6 @@
 # GGUF وتفاعلها مع المحولات
 
-تُستخدم صيغة ملف GGUF لتخزين النماذج للاستنتاج مع [GGML](https://github.com/ggerganov/ggml) والمكتبات الأخرى التي تعتمد عليها، مثل [llama.cpp](https://github.com/ggerganov/llama.cpp) أو [whisper.cpp](https://github.com/ggerganov/whisper.cpp) الشهيرة جدًا.
+تُستخدم صيغة ملف GGUF لتخزين النماذج للاستدلال باستخدام [GGML](https://github.com/ggerganov/ggml) والمكتبات الأخرى التي تعتمد عليه، مثل [llama.cpp](https://github.com/ggerganov/llama.cpp) أو [whisper.cpp](https://github.com/ggerganov/whisper.cpp) الشهيرة جدًا.
 
 إنها صيغة ملف [مدعومة من قبل Hugging Face Hub](https://huggingface.co/docs/hub/en/gguf) مع ميزات تسمح بالتفتيش السريع للتوابع والبيانات الوصفية داخل الملف.
 
