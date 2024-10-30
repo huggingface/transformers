@@ -196,7 +196,7 @@ print(dataset['formatted_chat'][0])
 ```
 ونحصل على:
 
-```النص
+```text
 <|user|>
 Which is bigger, the moon or the sun?</s>
 <|assistant|>
