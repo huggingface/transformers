@@ -332,7 +332,7 @@ model = MaskFormerForInstanceSegmentation(config)
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
 config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=True, use_timm_backbone=True) # تكوين الجزء الأساسي والجزء الوسيط
-model = MaskFormerForInstanceSegmentation(config) # الرأس
+model = MaskFormerForInstanceSegmentation(config) # جزء المعالجة النهائي
 ```
 
 قم بتعيين `use_timm_backbone=True` و `use_pretrained_backbone=False` لتحميل عمود فقري timm مبدئي عشوائي.
