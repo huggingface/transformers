@@ -75,7 +75,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
 model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 ```
 
-الآن لديك حق الوصول إلى الإصدار الكامل غير المكمم للنموذج في نظام PyTorch البيئي، حيث يمكنك دمجه مع مجموعة من الأدوات الأخرى.
+الآن لديك إمكانية الوصول إلى النسخة الكامل غير المكممة للنموذج في بيئة PyTorch، حيث يمكنك دمجه مع مجموعة كبيرة من الأدوات الأخرى.
 
 لإعادة التحويل إلى ملف `gguf`، نوصي باستخدام ملف [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py) من llama.cpp.
 
