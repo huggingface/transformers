@@ -74,7 +74,7 @@ print(tokenizer.decode(tokenized_chat[0]))
 ```
 سيؤدي هذا إلى إنتاج سلسلة نصية بتنسيق الإدخال الذي يتوقعه Zephyr.
 
-```النص
+```text
 <|system|>
 You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
