@@ -526,7 +526,12 @@ I'm doing great!<|im_end|>
 
 </Tip>
 
+### دوال قابلة للاستدعاء
 
+هناك أيضًا قائمة قصيرة من الدوال القابلة للاستدعاء المتاحة لك داخل قوالبك. هذه هي:
+
+- `raise_exception(msg)`: تُثير `TemplateException`. هذا مفيد لتصحيح الأخطاء، ولإخبار المستخدمين عندما يفعلون شيئًا لا يدعمه قالبك.
+- `strftime_now(format_str)`: تُكافئ `datetime.now().strftime(format_str)` في Python. يُستخدم هذا للحصول على التاريخ/الوقت الحالي بتنسيق مُحدد، والذي يتم تضمينه أحيانًا في رسائل النظام.
 ### التوافق مع Jinja غير Python
 ```
 {%- if loop.last and add_generation_prompt %}
