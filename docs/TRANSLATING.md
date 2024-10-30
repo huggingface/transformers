@@ -2,14 +2,14 @@
 
 As part of our mission to democratize machine learning, we aim to make the Transformers library available in many more languages! Follow the steps below to help translate the documentation into your language.
 
-## Step 1: Open an Issue
+## Open an Issue
 
 1. Navigate to the Issues page of this repository.
 2. Check if anyone has already opened an issue for your language.
 3. If not, create a new issue by selecting the "Translation template" from the "New issue" button.
 4. Post a comment indicating which chapters you’d like to work on, and we’ll add your name to the list.
 
-## Step 2: Fork the Repository
+## Fork the Repository
 
 1. First, fork the Transformers repo by clicking the Fork button in the top-right corner.
 2. Clone your fork to your local machine for editing with the following command:
@@ -20,7 +20,7 @@ As part of our mission to democratize machine learning, we aim to make the Trans
    
    Replace `YOUR-USERNAME` with your GitHub username.
 
-## Step 3: Copy-Paste the English Version with a New Language Code
+## Copy-paste the English version with a new language code
 
 The documentation files are organized in the following directory:
 
@@ -44,7 +44,7 @@ To copy the English version to your new language directory:
 
    Replace `LANG-ID` with the appropriate ISO 639-1 or ISO 639-2 language code (see [this table](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) for reference).
 
-## Step 4: Start Translating
+## Start translating
 
 Begin translating the text!
 
@@ -65,6 +65,6 @@ Begin translating the text!
 
 2. Once you’ve translated the `_toctree.yml`, move on to translating the associated MDX files.
 
-## Step 5: Collaborate and Share
+## Collaborate and share
 
 If you'd like assistance with your translation, open an issue and tag `@stevhliu`. Feel free to share resources or glossaries to ensure consistent terminology.
