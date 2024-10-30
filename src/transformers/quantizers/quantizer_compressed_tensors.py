@@ -38,6 +38,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
+        breakpoint()
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -72,5 +73,5 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, safe_serialization=None) -> bool:
         return True

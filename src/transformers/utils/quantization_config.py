@@ -1102,6 +1102,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
+        version: Optional[str] = None,
         **kwargs,
     ):
         from compressed_tensors import QuantizationConfig
@@ -1121,6 +1122,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
+                    "version": version,
                     **kwargs,
                 }
             )
@@ -1150,11 +1152,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
         """
+        ver = config_dict.get("version", None)
+
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
                 **config_dict["quantization_config"],
             )
+        if ver is not None:
+            config_dict["version"] = ver
 
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
