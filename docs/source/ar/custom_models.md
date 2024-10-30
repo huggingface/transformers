@@ -315,8 +315,7 @@ from transformers import AutoModelForImageClassification
 model = AutoModelForImageClassification.from_pretrained("sgugger/custom-resnet50d", trust_remote_code=True)
 ```
 
-يُنصح بشدة أيضًا بتمرير علامة التجزئة للالتزام كـ `revision` للتأكد من أن مؤلف النماذج لم
-قم بتحديث الكود بخطوط جديدة ضارة (ما لم تثق تمامًا بمؤلفي النماذج).
+يُنصح بشدة بتحديد رقم إصدار (commit hash) كـ `revision`  للتأكد من عدم تعديل مؤلف النموذج للشفرة لاحقًابإضافة أسطر ضارة  (إلا إذا كنت تثق تمامًا بمؤلفي النموذج):
 
 ```py
 commit_hash = "ed94a7c6247d8aedce4647f00f20de6875b5b292"
