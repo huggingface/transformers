@@ -252,7 +252,7 @@ def auto_docstring(func):
             if param.annotation != inspect.Parameter.empty:
                 param_type = param.annotation
                 if "typing" in str(param_type):
-                    param_type = "".join(str(param_type).split('typing.')).replace('transformers.', '~')
+                    param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
                 else:
                     param_type = f"{param_type.__module__.replace('transformers.','~').replace('builtins','')}.{param.annotation.__name__}"
             else:
