@@ -701,10 +701,10 @@ class ModelFileMapper(ModuleMapper):
             # We need to differentiate between nodes that were already present (we can get relative order globally) and
             # nodes that were merged (we can get relative order only relative to the class the dependencies relate to)
             for class_dep in class_dependencies:
-                if class_dep in self.modular_file_start_lines:
-                    merged_dependencies.append(class_dep)
-                else:
+                if class_dep in self.start_lines:
                     original_dependencies.append(class_dep)
+                else:
+                    merged_dependencies.append(class_dep)
             # Sort both list according to the order in their respective file
             original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
             merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
