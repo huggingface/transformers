@@ -479,45 +479,45 @@ class ClassDependencyMapper(CSTVisitor):
     `global_names`.
     """
 
-    METADATA_DEPENDENCIES = (ParentNodeProvider,)
-
-    def __init__(self, class_name: str, global_names: set | None):
+    def __init__(self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None):
         super().__init__()
         self.class_name = class_name
         self.dependencies = set()
         self.global_names = global_names
+        self.objects_imported_from_modeling = set() if objects_imported_from_modeling is None else objects_imported_from_modeling
 
     def visit_Name(self, node):
-        if node.value != self.class_name and node.value in self.global_names:
-            parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-            # If it is only an annotation inside a method definition, do not add dependency (however, do it for
-            # annotations that are variable definitions, i.e. for Kwargs classes)
-            if m.matches(parent_node, m.Annotation()):
-                grand_parent = self.get_metadata(cst.metadata.ParentNodeProvider, parent_node)
-                if m.matches(grand_parent, m.Param() | m.FunctionDef()):
-                    return
+        if node.value != self.class_name and node.value in self.global_names and node.value not in self.objects_imported_from_modeling:
             self.dependencies.add(node.value)
 
 
 def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> set:
     """Create immediate dependencies for a class node based on the `global_names`."""
     temp_module = cst.Module(body=[node])
-    wrapper = MetadataWrapper(temp_module)
     visitor = ClassDependencyMapper(node.name.value, global_names)
-    wrapper.visit(visitor)
+    temp_module.visit(visitor)
     return visitor.dependencies
 
 
-def augmented_dependencies_for_class_node(node: cst.ClassDef, mapper: "ModuleMapper") -> set:
+def augmented_dependencies_for_class_node(node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None) -> set:
     """Create augmented dependencies for a class node based on a `mapper`.
     Augmented dependencies means immediate dependencies + recursive function and assignments dependencies.
     """
     temp_module = cst.Module(body=[node])
-    wrapper = MetadataWrapper(temp_module)
-    visitor = ClassDependencyMapper(node.name.value, set(mapper.global_nodes.keys()))
-    wrapper.visit(visitor)
+    visitor = ClassDependencyMapper(node.name.value, set(mapper.global_nodes.keys()), objects_imported_from_modeling)
+    temp_module.visit(visitor)
     return mapper.augment_dependencies(visitor.dependencies)
 
+
+# All the potential file types to create
+ALL_FILE_TYPES = (
+    "modeling",
+    "configuration",
+    "tokenization",
+    "processing",
+    "image_processing",
+    "feature_extractor",
+)
 
 class ModuleMapper(CSTVisitor, ABC):
     """An abstract visitor class which analyses a module, creating a mapping of dependencies for classes, functions and assignments.
@@ -539,7 +539,25 @@ class ModuleMapper(CSTVisitor, ABC):
         self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None                               # this keeps track of the current module-scope function
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
+        # this keeps track of objects imported from modeling files (`from .configuration import Config`) -> `Config` should not be a dependency
+        self.objects_imported_from_modeling = set()
+        # regex pattern joining every possible file type
+        self.match_patterns = "|".join(ALL_FILE_TYPES)
         # fmt: on
+
+    def visit_ImportFrom(self, node):
+        """This keeps track of objects imported from neighbor modeling files (e.g. in `modeling_xxx.py, we have
+        `from .configuration_xxx import Config`, then `Config` should be recorded as it is not a dependency that needs
+        to be added (because it will be part of the imports)"""
+        import_module = self.python_module.code_for_node(node.module)
+        import_statement = "." * len(node.relative) + import_module
+        if re.search(rf"^\.({self.match_patterns})_.*", import_statement):
+            for imported_object in node.names:
+                # If an alias is present, we record it and not the original name
+                if imported_object.evaluated_alias is not None:
+                    self.objects_imported_from_modeling.add(imported_object.evaluated_alias)
+                else:
+                    self.objects_imported_from_modeling.add(imported_object.evaluated_name)    
 
     def visit_SimpleStatementLine(self, node):
         """
@@ -1033,7 +1051,6 @@ class ModularFileMapper(ModuleMapper):
         self.model_specific_imported_objects: Dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
         self.model_specific_modules: Dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
-        self.match_patterns = "|".join(list(TYPE_TO_FILE_TYPE.values()) + ["modeling"])
         self.all_all_to_add = {}
         # fmt: on
 
@@ -1135,6 +1152,14 @@ class ModularFileMapper(ModuleMapper):
         # definitions found in the visited files
         self.merge_model_specific_imports(self.visited_modules)
 
+        # We need to keep track of which objects were imported directly into which modeling file to not add them wrongly later
+        # Note that we may visit several of the same file types, thus we save them per file type, not file
+        self.imported_objects_per_file = defaultdict(set)
+        for file, mapper in self.visited_modules.items():
+            file_type = re.search(rf"^transformers\.models\.\w+\.({self.match_patterns})_.*", file).group(1)
+            self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
+        print(self.imported_objects_per_file)
+
     def merge_model_specific_imports(self, visited_modules):
         """Merge the functions and assignments imported from the modeling files to the modular nodes and dependency graph,
         based on the visited files."""
@@ -1214,6 +1239,13 @@ def get_class_node_and_dependencies(
     file_type = find_file_type(class_name)
     file_to_update = files[file_type]
 
+    # This is used to avoid adding objects to the dependencies graph if they will be imported 
+    # e.g. Config is imported in modeling, it should not be redefined into it
+    if file_type in modular_mapper.imported_objects_per_file:
+        imported_objects = modular_mapper.imported_objects_per_file[file_type]
+    else:
+        imported_objects = None
+
     # We need to replace the class node with the transformers (modeling file) super class node
     if len(bases) == 1:
         super_class = bases[0]
@@ -1230,7 +1262,7 @@ def get_class_node_and_dependencies(
         updated_node = replace_class_node(mapper, node, renamed_super_class)
 
         # The node was modified -> look for all dependencies (recursively) of the new node
-        new_node_dependencies = augmented_dependencies_for_class_node(updated_node, mapper)
+        new_node_dependencies = augmented_dependencies_for_class_node(updated_node, mapper, imported_objects)
         all_dependencies_to_add = find_all_dependencies(
             dependency_mapping=mapper.class_dependency_mapping,
             initial_dependencies=new_node_dependencies,
@@ -1248,7 +1280,7 @@ def get_class_node_and_dependencies(
         updated_node = node
         # The node was NOT modified -> no need to look recursively for other class dependencies. Indeed, even if they are not
         # already defined (which would mean a weird order of the code in the modular...), they will be in the future
-        all_dependencies_to_add = augmented_dependencies_for_class_node(updated_node, modular_mapper)
+        all_dependencies_to_add = augmented_dependencies_for_class_node(updated_node, modular_mapper, imported_objects)
 
         relative_dependency_order = modular_mapper.compute_relative_order(all_dependencies_to_add)
         nodes_to_add = {
