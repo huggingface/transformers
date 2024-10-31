@@ -543,7 +543,7 @@ class ModuleMapper(CSTVisitor, ABC):
     def __init__(self, python_module: cst.Module):
         # fmt: off
         self.python_module: cst.Module = python_module             # original cst.Module being visited
-        self.classes: Dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes
+        self.classes: Dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes (it will be ordered by default!!)
         self.imports = []                                          # stores all import statements
         self.functions: Dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
         self.object_dependency_mapping = defaultdict(set)          # immediate function/assignment dependency mapping (i.e. dependencies immediately in the function/assignment definition)
@@ -674,14 +674,7 @@ class ModuleMapper(CSTVisitor, ABC):
 
     def compute_class_dependencies(self):
         """For each visited class, find its dependencies based on visiting the current file + potential merged dependencies.
-        Note: This function takes care of updating `global_nodes` and `object_recursive_dependency_mapping` as well after the
-        merge with other files dependencies.
         """
-        # Correctly re-set the global nodes at this point
-        self.global_nodes = {**self.assignments, **self.classes, **self.functions}
-        # Create the global mapping of recursive dependencies for functions and assignments
-        self.object_recursive_dependency_mapping = self._compute_recursive_object_dependencies()
-
         self.class_dependency_mapping = {}
         for class_name, class_node in self.classes.items():
             dependencies = dependencies_for_class_node(class_node, set(self.global_nodes.keys()))
@@ -783,8 +776,8 @@ class ModelFileMapper(ModuleMapper):
     def _merge_assignments(self, assignments: dict[str, cst.CSTNode], object_mapping: dict[str, set]):
         """Update the global nodes with the assignment from the modular file.
 
-        Merging rule: if any assignment with the same name was redefined in the modular, we use it ONLY if it is
-        in `ASSIGNMENTS_TO_KEEP`. Otherwise, we use the original value. This rule was chosen to avoid having to rewrite the
+        Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it is
+        in `ASSIGNMENTS_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
         big docstrings.
         """
         for assignment, node in assignments.items():
@@ -793,22 +786,40 @@ class ModelFileMapper(ModuleMapper):
                 if assignment in object_mapping:
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]
 
-    def merge_modular_dependencies(self, functions, assignments, object_mapping, start_lines):
-        """Merge both functions and assignments from the modular definitions into the current module file,
-        then record the relative order of all nodes."""
+    def _merge_classes(self, classes: dict[str, cst.CSTNode]):
+        """Update the global nodes with the new classes from the modular. We do NOT update any dependency mapping here.
+        This is because we only need the names of newly defined classes in the modular to be discoverable when computing dependencies
+        for new nodes later on. For this reason, we do not add the new classes to `self.classes`, but only to `global_nodes`.
+        """
+        # Add/overwrite all needed function nodes and dependencies
+        self.global_nodes.update({name: node for name, node in classes.items() if name not in self.classes})
+
+    def merge_modular_dependencies(self, classes, functions, assignments, object_mapping, start_lines):
+        """Merge classes, functions and assignments from the modular definitions into the current module file,
+        then record the relative order of all nodes.
+        Note: This function takes care of updating `global_nodes` and `object_recursive_dependency_mapping` as well after the
+        merge with other files dependencies.
+        """
         self._merge_functions(functions, object_mapping)
         self._merge_assignments(assignments, object_mapping)
+        self._merge_classes(classes)
         self.modular_file_start_lines = start_lines
+
+        # Correctly re-set the global nodes at this point
+        self.global_nodes.update(self.functions)
+        self.global_nodes.update(self.assignments)
+        # Create the global mapping of recursive dependencies for functions and assignments
+        self.object_recursive_dependency_mapping = self._compute_recursive_object_dependencies()
 
     @classmethod
     def visit_and_merge_dependencies(
-        cls, module: cst.Module, functions, assignments, object_mapping, start_lines
+        cls, module: cst.Module, classes, functions, assignments, object_mapping, start_lines
     ) -> "ModelFileMapper":
         wrapper = MetadataWrapper(module)
         mapper = cls(module)
         wrapper.visit(mapper)
         # Merge dependencies
-        mapper.merge_modular_dependencies(functions, assignments, object_mapping, start_lines)
+        mapper.merge_modular_dependencies(classes, functions, assignments, object_mapping, start_lines)
         # Create the class dependencies graph
         mapper.compute_class_dependencies()
         return mapper
@@ -1151,6 +1162,7 @@ class ModularFileMapper(ModuleMapper):
             renamed_module = module.visit(renamer)
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
+                self.classes,
                 self.functions,
                 self.assignments,
                 self.object_dependency_mapping,
@@ -1234,11 +1246,52 @@ class ModularFileMapper(ModuleMapper):
         return relative_order
 
 
+def check_dependencies_and_create_import_node(file_type: str, new_dependencies: set[str], mapper: ModuleMapper,
+                                              new_name: str) -> tuple[set[str], dict[str, cst.CSTNode]]:
+    """Check that all class nodes in the `new_dependencies` belong to the correct `file_type`. If this is not the case,
+    we need to remove it from the dependencies, and create a new import to it instead.
+    This scenario may appear in the following case:
+    If a new class in the `modular_xxx.py` file does not belong to `type_xxx.py`, but is used somewhere in `other_type_xxx.py`
+    (e.g. as a type hint), but none of the visited files had a similar class, then it would be imported in `type_xxx.py` as
+    part of the standard dependency graph (because we never encountered an import towards this new class in any file).
+    For example imagine the following `modular.py`:
+    ```
+    from ..llama.modeling_llama import LlamaModel
+
+    class NewNameTextConfig(PretrainedConfig):
+        ...
+    
+    class NewNameConfig(PretrainedConfig):
+        ...
+
+    class NewNameModel(LlamaModel):
+        config = NewNameConfig()
+        text_config = NewNameTextConfig()
+        ...
+    ```
+    then without the help of this function, `NewNameTextConfig` would be imported in the `modeling_newname.py` as well as
+    `configuration_newname.py`, because `modeling_llama.py` tells us to not import `NewNameConfig`, but has no
+    knowledge of `NewNameTextConfig`.
+    """
+    class_dependencies = {dep for dep in new_dependencies if m.matches(mapper.global_nodes[dep], m.ClassDef())}
+    corrected_dependencies = new_dependencies.copy()
+    new_imports = {}
+    for class_name in class_dependencies:
+        class_file_type = find_file_type(class_name)
+        # In this case, we need to remove it from the dependencies and create a new import instead
+        if class_file_type != file_type:
+            corrected_dependencies.remove(class_name)
+            import_statement = f"from .{class_file_type}_{new_name} import {class_name}"
+            new_imports[class_name] = cst.parse_statement(import_statement)
+
+    return corrected_dependencies, new_imports
+
 def get_class_node_and_dependencies(
     modular_mapper: ModularFileMapper, class_name: str, node: cst.CSTNode, files: dict[str, dict]
-) -> tuple[dict, str]:
+) -> tuple[dict, str, dict]:
     """Return a single class node (and all its dependency nodes), to be added to the `files`. It creates the new
-    class node based on the inherited classes if needed.
+    class node based on the inherited classes if needed. Also returns any new imports of a new class defined in
+    the modular that we nay need.
     """
     bases = [k.value.value for k in node.bases if k.value.value in modular_mapper.model_specific_imported_objects]
     if len(bases) > 1:
@@ -1248,13 +1301,10 @@ def get_class_node_and_dependencies(
 
     file_type = find_file_type(class_name)
     file_to_update = files[file_type]
+    model_name = modular_mapper.model_name
 
-    # This is used to avoid adding objects to the dependencies graph if they will be imported
-    # e.g. Config is imported in modeling, it should not be redefined into it
-    if file_type in modular_mapper.imported_objects_per_file:
-        imported_objects = modular_mapper.imported_objects_per_file[file_type]
-    else:
-        imported_objects = None
+    # This is used to avoid adding objects to the dependencies graph if they will be imported already
+    imported_objects = modular_mapper.imported_objects_per_file[file_type]
 
     # We need to replace the class node with the transformers (modeling file) super class node
     if len(bases) == 1:
@@ -1271,8 +1321,15 @@ def get_class_node_and_dependencies(
         # Create the new class node
         updated_node = replace_class_node(mapper, node, renamed_super_class)
 
-        # The node was modified -> look for all dependencies (recursively) of the new node
+        # Grab all immediate dependencies of the new node
         new_node_dependencies = augmented_dependencies_for_class_node(updated_node, mapper, imported_objects)
+
+        # At this point, if any class dependency is found, but belongs to another file, it means that we need to remove
+        # it from the dependencies, and add a new import of it instead
+        new_node_dependencies, new_imports = check_dependencies_and_create_import_node(file_type, new_node_dependencies,
+                                                                                       mapper, model_name)
+
+        # The node was modified -> look for all recursive dependencies of the new node
         all_dependencies_to_add = find_all_dependencies(
             dependency_mapping=mapper.class_dependency_mapping,
             initial_dependencies=new_node_dependencies,
@@ -1284,13 +1341,17 @@ def get_class_node_and_dependencies(
             dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
         }
 
-    # No transformers (modeling file) super class, just check functions and assignments dependency in the imports from
-    # other modeling files
+    # No transformers (modeling file) super class, just check functions and assignments dependencies
     else:
         updated_node = node
         # The node was NOT modified -> no need to look recursively for other class dependencies. Indeed, even if they are not
         # already defined (which would mean a weird order of the code in the modular...), they will be in the future
         all_dependencies_to_add = augmented_dependencies_for_class_node(updated_node, modular_mapper, imported_objects)
+
+        # At this point, if any class dependency is found, but belongs to another file, it means that we need to remove
+        # it from the dependencies, and add a new import of it instead
+        all_dependencies_to_add, new_imports = check_dependencies_and_create_import_node(file_type, all_dependencies_to_add,
+                                                                                       modular_mapper, model_name)
 
         relative_dependency_order = modular_mapper.compute_relative_order(all_dependencies_to_add)
         nodes_to_add = {
@@ -1303,7 +1364,7 @@ def get_class_node_and_dependencies(
     class_idx = max(relative_dependency_order.values()) + 1 if len(relative_dependency_order) > 0 else 0
     nodes_to_add[class_name] = (class_idx, updated_node)
 
-    return nodes_to_add, file_type
+    return nodes_to_add, file_type, new_imports
 
 
 def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
@@ -1313,7 +1374,12 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
 
     # For each class defined in modular, potentially replace the node and add it with its dependencies
     for class_name, node in modular_mapper.classes.items():
-        nodes_to_add, file_type = get_class_node_and_dependencies(modular_mapper, class_name, node, files)
+        nodes_to_add, file_type, new_imports = get_class_node_and_dependencies(modular_mapper, class_name, node, files)
+
+        # Add the new potential new imports that we may need to the `modular_mapper` variable
+        modular_mapper.imported_objects_per_file[file_type].update(new_imports.keys())
+        modular_mapper.imports.extend(list(new_imports.values()))
+
         # Sort the nodes according to their relative order
         nodes_to_add = sorted(nodes_to_add.items(), key=lambda x: x[1][0])
         # Write all nodes to file
