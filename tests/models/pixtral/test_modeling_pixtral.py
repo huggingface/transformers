@@ -23,7 +23,6 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     torch_device,
 )
