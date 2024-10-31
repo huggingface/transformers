@@ -2,10 +2,10 @@ import inspect
 from functools import wraps
 
 import regex as re
-
+from .doc import PT_SAMPLE_DOCSTRINGS, PT_RETURN_INTRODUCTION, _prepare_output_docstrings
 
 class ModelArgs:
-    labels = r"""of shape `(batch_size, sequence_length)`, *optional*):
+    labels = r""" of shape `(batch_size, sequence_length)`:
         Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
         config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
         (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
@@ -25,7 +25,7 @@ class ModelArgs:
         [What are input IDs?](../glossary#input-ids)
     """
 
-    attention_mask = r"""of shape `(batch_size, sequence_length)`, *optional*):
+    attention_mask = r""" of shape `(batch_size, sequence_length)`:
         Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
         - 1 for tokens that are **not masked**,
@@ -95,26 +95,26 @@ class ModelArgs:
         the complete sequence length.
     """
 
-    hidden_states = r"""): input to the layer of shape `(batch, seq_len, embed_dim)"""
+    hidden_states = r""": input to the layer of shape `(batch, seq_len, embed_dim)"""
 
-    position_embeddings = r""", *optional*):
+    position_embeddings = r""":
         Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
         with `head_dim` being the embedding dimension of each attention head.
     """
 
-    config = r"""):
+    config = r""":
         Model configuration class with all the parameters of the model. Initializing with a config file does not
         load the weights associated with the model, only the configuration. Check out the
         [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    start_positions = r""" of shape `(batch_size,)`, *optional*):
+    start_positions = r""" of shape `(batch_size,)`:
         Labels for position (index) of the start of the labelled span for computing the token classification loss.
         Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
         are not taken into account for computing the loss.
     """
 
-    end_positions = r""" of shape `(batch_size,)`, *optional*):
+    end_positions = r""" of shape `(batch_size,)`:
         Labels for position (index) of the end of the labelled span for computing the token classification loss.
         Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
         are not taken into account for computing the loss.
@@ -141,7 +141,7 @@ class ClassDocstring:
         The bare {model_name} Model outputting raw hidden-states without any specific head on top."""
 
     ForSequenceClassification = r"""
-        The {model_name} Model transformer with a sequence classification head on top (linear layer).
+        The {model_name} Model with a sequence classification head on top (linear layer).
 
         [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
         (e.g. GPT-2) do.
@@ -250,16 +250,18 @@ def auto_docstring(func):
             if param.annotation != inspect.Parameter.empty:
                 param_type = param.annotation
                 if "typing" in str(param_type):
-                    param_type = str(param_type).split("typing.")[1]
+                    param_type = "".join(str(param_type).split("typing.")).replace("transformers.","~")
                 else:
-                    param_type = f"{param_type.__module__}.{param.annotation.__name__}"
+                    param_type = f"{param_type.__module__.replace("transformers.","~").replace("builtins","")}.{param.annotation.__name__}"
             else:
                 param_type = ""
             # Check if the parameter has a default value (considered optional)
             # is_optional = param.default != inspect.Parameter.empty
-
+            param_default = ""
+            if param.default != inspect._empty and param.default is not None:
+                param_default = f", defaults to `{str(param.default)}`"
             indented_doc = getattr(ModelArgs, param_name)  # .replace("\n    ", "\n")
-            docstring += f"{' '*indent_level}{param_name} (`{param_type}`){indented_doc}\n"
+            docstring += f"{' '*indent_level}{param_name} (`{param_type}`{param_default}){indented_doc}\n"
         elif param_name in ARGS_TO_IGNORE:
             continue
         elif param_name in documented_params:
@@ -268,6 +270,22 @@ def auto_docstring(func):
             undocumented_parameters.append(
                 f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
+
+    model_class = func.__qualname__.split(".")[0]
+    task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
+    model_task = re.search(task, model_class)
+    example_annotation = ""
+    if model_task is not None:
+        task = model_task.group()
+        example_annotation = PT_SAMPLE_DOCSTRINGS[task]
+
+    config_class = "".join([k.title() for k in func.__module__.split('.')[-1].split("_")[1:]]) + "Config"
+    # return_annotation = sig.return_annotation
+    # return_type =  f"{return_annotation.__module__.replace("transformers.","~").replace("builtins","")}.{return_annotation.__name__}"
+    return_docstring = _prepare_output_docstrings(sig.return_annotation, config_class)
+
+    docstring += return_docstring
+    docstring += example_annotation
 
     if len(undocumented_parameters) > 0:
         print("\n".join(undocumented_parameters))
@@ -292,8 +310,9 @@ def auto_class_docstring(cls):
         )
     if name != []:
         name = name[0]
-
-        pre_block = getattr(ClassDocstring, name).format(model_name=cls.__name__, model_checkpoint="dummy-path")
+        path = inspect.getsourcefile(cls)
+        model_name = "".join([k.title() for k in path[:-3].split('/')[-1].split("_")[1:]])
+        pre_block = getattr(ClassDocstring, name).format(model_name=model_name, model_checkpoint="dummy-path")
         # Start building the docstring
         docstring = f"{pre_block}\n\n"
         attr_docs = ""
