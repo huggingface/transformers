@@ -786,12 +786,19 @@ class ModelFileMapper(ModuleMapper):
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]
 
     def _merge_classes(self, classes: dict[str, cst.CSTNode]):
-        """Update the global nodes with the new classes from the modular. We do NOT update any dependency mapping here.
-        This is because we only need the names of newly defined classes in the modular to be discoverable when computing dependencies
-        for new nodes later on. For this reason, we do not add the new classes to `self.classes`, but only to `global_nodes`.
+        """Update the global nodes with the new classes from the modular (i.e. classes which do not exist in current file, and
+        are not imported). We do NOT update any dependency mapping here. This is because we only need the names of newly defined
+        classes in the modular to be discoverable when computing dependencies for new nodes later on. For this reason, we
+        do not add the new classes to `self.classes`, but only to `global_nodes`.
         """
         # Add/overwrite all needed function nodes and dependencies
-        self.global_nodes.update({name: node for name, node in classes.items() if name not in self.classes})
+        self.global_nodes.update(
+            {
+                name: node
+                for name, node in classes.items()
+                if name not in self.classes and name not in self.objects_imported_from_modeling
+            }
+        )
 
     def merge_modular_dependencies(self, classes, functions, assignments, object_mapping, start_lines):
         """Merge classes, functions and assignments from the modular definitions into the current module file,
