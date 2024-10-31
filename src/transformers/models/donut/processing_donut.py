@@ -16,7 +16,6 @@
 Processor class for Donut.
 """
 
-import logging
 import re
 import warnings
 from contextlib import contextmanager
@@ -25,14 +24,14 @@ from typing import List, Optional, Union
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import logging
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class DonutProcessor(ProcessorMixin):
@@ -75,7 +74,6 @@ class DonutProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
-    @deprecate_kwarg(old_name="legacy", version="5.0.0")
     def __call__(
         self,
         images: ImageInput = None,
@@ -95,9 +93,10 @@ class DonutProcessor(ProcessorMixin):
         if legacy:
             # With `add_special_tokens=True`, the performance of donut are degraded when working with both images and text.
             logger.warning_once(
-                "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
+                "Legacy behavior is being used. The current behavior will be deprecated in version 5.0.0. "
                 "In the new behavior, if both images and text are provided, the default value of `add_special_tokens` "
-                "will be changed to `False` when calling the tokenizer if `add_special_tokens` is unset."
+                "will be changed to `False` when calling the tokenizer if `add_special_tokens` is unset. "
+                "To test the new behavior, set `legacy=False`as a processor call argument."
             )
 
         if self._in_target_context_manager:

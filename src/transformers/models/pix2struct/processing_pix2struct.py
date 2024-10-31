@@ -16,13 +16,12 @@
 Processor class for Pix2Struct.
 """
 
-import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import logging
 
 
 class Pix2StructImagesKwargs(ImagesKwargs, total=False):
@@ -50,7 +49,7 @@ class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class Pix2StructProcessor(ProcessorMixin):
@@ -76,7 +75,6 @@ class Pix2StructProcessor(ProcessorMixin):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
 
-    @deprecate_kwarg(old_name="legacy", version="5.0.0")
     def __call__(
         self,
         images=None,
@@ -93,10 +91,11 @@ class Pix2StructProcessor(ProcessorMixin):
         """
         legacy = kwargs.pop("legacy", True)
         if legacy:
-            logger.warning(
-                "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
+            logger.warning_once(
+                "Legacy behavior is being used. The current behavior will be deprecated in version 5.0.0. "
                 "In the new behavior, If both images and text are provided, image_processor is not a VQA processor, and `add_special_tokens` is unset, "
-                "the default value of `add_special_tokens` will be changed to `False` when calling the tokenizer."
+                "the default value of `add_special_tokens` will be changed to `False` when calling the tokenizer. "
+                "To test the new behavior, set `legacy=False`as a processor call argument."
             )
 
         if images is None and text is None:
