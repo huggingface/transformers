@@ -1889,7 +1889,6 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
         self.model = Qwen2VLModel(config)
         self.vocab_size = config.vocab_size
         self.classification_head = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-        self.padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
 
         # Initialize weights and apply final processing
         self.post_init()
