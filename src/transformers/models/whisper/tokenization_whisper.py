@@ -528,7 +528,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02, segment_size=1500) -> str:
+    def _decode_with_timestamps(
+        self, token_ids, skip_special_tokens=False, time_precision=0.02, segment_size=1500
+    ) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".

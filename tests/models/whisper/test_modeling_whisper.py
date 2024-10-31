@@ -2133,12 +2133,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         processor = WhisperProcessor.from_pretrained("openai/whisper-small.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small.en")
         model.to(torch_device)
-        
+
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
         sample = dataset[0]["audio"]["array"]
         sampling_rate = dataset[0]["audio"]["sampling_rate"]
 
-        sample = [*sample[:15 * sampling_rate], *np.zeros(16 * sampling_rate).tolist(), *sample[15 * sampling_rate:]]
+        sample = [*sample[: 15 * sampling_rate], *np.zeros(16 * sampling_rate).tolist(), *sample[15 * sampling_rate :]]
         sample = np.array(sample)
 
         input_features = processor(
@@ -2210,8 +2210,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript_segments = [
             {
                 "text": processor.decode(seg["tokens"], skip_special_tokens=True),
-                "timestamp": (seg["start"].item(), seg["end"].item())
-            } for seg in generated_ids["segments"][0]
+                "timestamp": (seg["start"].item(), seg["end"].item()),
+            }
+            for seg in generated_ids["segments"][0]
         ]
         self.assertEqual(transcript_segments, EXPECTED_TRANSCRIPT)
 
