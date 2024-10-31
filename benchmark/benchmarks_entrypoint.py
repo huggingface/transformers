@@ -36,7 +36,6 @@ class MetricsRecorder:
             )
             return cur.fetchone()[0]
 
-
     def collect_device_measurements(self, benchmark_id: int, cpu_util, mem_megabytes, gpu_util, gpu_mem_megabytes):
         """
         Collect device metrics, such as CPU & GPU usage. These are "static", as in you cannot pass arbitrary arguments to the function.
@@ -64,6 +63,7 @@ class MetricsRecorder:
 
     def close(self):
         self.conn.close()
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
     branch, commit_id, commit_msg = parse_arguments()
 
-    metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"))
+    metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), branch, commit_id, commit_msg)
     for entry in os.scandir(benchmarks_folder_path):
         try:
             if not entry.name.endswith(".py"):
