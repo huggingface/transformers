@@ -673,8 +673,7 @@ class ModuleMapper(CSTVisitor, ABC):
         return new_dependencies
 
     def compute_class_dependencies(self):
-        """For each visited class, find its dependencies based on visiting the current file + potential merged dependencies.
-        """
+        """For each visited class, find its dependencies based on visiting the current file + potential merged dependencies."""
         self.class_dependency_mapping = {}
         for class_name, class_node in self.classes.items():
             dependencies = dependencies_for_class_node(class_node, set(self.global_nodes.keys()))
@@ -1246,8 +1245,9 @@ class ModularFileMapper(ModuleMapper):
         return relative_order
 
 
-def check_dependencies_and_create_import_node(file_type: str, new_dependencies: set[str], mapper: ModuleMapper,
-                                              new_name: str) -> tuple[set[str], dict[str, cst.CSTNode]]:
+def check_dependencies_and_create_import_node(
+    file_type: str, new_dependencies: set[str], mapper: ModuleMapper, new_name: str
+) -> tuple[set[str], dict[str, cst.CSTNode]]:
     """Check that all class nodes in the `new_dependencies` belong to the correct `file_type`. If this is not the case,
     we need to remove it from the dependencies, and create a new import to it instead.
     This scenario may appear in the following case:
@@ -1260,7 +1260,7 @@ def check_dependencies_and_create_import_node(file_type: str, new_dependencies: 
 
     class NewNameTextConfig(PretrainedConfig):
         ...
-    
+
     class NewNameConfig(PretrainedConfig):
         ...
 
@@ -1285,6 +1285,7 @@ def check_dependencies_and_create_import_node(file_type: str, new_dependencies: 
             new_imports[class_name] = cst.parse_statement(import_statement)
 
     return corrected_dependencies, new_imports
+
 
 def get_class_node_and_dependencies(
     modular_mapper: ModularFileMapper, class_name: str, node: cst.CSTNode, files: dict[str, dict]
@@ -1326,8 +1327,9 @@ def get_class_node_and_dependencies(
 
         # At this point, if any class dependency is found, but belongs to another file, it means that we need to remove
         # it from the dependencies, and add a new import of it instead
-        new_node_dependencies, new_imports = check_dependencies_and_create_import_node(file_type, new_node_dependencies,
-                                                                                       mapper, model_name)
+        new_node_dependencies, new_imports = check_dependencies_and_create_import_node(
+            file_type, new_node_dependencies, mapper, model_name
+        )
 
         # The node was modified -> look for all recursive dependencies of the new node
         all_dependencies_to_add = find_all_dependencies(
@@ -1350,8 +1352,9 @@ def get_class_node_and_dependencies(
 
         # At this point, if any class dependency is found, but belongs to another file, it means that we need to remove
         # it from the dependencies, and add a new import of it instead
-        all_dependencies_to_add, new_imports = check_dependencies_and_create_import_node(file_type, all_dependencies_to_add,
-                                                                                       modular_mapper, model_name)
+        all_dependencies_to_add, new_imports = check_dependencies_and_create_import_node(
+            file_type, all_dependencies_to_add, modular_mapper, model_name
+        )
 
         relative_dependency_order = modular_mapper.compute_relative_order(all_dependencies_to_add)
         nodes_to_add = {
