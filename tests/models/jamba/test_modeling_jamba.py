@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
+    skipIfRocm
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -364,6 +365,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    @skipIfRocm
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.

@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
+    skipIfRocm
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -423,6 +424,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.skipTest(reason="Mixtral flash attention does not support right padding")
 
     # Ignore copy
+    @skipIfRocm
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
