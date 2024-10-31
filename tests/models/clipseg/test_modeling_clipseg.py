@@ -796,7 +796,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs, interpolate_pos_encoding=True)
+            outputs = model(**inputs)
 
         # verify the predicted masks
         self.assertEqual(
@@ -804,7 +804,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
             torch.Size((3, 352, 352)),
         )
         expected_masks_slice = torch.tensor(
-            [[-7.4613, -7.4785, -7.3627], [-7.3268, -7.0898, -7.1333], [-6.9838, -6.7900, -6.8913]]
+            [[-7.4613, -7.4785, -7.3628], [-7.3268, -7.0899, -7.1333], [-6.9838, -6.7900, -6.8913]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3))
