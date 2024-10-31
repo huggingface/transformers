@@ -319,7 +319,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         model = ColPaliForRetrieval.from_pretrained(
             "vidore/colpali-v1.2-hf",
             torch_dtype=torch.bfloat16,
-            device_map="mps",
+            device_map=torch_device,
         ).eval()
 
         # Load the test dataset
