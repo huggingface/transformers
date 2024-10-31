@@ -97,7 +97,7 @@ try:
     if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
         logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM instead.")
         experts_gemm = sequential_gemm
-except ImportError:
+except ImportError as e:
     logger.warning("`grouped_gemm` is not installed, using sequential GEMM, which is slower.")
     experts_gemm = sequential_gemm
 
@@ -359,8 +359,8 @@ class AriaProjector(nn.Module):
             raise KeyError(f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}.")
         query_num = self.patch_to_query_dict[num_patches]
 
-        # Compared to original, simplify definition and use expand instead of repeat.
-        queries = self.query[:query_num].unsqueeze(0).expand(batch_size, -1, -1)
+        # Compared to original, simplify definition
+        queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, -1, -1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
@@ -440,6 +440,7 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
 
     return (oh, ow)
 
+
 class AriaImageProcessor(BaseImageProcessor):
     """
     A vision processor for the Aria model that handles image preprocessing.
@@ -447,10 +448,11 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        max_image_size=980,
-        min_image_size=336,
+        max_image_size=None,
+        min_image_size=None,
         image_mean=None,
         image_std=None,
+        split_ratio: Optional[List[Tuple[int, int]]] = None,
         **kwargs,
     ):
         """
@@ -461,6 +463,7 @@ class AriaImageProcessor(BaseImageProcessor):
             min_image_size (int, optional): Minimum image size. Defaults to 336.
             image_mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
             image_std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
+            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
         """
         super().__init__(**kwargs)
 
@@ -468,10 +471,19 @@ class AriaImageProcessor(BaseImageProcessor):
             image_mean = [0.5, 0.5, 0.5]
         if image_std is None:
             image_std = [0.5, 0.5, 0.5]
-        self.max_image_size = max_image_size
-        self.min_image_size = min_image_size
+        self.max_image_size = 980 if max_image_size is None else max_image_size
+        self.min_image_size = 336 if min_image_size is None else min_image_size
         self.image_mean = image_mean
         self.image_std = image_std
+        if split_ratio is None:
+           self.split_ratio = [
+               (1, 2), (1, 3), (1, 4), (1, 5), (1, 6),
+               (1, 7), (1, 8), (2, 4), (2, 3), (2, 2),
+               (2, 1), (3, 1), (3, 2), (4, 1), (4, 2),
+               (5, 1), (6, 1), (7, 1), (8, 1),
+           ]
+       else:
+           self.split_ratio = split_ratio
 
         # we make the transform a property so that it is lazily initialized,
         # this could avoid the error "TypeError: Object of type Normalize is not JSON serializable"
@@ -482,11 +494,10 @@ class AriaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: Union[ImageInput, List[ImageInput]],
-        max_image_size: Optional[int] = 980,
-        min_image_size: Optional[int] = 336,
+        max_image_size: int = 980,
+        min_image_size: int = 336,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         split_image: Optional[bool] = False,
-        split_ratio: Optional[List[Tuple[int]]] = None,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
     ):
@@ -494,11 +505,14 @@ class AriaImageProcessor(BaseImageProcessor):
         Process a list of images.
 
         Args:
-            images (list): List of ImageInput objects.
-            max_image_size (int, optional): Override the default max image size. Defaults to None.
+            images (ImageInput or list of ImageInput): The input image or a list of images.
+            max_image_size (int, optional): Maximum image size. Defaults to `self.max_image_size` (980).
+            min_image_size (int, optional): Minimum image size. Defaults to `self.min_image_size` (336).
             return_tensors (str or TensorType, optional): The type of tensor to return. Defaults to "pt".
             split_image (bool, optional): Whether to split the image. Defaults to False.
-            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
+            do_convert_rgb (bool, optional): Whether to convert the image to RGB. Defaults to True.
+            do_normalize (bool, optional): Whether to normalize the image. Defaults to True.
+
         Returns:
             BatchFeature: A BatchFeature object containing:
                 - 'pixel_values': Tensor of processed image pixel values.
@@ -506,30 +520,8 @@ class AriaImageProcessor(BaseImageProcessor):
                     - True (1) values indicate pixels that belong to the original resized image.
                     - False (0) values indicate pixels that are part of the padding.
                   The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
-                - 'num_crops': Tensor of the number of crops for each image.
+                - 'num_crops': The maximum number of crops across all images.
         """
-        if split_ratio is None:
-            split_ratio = [
-                (1, 2),
-                (1, 3),
-                (1, 4),
-                (1, 5),
-                (1, 6),
-                (1, 7),
-                (1, 8),
-                (2, 4),
-                (2, 3),
-                (2, 2),
-                (2, 1),
-                (3, 1),
-                (3, 2),
-                (4, 1),
-                (4, 2),
-                (5, 1),
-                (6, 1),
-                (7, 1),
-                (8, 1),
-            ]
         max_size = self.max_image_size if max_image_size is None else max_image_size
         min_size = self.min_image_size if min_image_size is None else min_image_size
 
@@ -544,44 +536,39 @@ class AriaImageProcessor(BaseImageProcessor):
         num_crops = None
 
         for image in images:
+            if do_convert_rgb:
+                image = convert_to_rgb(image)
             image = to_numpy_array(image)
             if split_image:
-                crop_images = self.get_image_patches(image, split_ratio, max_size, max_size)
+                crop_images = self.get_image_patches(image, self.split_ratio, max_size, max_size)
             else:
                 crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
                 num_crops = len(crop_images)
             for crop_image in crop_images:
-                # img_padded, pixel_mask = keep_ratio_resize_and_pixel_mask(crop_image, max_size, min_size)
-                # Compute
-                scale = max_size / max(crop_image.size)
                 # At this point the scale is the rescaling factor that would bring the image to max_size in its larger dimension
-
-                h, w = crop_image.size
-                print("SIZEEE:", crop_image.size)
+                h, w = crop_image.shape[:2]
+                scale = max_size / max(h, w)
                 if w >= h:
                     new_size = (max(int(h * scale), min_size), max_size)  # h, w
                 else:
                     new_size = (max_size, max(int(w * scale), min_size))  # h, w
 
-                # resize takes as input an array
                 crop_image_resized = resize(crop_image, new_size, resample=Image.Resampling.BICUBIC)
 
-                # padding the right/bottom
-                padding_right, padding_bottom = max_size - new_size[0], max_size - new_size[1]
+                padding_bottom, padding_right = max_size - new_size[0], max_size - new_size[1]
                 crop_image_padded = pad(crop_image_resized, ((0, padding_bottom), (0, padding_right)))
 
                 # Create a pixel mask
                 pixel_mask = torch.zeros(max_size, max_size, dtype=bool)
-                pixel_mask[: new_size[1], : new_size[0]] = 1
+                pixel_mask[: new_size[0], : new_size[1]] = 1
                 pixel_masks.append(pixel_mask)
 
-                if do_convert_rgb:
-                    crop_image_padded = convert_to_rgb(crop_image_padded)
-
-                crop_image_padded = to_numpy_array(crop_image_padded).T
                 if do_normalize:
-                    crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std)
+                    crop_image_padded = normalize(crop_image_padded, self.image_mean, self.image_std)
+    
+                # Switch to rgb channel first
+                crop_image_padded = np.transpose(crop_image_padded, (2, 0, 1))
                 pixel_values.append(crop_image_padded)
         return BatchFeature(
             data={
@@ -645,7 +632,6 @@ class AriaImageProcessor(BaseImageProcessor):
             for patch in patches
         ]
         return patches
-
 
 
 class AriaProcessor(ProcessorMixin):
