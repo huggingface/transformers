@@ -3652,9 +3652,11 @@ class Trainer:
             if num_items_in_batch is not None and self.args.average_tokens_across_devices:
                 loss *= self.args.world_size
             self.accelerator.backward(loss, **kwargs)
-            if num_items_in_batch is None:
-                return loss.detach() / self.args.gradient_accumulation_steps
-            return loss.detach()
+            # Finally we need to normalize the loss for reporting
+            loss = loss.detach() / self.args.gradient_accumulation_steps
+            if self.args.average_tokens_across_devices:
+                loss /= self.args.world_size
+            return loss
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
