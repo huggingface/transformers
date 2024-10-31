@@ -600,7 +600,10 @@ class Trainer:
             if not _is_peft_model(unwrapped_model)
             else unwrapped_model.get_base_model().forward
         )
-        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
+        forward_params = inspect.signature(model_forward).parameters
+        self.model_accepts_loss_kwargs = (
+            "loss_kwargs" in forward_params and forward_params["loss_kwargs"].kind == inspect.Parameter.VAR_KEYWORD
+        )
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
