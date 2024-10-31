@@ -275,6 +275,14 @@ class Olmo1124ModelTester:
 class Olmo1124ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Olmo1124Model, Olmo1124ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Olmo1124ForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Olmo1124Model,
+            "text-generation": Olmo1124ForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     fx_compatible = False
 
