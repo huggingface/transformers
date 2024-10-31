@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Mllama model."""
 
-import gc
 import unittest
 
 import requests
@@ -30,6 +29,7 @@ from transformers import (
 )
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
+    cleanup,
     is_flaky,
     require_bitsandbytes,
     require_read_token,
@@ -396,8 +396,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.instruct_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_gpu
