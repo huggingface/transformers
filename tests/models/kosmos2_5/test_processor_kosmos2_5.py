@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
 
 if is_vision_available():
     from PIL import Image
@@ -43,7 +44,7 @@ if is_vision_available():
 
 
 @require_vision
-class Kosmos2_5ProcessorTest(unittest.TestCase):
+class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = Kosmos2_5ImageProcessor()
