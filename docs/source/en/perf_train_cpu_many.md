@@ -46,8 +46,6 @@ Check more approaches for [oneccl_bind_pt installation](https://github.com/intel
 Versions of oneCCL and PyTorch must match.
 
 
-</Tip>
-
 ## Intel® MPI library
 Use this standards-based MPI implementation to deliver flexible, efficient, scalable cluster messaging on Intel® architecture. This component is part of the Intel® oneAPI HPC Toolkit.
 
