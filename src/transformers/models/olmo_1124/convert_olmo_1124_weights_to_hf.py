@@ -79,11 +79,16 @@ def write_model(
     config_path = Path(input_base_path) / "config.yaml"
     olmo_1124_config = yaml.safe_load(config_path.read_text())["model"]
 
+    if not olmo_1124_config.get("attention_layer_norm", False):
+        raise RuntimeError("OLMo November 2024 checkpoints must have attention layer norm")
+    if not olmo_1124_config.get("norm_after", False):
+        raise RuntimeError("OLMo November 2024 checkpoints must set norm_after to True")
+
     n_layers = olmo_1124_config["n_layers"]
     n_heads = olmo_1124_config["n_heads"]
     dim = olmo_1124_config["d_model"]
     dims_per_head = dim // n_heads
-    base = 10000.0
+    base = olmo_1124_config["rope_theta"]
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
     max_position_embeddings = olmo_1124_config["max_sequence_length"]
 
@@ -121,9 +126,15 @@ def write_model(
             f"model.layers.{layer_i}.self_attn.k_proj.weight": k_proj_weight,
             f"model.layers.{layer_i}.self_attn.v_proj.weight": v_proj_weight,
             f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"transformer.blocks.{layer_i}.attn_out.weight"],
+            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[f"transformer.blocks.{layer_i}.q_norm.weight"],
+            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"transformer.blocks.{layer_i}.k_norm.weight"],
             f"model.layers.{layer_i}.mlp.gate_proj.weight": gate_proj_weight,
             f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"transformer.blocks.{layer_i}.ff_out.weight"],
             f"model.layers.{layer_i}.mlp.up_proj.weight": up_proj_weight,
+            f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"transformer.blocks.{layer_i}.attn_norm.weight"],
+            f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                f"transformer.blocks.{layer_i}.ff_norm.weight"
+            ],
         }
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
@@ -139,6 +150,7 @@ def write_model(
     # TODO: Deal with weight-tying
     state_dict = {
         "model.embed_tokens.weight": loaded["transformer.wte.weight"],
+        "model.norm.weight": loaded["transformer.ln_f.weight"],
         "lm_head.weight": loaded["transformer.ff_out.weight"]
         if "transformer.ff_out.weight" in loaded
         else loaded["transformer.wte.weight"],
@@ -175,8 +187,8 @@ def write_model(
         bos_token_id=None,
         eos_token_id=olmo_1124_config["eos_token_id"],
         tie_word_embeddings=olmo_1124_config["weight_tying"],
+        rms_norm_eps=olmo_1124_config["layer_norm_eps"],
         rope_theta=base,
-        clip_qkv=olmo_1124_config.get("clip_qkv"),
     )
     config.save_pretrained(tmp_model_path)
 
