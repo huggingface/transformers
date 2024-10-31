@@ -1788,12 +1788,8 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
 
-        self.text_model = Kosmos2_5TextModel._from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
-        self.vision_model = Kosmos2_5VisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.text_model = Kosmos2_5TextModel._from_config(config.text_config)
+        self.vision_model = Kosmos2_5VisionModel._from_config(config.vision_config)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
