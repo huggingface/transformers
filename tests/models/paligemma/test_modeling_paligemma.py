@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch PaliGemma model."""
 
-import gc
 import unittest
 
 import requests
@@ -28,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_read_token,
     require_torch,
     require_torch_sdpa,
@@ -365,8 +365,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used

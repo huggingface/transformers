@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT-Video model."""
 
-import gc
 import unittest
 
 import numpy as np
@@ -29,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     slow,
@@ -400,8 +400,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt_video = "USER: <video>\nWhy is this video funny? ASSISTANT:"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     @slow
     @require_bitsandbytes

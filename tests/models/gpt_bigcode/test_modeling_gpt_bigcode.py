@@ -422,9 +422,10 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
 
     def tearDown(self):
-        import gc
+        if torch_device != "cpu":
+            import gc
 
-        gc.collect()
+            gc.collect()
 
     def test_config(self):
         self.config_tester.run_common_tests()

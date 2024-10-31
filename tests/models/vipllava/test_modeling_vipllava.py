@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch VipLlava model."""
 
-import gc
 import unittest
 
 import requests
@@ -26,7 +25,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -290,8 +296,7 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     @slow
     @require_bitsandbytes
