@@ -623,8 +623,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     {
                         "text": text,
                         "timestamp": (
-                            (start_timestamp_position + prev_segments_len) * time_precision,
-                            (end_timestamp_position + prev_segments_len) * time_precision,
+                            start_timestamp_position * time_precision + prev_segments_len * time_precision,
+                            end_timestamp_position * time_precision + prev_segments_len * time_precision,
                         ),
                     }
                 )
