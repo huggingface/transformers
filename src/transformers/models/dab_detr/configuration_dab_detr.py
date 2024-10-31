@@ -69,7 +69,7 @@ class DabDetrConfig(PretrainedConfig):
         activation_function (`str` or `function`, *optional*, defaults to `"prelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        d_model (`int`, *optional*, defaults to 256):
+        hidden_size (`int`, *optional*, defaults to 256):
             This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -138,7 +138,6 @@ class DabDetrConfig(PretrainedConfig):
     model_type = "dab-detr"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
-        "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
     }
 
@@ -158,7 +157,7 @@ class DabDetrConfig(PretrainedConfig):
         decoder_attention_heads=8,
         is_encoder_decoder=True,
         activation_function="prelu",
-        d_model=256,
+        hidden_size=256,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -219,7 +218,7 @@ class DabDetrConfig(PretrainedConfig):
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_queries = num_queries
-        self.d_model = d_model
+        self.hidden_size = hidden_size
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
