@@ -2,7 +2,9 @@ import inspect
 from functools import wraps
 
 import regex as re
-from .doc import PT_SAMPLE_DOCSTRINGS, PT_RETURN_INTRODUCTION, _prepare_output_docstrings
+
+from .doc import PT_SAMPLE_DOCSTRINGS, _prepare_output_docstrings
+
 
 class ModelArgs:
     labels = r""" of shape `(batch_size, sequence_length)`:
@@ -250,7 +252,7 @@ def auto_docstring(func):
             if param.annotation != inspect.Parameter.empty:
                 param_type = param.annotation
                 if "typing" in str(param_type):
-                    param_type = "".join(str(param_type).split("typing.")).replace("transformers.","~")
+                    param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
                 else:
                     param_type = f"{param_type.__module__.replace("transformers.","~").replace("builtins","")}.{param.annotation.__name__}"
             else:
@@ -279,12 +281,13 @@ def auto_docstring(func):
         task = model_task.group()
         example_annotation = PT_SAMPLE_DOCSTRINGS[task]
 
-    config_class = "".join([k.title() for k in func.__module__.split('.')[-1].split("_")[1:]]) + "Config"
+    config_class = "".join([k.title() for k in func.__module__.split(".")[-1].split("_")[1:]]) + "Config"
     # return_annotation = sig.return_annotation
     # return_type =  f"{return_annotation.__module__.replace("transformers.","~").replace("builtins","")}.{return_annotation.__name__}"
-    return_docstring = _prepare_output_docstrings(sig.return_annotation, config_class)
+    if sig.return_annotation is not None and sig.return_annotation != inspect._empty:
+        return_docstring = _prepare_output_docstrings(sig.return_annotation, config_class)
+        docstring += return_docstring
 
-    docstring += return_docstring
     docstring += example_annotation
 
     if len(undocumented_parameters) > 0:
@@ -311,7 +314,7 @@ def auto_class_docstring(cls):
     if name != []:
         name = name[0]
         path = inspect.getsourcefile(cls)
-        model_name = "".join([k.title() for k in path[:-3].split('/')[-1].split("_")[1:]])
+        model_name = "".join([k.title() for k in path[:-3].split("/")[-1].split("_")[1:]])
         pre_block = getattr(ClassDocstring, name).format(model_name=model_name, model_checkpoint="dummy-path")
         # Start building the docstring
         docstring = f"{pre_block}\n\n"
