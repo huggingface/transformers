@@ -438,12 +438,6 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
-    @unittest.skip(
-        "KOSMOS-2 doesn't support inputs embeds. The test isn't skipped by checking ipnut args because KOSMOS-2 has `generate()` overwritten"
-    )
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/kosmos-2-patch14-224"

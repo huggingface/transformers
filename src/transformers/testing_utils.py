@@ -16,6 +16,7 @@ import collections
 import contextlib
 import doctest
 import functools
+import gc
 import importlib
 import inspect
 import logging
@@ -2679,3 +2680,10 @@ def compare_pipeline_output_to_hub_spec(output, hub_spec):
         if unexpected_keys:
             error.append(f"Keys in pipeline output that are not in Hub spec: {unexpected_keys}")
         raise KeyError("\n".join(error))
+
+
+@require_torch
+def cleanup(device: str, gc_collect=False):
+    if gc_collect:
+        gc.collect()
+    backend_empty_cache(device)
