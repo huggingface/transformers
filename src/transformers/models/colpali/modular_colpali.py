@@ -471,40 +471,8 @@ class ColPaliForRetrievalOutput(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-@add_start_docstrings(
-    """
-    ColPali leverages Vision Language Models (VLMs) to construct efficient multi-vector embeddings in the visual space for document retrieval.
-    By feeding the ViT output patches from PaliGemma-3B to a linear projection, we create a multi-vector representation of documents. The model
-    is trained to maximize the similarity between these document embeddings and the query embeddings, following the ColBERT method.
-
-    Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account
-    both the textual and visual content (layout, charts, ...) of a document.
-
-    ColPali was introduced in the following paper: [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
-
-    Resources:
-    - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
-    - The code for using and training the original ColPali model and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
-    - Cookbooks to fine-tune ColPali (with optional quantization), generate similarity maps, ... can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
-    """
-)
-class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
-    main_input_name: ClassVar[str] = "input_ids"  # transformers-related
-
-    def __init__(self, config: ColPaliConfig):
-        super().__init__(config=config)
-
-        self.embedding_dim = self.config.embedding_dim
-        self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
-
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(
-        """
-        Args:
+COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING = r"""
+    Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
@@ -576,45 +544,78 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
             token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
 
-        ```python
-        import torch
-        from PIL import Image
+    ```python
+    import torch
+    from PIL import Image
 
-        from transformers import ColPali, ColPaliProcessor
+    from transformers import ColPali, ColPaliProcessor
 
-        model_name = "vidore/colpali-v1.2-hf"
+    model_name = "vidore/colpali-v1.2-hf"
 
-        model = ColPali.from_pretrained(
-            model_name,
-            torch_dtype=torch.bfloat16,
-            device_map="cuda:0",  # or "mps" if on Apple Silicon
-        ).eval()
+    model = ColPali.from_pretrained(
+        model_name,
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0",  # or "mps" if on Apple Silicon
+    ).eval()
 
-        processor = ColPaliProcessor.from_pretrained(model_name)
+    processor = ColPaliProcessor.from_pretrained(model_name)
 
-        # Your inputs
-        images = [
-            Image.new("RGB", (32, 32), color="white"),
-            Image.new("RGB", (16, 16), color="black"),
-        ]
-        queries = [
-            "What is the organizational structure for our R&D department?",
-            "Can you provide a breakdown of last year’s financial performance?",
-        ]
+    # Your inputs
+    images = [
+        Image.new("RGB", (32, 32), color="white"),
+        Image.new("RGB", (16, 16), color="black"),
+    ]
+    queries = [
+        "What is the organizational structure for our R&D department?",
+        "Can you provide a breakdown of last year’s financial performance?",
+    ]
 
-        # Process the inputs
-        batch_images = processor(images=images).to(model.device)
-        batch_queries = processor(text=queries).to(model.device)
+    # Process the inputs
+    batch_images = processor(images=images).to(model.device)
+    batch_queries = processor(text=queries).to(model.device)
 
-        # Forward pass
-        with torch.no_grad():
-            image_embeddings = model(**batch_images)
-            query_embeddings = model(**batch_queries)
+    # Forward pass
+    with torch.no_grad():
+        image_embeddings = model(**batch_images)
+        query_embeddings = model(**batch_queries)
 
-        scores = processor.score_retrieval(query_embeddings, image_embeddings)
-        ```
-        """
-    )
+    scores = processor.score_retrieval(query_embeddings, image_embeddings)
+    ```
+"""
+
+
+@add_start_docstrings(
+    """
+    ColPali leverages Vision Language Models (VLMs) to construct efficient multi-vector embeddings in the visual space for document retrieval.
+    By feeding the ViT output patches from PaliGemma-3B to a linear projection, we create a multi-vector representation of documents. The model
+    is trained to maximize the similarity between these document embeddings and the query embeddings, following the ColBERT method.
+
+    Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account
+    both the textual and visual content (layout, charts, ...) of a document.
+
+    ColPali was introduced in the following paper: [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+
+    Resources:
+    - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
+    - The code for using and training the original ColPali model and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
+    - Cookbooks to fine-tune ColPali (with optional quantization), generate similarity maps, ... can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
+    """
+)
+class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
+    main_input_name: ClassVar[str] = "input_ids"  # transformers-related
+
+    def __init__(self, config: ColPaliConfig):
+        super().__init__(config=config)
+
+        self.embedding_dim = self.config.embedding_dim
+        self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
+
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING)
     @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class="ColPaliConfig")
     def forward(
         self,
