@@ -322,8 +322,8 @@
         title: (번역중) ALBERT
       - local: model_doc/bart
         title: BART
-      - local: in_translation
-        title: (번역중) BARThez
+      - local: model_doc/barthez
+        title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
       - local: in_translation
