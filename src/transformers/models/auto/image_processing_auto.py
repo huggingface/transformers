@@ -114,6 +114,7 @@ else:
             ("oneformer", ("OneFormerImageProcessor",)),
             ("owlv2", ("Owlv2ImageProcessor",)),
             ("owlvit", ("OwlViTImageProcessor",)),
+            ("paligemma", ("SiglipImageProcessor",)),
             ("perceiver", ("PerceiverImageProcessor",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor",)),
