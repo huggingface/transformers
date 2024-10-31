@@ -331,7 +331,7 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     device = get_torch_device("auto")
     print(f"Device: {device}")
 
-    Load the original model's state_dict
+    # Load the original model's state_dict
     original_state_dict: Dict[str, torch.Tensor] = torch.hub.load_state_dict_from_url(
         "https://huggingface.co/vidore/colpali-v1.2-merged-state_dict/resolve/main/colpali_v1_2_merged_state_dict.pth",
         map_location="cpu",
@@ -403,19 +403,24 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
         )
     )
 
+    # Sanity checks
     print(f"Mean Absolute Error (MAE) for images: {mae_images}")
     print(f"Mean Absolute Error (MAE) for queries: {mae_queries}")
+    if mae_images > TOLERANCE or mae_queries > TOLERANCE:
+        raise ValueError("Mean Absolute Error (MAE) is greater than the tolerance")
 
-    torch.allclose(
+    if not torch.allclose(
         outputs_images_new[ORIGINAL_IMAGE_OUTPUTS_SLICE["slice"]],
         ORIGINAL_IMAGE_OUTPUTS_SLICE["value"].to(outputs_images_new.device).to(ORIGINAL_DTYPE),
         rtol=TOLERANCE,
-    )
-
-    breakpoint()
-
-    if mae_images > TOLERANCE or mae_queries > TOLERANCE:
-        raise ValueError("Mean Absolute Error (MAE) is greater than the tolerance")
+    ):
+        raise ValueError("Outputs for images do not match the original model's outputs")
+    if not torch.allclose(
+        outputs_queries_new[ORIGINAL_QUERY_OUTPUTS_SLICE["slice"]],
+        ORIGINAL_QUERY_OUTPUTS_SLICE["value"].to(outputs_queries_new.device).to(ORIGINAL_DTYPE),
+        rtol=TOLERANCE,
+    ):
+        raise ValueError("Outputs for queries do not match the original model's outputs")
 
     # Save the model
     if push_to_hub:
