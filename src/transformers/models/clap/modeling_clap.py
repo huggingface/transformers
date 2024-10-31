@@ -575,11 +575,14 @@ class ClapAudioOutput(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->ClapDropPath, Swin->ClapAudio
 class ClapAudioLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
+    def __init__(self, config, layer_id, input_resolution, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
+        dim = int(config.embed_dim * 2**layer_id)
+        num_heads = config.num_heads[layer_id]
+
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = ClapAudioAttention(config, dim, num_heads, window_size=self.window_size)
@@ -701,17 +704,20 @@ class ClapAudioLayer(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->ClapAudio
 class ClapAudioStage(nn.Module):
-    def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
+    def __init__(self, config, grid_size, dpr, layer_id):
         super().__init__()
-        self.config = config
-        self.dim = dim
+        self.config = config  # is this even necessary??
+        dim = int(config.embed_dim * 2**layer_id)
+        depth = config.depths[layer_id]
+        drop_path = dpr[sum(config.depths[:layer_id]) : sum(config.depths[: layer_id + 1])]
+        downsample = ClapAudioPatchMerging if (layer_id < len(config.depths) - 1) else None
+
         self.blocks = nn.ModuleList(
             [
                 ClapAudioLayer(
                     config=config,
-                    dim=dim,
+                    layer_id=layer_id,
                     input_resolution=input_resolution,
-                    num_heads=num_heads,
                     drop_path_rate=drop_path[i],
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
                 )

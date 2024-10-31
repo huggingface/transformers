@@ -635,14 +635,13 @@ class SwinOutput(nn.Module):
 
 
 class SwinLayer(nn.Module):
-    def __init__(self, config,layer_id, input_resolution,drop_path_rate=0.0, shift_size=0):
+    def __init__(self, config, layer_id, input_resolution, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
-        dim=int(config.embed_dim * 2** layer_id)
-        num_heads=config.num_heads[layer_id]
-
+        dim = int(config.embed_dim * 2**layer_id)
+        num_heads = config.num_heads[layer_id]
 
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
@@ -766,11 +765,11 @@ class SwinLayer(nn.Module):
 class SwinStage(nn.Module):
     def __init__(self, config, grid_size, dpr, layer_id):
         super().__init__()
-        self.config = config # is this even necessary??
-        dim=int(config.embed_dim * 2** layer_id)
-        depth=config.depths[layer_id]
-        drop_path=dpr[sum(config.depths[:layer_id]) : sum(config.depths[: layer_id + 1])]
-        downsample=SwinPatchMerging if (layer_id < len(config.depths) - 1) else None
+        self.config = config  # is this even necessary??
+        dim = int(config.embed_dim * 2**layer_id)
+        depth = config.depths[layer_id]
+        drop_path = dpr[sum(config.depths[:layer_id]) : sum(config.depths[: layer_id + 1])]
+        downsample = SwinPatchMerging if (layer_id < len(config.depths) - 1) else None
 
         self.blocks = nn.ModuleList(
             [
@@ -829,17 +828,12 @@ class SwinStage(nn.Module):
 class SwinEncoder(nn.Module):
     def __init__(self, config, grid_size):
         super().__init__()
-        self.num_layers = len(config.depths) 
+        self.num_layers = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList(
             [
-                SwinStage(
-                    config=config,
-                    grid_size=grid_size,
-                    dpr=dpr,
-                    layer_id=i_layer
-                )
+                SwinStage(config=config, grid_size=grid_size, dpr=dpr, layer_id=i_layer)
                 for i_layer in range(self.num_layers)
             ]
         )
