@@ -202,22 +202,19 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.gemma2.modeling_gemma.Gemma2MLP with Gemma2->DiffLlama
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->DiffLlama
 class DiffLlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
-        return down_proj
+    def forward(self, hidden_state):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -267,10 +264,11 @@ class DiffLlamaAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
 
         self.lambda_init = lambda_init_fn(layer_idx)
-        self.lambda_q1 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
-        self.lambda_k1 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
-        self.lambda_q2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
-        self.lambda_k2 = nn.Parameter(torch.normal(0, 0.1, size=(self.head_dim,)))
+        std_dev = 1e-10 if getattr(config, "zero_init", False) else 0.1
+        self.lambda_q1 = nn.Parameter(torch.normal(0, std_dev, size=(self.head_dim,)))
+        self.lambda_k1 = nn.Parameter(torch.normal(0, std_dev, size=(self.head_dim,)))
+        self.lambda_q2 = nn.Parameter(torch.normal(0, std_dev, size=(self.head_dim,)))
+        self.lambda_k2 = nn.Parameter(torch.normal(0, std_dev, size=(self.head_dim,)))
         self.groupnorm = nn.RMSNorm(2 * self.head_dim, eps=config.rms_norm_eps, elementwise_affine=False)
 
         # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
@@ -1194,8 +1192,8 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, DiffLlamaForCausalLM
 
-        >>> model = GemmaForCausalLM.from_pretrained("kajuma/DiffLlama-0.3B-handcut)
-        >>> tokenizer = AutoTokenizer.from_pretrained("kajuma/DiffLlama-0.3B-handcut")
+        >>> model = DiffLlamaForCausalLM.from_pretrained("google/diffllama-7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/diffllama-7b")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1392,6 +1390,7 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 class DiffLlamaForQuestionAnswering(DiffLlamaPreTrainedModel):
     base_model_prefix = "transformer"
 
+    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->DiffLlama
     def __init__(self, config):
         super().__init__(config)
         self.transformer = DiffLlamaModel(config)
@@ -1563,3 +1562,20 @@ class DiffLlamaForTokenClassification(DiffLlamaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "DiffLlamaRMSNorm",
+    "DiffLlamaRotaryEmbedding",
+    "DiffLlamaMLP",
+    "DiffLlamaAttention",
+    "DiffLlamaFlashAttention2",
+    "DiffLlamaSdpaAttention",
+    "DiffLlamaDecoderLayer",
+    "DiffLlamaPreTrainedModel",
+    "DiffLlamaModel",
+    "DiffLlamaForCausalLM",
+    "DiffLlamaForSequenceClassification",
+    "DiffLlamaForQuestionAnswering",
+    "DiffLlamaForTokenClassification",
+]

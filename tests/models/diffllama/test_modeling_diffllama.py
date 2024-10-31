@@ -53,7 +53,6 @@ if is_torch_available():
         DiffLlamaModel,
     )
     from transformers.models.diffllama.modeling_diffllama import (
-        DiffLlamaLinearScalingRotaryEmbedding,
         DiffLlamaRotaryEmbedding,
     )
 
@@ -298,6 +297,18 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else ()
     )
     all_generative_model_classes = (DiffLlamaForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DiffLlamaModel,
+            "text-classification": DiffLlamaForSequenceClassification,
+            "text-generation": DiffLlamaForCausalLM,
+            "zero-shot": DiffLlamaForSequenceClassification,
+            "question-answering": DiffLlamaForQuestionAnswering,
+            "token-classification": DiffLlamaForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
