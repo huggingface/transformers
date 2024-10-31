@@ -479,15 +479,23 @@ class ClassDependencyMapper(CSTVisitor):
     `global_names`.
     """
 
-    def __init__(self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None):
+    def __init__(
+        self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None
+    ):
         super().__init__()
         self.class_name = class_name
         self.dependencies = set()
         self.global_names = global_names
-        self.objects_imported_from_modeling = set() if objects_imported_from_modeling is None else objects_imported_from_modeling
+        self.objects_imported_from_modeling = (
+            set() if objects_imported_from_modeling is None else objects_imported_from_modeling
+        )
 
     def visit_Name(self, node):
-        if node.value != self.class_name and node.value in self.global_names and node.value not in self.objects_imported_from_modeling:
+        if (
+            node.value != self.class_name
+            and node.value in self.global_names
+            and node.value not in self.objects_imported_from_modeling
+        ):
             self.dependencies.add(node.value)
 
 
@@ -499,7 +507,9 @@ def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> s
     return visitor.dependencies
 
 
-def augmented_dependencies_for_class_node(node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None) -> set:
+def augmented_dependencies_for_class_node(
+    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None
+) -> set:
     """Create augmented dependencies for a class node based on a `mapper`.
     Augmented dependencies means immediate dependencies + recursive function and assignments dependencies.
     """
@@ -518,6 +528,7 @@ ALL_FILE_TYPES = (
     "image_processing",
     "feature_extractor",
 )
+
 
 class ModuleMapper(CSTVisitor, ABC):
     """An abstract visitor class which analyses a module, creating a mapping of dependencies for classes, functions and assignments.
@@ -557,7 +568,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 if imported_object.evaluated_alias is not None:
                     self.objects_imported_from_modeling.add(imported_object.evaluated_alias)
                 else:
-                    self.objects_imported_from_modeling.add(imported_object.evaluated_name)    
+                    self.objects_imported_from_modeling.add(imported_object.evaluated_name)
 
     def visit_SimpleStatementLine(self, node):
         """
@@ -1158,7 +1169,6 @@ class ModularFileMapper(ModuleMapper):
         for file, mapper in self.visited_modules.items():
             file_type = re.search(rf"^transformers\.models\.\w+\.({self.match_patterns})_.*", file).group(1)
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
-        print(self.imported_objects_per_file)
 
     def merge_model_specific_imports(self, visited_modules):
         """Merge the functions and assignments imported from the modeling files to the modular nodes and dependency graph,
@@ -1239,7 +1249,7 @@ def get_class_node_and_dependencies(
     file_type = find_file_type(class_name)
     file_to_update = files[file_type]
 
-    # This is used to avoid adding objects to the dependencies graph if they will be imported 
+    # This is used to avoid adding objects to the dependencies graph if they will be imported
     # e.g. Config is imported in modeling, it should not be redefined into it
     if file_type in modular_mapper.imported_objects_per_file:
         imported_objects = modular_mapper.imported_objects_per_file[file_type]
