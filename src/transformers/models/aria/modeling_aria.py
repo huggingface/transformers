@@ -235,7 +235,7 @@ class AriaProjector(nn.Module):
         # Removed weight inits compared to original:
         # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
         """
         Forward pass of the Projector module.
 
@@ -246,13 +246,16 @@ class AriaProjector(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
-        batch_size = x.shape[0]
+        batch_size, num_patches = x.shape[0], x.shape[1]
 
-        query_num = self.patch_to_query_dict.get(x.shape[1], None)
-        assert query_num is not None, f"Query number for {x.shape[1]} patches is not provided"
+        if num_patches not in self.patch_to_query_dict.keys():
+            raise KeyError(
+                f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
+            )
+        query_num = self.patch_to_query_dict[num_patches]
 
-        # Compared to original, simplify definition and use expand instead of repeat.
-        queries = self.query[:query_num].unsqueeze(0).expand(batch_size, -1, -1)
+        # Compared to original, simplify definition
+        queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, -1, -1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
@@ -342,8 +345,8 @@ class AriaTopKRouter(nn.Module):
 
     # Simplify code a lot compared to original, since we do not need training.
     # Original: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/moe_lm.py#L170
-    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        logits = F.linear(input, self.weight)
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        logits = F.linear(hidden_states, self.weight)
         top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
         scores = F.softmax(top_logits, dim=-1)
 
@@ -500,8 +503,6 @@ class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for Instruc
         self.experts = AriaGroupedMLP(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
         self.config = config
-        self.hidden_states_shape = None
-        self.reversed_input_permutation_mapping = None
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -2108,7 +2109,7 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaTextConfig
     _no_split_modules = ["AriaDecoderLayer"]
 
-    def __init__(self, config):
+    def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.model = AriaTextModel(config)
         self.vocab_size = config.vocab_size
@@ -2350,7 +2351,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position=None,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
@@ -2372,6 +2372,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_attentions (bool, optional): Whether to output attention weights.
             output_hidden_states (bool, optional): Whether to output hidden states.
             return_dict (bool, optional): Whether to return a ModelOutput object.
+            num_logits_to_keep (`int`, optional): Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
 
         Returns:
             Union[Tuple, AriaCausalLMOutputWithPast]: Model outputs.

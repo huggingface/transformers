@@ -228,7 +228,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
                 if do_normalize:
                     crop_image_padded = normalize(crop_image_padded, self.image_mean, self.image_std)
-    
+
                 # Switch to rgb channel first
                 crop_image_padded = np.transpose(crop_image_padded, (2, 0, 1))
                 pixel_values.append(crop_image_padded)

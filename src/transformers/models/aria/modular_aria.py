@@ -203,7 +203,7 @@ class AriaConfig(PretrainedConfig):
                 1225: 128,
                 4900: 256,
             }
-        self.projector_patch_to_query_dict = projector_patch_to_query_dict.copy()
+        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"
@@ -482,8 +482,8 @@ class AriaImageProcessor(BaseImageProcessor):
                (2, 1), (3, 1), (3, 2), (4, 1), (4, 2),
                (5, 1), (6, 1), (7, 1), (8, 1),
            ]
-       else:
-           self.split_ratio = split_ratio
+        else:
+            self.split_ratio = split_ratio
 
         # we make the transform a property so that it is lazily initialized,
         # this could avoid the error "TypeError: Object of type Normalize is not JSON serializable"

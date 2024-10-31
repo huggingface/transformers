@@ -7,7 +7,6 @@
 
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING
 
 
@@ -154,7 +153,7 @@ class AriaConfig(PretrainedConfig):
                 1225: 128,
                 4900: 256,
             }
-        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
+        self.projector_patch_to_query_dict = projector_patch_to_query_dict.copy()
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"
