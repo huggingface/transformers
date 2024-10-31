@@ -1100,7 +1100,6 @@ ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": Jam
 # Adapted from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->JAMBA, Mistral->Jamba
 @auto_class_docstring
 class JambaModel(JambaPreTrainedModel):
-
     def __init__(self, config: JambaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

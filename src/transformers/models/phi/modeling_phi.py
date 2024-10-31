@@ -755,7 +755,6 @@ class PhiPreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class PhiModel(PhiPreTrainedModel):
-
     def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

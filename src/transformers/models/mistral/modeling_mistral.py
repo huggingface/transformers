@@ -578,7 +578,6 @@ class MistralPreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class MistralModel(MistralPreTrainedModel):
-
     def __init__(self, config: MistralConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1149,13 +1148,7 @@ class MistralForTokenClassification(MistralPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-The Mistral Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    MISTRAL_START_DOCSTRING,
-)
+@auto_class_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering with Llama->Mistral,LLAMA->MISTRAL,transformer->model
 class MistralForQuestionAnswering(MistralPreTrainedModel):
     base_model_prefix = "model"
@@ -1175,7 +1168,7 @@ class MistralForQuestionAnswering(MistralPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

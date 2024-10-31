@@ -697,7 +697,6 @@ class CoherePreTrainedModel(PreTrainedModel):
 @auto_class_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere, LLAMA->COHERE
 class CohereModel(CoherePreTrainedModel):
-
     # Ignore copy
     def __init__(self, config: CohereConfig):
         super().__init__(config)

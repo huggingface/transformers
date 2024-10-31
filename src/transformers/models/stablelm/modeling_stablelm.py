@@ -837,7 +837,6 @@ STABLELM_INPUTS_DOCSTRING = r"""
 
 @auto_class_docstring
 class StableLmModel(StableLmPreTrainedModel):
-
     def __init__(self, config: StableLmConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

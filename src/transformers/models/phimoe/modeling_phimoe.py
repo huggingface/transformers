@@ -912,7 +912,6 @@ class PhimoePreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class PhimoeModel(PhimoePreTrainedModel):
-
     def __init__(self, config: PhimoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

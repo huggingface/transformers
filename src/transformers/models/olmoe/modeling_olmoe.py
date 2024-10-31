@@ -890,7 +890,6 @@ OLMOE_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Olmoe
 class OlmoeModel(OlmoePreTrainedModel):
-
     def __init__(self, config: OlmoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

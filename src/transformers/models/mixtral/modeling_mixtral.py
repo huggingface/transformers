@@ -778,7 +778,6 @@ class MixtralPreTrainedModel(PreTrainedModel):
 # TODO @longjie no longer copied from Mistral after static cache
 @auto_class_docstring
 class MixtralModel(MixtralPreTrainedModel):
-
     def __init__(self, config: MixtralConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1371,13 +1370,7 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-The Mixtral Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    MIXTRAL_START_DOCSTRING,
-)
+@auto_class_docstring
 # Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Mixtral, MISTRAL->MIXTRAL
 class MixtralForQuestionAnswering(MixtralPreTrainedModel):
     base_model_prefix = "model"
@@ -1397,7 +1390,7 @@ class MixtralForQuestionAnswering(MixtralPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

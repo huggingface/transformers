@@ -931,7 +931,6 @@ QWEN2MOE_INPUTS_DOCSTRING = r"""
 
 @auto_class_docstring
 class Qwen2MoeModel(Qwen2MoePreTrainedModel):
-
     def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1528,13 +1527,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-The Qwen2MoE Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_class_docstring
 # Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
     base_model_prefix = "model"
@@ -1554,7 +1547,7 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

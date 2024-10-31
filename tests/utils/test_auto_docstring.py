@@ -13,16 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import doctest
-import logging
-import os
 import unittest
-from pathlib import Path
-from typing import List, Union
 
-from transformers import LlamaModel, LlamaForCausalLM
+from transformers import LlamaForCausalLM, LlamaModel
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 from transformers.utils import auto_class_docstring, auto_docstring
+
+
 LLAMA_CLM_FORWARD = """The [`LlamaForCausalLM`] forward method, overrides the `__call__` special method.
 
     <Tip>
@@ -180,7 +177,6 @@ LLAMA_DECODER = """
 
 
 class AutoDocstringTest(unittest.TestCase):
-
     def test_modeling_docstring(self):
         llama_docstring = """The bare LLaMA Model outputting raw hidden-states without any specific head on top.\n    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the\n    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads\n    etc.)\n\n    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.\n    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage\n    and behavior.\n\n    Parameters:\n        config ([`LlamaConfig`]):\n            Model configuration class with all the parameters of the model. Initializing with a config file does not\n            load the weights associated with the model, only the configuration. Check out the\n            [`~PreTrainedModel.from_pretrained`] method to load the model weights.\n\n    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]\n\n    Args:\n        config: LlamaConfig\n    '"""
         self.assertEqual(llama_docstring, LlamaModel.__doc__)
@@ -190,7 +186,7 @@ class AutoDocstringTest(unittest.TestCase):
         self.assertEqual(LLAMA_CLM_FORWARD, LlamaForCausalLM.forward.__doc__)
         self.assertEqual(LLAMA_DECODER, LlamaDecoderLayer.forward.__doc__)
 
-    def auto_doc(self):
+    def test_auto_doc(self):
         COOL_CLASS_DOC = """
         Args:
             input_ids (some):
@@ -201,7 +197,7 @@ class AutoDocstringTest(unittest.TestCase):
                 I want
                 this to be
                 quite long
-"""
+        """
 
         @auto_class_docstring
         class MyCoolClass:

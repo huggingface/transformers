@@ -647,7 +647,6 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class Starcoder2Model(Starcoder2PreTrainedModel):
-
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -990,7 +989,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
-        pamplemousse:int = None,
+        pamplemousse: int = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:

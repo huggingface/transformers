@@ -138,7 +138,7 @@ class ClassDocstring:
     """
 
     Model = r"""
-        The bare {model_camel} Model outputting raw hidden-states without any specific head on top."""
+        The bare {model_name} Model outputting raw hidden-states without any specific head on top."""
 
     ForSequenceClassification = r"""
         The {model_name} Model transformer with a sequence classification head on top (linear layer).
@@ -154,20 +154,20 @@ class ClassDocstring:
     """
 
     ForQuestionAnswering = r"""
-        The Llama Model transformer with a span classification head on top for extractive question-answering tasks like
+        The {model_name} transformer with a span classification head on top for extractive question-answering tasks like
         SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """
 
     ForTokenClassificatio = r"""
-        The Llama Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+        The {model_name} transformer with a token classification head on top (a linear layer on top of the hidden-states
         output) e.g. for Named-Entity-Recognition (NER) tasks.
     """
 
     Config = r"""
-    This is the configuration class to store the configuration of a [`{}Model`] or a [`TF{}Model`]. It is
+    This is the configuration class to store the configuration of a [`{model_name}Model`] or a [`TF{model_name}Model`]. It is
     used to instantiate a DeBERTa model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the {}
-    [{}](https://huggingface.co/{}) architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the {model_name}
+    [{}](https://huggingface.co/{model_checkpoint}) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -207,20 +207,20 @@ def parse_docstring(docstring):
     args_pattern = args_pattern = re.compile(r"(Args:)(\n.*)?(\n)?$", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
-    args_section = args_match.group(2).lstrip('\n') if args_match else None
+    args_section = args_match.group(2).lstrip("\n") if args_match else None
 
     params = {}
     if args_section:
-        param_pattern = re.compile(r"^\s*(\w+)\s*\((.*?)\):\s*(.*?)(?=\n^\s*\w+\s*\(|\n\s*$)", re.DOTALL | re.MULTILINE)
+        param_pattern = re.compile(
+            r"^\s*(\w+)\s*\((.*?)\):\s*(.*?)(?=\n^\s*\w+\s*\(|\n\s*$)", re.DOTALL | re.MULTILINE
+        )
         for match in param_pattern.finditer(args_section):
             param_name = match.group(1)
             param_type = match.group(2)
             param_description = match.group(3).strip()
-            params[param_name] = {
-                'type': param_type,
-                'description': param_description
-            }
-    return params
+            params[param_name] = {"type": param_type, "description": param_description}
+    docstring = re.sub(r"Args:[\S\s]*(?=Example|Return)", "", docstring)
+    return params, docstring
 
 
 def auto_docstring(func):
@@ -243,7 +243,7 @@ def auto_docstring(func):
 
     func_documentation = func.__doc__
     if func_documentation is not None:
-        documented_params = parse_docstring(func_documentation)
+        documented_params, func_documentation = parse_docstring(func_documentation)
 
     for param_name, param in sig.parameters.items():
         if param_name in ModelArgs.__dict__:
@@ -271,8 +271,8 @@ def auto_docstring(func):
 
     if len(undocumented_parameters) > 0:
         print("\n".join(undocumented_parameters))
-    if func.__doc__ is not None:
-        docstring += func.__doc__
+    if func_documentation is not None:
+        docstring += func_documentation
     # Assign the dynamically generated docstring to the wrapper function
     wrapper.__doc__ = docstring
     return wrapper
@@ -285,26 +285,36 @@ def auto_class_docstring(cls):
     docstring = "DUMMUY DOCSTRING YOU DUMB"
     indent_level = get_indent_level(cls) + 8
 
-    name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)[0]
-    pre_block = getattr(ClassDocstring, name)
-    # Start building the docstring
-    docstring = f"{pre_block}\n\n"
-    attr_docs = ""
-    # Get all attributes and methods of the class
-    for attr_name, attr_value in cls.__dict__.items():
-        if not callable(attr_value) and not attr_name.startswith("__"):
-            if attr_value.__class__.__name__ == "property":
-                attr_type = "property"
-            else:
-                attr_type = type(attr_value).__name__
-            if "Config" in name:
-                raise ValueError("Config should have explicit docstring")
-            attribute_mapping = ClassAttrs
-            indented_doc = getattr(attribute_mapping, attr_name, "")
-            attr_docs += f"{' ' * (indent_level+4)}{attr_name} (`{attr_type}`): {indented_doc}\n"
-    if len(attr_docs.replace(" ", "")):
-        docstring += f"{' ' * indent_level}Attributes:\n" + attr_docs
+    name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})", cls.__name__)
+    if name == [] and cls.__doc__ is None:
+        raise ValueError(
+            f"`{cls.__name__}` is not part of the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}"
+        )
+    if name != []:
+        name = name[0]
 
+        pre_block = getattr(ClassDocstring, name).format(model_name=cls.__name__, model_checkpoint="dummy-path")
+        # Start building the docstring
+        docstring = f"{pre_block}\n\n"
+        attr_docs = ""
+        # Get all attributes and methods of the class
+        for attr_name, attr_value in cls.__dict__.items():
+            if not callable(attr_value) and not attr_name.startswith("__"):
+                if attr_value.__class__.__name__ == "property":
+                    attr_type = "property"
+                else:
+                    attr_type = type(attr_value).__name__
+                if "Config" in name:
+                    raise ValueError("Config should have explicit docstring")
+                attribute_mapping = ClassAttrs
+                indented_doc = getattr(attribute_mapping, attr_name, "")
+                attr_docs += f"{' ' * (indent_level+4)}{attr_name} (`{attr_type}`): {indented_doc}\n"
+        if len(attr_docs.replace(" ", "")):
+            docstring += f"{' ' * indent_level}Attributes:\n" + attr_docs
+    else:
+        print(
+            f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"
+        )
     # Assign the dynamically generated docstring to the wrapper class
     if cls.__doc__ is not None:
         docstring += cls.__doc__

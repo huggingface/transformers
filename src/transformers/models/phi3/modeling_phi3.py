@@ -39,7 +39,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_class_docstring,
     auto_docstring,
-    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
@@ -758,7 +757,6 @@ class Phi3PreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class Phi3Model(Phi3PreTrainedModel):
-
     def __init__(self, config: Phi3Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

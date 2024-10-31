@@ -859,7 +859,6 @@ class JetMoePreTrainedModel(PreTrainedModel):
 
 @auto_class_docstring
 class JetMoeModel(JetMoePreTrainedModel):
-
     def __init__(self, config: JetMoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
