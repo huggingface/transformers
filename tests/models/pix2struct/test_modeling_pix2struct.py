@@ -420,7 +420,11 @@ class Pix2StructModelTester:
 class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else {}
-    pipeline_model_mapping = {"image-to-text": Pix2StructForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-to-text": Pix2StructForConditionalGeneration, "image-text-to-text": Pix2StructForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

@@ -767,6 +767,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
             "feature-extraction": Blip2Model,
             "image-to-text": Blip2ForConditionalGeneration,
             "visual-question-answering": Blip2ForConditionalGeneration,
+            "image-text-to-text": Blip2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}

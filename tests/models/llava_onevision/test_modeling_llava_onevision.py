@@ -217,6 +217,9 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True
