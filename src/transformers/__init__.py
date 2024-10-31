@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.46.0.dev0"
+__version__ = "4.47.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -1228,7 +1228,7 @@ else:
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
-    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
+    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor", "RTDetrImageProcessorFast"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -1301,6 +1301,8 @@ else:
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
+            "BayesianDetectorConfig",
+            "BayesianDetectorModel",
             "BeamScorer",
             "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
@@ -1339,6 +1341,9 @@ else:
             "StopStringCriteria",
             "SuppressTokensAtBeginLogitsProcessor",
             "SuppressTokensLogitsProcessor",
+            "SynthIDTextWatermarkDetector",
+            "SynthIDTextWatermarkingConfig",
+            "SynthIDTextWatermarkLogitsProcessor",
             "TemperatureLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
@@ -6147,7 +6152,7 @@ if TYPE_CHECKING:
         )
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
-        from .models.rt_detr import RTDetrImageProcessor
+        from .models.rt_detr import RTDetrImageProcessor, RTDetrImageProcessorFast
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -6213,6 +6218,8 @@ if TYPE_CHECKING:
         )
         from .generation import (
             AlternatingCodebooksLogitsProcessor,
+            BayesianDetectorConfig,
+            BayesianDetectorModel,
             BeamScorer,
             BeamSearchScorer,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -6251,6 +6258,9 @@ if TYPE_CHECKING:
             StopStringCriteria,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
+            SynthIDTextWatermarkDetector,
+            SynthIDTextWatermarkingConfig,
+            SynthIDTextWatermarkLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,

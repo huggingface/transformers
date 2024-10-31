@@ -34,7 +34,7 @@ import time
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -117,9 +117,9 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     HubStrategy,
-    IntervalStrategy,
     PredictionOutput,
     RemoveColumnsCollator,
+    SaveStrategy,
     TrainerMemoryTracker,
     TrainOutput,
     check_target_module_exists,
@@ -358,6 +358,11 @@ class Trainer:
         optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your
             model and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
+        optimizer_cls_and_kwargs (`Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]`, *optional*):
+            A tuple containing the optimizer class and keyword arguments to use.
+            Overrides `optim` and `optim_args` in `args`. Incompatible with the `optimizers` argument.
+
+            Unlike `optimizers`, this argument avoids the need to place model parameters on the correct devices before initializing the Trainer.
         preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`, *optional*):
             A function that preprocess the logits right before caching them at each evaluation step. Must take two
             tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
@@ -401,7 +406,8 @@ class Trainer:
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        optimizers: Tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
+        optimizer_cls_and_kwargs: Optional[Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]] = None,
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         if args is None:
@@ -419,6 +425,12 @@ class Trainer:
             raise ValueError(
                 f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
             )
+        if args.save_strategy == SaveStrategy.BEST or args.load_best_model_at_end:
+            if args.metric_for_best_model is None:
+                raise ValueError(
+                    "`args.metric_for_best_model` must be provided when using 'best' save_strategy or if `args.load_best_model_at_end` is set to `True`."
+                )
+
         self.args = args
         self.compute_loss_func = compute_loss_func
         # Seed must be set before instantiating the model when using model
@@ -582,11 +594,24 @@ class Trainer:
         self.model_wrapped = model
         self.model = model
 
+        # Just in case the model was wrapped outside of the `Trainer`
+        unwrapped_model = self.accelerator.unwrap_model(model)
+        model_forward = (
+            unwrapped_model.forward
+            if not _is_peft_model(unwrapped_model)
+            else unwrapped_model.get_base_model().forward
+        )
+
+        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
+
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
         self.optimizer, self.lr_scheduler = optimizers
+        self.optimizer_cls_and_kwargs = optimizer_cls_and_kwargs
+        if self.optimizer_cls_and_kwargs is not None and self.optimizer is not None:
+            raise RuntimeError("Passing both `optimizers` and `optimizer_cls_and_kwargs` arguments is incompatible.")
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
@@ -965,7 +990,7 @@ class Trainer:
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
-        if self.eval_dataset is None or not has_length(self.eval_dataset):
+        if eval_dataset is None or not has_length(eval_dataset):
             return None
         # Build the sampler.
 
@@ -986,10 +1011,10 @@ class Trainer:
                 return SequentialSampler(eval_dataset)
 
         if self.args.group_by_length:
-            if is_datasets_available() and isinstance(self.eval_dataset, datasets.Dataset):
+            if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
                 lengths = (
-                    self.eval_dataset[self.args.length_column_name]
-                    if self.args.length_column_name in self.eval_dataset.column_names
+                    eval_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in eval_dataset.column_names
                     else None
                 )
             else:
@@ -997,7 +1022,7 @@ class Trainer:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             return LengthGroupedSampler(
                 self.args.eval_batch_size,
-                dataset=self.eval_dataset,
+                dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
             )
@@ -1155,7 +1180,10 @@ class Trainer:
                 },
             ]
 
-            optimizer_cls, optimizer_kwargs = self.get_optimizer_cls_and_kwargs(self.args, opt_model)
+            if self.optimizer_cls_and_kwargs is not None:
+                optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
+            else:
+                optimizer_cls, optimizer_kwargs = self.get_optimizer_cls_and_kwargs(self.args, opt_model)
 
             # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
             # e.g. for GaLore optimizer.
@@ -2199,7 +2227,7 @@ class Trainer:
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
-        delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
+        delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled
 
         # We need to reset the scheduler, as its parameters may be different on subsequent calls
         if self._created_lr_scheduler:
@@ -2248,9 +2276,12 @@ class Trainer:
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
         use_accelerator_prepare = True if model is self.model else False
 
+        # configure fsdp plugin for qlora if any
+        if use_accelerator_prepare:
+            self._fsdp_qlora_plugin_updates()
+
         if delay_optimizer_creation:
             if use_accelerator_prepare:
-                self._fsdp_qlora_plugin_updates()
                 self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
@@ -2417,8 +2448,14 @@ class Trainer:
                 for inputs in batch_samples:
                     step += 1
                     total_batched_samples += 1
+                    is_last_step_and_steps_less_than_grad_acc = (
+                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
+                    )
+                    do_sync_step = is_last_step_and_steps_less_than_grad_acc or (
+                        total_batched_samples % args.gradient_accumulation_steps == 0
+                    )
                     # Since we perform prefetching, we need to manually set sync_gradients
-                    if total_batched_samples % args.gradient_accumulation_steps != 0:
+                    if not do_sync_step:
                         self.accelerator.gradient_state._set_sync_gradients(False)
                     else:
                         self.accelerator.gradient_state._set_sync_gradients(True)
@@ -2473,16 +2510,7 @@ class Trainer:
 
                     self.current_flos += float(self.floating_point_ops(inputs))
 
-                    is_last_step_and_steps_less_than_grad_acc = (
-                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
-                    )
-
-                    if (
-                        (total_batched_samples) % args.gradient_accumulation_steps == 0
-                        or
-                        # last step in epoch but step is always smaller than gradient_accumulation_steps
-                        is_last_step_and_steps_less_than_grad_acc
-                    ):
+                    if do_sync_step:
                         # Since we perform prefetching, we need to manually set sync_gradients to True
                         self.accelerator.gradient_state._set_sync_gradients(True)
 
@@ -2988,9 +3016,13 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             metrics = self._evaluate(trial, ignore_keys_for_eval)
+            is_new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
+
+            if self.args.save_strategy == SaveStrategy.BEST:
+                self.control.should_save = is_new_best_metric
 
         if self.control.should_save:
-            self._save_checkpoint(model, trial, metrics=metrics)
+            self._save_checkpoint(model, trial)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
     def _load_rng_state(self, checkpoint):
@@ -3067,7 +3099,48 @@ class Trainer:
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
 
-    def _save_checkpoint(self, model, trial, metrics=None):
+    def _determine_best_metric(self, metrics, trial):
+        """
+        Determine if the model should be saved based on the evaluation metrics.
+        If args.metric_for_best_model is not set, the loss is used.
+
+        Returns:
+            bool: True if a new best metric was found, else False
+        """
+        is_new_best_metric = False
+
+        if self.args.metric_for_best_model is not None:
+            metric_to_check = self.args.metric_for_best_model
+
+            if not metric_to_check.startswith("eval_"):
+                metric_to_check = f"eval_{metric_to_check}"
+
+            try:
+                metric_value = metrics[metric_to_check]
+            except KeyError as exc:
+                raise KeyError(
+                    f"The `metric_for_best_model` training argument is set to '{metric_to_check}', which is not found in the evaluation metrics. "
+                    f"The available evaluation metrics are: {list(metrics.keys())}. Consider changing the `metric_for_best_model` via the TrainingArguments."
+                ) from exc
+
+            operator = np.greater if self.args.greater_is_better else np.less
+
+            if self.state.best_metric is None:
+                self.state.best_metric = float("-inf") if self.args.greater_is_better else float("inf")
+
+            if operator(metric_value, self.state.best_metric):
+                run_dir = self._get_output_dir(trial=trial)
+                checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+                output_dir = os.path.join(run_dir, checkpoint_folder)
+
+                self.state.best_metric = metric_value
+                self.state.best_model_checkpoint = output_dir
+
+                is_new_best_metric = True
+
+        return is_new_best_metric
+
+    def _save_checkpoint(self, model, trial):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
         # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
@@ -3087,31 +3160,6 @@ class Trainer:
             self._save_optimizer_and_scheduler(output_dir)
             # Save RNG state
             self._save_rng_state(output_dir)
-
-        # Determine the new best metric / best model checkpoint
-        if metrics is not None and self.args.metric_for_best_model is not None:
-            metric_to_check = self.args.metric_for_best_model
-            if not metric_to_check.startswith("eval_"):
-                metric_to_check = f"eval_{metric_to_check}"
-            try:
-                metric_value = metrics[metric_to_check]
-            except KeyError as exc:
-                raise KeyError(
-                    f"The `metric_for_best_model` training argument is set to '{metric_to_check}', "
-                    f"which is not found in the evaluation metrics. "
-                    f"The available evaluation metrics are: {list(metrics.keys())}. "
-                    f"Please ensure that the `compute_metrics` function returns a dictionary that includes '{metric_to_check}' or "
-                    f"consider changing the `metric_for_best_model` via the TrainingArguments."
-                ) from exc
-
-            operator = np.greater if self.args.greater_is_better else np.less
-            if (
-                self.state.best_metric is None
-                or self.state.best_model_checkpoint is None
-                or operator(metric_value, self.state.best_metric)
-            ):
-                self.state.best_metric = metric_value
-                self.state.best_model_checkpoint = output_dir
 
         # Save the Trainer state
         if self.args.should_save:
@@ -3595,7 +3643,12 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            loss *= self.args.gradient_accumulation_steps
+            if num_items_in_batch is not None:
+                if self.compute_loss_func or self.model_accepts_loss_kwargs:
+                    loss *= self.args.gradient_accumulation_steps
+                # Average tokens across devices is orthogonal to gradient accumulation
+                if self.args.average_tokens_across_devices:
+                    loss *= self.args.world_size
             self.accelerator.backward(loss, **kwargs)
 
         return loss.detach() / self.args.gradient_accumulation_steps
@@ -3610,8 +3663,14 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        # if num_items_in_batch is not None:
-        #     inputs["num_items_in_batch"] = num_items_in_batch
+        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
+            num_items_in_batch_tensor = torch.tensor(num_items_in_batch, device=self.args.device)
+            num_items_in_batch = int(self.accelerator.gather(num_items_in_batch_tensor).sum().cpu())
+        if self.model_accepts_loss_kwargs:
+            loss_kwargs = {}
+            if num_items_in_batch is not None:
+                loss_kwargs["num_items_in_batch"] = num_items_in_batch
+            inputs = {**inputs, **loss_kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -4530,7 +4589,7 @@ class Trainer:
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
-        if self.args.save_strategy == IntervalStrategy.STEPS:
+        if self.args.save_strategy == SaveStrategy.STEPS:
             commit_message = f"Training in progress, step {self.state.global_step}"
         else:
             commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
@@ -4704,7 +4763,17 @@ class Trainer:
             elif args.bf16_full_eval:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
-        batch_size = dataloader.batch_size
+        batch_size = (
+            dataloader.total_batch_size
+            if getattr(dataloader, "_is_accelerate_prepared", False)
+            else dataloader.batch_size
+        )
+
+        if batch_size is None:
+            raise ValueError(
+                "Batch size cannot be None. Ensure the dataloader has a valid batch_size or total_batch_size."
+            )
+
         num_examples = self.num_examples(dataloader)
         logger.info(f"\n***** Running {description} *****")
         logger.info(f"  Num examples = {num_examples}")

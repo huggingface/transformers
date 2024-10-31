@@ -621,7 +621,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             logits = model(**inputs).logits
 
         expected_slice = torch.tensor(
-            [[-3.3926, -12.2969, 8.4922], [-5.0195, -11.9531, 8.1406], [-4.0039, -13.3594, 9.2578]],
+            [[-3.3047, -12.0625, 8.4922], [-4.9258, -11.7578, 8.1406], [-3.9297, -13.5000, 9.2500]],
             device=torch_device,
         )
 
