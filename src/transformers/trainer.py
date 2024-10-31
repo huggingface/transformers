@@ -2014,6 +2014,7 @@ class Trainer:
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
+        
         if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train and not self.is_model_parallel:
             self._move_model_to_device(self.model, args.device)
 
@@ -2059,7 +2060,7 @@ class Trainer:
             if self.place_model_on_device:
                 self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
-
+        
         inner_training_loop = find_executable_batch_size(
             self._inner_training_loop, self._train_batch_size, args.auto_find_batch_size
         )
@@ -2208,12 +2209,13 @@ class Trainer:
         if args.gradient_checkpointing:
             self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
 
+        self.model.model.gradient_checkpointing = args.gradient_checkpointing 
         model = self._wrap_model(self.model_wrapped)
 
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
-        use_accelerator_prepare = True if model is self.model else False
+        use_accelerator_prepare = False
 
         if delay_optimizer_creation:
             if use_accelerator_prepare:
@@ -2221,6 +2223,7 @@ class Trainer:
                 self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
+        use_accelerator_prepare = False
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
             self.model.train()
@@ -2342,6 +2345,7 @@ class Trainer:
 
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
+            logger.info("Starting epoch")
             epoch_iterator = train_dataloader
             if hasattr(epoch_iterator, "set_epoch"):
                 epoch_iterator.set_epoch(epoch)
@@ -2411,8 +2415,8 @@ class Trainer:
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                with self.accelerator.accumulate(model):
-                    tr_loss_step = self.training_step(model, inputs)
+                
+                tr_loss_step = self.training_step(model, inputs)
 
                 if (
                     args.logging_nan_inf_filter
@@ -2512,6 +2516,7 @@ class Trainer:
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+            logger.info("Maybe log/save/evaluate complete")
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_xla_available():
@@ -2522,9 +2527,11 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
+            logger.info("Epoch complete")
             if self.control.should_training_stop:
                 break
 
+        logger.info("Exited training loop")
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
             delattr(self, "_past")
@@ -3562,6 +3569,7 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+            
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.

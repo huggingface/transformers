@@ -403,6 +403,8 @@ def is_torch_cuda_available():
     else:
         return False
 
+def is_torch_rdu_available():
+    return _is_package_available("torch_rdu")
 
 def is_mamba_ssm_available():
     if is_torch_available():

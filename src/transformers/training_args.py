@@ -49,6 +49,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_rdu_available,
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
@@ -2230,6 +2231,8 @@ class TrainingArguments:
                 device = torch.device("cpu")
             elif is_torch_mps_available():
                 device = torch.device("mps")
+            elif is_torch_rdu_available():
+                device = torch.device("rdu")
             elif is_torch_xpu_available():
                 if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
                     raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")

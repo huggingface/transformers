@@ -205,6 +205,7 @@ from .import_utils import (
     is_torch_bf16_gpu_available,
     is_torch_compile_available,
     is_torch_cuda_available,
+    is_torch_rdu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_fx_available,
@@ -309,5 +310,8 @@ def get_available_devices() -> FrozenSet[str]:
 
     if is_torch_musa_available():
         devices.add("musa")
+
+    if is_torch_rdu_available():
+        devices.add("rdu")
 
     return frozenset(devices)
