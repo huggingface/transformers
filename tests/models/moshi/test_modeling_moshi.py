@@ -560,7 +560,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, input_ids, attention_mask, inputs_dict
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate()
+        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
 
         # Make sure we only return `input_ids`.
         # Note that audio_codes will still be generated internally, so the ability to test audio codes is still there.
@@ -591,9 +591,11 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
+    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        super()._check_outputs(output, input_ids, config, use_cache=True, num_return_sequences=num_return_sequences)
+        super()._check_outputs(
+            output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
+        )
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -654,59 +656,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-
-    @pytest.mark.generate
-    @parameterized.expand([(1,), (2,)])
-    def test_generate_from_inputs_embeds_decoder_only(self, num_beams):
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, _, inputs_dict = self._get_input_ids_and_config()
-
-            model = model_class(config).to(torch_device).eval()
-            generation_kwargs = {
-                "return_dict_in_generate": True,
-                "output_scores": True,
-                "num_beams": num_beams,
-                "do_sample": False,
-            }
-
-            # Traditional way of generating text
-            outputs_from_ids = model.generate(input_ids, max_new_tokens=5, **generation_kwargs, **inputs_dict)
-            self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
-
-            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-            outputs_from_embeds = model.generate(
-                input_ids,
-                inputs_embeds=inputs_embeds,
-                max_new_tokens=5,
-                **generation_kwargs,
-                **inputs_dict,
-            )
-
-            # But if we pass different inputs_embeds, we should get different outputs (the output text may be the
-            # same, but the logits will almost surely be different)
-            random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(
-                input_ids,
-                inputs_embeds=random_embeds,
-                max_new_tokens=5,
-                **generation_kwargs,
-                **inputs_dict,
-            )
-            for i in range(len(outputs_from_rand_embeds.scores)):
-                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
-
-            # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
-            outputs_from_embeds_wo_ids = model.generate(
-                inputs_embeds=inputs_embeds,
-                max_new_tokens=5,
-                **generation_kwargs,
-                **inputs_dict,
-            )
-            self.assertListEqual(
-                outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids.sequences.tolist(),
-            )
 
     @unittest.skip(reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs")
     def test_generate_continue_from_past_key_values(self):
