@@ -565,7 +565,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         ]
         return "".join(outputs)
 
-    def _compute_offsets(self, token_ids, time_precision=0.02):
+    def _compute_offsets(self, token_ids, time_precision=0.02, segment_size=1500):
         """
         Compute offsets for a given tokenized input
 
@@ -574,6 +574,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
+            segment_size (`int`, *optional*, defaults to 1500):
+                The number of features in the input mel spectrogram.
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -604,7 +606,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
                 if start_timestamp_position < cur_max_timestamp:
                     # next segment has started
-                    prev_segments_len += cur_max_timestamp
+                    # here in the worst case we have [<|start_timestamp_position before|>, <|cur_max_timestamp|>, <|start_timestamp_position|>], so last_slice (idx of start_timestamp_position) - 2 is safe
+                    is_single_ending = not token_ids[last_slice - 2] == token_ids[last_slice - 1]
+                    if is_single_ending:
+                        prev_segments_len += segment_size
+                    else:
+                        prev_segments_len += cur_max_timestamp
 
                 cur_max_timestamp = end_timestamp_position
 
