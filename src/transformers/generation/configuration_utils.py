@@ -172,7 +172,15 @@ class GenerationConfig(PushToHubMixin):
             speed up decoding.
         cache_implementation (`str`, *optional*, default to `None`):
             Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
-            {ALL_CACHE_IMPLEMENTATIONS}. We support other cache types, but they must be manually instantiated and
+
+            - `"static"`: [`StaticCache`]
+            - `"offloaded_static"`: [`OffloadedStaticCache`]
+            - `"sliding_window"`: [`SlidingWindowCache`]
+            - `"hybrid"`: [`HybridCache`]
+            - `"mamba"`: [`MambaCache`]
+            - `"quantized"`: [`QuantizedCache`]
+
+            We support other cache types, but they must be manually instantiated and
             passed to `generate` through the `past_key_values` argument. See our
             [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
@@ -1471,8 +1479,8 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     ```python
     >>> from transformers import AutoModelForCausalLM, AutoTokenizer, SynthIDTextWatermarkingConfig
 
-    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b-it')
-    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b-it')
+    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b', padding_side="left")
+    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b')
 
     >>> # SynthID Text configuration
     >>> watermarking_config = SynthIDTextWatermarkingConfig(
@@ -1481,11 +1489,11 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     ... )
 
     >>> # Generation with watermarking
-    >>> tokenized_prompts = tokenizer(["your prompts here"])
+    >>> tokenized_prompts = tokenizer(["Once upon a time, "], return_tensors="pt", padding=True)
     >>> output_sequences = model.generate(
-    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True,
+    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True, max_new_tokens=10
     ... )
-    >>> watermarked_text = tokenizer.batch_decode(output_sequences)
+    >>> watermarked_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
     ```
     """
 

@@ -126,17 +126,10 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
-    _torch_compile_test_ckpt = "nltpt/Llama-3.2-11B-Vision"
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
-
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
 
 
 class MllamaVisionText2TextModelTester:
@@ -359,12 +352,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             ]
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
-
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
 
     @require_torch_sdpa
     @slow
