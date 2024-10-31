@@ -1620,6 +1620,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if not isinstance(requested_attn_implementation, dict)
                     else requested_attn_implementation.get(key, None)
                 )
+                if curr_attn_implementation is None:
+                    sub_config._attn_implementation_autoset = True
                 sub_config._attn_implementation_internal = curr_attn_implementation
 
         if use_flash_attention_2:
