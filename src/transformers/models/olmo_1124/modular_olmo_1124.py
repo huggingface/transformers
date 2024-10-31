@@ -13,6 +13,8 @@ from ..olmo.modeling_olmo import (
     OlmoAttention,
     OlmoDecoderLayer,
     OlmoFlashAttention2,
+    OlmoForCausalLM,
+    OlmoModel,
     OlmoSdpaAttention,
     apply_rotary_pos_emb,
     repeat_kv,
@@ -379,3 +381,21 @@ class Olmo1124DecoderLayer(OlmoDecoderLayer):
         if use_cache:
             outputs += (present_key_value,)
         return outputs
+
+
+# The OLMo November 2024 model is identical to the OLMo model, except RMSNorm is used instead of
+# standard layer norm for the output norm.
+class Olmo1124Model(OlmoModel):
+    def __init__(self, config: Olmo1124Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Olmo1124DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+# The heads now only need to redefine the model inside to the correct `RobertaModel`
+class Olmo1124ForCausalLM(OlmoForCausalLM):
+    def __init__(self, config: Olmo1124Config):
+        super().__init__(config)
+        self.model = Olmo1124Model(config)
