@@ -229,6 +229,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_commit_hash",
                 "_attn_implementation_internal",
                 "_attn_implementation_autoset_was_run",
+                "_attn_implementation_was_set_by_autoset",
                 "transformers_version",
             ],
         )
