@@ -499,7 +499,7 @@ class ClassDependencyMapper(CSTVisitor):
             self.dependencies.add(node.value)
 
 
-def dependencies_for_class_node(node: cst.ClassDef, global_names: set) -> set:
+def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> set:
     """Create immediate dependencies for a class node based on the `global_names`."""
     temp_module = cst.Module(body=[node])
     wrapper = MetadataWrapper(temp_module)
@@ -661,7 +661,7 @@ class ModuleMapper(CSTVisitor, ABC):
 
     @abstractmethod
     def compute_relative_order(self, missing_dependencies: set) -> dict[str, int]:
-        pass
+        raise NotImplementedError
 
 
 class ModelFileMapper(ModuleMapper):
@@ -1214,7 +1214,7 @@ def get_class_node_and_dependencies(
     file_type = find_file_type(class_name)
     file_to_update = files[file_type]
 
-    # We need to replace the class node with the super class node
+    # We need to replace the class node with the transformers (modeling file) super class node
     if len(bases) == 1:
         super_class = bases[0]
         super_file_name = modular_mapper.model_specific_imported_objects[super_class]
@@ -1242,7 +1242,8 @@ def get_class_node_and_dependencies(
             dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
         }
 
-    # No super class, just check functions and assignments dependency in the imports from other modeling files
+    # No transformers (modeling file) super class, just check functions and assignments dependency in the imports from
+    # other modeling files
     else:
         updated_node = node
         # The node was NOT modified -> no need to look recursively for other class dependencies. Indeed, even if they are not
