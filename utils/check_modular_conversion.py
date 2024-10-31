@@ -4,9 +4,10 @@ import glob
 import logging
 from io import StringIO
 
+from create_dependency_mapping import find_priority_list
+
 # Console for rich printing
 from modular_model_converter import convert_modular_file
-from create_dependency_mapping import find_priority_list
 from rich.console import Console
 from rich.syntax import Syntax
 
