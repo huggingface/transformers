@@ -617,10 +617,10 @@ class Idefics2PreTrainedModel(PreTrainedModel):
             # explicitly sets `attn_implementation="sdpa"`, the code will crash. Let's raise an informative
             # exception instead.
             # TODO (@raushan?): A better fix would be to implement SDPA in the vision model.
-            if config._attn_implementation_autoset is False and config._attn_implementation == "sdpa":
+            if config._attn_implementation_was_set_by_autoset is False and config._attn_implementation == "sdpa":
                 raise ValueError(
                     "Idefics2 only supports SDPA in the text model. Please remove `attn_implementation='sdpa'` at "
-                    "model initialization time -- by default SDPA is used in the text model."
+                    "model initialization time -- by default SDPA will be used in the text model."
                 )
         super().__init__(*args, **kwargs)
 

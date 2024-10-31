@@ -1421,7 +1421,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
-        if not getattr(config, "_attn_implementation_autoset", False):
+        if not getattr(config, "_attn_implementation_autoset_was_run", False):
             config = self._autoset_attn_implementation(
                 config, torch_dtype=torch.get_default_dtype(), check_device_map=False
             )
@@ -1523,7 +1523,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             attn_implementation = None
 
         config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
-        if not getattr(config, "_attn_implementation_autoset", False):
+        if not getattr(config, "_attn_implementation_autoset_was_run", False):
             config = cls._autoset_attn_implementation(
                 config,
                 use_flash_attention_2=use_flash_attention_2,
@@ -1602,7 +1602,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # user-provided config, with hard checks that the requested attention implementation is available.
             requested_attn_implementation = config._attn_implementation_internal
         else:
-            config._attn_implementation_autoset = True
+            config._attn_implementation_was_set_by_autoset = True
 
         # Composite models consisting of several PretrainedModels have to specify attention impl as a dict
         # where keys are sub-config names. But most people will specify one `str` which means that should dispatch it
@@ -1621,7 +1621,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else requested_attn_implementation.get(key, None)
                 )
                 if curr_attn_implementation is None:
-                    config._attn_implementation_autoset = True
+                    config._attn_implementation_was_set_by_autoset = True
                 sub_config._attn_implementation_internal = curr_attn_implementation
 
         if use_flash_attention_2:
@@ -1661,6 +1661,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             config._attn_implementation = "eager"
 
+        config._attn_implementation_autoset_was_run = True
         return config
 
     @classmethod
@@ -2819,7 +2820,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
         # Unset attn implementation so it can be set to another one when loading back
-        model_to_save.config._attn_implementation_autoset = False
+        model_to_save.config._attn_implementation_autoset_was_run = False
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -4105,7 +4106,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
-        if not getattr(config, "_attn_implementation_autoset", False):
+        if not getattr(config, "_attn_implementation_autoset_was_run", False):
             config = cls._autoset_attn_implementation(
                 config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
             )
