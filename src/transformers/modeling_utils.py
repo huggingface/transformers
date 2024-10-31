@@ -4087,7 +4087,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
-        if not getattr(config, "_attn_implementation_autoset", False):
+
+        # Set the `attn_implementation` attribute of the config if not manually specified
+        if (
+            not getattr(config, "_attn_implementation_autoset", False)
+            and getattr(config, "_attn_implementation_internal", None) is None
+        ):
             config = cls._autoset_attn_implementation(
                 config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
             )

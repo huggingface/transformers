@@ -25,6 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
@@ -600,7 +601,28 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
+
+    def __init__(self, *args, **kwargs):
+        config = None
+        if len(args) > 0 and isinstance(args[0], PretrainedConfig):
+            config = args[0]
+        elif "config" in kwargs:
+            config = kwargs.pop("config")
+
+        if config is not None:
+            # IDEFICS2 doesn't fully support SDPA. However, it supports SDPA in the text model. SDPA in the text model
+            # is enabled if we infer the implementation (which relies on `_supports_sdpa`). However, if the user
+            # explicitly sets `attn_implementation="sdpa"`, the code will crash. Let's raise an informative
+            # exception instead.
+            # TODO (@raushan?): A better fix would be to implement SDPA in the vision model.
+            if config._attn_implementation_autoset is False and config._attn_implementation == "sdpa":
+                raise ValueError(
+                    "Idefics2 only supports SDPA in the text model. Please remove `attn_implementation='sdpa'` at "
+                    "model initialization time -- by default SDPA is used in the text model."
+                )
+        super().__init__(*args, **kwargs)
 
     def _init_weights(self, module):
         std = (
@@ -646,6 +668,7 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
+    _supports_sdpa = False
     config_class = Idefics2VisionConfig
 
     def __init__(self, config: Idefics2VisionConfig):
@@ -1083,6 +1106,7 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
+    _supports_sdpa = False
     config_class = Idefics2PerceiverConfig
 
     def __init__(self, config) -> None:
