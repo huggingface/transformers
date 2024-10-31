@@ -600,7 +600,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _supports_sdpa = False
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -647,7 +646,6 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
-    _supports_sdpa = False
     config_class = Idefics2VisionConfig
 
     def __init__(self, config: Idefics2VisionConfig):
@@ -1085,7 +1083,6 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
-    _supports_sdpa = False
     config_class = Idefics2PerceiverConfig
 
     def __init__(self, config) -> None:
