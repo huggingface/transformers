@@ -1544,15 +1544,16 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
     def test_generation_config_is_loaded_with_model(self):
-        # Note: `TinyLlama/TinyLlama-1.1B-Chat-v1.0` has a `generation_config.json` containing `max_length: 2048`
+        # Note: `hf-internal-testing/tiny-random-MistralForCausalLM` has a `generation_config.json`
+        # containing `bos_token_id: 1`
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-        self.assertEqual(model.generation_config.max_length, 2048)
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
         # 2. Load with `device_map`
-        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", device_map="auto")
-        self.assertEqual(model.generation_config.max_length, 2048)
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto")
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     @require_safetensors
     def test_safetensors_torch_from_torch(self):
@@ -2009,19 +2010,18 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             if thread.name == "Thread-autoconversion":
                 thread.join(timeout=10)
 
-        with self.subTest("PR was open with the safetensors account"):
-            discussions = self.api.get_repo_discussions(self.repo_name)
+        discussions = self.api.get_repo_discussions(self.repo_name)
 
-            bot_opened_pr = None
-            bot_opened_pr_title = None
+        bot_opened_pr = None
+        bot_opened_pr_title = None
 
-            for discussion in discussions:
-                if discussion.author == "SFconvertbot":
-                    bot_opened_pr = True
-                    bot_opened_pr_title = discussion.title
+        for discussion in discussions:
+            if discussion.author == "SFconvertbot":
+                bot_opened_pr = True
+                bot_opened_pr_title = discussion.title
 
-            self.assertTrue(bot_opened_pr)
-            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+        self.assertTrue(bot_opened_pr)
+        self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
 
     @mock.patch("transformers.safetensors_conversion.spawn_conversion")
     def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
