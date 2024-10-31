@@ -1714,9 +1714,7 @@ class ModelUtilsTest(TestCasePlus):
         # We can match against an 0D tensor
         random_test_tensor = torch.randint(0, 100, (1,)).squeeze()
         self.assertTrue(
-            torch.equal(
-                torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor)
-            )
+            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
         # We can match against an 1D tensor (with many items)
         random_test_tensor = torch.randint(0, 100, (10,))
