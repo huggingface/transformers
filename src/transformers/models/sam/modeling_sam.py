@@ -900,7 +900,7 @@ class SamVisionAttention(nn.Module):
         return outputs
 
 
-class SamSdpaVisionAttention(SamVisionAttention):
+class SamVisionSdpaAttention(SamVisionAttention):
     """
     Multi-head Attention block with relative position embeddings.
     Using SDPA instead of the default attention.
@@ -920,6 +920,9 @@ class SamSdpaVisionAttention(SamVisionAttention):
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
         https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py   # noqa B950
+        This method is reimplemented to follow the implementation in:
+        https://github.com/pytorch-labs/segment-anything-fast/blob/main/segment_anything_fast/modeling/image_encoder.py   # noqa B950
+        This implementation is more memory efficient when using SDPA in the forward method.
         Args:
             q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
             rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
@@ -1000,7 +1003,7 @@ class SamSdpaVisionAttention(SamVisionAttention):
 
 SAM_VISION_ATTENTION_CLASSES = {
     "eager": SamVisionAttention,
-    "sdpa": SamSdpaVisionAttention,
+    "sdpa": SamVisionSdpaAttention,
 }
 
 
