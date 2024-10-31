@@ -1576,7 +1576,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if config._attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
                     f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were '
-                    'used when loading the model, which are not compatible.'
+                    "used when loading the model, which are not compatible."
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
@@ -1594,7 +1594,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if cls._supports_sdpa:
                     message += (
                         ', `"attn_implementation=sdpa"` '
-                        '(implementation using torch.nn.functional.scaled_dot_product_attention)'
+                        "(implementation using torch.nn.functional.scaled_dot_product_attention)"
                     )
                 raise ValueError(message + ".")
 
@@ -1626,7 +1626,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_flash_attention_2:
             logger.warning_once(
-                'The model was loaded with use_flash_attention_2=True, which is deprecated and may be removed in a '
+                "The model was loaded with use_flash_attention_2=True, which is deprecated and may be removed in a "
                 'future release. Please use `attn_implementation="flash_attention_2"` instead.'
             )
             config._attn_implementation = "flash_attention_2"
