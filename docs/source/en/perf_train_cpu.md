@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 This guide focuses on training large models efficiently on CPU.
 
 ## Mixed precision with IPEX
-Mixed precision uses single (fp32) and half-precision (bf16/fp16) data types in a model to accelerate training or inference while still preserving much of the single-precision accuracy. Modern CPUs such as 3rd and 4th and 5th Gen Intel® Xeon® Scalable processors natively support bf16, and 6th Gen Intel® Xeon® Scalable processors natively support bf16 and fp16. You should get more performance out of the box by enabling mixed precision training with bf16 or fp16.
+Mixed precision uses single (fp32) and half-precision (bf16/fp16) data types in a model to accelerate training or inference while still preserving much of the single-precision accuracy. Modern CPUs such as 3rd, 4th, and 5th Gen Intel® Xeon® Scalable processors natively support bf16. 6th Gen Intel® Xeon® Scalable processors natively support bf16 and fp16. You should get more performance out of the box by enabling mixed precision training with bf16 or fp16.
 
 To further maximize training performance, you can use Intel® Extension for PyTorch (IPEX), which is a library built on PyTorch and adds additional CPU instruction level architecture (ISA) level support such as Intel® Advanced Vector Extensions 512 Vector Neural Network Instructions (Intel® AVX512-VNNI), and Intel® Advanced Matrix Extensions (Intel® AMX) for an extra performance boost on Intel CPUs. However, CPUs with only AVX2 (e.g., AMD or older Intel CPUs) are not guaranteed to have better performance under IPEX.
 
