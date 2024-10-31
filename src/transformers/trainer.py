@@ -600,8 +600,8 @@ class Trainer:
             if not _is_peft_model(unwrapped_model)
             else unwrapped_model.get_base_model().forward
         )
-
-        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
+        params = inspect.signature(model_forward).parameters
+        self.model_accepts_loss_kwargs = "loss_kwargs" in params or "kwargs" in params
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -3648,15 +3648,11 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            # Average tokens across devices is orthogonal to gradient accumulation
-            if num_items_in_batch is not None and self.args.average_tokens_across_devices:
-                loss *= self.args.world_size
             self.accelerator.backward(loss, **kwargs)
             # Finally we need to normalize the loss for reporting
-            loss = loss.detach() / self.args.gradient_accumulation_steps
-            if self.args.average_tokens_across_devices:
-                loss /= self.args.world_size
-            return loss
+            if num_items_in_batch is None:
+                return loss.detach() / self.args.gradient_accumulation_steps
+            return loss.detach()
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
@@ -3668,13 +3664,12 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
-            num_items_in_batch_tensor = torch.tensor(num_items_in_batch, device=self.args.device)
-            num_items_in_batch = int(self.accelerator.gather(num_items_in_batch_tensor).sum().cpu())
         if self.model_accepts_loss_kwargs:
             loss_kwargs = {}
             if num_items_in_batch is not None:
                 loss_kwargs["num_items_in_batch"] = num_items_in_batch
+            if self.processing_class is not None:
+                loss_kwargs["ignore_index"] = self.processing_class.pad_token_id
             inputs = {**inputs, **loss_kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
@@ -3703,6 +3698,9 @@ class Trainer:
                 )
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        if self.args.average_tokens_across_devices and self.model_accepts_loss_kwargs:
+            loss *= self.accelerator.num_processes
 
         return (loss, outputs) if return_outputs else loss
 
@@ -5101,9 +5099,10 @@ class Trainer:
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum(
-                    [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
-                )
+                num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
             except TypeError:
                 pass
+
+        if self.args.average_tokens_across_devices:
+            num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
         return batch_samples, num_items_in_batch
