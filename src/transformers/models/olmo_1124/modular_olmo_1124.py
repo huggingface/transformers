@@ -1,4 +1,6 @@
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import logging
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..olmo.configuration_olmo import OlmoConfig
 
 
@@ -58,3 +60,10 @@ class Olmo1124Config(OlmoConfig):
 
         self.rms_norm_eps = rms_norm_eps
         del self.clip_qkv
+
+
+class Olmo1124RMSNorm(LlamaRMSNorm):
+    pass
+
+
+ALL_LAYERNORM_LAYERS.append(Olmo1124RMSNorm)
