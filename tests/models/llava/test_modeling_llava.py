@@ -85,7 +85,7 @@ class LlavaVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 30,
+            "image_size": 8,
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
@@ -118,9 +118,9 @@ class LlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 232
-        self.num_image_tokens = 225
+        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
         self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return LlavaConfig(
