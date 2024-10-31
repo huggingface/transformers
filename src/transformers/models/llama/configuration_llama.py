@@ -142,7 +142,7 @@ class LlamaConfig(PretrainedConfig):
     model_type = "llama"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `LlamaModel`
-    _base_model_tp_plan = {
+    base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",

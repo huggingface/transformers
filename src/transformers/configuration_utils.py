@@ -71,6 +71,8 @@ class PretrainedConfig(PushToHubMixin):
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
       naming of attributes.
+    - **base_model_tp_plan** (`Dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
+      parallel plan applied to the sub-module when `model.tensor_parallel` is called.
 
     Common attributes (present in all subclasses):
 
@@ -192,6 +194,7 @@ class PretrainedConfig(PushToHubMixin):
     model_type: str = ""
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
+    base_model_tp_plan: Optional[Dict[str, Any]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
