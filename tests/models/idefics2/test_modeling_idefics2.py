@@ -15,12 +15,10 @@
 """Testing suite for the PyTorch Idefics2 model."""
 
 import copy
-import gc
 import tempfile
 import unittest
 from io import BytesIO
 
-import pytest
 import requests
 
 from transformers import (
@@ -32,6 +30,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -420,50 +419,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @pytest.mark.generate
-    def test_generate_from_inputs_embeds_decoder_only(self):
-        # overwrite because IDEFICS needs ids and embeds at the input to be not None
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-
-            # Ignore:
-            # a) eos (to always output 20 tokens) and pad (so we don't try to infer the attn mask from the input_ids,
-            #   which would cause a mismatch),
-            config.pad_token_id = config.eos_token_id = -1
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            input_ids = inputs_dict.pop("input_ids")
-
-            # Traditional way of generating text
-            outputs_from_ids = model.generate(
-                input_ids, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
-            )
-            self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
-
-            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-            outputs_from_embeds = model.generate(
-                input_ids,
-                inputs_embeds=inputs_embeds,
-                max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-            self.assertListEqual(outputs_from_ids.sequences.tolist(), outputs_from_embeds.sequences.tolist())
-
-            # But if we pass different inputs_embeds, we should get different outputs (the output text may be the
-            # same, but the logits will almost surely be different)
-            random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(
-                input_ids,
-                inputs_embeds=random_embeds,
-                max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-            for i in range(len(outputs_from_rand_embeds.scores)):
-                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
-
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
@@ -628,8 +583,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_multi_gpu

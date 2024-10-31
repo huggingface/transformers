@@ -143,12 +143,12 @@ def unpad_image(tensor, original_size):
 
     if original_aspect_ratio > current_aspect_ratio:
         scale_factor = current_width / original_width
-        new_height = int(original_height * scale_factor)
+        new_height = int(round(original_height * scale_factor, 7))
         padding = (current_height - new_height) // 2
         unpadded_tensor = tensor[:, padding : current_height - padding, :]
     else:
         scale_factor = current_height / original_height
-        new_width = int(original_width * scale_factor)
+        new_width = int(round(original_width * scale_factor, 7))
         padding = (current_width - new_width) // 2
         unpadded_tensor = tensor[:, :, padding : current_width - padding]
 
@@ -911,7 +911,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
 
         if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
             raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+                "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
+                "and must specify either one"
             )
 
         legacy_processing = False
@@ -1020,6 +1021,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             if image_features is not None:
                 n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
                 n_image_features = image_features.shape[0]
+
                 if n_image_tokens != n_image_features:
                     raise ValueError(
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
