@@ -1,12 +1,16 @@
-<!--कॉपीराइट 2022 द हगिंगफेस टीम। सभी अधिकार सुरक्षित हैं।
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
-एपाचे लाइसेंस, संस्करण 2.0 ( "लाइसेंस") के तहत लाइसेंस प्राप्त; आप इस फ़ाइल का उपयोग केवल लाइसेंस के अनुपालन में कर सकते हैं। आप लाइसेंस की एक प्रति प्राप्त कर सकते हैं
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
 http://www.apache.org/licenses/LICENSE-2.0
 
-जब तक लागू कानून द्वारा आवश्यक न हो या लिखित में सहमति न हो, लाइसेंस के तहत वितरित सॉफ़्टवेयर "जैसा है" आधार पर वितरित किया जाता है, बिना किसी प्रकार की वारंटी या शर्तों के, चाहे वह स्पष्ट हो या निहित। लाइसेंस में विशिष्ट भाषा के लिए अनुमति और सीमाओं को देखें।
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
 
-⚠️ ध्यान दें कि यह फ़ाइल मार्कडाउन में है लेकिन इसमें हमारे डॉक-बिल्डर (MDX के समान) के लिए विशिष्ट सिंटैक्स है जो आपके मार्कडाउन व्यूअर में सही ढंग से प्रदर्शित नहीं हो सकता है।
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
 
 -->
 
