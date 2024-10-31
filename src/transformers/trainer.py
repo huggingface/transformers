@@ -3668,8 +3668,6 @@ class Trainer:
             loss_kwargs = {}
             if num_items_in_batch is not None:
                 loss_kwargs["num_items_in_batch"] = num_items_in_batch
-            if self.processing_class is not None:
-                loss_kwargs["ignore_index"] = self.processing_class.pad_token_id
             inputs = {**inputs, **loss_kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
