@@ -11,6 +11,7 @@ from ..llama.modeling_llama import LlamaRMSNorm
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
     OlmoAttention,
+    OlmoDecoderLayer,
     OlmoFlashAttention2,
     OlmoSdpaAttention,
     apply_rotary_pos_emb,
@@ -328,3 +329,53 @@ class Olmo1124SdpaAttention(OlmoSdpaAttention, Olmo1124Attention):
         attn_output = attn_output.view(bsz, q_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
         return attn_output, None, past_key_value
+
+
+# The OLMo November 2024 layers are identical to those of the OLMo model except:
+# - RMSNorm is used instead of standard layer norm.
+# - Norm is applied after attention/feedforward rather than before.
+class Olmo1124DecoderLayer(OlmoDecoderLayer):
+    def __init__(self, config: Olmo1124Config, layer_idx: int):
+        super().__init__(config, layer_idx=layer_idx)
+        self.input_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        residual = hidden_states
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
+        if use_cache:
+            outputs += (present_key_value,)
+        return outputs
