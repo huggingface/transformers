@@ -812,9 +812,10 @@ class LlamaModel(LlamaPreTrainedModel):
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
 
         self.gradient_checkpointing = False
-        self._tp_plan = config._base_model_tp_plan
-        if config.pretraining_tp != 1:
-            logger.warn("`pretraining_tp` is deprecated, please use `tensor_parallel` method instead.")
+        self._tp_plan = getattr(config, "_base_model_tp_plan", None)
+        if getattr(config, "pretraining_tp", 1) != 1:
+            logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
+
         # Initialize weights and apply final processing
         self.post_init()
 
