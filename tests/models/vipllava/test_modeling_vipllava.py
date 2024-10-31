@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch VipLlava model."""
 
-import gc
 import unittest
 
 import requests
@@ -26,7 +25,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -79,7 +85,7 @@ class VipLlavaVisionText2TextModelTester:
         is_training=True,
         vision_config={
             "batch_size": 12,
-            "image_size": 30,
+            "image_size": 8,
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
@@ -111,9 +117,9 @@ class VipLlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 232
-        self.num_image_tokens = 225
+        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
         self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return VipLlavaConfig(
@@ -290,8 +296,7 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes
