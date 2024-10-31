@@ -600,7 +600,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _supports_sdpa = True
+    _supports_sdpa = False
     _supports_cache_class = True
 
     def _init_weights(self, module):
