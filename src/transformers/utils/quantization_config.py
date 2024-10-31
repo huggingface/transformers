@@ -39,6 +39,7 @@ class QuantizationMethod(str, Enum):
     GPTQ = "gptq"
     AWQ = "awq"
     AQLM = "aqlm"
+    VPTQ = "vptq"
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
@@ -992,6 +993,11 @@ class AqlmConfig(QuantizationConfigMixin):
 
         if self.linear_weights_not_to_quantize is None:
             self.linear_weights_not_to_quantize = []
+
+
+@dataclass
+class VptqConfig(QuantizationConfigMixin):
+    pass
 
 
 @dataclass

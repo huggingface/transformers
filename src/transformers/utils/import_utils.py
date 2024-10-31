@@ -98,6 +98,7 @@ HQQ_MIN_VERSION = "0.2.1"
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
+_vptq_available = _is_package_available("vptq")
 _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
@@ -801,6 +802,10 @@ def is_apex_available():
 
 def is_aqlm_available():
     return _aqlm_available
+
+
+def is_vptq_available():
+    return _vptq_available
 
 
 def is_av_available():
