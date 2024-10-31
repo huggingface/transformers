@@ -629,7 +629,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 cur_bsz=cur_bsz,
                 batch_idx_map=batch_idx_map,
             )
-            time_offset = seek * time_precision / input_stride
+            time_offset = seek.to(torch.float64) * time_precision / input_stride
             seek_num_frames = (max_frames - seek).clamp(max=num_segment_frames)
 
             # 6.2 cut out next 30s segment from input features
