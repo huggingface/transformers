@@ -1799,6 +1799,9 @@ class WhisperGenerationMixin(GenerationMixin):
             segments = []
             if single_timestamp_ending:
                 slices.append(len(seek_sequence))
+            else:
+                # we want to include the last timestamp token in the last segment to know it was no single ending
+                slices[-1] += 1
 
             last_slice = 0
             # Add each segment to list of all segments
