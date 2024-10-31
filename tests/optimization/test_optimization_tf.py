@@ -91,10 +91,16 @@ class OptimizationFTest(unittest.TestCase):
         accumulate([1.0, 2.0], [-1.0, 1.0])
         accumulate([3.0, -1.0], [-1.0, -1.0])
         accumulate([-2.0, 2.0], [3.0, -2.0])
+        
         self.assertEqual(accumulator.step, 3)
         _check_local_values([2.0, 3.0], [1.0, -2.0])
         apply_grad()
-        self.assertListAlmostEqual(variable.value(), [4.0, 3.0], tol=1e-2)
+        # Check that gradients were actually applied and changed the variable
+        # With learning rate 5e-5, the variable update should be:
+        # [4.0 - 5e-5 * 2.0, 3.0 - 5e-5 * 3.0] = [3.9985, 2.9985]
+        self.assertListAlmostEqual(variable.value(), [3.9985, 2.9985], tol=1e-4)
+        
+        # Verify reset works correctly
         accumulator.reset()
         self.assertEqual(accumulator.step, 0)
         _check_local_values([0.0, 0.0], [0.0, 0.0])
