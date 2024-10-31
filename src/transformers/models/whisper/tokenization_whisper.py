@@ -528,7 +528,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
+    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02, segment_size=1500) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -538,6 +538,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         cur_max_timestamp = 0.0
         prev_segments_len = 0.0
+        # track if last timestamp was single ending
+        penultimate_timestamp = 0.0
 
         for token in token_ids:
             if token >= timestamp_begin:
@@ -545,8 +547,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
                 if timestamp < cur_max_timestamp:
                     # next segment has started
-                    prev_segments_len += cur_max_timestamp
+                    last_was_single_ending = not cur_max_timestamp == penultimate_timestamp
+                    if last_was_single_ending:
+                        prev_segments_len += time_precision * segment_size
+                    else:
+                        prev_segments_len += cur_max_timestamp
 
+                penultimate_timestamp = cur_max_timestamp
                 cur_max_timestamp = timestamp
 
                 outputs.append(f"<|{(timestamp + prev_segments_len):.2f}|>")
