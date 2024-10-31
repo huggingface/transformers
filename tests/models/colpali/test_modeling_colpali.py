@@ -319,15 +319,15 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         model = ColPaliForRetrieval.from_pretrained(
             "vidore/colpali-v1.2-hf",
             torch_dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map="mps",
         ).eval()
 
         # Load the test dataset
         ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
 
         # Preprocess the examples
-        batch_images = self.processor.process_images(ds["image"]).to(model.device)
-        batch_queries = self.processor.process_queries(ds["query"]).to(model.device)
+        batch_images = self.processor(images=ds["image"]).to(model.device)
+        batch_queries = self.processor(text=ds["query"]).to(model.device)
 
         # Run inference
         with torch.inference_mode():
@@ -336,8 +336,8 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
 
         # Compute retrieval scores
         scores = self.processor.score_retrieval(
-            qs=query_embeddings,
-            ps=image_embeddings,
+            query_embeddings=query_embeddings,
+            passage_embeddings=image_embeddings,
         )  # (len(qs), len(ps))
 
         assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
@@ -345,3 +345,15 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
 
         # Check if the maximum scores per row are in the diagonal of the matrix score
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
+
+        # Further validation: fine-grained check, with a hardcoded score from the original implementation
+        expected_scores = torch.tensor(
+            [
+                [15.4375, 6.6875, 14.6875],
+                [12.1250, 16.2500, 10.9375],
+                [15.1250, 11.6875, 21.1250],
+            ],
+            dtype=scores.dtype,
+        )
+
+        assert torch.allclose(scores, expected_scores, atol=1e-3), f"Expected scores {expected_scores}, got {scores}"
