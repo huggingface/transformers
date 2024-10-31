@@ -108,7 +108,7 @@ def _convert_output_args_doc(output_args_doc):
     return "\n".join(blocks)
 
 
-def _prepare_output_docstrings(output_type, config_class, min_indent=None):
+def _prepare_output_docstrings(output_type, config_class, min_indent=None, add_intro=True):
     """
     Prepares the return part of the docstring using `output_type`.
     """
@@ -124,7 +124,7 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
         if i < len(lines):
             params_docstring = "\n".join(lines[(i + 1) :])
             params_docstring = _convert_output_args_doc(params_docstring)
-        else:
+        elif add_intro:
             raise ValueError(
                 f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has "
                 "docstring and contain either `Args` or `Parameters`."
@@ -132,8 +132,11 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
-    intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
-    intro = intro.format(full_output_type=full_output_type, config_class=config_class)
+    if add_intro:
+        intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
+        intro = intro.format(full_output_type=full_output_type, config_class=config_class)
+    else:
+        intro = f"Returns: {full_output_type}"
 
     result = intro
     if params_docstring is not None:

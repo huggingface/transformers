@@ -1,9 +1,11 @@
 import inspect
 from functools import wraps
+from typing import get_args
 
 import regex as re
 
 from .doc import PT_SAMPLE_DOCSTRINGS, _prepare_output_docstrings
+from .generic import ModelOutput
 
 
 class ModelArgs:
@@ -225,6 +227,17 @@ def parse_docstring(docstring):
     return params, docstring
 
 
+def contains_type(type_hint, target_type) -> bool:
+    args = get_args(type_hint)
+    if args == ():
+        try:
+            return issubclass(type_hint, target_type)
+        except Exception as _:
+            return issubclass(type(type_hint), target_type)
+    _type = any(contains_type(arg, target_type) for arg in args)
+    return _type
+
+
 def auto_docstring(func):
     """
     Wrapper that automatically generates docstring using ARG_TO_DOC.
@@ -285,7 +298,9 @@ def auto_docstring(func):
     # return_annotation = sig.return_annotation
     # return_type =  f"{return_annotation.__module__.replace("transformers.","~").replace("builtins","")}.{return_annotation.__name__}"
     if sig.return_annotation is not None and sig.return_annotation != inspect._empty:
-        return_docstring = _prepare_output_docstrings(sig.return_annotation, config_class)
+        return_docstring = _prepare_output_docstrings(
+            sig.return_annotation, config_class, add_intro=contains_type(sig.return_annotation, ModelOutput)
+        )
         docstring += return_docstring
 
     docstring += example_annotation
