@@ -4020,6 +4020,7 @@ class ModelTesterMixin:
                             can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
                             if not (self.has_attentions and can_output_attn) and output_attentions:
                                 continue
+                            # TODO: if we can also check with `batch_size=1` without being flaky?
                             for batch_size in [7]:
                                 dummy_input = inputs_dict[model.main_input_name]
 
