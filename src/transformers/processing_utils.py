@@ -526,7 +526,7 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_raw_chat_template_file = os.path.join(save_directory, "processor_chat_template.jinja")
+        output_raw_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
         output_chat_template_file = os.path.join(save_directory, "chat_template.json")
 
         processor_dict = self.to_dict()
@@ -622,7 +622,7 @@ class ProcessorMixin(PushToHubMixin):
         else:
             processor_file = PROCESSOR_NAME
             chat_template_file = "chat_template.json"
-            raw_chat_template_file = "processor_chat_template.jinja"
+            raw_chat_template_file = "chat_template.jinja"
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
