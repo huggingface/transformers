@@ -600,8 +600,7 @@ class Trainer:
             if not _is_peft_model(unwrapped_model)
             else unwrapped_model.get_base_model().forward
         )
-        params = inspect.signature(model_forward).parameters
-        self.model_accepts_loss_kwargs = "loss_kwargs" in params or "kwargs" in params
+        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -5098,7 +5097,7 @@ class Trainer:
             # For now we don't support object detection
             try:
                 num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
-            except TypeError:
+            except (TypeError, AttributeError):
                 pass
 
         if self.args.average_tokens_across_devices:
