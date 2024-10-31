@@ -18,7 +18,10 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
+
 from ..utils import is_sklearn_available
+
+
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
@@ -285,7 +288,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
             if excess_length > 0:
                 del self.probs[-excess_length:]
 
-            if len(self.probs) > 5 and {0, 1}.issubset(self.matches):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
+            if (
+                len(self.probs) > 5 and {0, 1}.issubset(self.matches)
+            ):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
                 fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
                 fnr = 1 - tpr
 
