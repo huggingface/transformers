@@ -59,17 +59,18 @@ def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
             for message in pull_message(step_log):
                 yield message
 
-    if isinstance(step_log, AgentText):
-        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{step_log.to_string()}\n```")
-    elif isinstance(step_log, AgentImage):
+
+    if isinstance(step_log["final_answer"], AgentText):
+        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{step_log["final_answer"].to_string()}\n```")
+    elif isinstance(step_log["final_answer"], AgentImage):
         yield ChatMessage(
             role="assistant",
-            content={"path": step_log.to_string(), "mime_type": "image/png"},
+            content={"path": step_log["final_answer"].to_string(), "mime_type": "image/png"},
         )
-    elif isinstance(step_log, AgentAudio):
+    elif isinstance(step_log["final_answer"], AgentAudio):
         yield ChatMessage(
             role="assistant",
-            content={"path": step_log.to_string(), "mime_type": "audio/wav"},
+            content={"path": step_log["final_answer"].to_string(), "mime_type": "audio/wav"},
         )
     else:
-        yield ChatMessage(role="assistant", content=str(step_log))
+        yield ChatMessage(role="assistant", content=str(step_log["final_answer"]))
