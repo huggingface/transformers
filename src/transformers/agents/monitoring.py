@@ -15,8 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .agent_types import AgentAudio, AgentImage, AgentText
-from .agents import ReactAgent
+from ..utils import logging
 
+logger = logging.get_logger(__name__)
 
 def pull_message(step_log: dict):
     try:
@@ -46,7 +47,7 @@ def pull_message(step_log: dict):
         )
 
 
-def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
+def stream_to_gradio(agent, task: str, **kwargs):
     """Runs an agent with the given task and streams the messages from the agent as gradio ChatMessages."""
 
     try:
@@ -73,3 +74,25 @@ def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
         )
     else:
         yield ChatMessage(role="assistant", content=str(step_log))
+
+
+class Monitor:
+    def __init__(self, tracked_llm_engine):
+        self.step_durations = []
+        self.tracked_llm_engine = tracked_llm_engine
+        if getattr(self.tracked_llm_engine, "last_input_token_count", "Not found") != "Not found":
+            self.total_input_token_count = 0
+            self.total_output_token_count = 0
+
+    def update_metrics(self, step_log):
+        step_duration = step_log.get('step_duration', None)
+        self.step_durations.append(step_duration)
+
+        if getattr(self.tracked_llm_engine, "last_input_token_count", None) is not None:
+            self.total_input_token_count += self.tracked_llm_engine.last_input_token_count
+            self.total_output_token_count += self.tracked_llm_engine.last_output_token_count
+
+        logger.info(f"Step {len(self.step_durations)}:")
+        logger.info(f"  Time taken: {step_duration:.2f} seconds (valid only if step succeeded)")
+        logger.info(f"  Input tokens: {self.total_input_token_count}")
+        logger.info(f"  Output tokens: {self.total_output_token_count}")

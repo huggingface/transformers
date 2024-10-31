@@ -21,7 +21,10 @@ from typing import Dict, List, Optional
 from huggingface_hub import InferenceClient
 
 from ..pipelines.base import Pipeline
+from .. import AutoTokenizer
+from ..utils import logging
 
+logger = logging.get_logger(__name__)
 
 class MessageRole(str, Enum):
     USER = "user"
@@ -66,16 +69,61 @@ llama_role_conversions = {
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
+class HfEngine:
+    def __init__(self, model_id: Optional[str] = None):
+        self.last_input_token_count = None
+        self.last_output_token_count = None
+        if model_id is None:
+            model_id = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
+            logger.warning(f"Using default model for token counting: '{model_id}'")
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        except Exception as e:
+            logger.warning(f"Failed to load tokenizer for model {model_id}: {e}. Loading default tokenizer instead.")
+            self.tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-1.7B-Instruct")
 
-class HfApiEngine:
+    def get_token_counts(self):
+        return {
+            'input_token_count': self.last_input_token_count,
+            'output_token_count': self.last_output_token_count,
+        }
+    
+    def generate(self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None):
+        raise NotImplementedError
+    
+    def __call__(
+        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
+    ) -> str:
+        if not isinstance(messages, List):
+            raise ValueError("Messages should be a list of dictionaries with 'role' and 'content' keys.")
+        if stop_sequences is None:
+            stop_sequences = []
+        response = self.generate(messages, stop_sequences, grammar)
+        self.last_input_token_count = len(self.tokenizer.apply_chat_template(messages, tokenize=True))
+        self.last_output_token_count = len(self.tokenizer.encode(response))
+
+        # Remove stop sequences from LLM output
+        for stop_seq in stop_sequences:
+            if response[-len(stop_seq) :] == stop_seq:
+                response = response[: -len(stop_seq)]
+        return response
+
+class HfApiEngine(HfEngine):
     """This engine leverages Hugging Face's Inference API service, either serverless or with a dedicated endpoint."""
 
-    def __init__(self, model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"):
+    def __init__(
+            self, 
+            model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            timeout: int = 120
+        ):
+        super().__init__(model_id=model)
         self.model = model
-        self.client = InferenceClient(self.model, timeout=120)
+        self.timeout = timeout
+        self.client = InferenceClient(self.model, timeout=self.timeout)
 
-    def __call__(
-        self, messages: List[Dict[str, str]], stop_sequences: List[str] = [], grammar: Optional[str] = None
+
+    def generate(
+        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
     ) -> str:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
@@ -89,41 +137,40 @@ class HfApiEngine:
             response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
 
         response = response.choices[0].message.content
-
-        # Remove stop sequences from LLM output
-        for stop_seq in stop_sequences:
-            if response[-len(stop_seq) :] == stop_seq:
-                response = response[: -len(stop_seq)]
         return response
 
 
-class TransformersEngine:
+class TransformersEngine(HfEngine):
     """This engine uses a pre-initialized local text-generation pipeline."""
 
-    def __init__(self, pipeline: Pipeline):
+    def __init__(self, pipeline: Pipeline, model_id: Optional[str] = None):
+        super().__init__(model_id)
         self.pipeline = pipeline
 
-    def __call__(
-        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
+    def generate(
+        self,
+        messages: List[Dict[str, str]],
+        stop_sequences: Optional[List[str]] = None,
+        grammar: Optional[str] = None,
+        max_length: int = 1500
     ) -> str:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
         # Get LLM output
+        if stop_sequences is not None and len(stop_sequences) > 0:
+            stop_strings = stop_sequences
+        else:
+            stop_strings = None
+
         output = self.pipeline(
             messages,
-            stop_strings=stop_sequences,
-            max_length=1500,
+            stop_strings=stop_strings,
+            max_length=max_length,
             tokenizer=self.pipeline.tokenizer,
         )
 
         response = output[0]["generated_text"][-1]["content"]
-
-        # Remove stop sequences from LLM output
-        if stop_sequences is not None:
-            for stop_seq in stop_sequences:
-                if response[-len(stop_seq) :] == stop_seq:
-                    response = response[: -len(stop_seq)]
         return response
 
 
