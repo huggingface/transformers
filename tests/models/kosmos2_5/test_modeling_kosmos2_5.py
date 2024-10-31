@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -289,7 +290,7 @@ class Kosmos2_5ModelTester:
 
 
 @require_torch
-class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Kosmos2_5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
