@@ -692,6 +692,8 @@ class DonutSwinStage(nn.Module):
         self.config = config  # is this even necessary??
         dim = int(config.embed_dim * 2**layer_id)
         depth = config.depths[layer_id]
+        input_resolution = (grid_size[0] // (2**layer_id), grid_size[1] // (2**layer_id))
+
         drop_path = dpr[sum(config.depths[:layer_id]) : sum(config.depths[: layer_id + 1])]
         downsample = DonutSwinPatchMerging if (layer_id < len(config.depths) - 1) else None
 
