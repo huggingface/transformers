@@ -28,6 +28,7 @@ from huggingface_hub import get_full_repo_name
 from packaging import version
 
 from .debug_utils import DebugOption
+from .integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from .trainer_utils import (
     EvaluationStrategy,
     FSDPOption,
@@ -2114,6 +2115,17 @@ class TrainingArguments:
                 "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
             )
             self.include_for_metrics.append("inputs")
+
+        if (
+            is_deepspeed_zero3_enabled()
+            and self.bf16
+            and not deepspeed_config()["zero_optimization"].get("stage3_gather_16bit_weights_on_model_save", False)
+            and self.save_steps != "no"
+        ):
+            raise ValueError(
+                "When running a Bfloat16 model with DeepSpeed ZeRO3, weights will not be saved during checkpoint saving if stage3_gather_16bit_weights_on_model_save is not set to True."
+                "Please set stage3_gather_16bit_weights_on_model_save to True in the deepspeed config."
+            )
 
     def __str__(self):
         self_as_dict = asdict(self)
