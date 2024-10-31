@@ -724,7 +724,11 @@ class GemmaModel(GemmaPreTrainedModel):
             [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
         self.gradient_checkpointing = False
+        self._tp_plan = getattr(config, "_base_model_tp_plan", None)
+        if getattr(config, "pretraining_tp", 1) != 1:
+            logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -986,6 +990,7 @@ class GemmaModel(GemmaPreTrainedModel):
 
 class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
