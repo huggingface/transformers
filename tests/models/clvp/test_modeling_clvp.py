@@ -568,7 +568,7 @@ class ClvpIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def test_conditional_encoder(self):
         with torch.no_grad():

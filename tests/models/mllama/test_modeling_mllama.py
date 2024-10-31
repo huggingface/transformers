@@ -396,7 +396,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.instruct_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_gpu

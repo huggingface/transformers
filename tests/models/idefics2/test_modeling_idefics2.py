@@ -583,7 +583,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_multi_gpu

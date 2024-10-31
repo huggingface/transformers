@@ -437,7 +437,7 @@ class MistralIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_model_7b_logits(self):
@@ -656,7 +656,7 @@ class Mask4DTestHard(unittest.TestCase):
     _model = None
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @property
     def model(self):

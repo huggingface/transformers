@@ -496,7 +496,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @unittest.skip("multi-gpu tests are disabled for now")

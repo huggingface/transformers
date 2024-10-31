@@ -336,7 +336,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt_video = "user\n<video>\nWhat do you see in this video?<|im_end|>\n<|im_start|>assistant\n"
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes

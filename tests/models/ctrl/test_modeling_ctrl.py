@@ -259,7 +259,7 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_lm_generate_ctrl(self):

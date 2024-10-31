@@ -890,7 +890,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 @require_torch_accelerator
 class Mask4DTestHard(unittest.TestCase):
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"

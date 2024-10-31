@@ -437,7 +437,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes

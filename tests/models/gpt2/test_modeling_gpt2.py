@@ -751,7 +751,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def _test_lm_generate_gpt2_helper(
         self,

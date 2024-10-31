@@ -400,7 +400,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt_video = "USER: <video>\nWhy is this video funny? ASSISTANT:"
 
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes
