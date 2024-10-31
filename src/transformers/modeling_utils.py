@@ -1596,15 +1596,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Below we check if a config is composite and manually prepare a dict of attn impl if not already passed as a dict.
         # Later each sub-module will dispatch with its own attn impl, by calling `XXXModel._from_config(config.text_config)`
         # If any of sub-modules doesn't support requested attn, an error will be raised. See https://github.com/huggingface/transformers/pull/32238
-        for key in config:
-            if isinstance(getattr(config, key), PretrainedConfig):
-                sub_config = getattr(config, key)
-                curr_attn_implementation = (
-                    requested_attn_implementation
-                    if not isinstance(requested_attn_implementation, dict)
-                    else requested_attn_implementation.get(key, None)
-                )
-                sub_config._attn_implementation_internal = curr_attn_implementation
+        for key in config.sub_configs.keys():
+            sub_config = getattr(config, key)
+            curr_attn_implementation = (
+                requested_attn_implementation
+                if not isinstance(requested_attn_implementation, dict)
+                else requested_attn_implementation.get(key, None)
+            )
+            sub_config._attn_implementation_internal = curr_attn_implementation
 
         if use_flash_attention_2:
             logger.warning_once(
