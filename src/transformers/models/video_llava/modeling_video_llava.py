@@ -534,7 +534,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         if (pixel_values_images is not None or pixel_values_videos is not None) and inputs_embeds is not None:
             raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+                "You cannot specify both `pixel_values_images`/`pixel_values_videos` and `inputs_embeds` at the same "
+                "time, and must specify either one"
             )
 
         legacy_processing = False
@@ -628,8 +629,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         # TODO: @raushan retain only the new behavior after v4.47
         else:
             if pixel_values_images is not None:
-                n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
-                n_image_features = image_features.shape[1]
+                n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
                 if n_image_tokens != n_image_features:
                     raise ValueError(
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -644,8 +645,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             if pixel_values_videos is not None:
-                n_video_tokens = (input_ids == self.config.video_token_index).sum(dim=-1)[0].item()
-                n_video_features = video_features.shape[1]
+                n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+                n_video_features = video_features.shape[0] * video_features.shape[1]
                 if n_video_tokens != n_video_features:
                     raise ValueError(
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
