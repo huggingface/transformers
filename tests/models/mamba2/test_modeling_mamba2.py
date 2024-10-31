@@ -204,7 +204,8 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         pass
 
     @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 
     @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
@@ -274,12 +275,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-    @unittest.skip(
-        reason="Mamba2 does not support generating with input embeddings (custom cache_position computation)"
-    )
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
 
 
 @require_torch
