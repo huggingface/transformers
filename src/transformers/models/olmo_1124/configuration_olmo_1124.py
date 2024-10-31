@@ -113,7 +113,7 @@ class Olmo1124Config(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         **kwargs,
     ):
         self.vocab_size = vocab_size
