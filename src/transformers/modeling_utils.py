@@ -1560,19 +1560,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         """
         Automatically checks and dispatches to a default attention implementation. In order of priority:
-            1. An implementation specified in `config._attn_implementation` (due for example to the argument attn_implementation="sdpa" in from_pretrained).
-            2. DEPRECATED: if use_flash_attention_2 is set to `True` and `flash_attn` is available, flash attention. (`LlamaFlashAttention` for example)
+            1. An implementation specified in `config._attn_implementation` (due for example to the argument
+               attn_implementation="sdpa" in from_pretrained).
+            2. DEPRECATED: if use_flash_attention_2 is set to `True` and `flash_attn` is available, flash attention.
+               (`LlamaFlashAttention` for example)
             3. SDPA implementation, if available and supported by the model type. (`LlamaSdpaAttention` for example)
             4. The default model's implementation otherwise (`LlamaAttention` for example) .
         """
-        # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitely set by the user.
-        # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility (always fall back on "eager").
-        # The `hasattr` here is used as some Transformers tests for some reason do not call PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
+        # Here we use config._attn_implementation_internal to check whether the attention implementation was
+        # explicitely set by the user. The property `PretrainedConfig._attn_implementation` is never `None`, for
+        # backward compatibility (always fall back on "eager"). The `hasattr` here is used as some Transformers tests
+        # for some reason do not call PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
         requested_attn_implementation = None
         if hasattr(config, "_attn_implementation_internal") and config._attn_implementation_internal is not None:
             if config._attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
-                    f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were used when loading the model, which are not compatible.'
+                    f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were '
+                    'used when loading the model, which are not compatible.'
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
@@ -1581,22 +1585,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "sdpa",
                 "flash_attention_2",
             ]:
-                message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
+                message = (
+                    f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only '
+                    'possible arguments are `attn_implementation="eager"` (manual attention implementation)'
+                )
                 if cls._supports_flash_attn_2:
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
                 if cls._supports_sdpa:
-                    message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+                    message += (
+                        ', `"attn_implementation=sdpa"` '
+                        '(implementation using torch.nn.functional.scaled_dot_product_attention)'
+                    )
                 raise ValueError(message + ".")
 
-            # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
+            # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the
+            # user-provided config, with hard checks that the requested attention implementation is available.
             requested_attn_implementation = config._attn_implementation_internal
+        else:
+            config._attn_implementation_autoset = True
 
         # Composite models consisting of several PretrainedModels have to specify attention impl as a dict
         # where keys are sub-config names. But most people will specify one `str` which means that should dispatch it
         # for all sub-models.
-        # Below we check if a config is composite and manually prepare a dict of attn impl if not already passed as a dict.
-        # Later each sub-module will dispatch with its own attn impl, by calling `XXXModel._from_config(config.text_config)`
-        # If any of sub-modules doesn't support requested attn, an error will be raised. See https://github.com/huggingface/transformers/pull/32238
+        # Below we check if a config is composite and manually prepare a dict of attn impl if not already passed as a
+        # dict. Later each sub-module will dispatch with its own attn impl, by calling
+        # `XXXModel._from_config(config.text_config)`
+        # If any of sub-modules doesn't support requested attn, an error will be raised.
+        # See https://github.com/huggingface/transformers/pull/32238
         for key in config:
             if isinstance(getattr(config, key), PretrainedConfig):
                 sub_config = getattr(config, key)
@@ -1609,7 +1624,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_flash_attention_2:
             logger.warning_once(
-                'The model was loaded with use_flash_attention_2=True, which is deprecated and may be removed in a future release. Please use `attn_implementation="flash_attention_2"` instead.'
+                'The model was loaded with use_flash_attention_2=True, which is deprecated and may be removed in a '
+                'future release. Please use `attn_implementation="flash_attention_2"` instead.'
             )
             config._attn_implementation = "flash_attention_2"
 
@@ -1634,7 +1650,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and torch.cuda.device_count() > 1
             ):
                 logger.warning_once(
-                    "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
+                    "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance "
+                    "issues due to the FA backend. Disabling it to use alternative backends."
                 )
                 torch.backends.cuda.enable_flash_sdp(False)
         elif isinstance(requested_attn_implementation, dict):
@@ -1642,7 +1659,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             config._attn_implementation = "eager"
 
-        config._attn_implementation_autoset = True
         return config
 
     @classmethod
@@ -4087,12 +4103,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
-
-        # Set the `attn_implementation` attribute of the config if not manually specified
-        if (
-            not getattr(config, "_attn_implementation_autoset", False)
-            and getattr(config, "_attn_implementation_internal", None) is None
-        ):
+        if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
                 config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
             )
