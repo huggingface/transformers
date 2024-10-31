@@ -169,7 +169,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
-    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
+    def _decode_with_timestamps(
+        self, token_ids, skip_special_tokens=False, time_precision=0.02, segment_size=1500
+    ) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -179,6 +181,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         cur_max_timestamp = 0.0
         prev_segments_len = 0.0
+        # track if last timestamp was single ending
+        penultimate_timestamp = 0.0
 
         for token in token_ids:
             if token >= timestamp_begin:
@@ -186,8 +190,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
                 if timestamp < cur_max_timestamp:
                     # next segment has started
-                    prev_segments_len += cur_max_timestamp
+                    last_was_single_ending = not cur_max_timestamp == penultimate_timestamp
+                    if last_was_single_ending:
+                        prev_segments_len += time_precision * segment_size
+                    else:
+                        prev_segments_len += cur_max_timestamp
 
+                penultimate_timestamp = cur_max_timestamp
                 cur_max_timestamp = timestamp
 
                 outputs.append(f"<|{(timestamp + prev_segments_len):.2f}|>")
@@ -200,7 +209,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return "".join(outputs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
-    def _compute_offsets(self, token_ids, time_precision=0.02):
+    def _compute_offsets(self, token_ids, time_precision=0.02, segment_size=1500):
         """
         Compute offsets for a given tokenized input
 
@@ -209,6 +218,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
+            segment_size (`int`, *optional*, defaults to 1500):
+                The number of features in the input mel spectrogram.
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -239,7 +250,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
                 if start_timestamp_position < cur_max_timestamp:
                     # next segment has started
-                    prev_segments_len += cur_max_timestamp
+                    # here in the worst case we have [<|start_timestamp_position before|>, <|cur_max_timestamp|>, <|start_timestamp_position|>], so last_slice (idx of start_timestamp_position) - 2 is safe
+                    is_single_ending = not token_ids[last_slice - 2] == token_ids[last_slice - 1]
+                    if is_single_ending:
+                        prev_segments_len += segment_size
+                    else:
+                        prev_segments_len += cur_max_timestamp
 
                 cur_max_timestamp = end_timestamp_position
 
@@ -251,8 +267,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                     {
                         "text": text,
                         "timestamp": (
-                            (start_timestamp_position + prev_segments_len) * time_precision,
-                            (end_timestamp_position + prev_segments_len) * time_precision,
+                            start_timestamp_position * time_precision + prev_segments_len * time_precision,
+                            end_timestamp_position * time_precision + prev_segments_len * time_precision,
                         ),
                     }
                 )
