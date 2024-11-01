@@ -27,7 +27,12 @@ import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
-from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+from tokenizers.trainers import (
+    BpeTrainer,
+    UnigramTrainer,
+    WordLevelTrainer,
+    WordPieceTrainer,
+)
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
@@ -75,7 +80,10 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VOCAB_FILE}
+VOCAB_FILES_NAMES = {
+    "tokenizer_file": TOKENIZER_FILE,
+    "vocab_file": TIKTOKEN_VOCAB_FILE,
+}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -404,7 +412,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             tokens.append(self._tokenizer.id_to_token(index))
         return tokens
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+    def tokenize(
+        self,
+        text: str,
+        pair: Optional[str] = None,
+        add_special_tokens: bool = False,
+        **kwargs,
+    ) -> List[str]:
         return self.encode_plus(text=text, text_pair=pair, add_special_tokens=add_special_tokens, **kwargs).tokens()
 
     def set_truncation_and_padding(
@@ -473,7 +487,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
             target = {
                 "length": length,
-                "direction": padding_side if padding_side is not None else self.padding_side,
+                "direction": (padding_side if padding_side is not None else self.padding_side),
                 "pad_id": self.pad_token_id,
                 "pad_token": self.pad_token,
                 "pad_type_id": self.pad_token_type_id,
@@ -485,7 +499,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput], List[TextInputPair], List[PreTokenizedInput], List[PreTokenizedInputPair]
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
+            List[PreTokenizedInputPair],
         ],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -624,7 +641,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if return_tensors is None and not return_overflowing_tokens:
             batched_output = BatchEncoding(
                 {
-                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                    key: (value[0] if len(value) > 0 and isinstance(value[0], list) else value)
                     for key, value in batched_output.items()
                 },
                 batched_output.encodings,
@@ -635,7 +652,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return batched_output
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        return self.backend_tokenizer.decoder.decode(tokens)
+        return (
+            self.backend_tokenizer.decoder.decode(tokens)
+            if self.backend_tokenizer.decoder is not None
+            else " ".join(tokens)
+        )
 
     def _decode(
         self,
@@ -689,7 +710,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if save_slow:
             added_tokens_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE,
             )
             # make sure to be foward compatible
             added_vocab = {tok: index for tok, index in self.added_tokens_encoder.items() if index >= self.vocab_size}
@@ -703,7 +725,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if save_fast:
             tokenizer_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE,
             )
             self.backend_tokenizer.save(tokenizer_file)
             file_names = file_names + (tokenizer_file,)
