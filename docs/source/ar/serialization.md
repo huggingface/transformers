@@ -99,7 +99,7 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 >>> model_checkpoint = "distilbert_base_uncased_squad"
 >>> save_directory = "onnx/"
 
->>> # Load a model from transformers and export it to ONNX
+>>> # تحميل نموذج من transformers وتصديره إلى ONNX
 >>> ort_model = ORTModelForSequenceClassification.from_pretrained(model_checkpoint, export=True)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 
