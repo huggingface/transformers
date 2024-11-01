@@ -99,25 +99,20 @@ class OneFormerProcessor(ProcessorMixin):
         return token_inputs
 
     @staticmethod
-    def _check_args(
+    def _validate_input_types(
         images: Optional[ImageInput] = None,
-        task_inputs: Optional[Union[TextInput, PreTokenizedInput]] = None,
-    ):
+        task_inputs: Optional[PreTokenizedInput] = None,
+    ) -> None:
         if task_inputs is None:
             raise ValueError("You have to specify the task_inputs. Found None.")
         elif images is None:
             raise ValueError("You have to specify the images. Found None.")
-
-        if isinstance(task_inputs, str):
-            task_inputs = [task_inputs]
 
         if not isinstance(task_inputs, List) or not task_inputs:
             raise TypeError("task_inputs should be a string or a list of strings.")
 
         if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
             raise ValueError("task_inputs must be semantic, instance, or panoptic.")
-
-        return task_inputs
 
     @staticmethod
     def _add_args_for_backward_compatibility(args):
@@ -179,7 +174,9 @@ class OneFormerProcessor(ProcessorMixin):
         )
         segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
         task_inputs = output_kwargs["images_kwargs"].pop("task_inputs", None)
-        task_inputs = self._check_args(images, task_inputs)
+        if isinstance(task_inputs, str):
+            task_inputs = [task_inputs]
+        self._validate_input_types(images, task_inputs)
 
         encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **output_kwargs["images_kwargs"])
 
@@ -204,7 +201,9 @@ class OneFormerProcessor(ProcessorMixin):
         task_inputs. Please refer to the docstring of this method for more information.
         """
 
-        task_inputs = self._check_args(images, task_inputs)
+        if isinstance(task_inputs, str):
+            task_inputs = [task_inputs]
+        self._validate_input_types(images, task_inputs)
 
         encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
 
