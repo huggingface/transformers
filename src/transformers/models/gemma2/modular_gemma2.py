@@ -50,7 +50,7 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 if is_torch_greater_or_equal("2.5"):
-    from torch.nn.attention.flex_attention import flex_attention
+    from torch.nn.attention.flex_attention import flex_attention, create_block_mask
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
@@ -269,9 +269,10 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
 
 
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, target_dtype=torch.float16):
-    causal_mask = mask
-    if mask is not None:
-        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+    def mask_mod(b, h, q_idx, kv_idx):
+        if mask is None:
+            return None
+        return mask[:, :, :, : kv_idx]
 
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
@@ -281,7 +282,7 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
         query,
         key,
         value,
-        block_mask=causal_mask,
+        block_mask=create_block_mask(mask_mod),
         score_mod=tanh_softcap,
         enable_gqa=True,
         scale=config.scaling,
