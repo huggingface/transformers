@@ -530,6 +530,10 @@ class ProcessorTesterMixin:
             self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+            if hasattr(processor, "tokenizer"):
+                # When we don't use single-file chat template saving, processor and tokenizer chat templates
+                # should remain separate
+                self.assertIsNone(getattr(reloaded_processor.tokenizer, "chat_template", None))
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname, save_raw_chat_template=True)
@@ -537,3 +541,7 @@ class ProcessorTesterMixin:
             self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+            # When we save as single files, tokenizers and processors share a chat template, which means
+            # the reloaded tokenizer should get the chat template as well
+            if hasattr(processor, "tokenizer"):
+                self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
