@@ -108,10 +108,6 @@ trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 
 على سبيل المثال، إذا كنت تريد تخصيص طريقة [`~Trainer.compute_loss`] لاستخدام دالة خسارة ذات ترجيح بدلاً من ذلك.
 
-```py
-from torch import nn
-from transformers import Trainer
-على سبيل المثال، إذا كنت تريد تخصيص طريقة [`~Trainer.compute_loss`] لاستخدام خسارة مرجحة بدلاً من ذلك.
 
 ```py
 from torch import nn
