@@ -21,6 +21,7 @@ import unittest
 import numpy as np
 import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
@@ -603,17 +604,19 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         self.assertIsNotNone(model)
 
     # overwrite because BLIP internally calls LM.generate() with embeds thus it cannot operate in no cache format
-    def _check_outputs(self, output, main_input, config, use_cache=False, num_return_sequences=1):
+    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         use_cache = True  # force this to be True in case False is passed
 
-        batch_size = main_input.shape[0]
+        input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
+        internal_batch_size = (
+            input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
+        )
 
         seq_length = getattr(self.model_tester, "seq_length", None)
         seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
         seq_length = getattr(self.model_tester, "text_seq_length", seq_length)
 
         config = config.text_config if hasattr(config, "text_config") else config
-        num_sequences_in_output = batch_size * num_return_sequences
 
         gen_len = (
             output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
@@ -624,19 +627,21 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
 
         # scores
-        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
+        self._check_scores(internal_batch_size, output.scores, length=gen_len, config=config)
 
         # unprocessed logits
-        self._check_logits(num_sequences_in_output, output.logits, config=config)
+        self._check_logits(internal_batch_size, output.logits, config=config)
 
         # Attentions
         if self.has_attentions:
             if config.is_encoder_decoder:
                 # encoder
-                self._check_encoder_attention_for_generate(output.encoder_attentions, batch_size, config, seq_length)
+                self._check_encoder_attention_for_generate(
+                    output.encoder_attentions, input_batch_size, config, seq_length
+                )
                 # decoder
                 self._check_attentions_for_generate(
-                    num_sequences_in_output,
+                    internal_batch_size,
                     output.decoder_attentions,
                     min_length=1,
                     max_length=output.sequences.shape[-1],
@@ -648,7 +653,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
                 attentions = output.attentions if not use_cache else output.attentions[1:]
                 min_length = seq_length if not use_cache else seq_length + 1
                 self._check_attentions_for_generate(
-                    num_sequences_in_output,
+                    internal_batch_size,
                     attentions=attentions,
                     min_length=min_length,
                     max_length=output.sequences.shape[-1],
@@ -660,12 +665,12 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         if config.is_encoder_decoder:
             # encoder
             self._check_encoder_hidden_states_for_generate(
-                output.encoder_hidden_states, batch_size, config, seq_length
+                output.encoder_hidden_states, input_batch_size, config, seq_length
             )
 
             # decoder
             self._check_hidden_states_for_generate(
-                num_sequences_in_output,
+                internal_batch_size,
                 output.decoder_hidden_states,
                 min_length=1,
                 max_length=output.sequences.shape[-1],
@@ -677,7 +682,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
             min_length = seq_length if not use_cache else seq_length + 1
             self._check_hidden_states_for_generate(
-                num_sequences_in_output,
+                internal_batch_size,
                 hidden_states,
                 min_length=min_length,
                 max_length=output.sequences.shape[-1],
@@ -685,36 +690,16 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
                 use_cache=use_cache,
             )
 
-        # Past Key Value States -- a few notes here:
-        # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
-        # 2. We ignore models that have unique cache structures (e.g. mamba) or are in need of refatoring to match the
-        #    standard cache format (e.g.gptbigcode )
-        models_without_standard_cache = (
-            "ctrl",
-            "fsmt",
-            "gptbigcode",
-            "mega",
-            "reformer",
-            "jamba",
-            "mamba",
-            "xlnet",
-            "zamba",
-        )
-        has_standard_cache = not any(
-            model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
-        )
-        if has_standard_cache:
-            if use_cache:
-                past_key_values = output.past_key_values
-                past_sequence_length = output.sequences.shape[-1] - 1
-                self._check_past_key_values_for_generate(
-                    num_sequences_in_output,
-                    past_key_values,
-                    seq_length=past_sequence_length,
-                    config=config,
-                )
-            elif use_cache is False:
-                self.assertTrue(output.past_key_values is None)
+        # Past Key Value States
+        if use_cache:
+            past_key_values = output.past_key_values
+            past_sequence_length = output.sequences.shape[-1] - 1
+            self._check_past_key_values_for_generate(
+                internal_batch_size,
+                past_key_values,
+                seq_length=past_sequence_length,
+                config=config,
+            )
 
     # overwrite because BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present
     @pytest.mark.generate
@@ -800,7 +785,8 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
 
     @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 
 
