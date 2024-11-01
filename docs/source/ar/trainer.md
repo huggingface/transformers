@@ -471,8 +471,9 @@ trainer = trl.SFTTrainer(
 
 trainer.train()
 ```
+
 ### مُحسِّن GrokAdamW
-تم تصميم مُحسِّن GrokAdamW لتعزيز أداء التدريب واستقراره، خاصةً للنماذج التي تستفيد من دوال إشارة grokking. لاستخدام GrokAdamW، قم أولاً بتثبيت حزمة المُحسِّن باستخدام pip install grokadamw.
+تم تصميم مُحسِّن GrokAdamW لتعزيز أداء التدريب واستقراره، خاصةً للنماذج التي تستفيد من دوال إشارة `grokking`. لاستخدام `GrokAdamW`، قم أولاً بتثبيت حزمة المُحسِّن باستخدام `pip install grokadamw`.
 <Tip>
 يُعد GrokAdamW مفيدًا بشكل خاص للنماذج التي تتطلب تقنيات تحسين مُتقدمة لتحقيق أداء واستقرار أفضل.
 </Tip>
@@ -499,7 +500,7 @@ args = TrainingArguments(
     run_name="grokadamw-imdb",
 )
 
-# تحميل النموذج والمجزىء اللغوىء
+# تحميل النموذج والمجزىء اللغوي
 model_id = "google/gemma-2b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
