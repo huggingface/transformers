@@ -455,10 +455,11 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 @require_torch
 class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
     _is_composite = True
