@@ -580,7 +580,7 @@ class ClapAudioLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
-        dim = int(config.embed_dim * 2**layer_id)
+        dim = int(config.patch_embeds_hidden_size * 2**layer_id)
         num_heads = config.num_heads[layer_id]
 
         self.input_resolution = input_resolution
