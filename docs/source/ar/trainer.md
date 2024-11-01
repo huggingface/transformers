@@ -247,7 +247,7 @@ trainer = Trainer(..., args=training_args)
 pip install galore-torch
 ```
 
-ثم قم ببساطة بإضافة واحد من `["galore_adamw"، "galore_adafactor"، "galore_adamw_8bit"]` في `optim` جنبًا إلى جنب مع `optim_target_modules`، والتي يمكن أن تكون قائمة من السلاسل أو regex أو المسار الكامل المقابل لأسماء الوحدات النمطية المستهدفة التي تريد تكييفها. فيما يلي مثال على النص البرمجي من البداية إلى النهاية (تأكد من `pip install trl datasets`):
+ثم أضف ببساطة أحد `["galore_adamw"، "galore_adafactor"، "galore_adamw_8bit"]` في `optim` جنبًا إلى جنب مع `optim_target_modules`، والتي يمكن أن تكون قائمة من السلاسل أو التعبيرات النمطية regex أو المسار الكامل المطابق لأسماء الوحدات المستهدفة التي تريد تكييفها. فيما يلي مثال على النص البرمجي كامل(تأكد من `pip install trl datasets`):
 
 ```python
 import torch
