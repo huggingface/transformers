@@ -226,7 +226,7 @@ my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 
 ## NEFTune
 
-[NEFTune](https://hf.co/papers/2310.05914) هي تقنية يمكن أن تحسن الأداء عن طريق إضافة ضجيج إلى متجهات التعلم أثناء التدريب. لتمكينه في [`Trainer`], قم بتعيين معلمة `neftune_noise_alpha` في [`TrainingArguments`] للتحكم في مقدار الضوضاء المضافة.
+[NEFTune](https://hf.co/papers/2310.05914) هي تقنية يمكن أن تحسن الأداء عن طريق إضافة ضوضاء إلى مُتجهات التعلم أثناء التدريب. لتمكينه في [`Trainer`], قم بتعيين معامل `neftune_noise_alpha` في [`TrainingArguments`] للتحكم في مقدار الضوضاء المُضافة.
 
 ```py
 from transformers import TrainingArguments, Trainer
