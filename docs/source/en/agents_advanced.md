@@ -141,12 +141,12 @@ image_generation_tool = Tool.from_space(
 
 image_generation_tool("A sunny beach")
 ```
-
 And voilà, here's your image! 🏖️
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/sunny_beach.webp">
 
-Then you can use this tool just like any other tool. For example, let's improve the prompt and generate an image of it.
+Then you can use this tool just like any other tool.  For example, let's improve the prompt  `a rabbit wearing a space suit` and generate an image of it.
+
 ```python
 from transformers import ReactCodeAgent
 
@@ -156,6 +156,20 @@ agent.run(
     "Improve this prompt, then generate an image of it.", prompt='A rabbit wearing a space suit'
 )
 ```
+
+```text
+=== Agent thoughts:
+improved_prompt could be "A bright blue space suit wearing rabbit, on the surface of the moon, under a bright orange sunset, with the Earth visible in the background"
+
+Now that I have improved the prompt, I can use the image generator tool to generate an image based on this prompt.
+>>> Agent is executing the code below:
+image = image_generator(prompt="A bright blue space suit wearing rabbit, on the surface of the moon, under a bright orange sunset, with the Earth visible in the background")
+final_answer(image)
+```
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit_spacesuit_flux.webp">
+
+How cool is this? 🤩
 
 ### Use gradio-tools
 
@@ -173,36 +187,6 @@ from transformers import Tool, load_tool, CodeAgent
 gradio_prompt_generator_tool = StableDiffusionPromptGeneratorTool()
 prompt_generator_tool = Tool.from_gradio(gradio_prompt_generator_tool)
 ```
-
-Now you can use it just like any other tool. For example, let's improve the prompt  `a rabbit wearing a space suit`.
-
-```python
-image_generation_tool = load_tool('huggingface-tools/text-to-image')
-agent = CodeAgent(tools=[prompt_generator_tool, image_generation_tool], llm_engine=llm_engine)
-
-agent.run(
-    "Improve this prompt, then generate an image of it.", prompt='A rabbit wearing a space suit'
-)
-```
-
-The model adequately leverages the tool:
-```text
-======== New task ========
-Improve this prompt, then generate an image of it.
-You have been provided with these initial arguments: {'prompt': 'A rabbit wearing a space suit'}.
-==== Agent is executing the code below:
-improved_prompt = StableDiffusionPromptGenerator(query=prompt)
-while improved_prompt == "QUEUE_FULL":
-    improved_prompt = StableDiffusionPromptGenerator(query=prompt)
-print(f"The improved prompt is {improved_prompt}.")
-image = image_generator(prompt=improved_prompt)
-====
-```
-
-Before finally generating the image:
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
-
 
 > [!WARNING]
 > gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.

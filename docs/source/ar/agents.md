@@ -464,7 +464,7 @@ image = image_generator(prompt=improved_prompt)
 
 قبل إنشاء الصورة أخيرًا:
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png" />
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit_spacesuit_flux.webp" />
 
 > [!WARNING]
 > تتطلب gradio-tools إدخالات وإخراجات *نصية* حتى عند العمل مع طرائق مختلفة مثل كائنات الصور والصوت. الإدخالات والإخراجات الصورية والصوتية غير متوافقة حاليًا.
