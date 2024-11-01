@@ -846,12 +846,9 @@ class ClapAudioEncoder(nn.Module):
             [
                 ClapAudioStage(
                     config=config,
-                    dim=int(config.patch_embeds_hidden_size * 2**i_layer),
-                    input_resolution=self.input_resolutions[i_layer],
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_attention_heads[i_layer],
-                    drop_path=drop_path_rate[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=ClapAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
+                    grid_size=grid_size,
+                    dpr=drop_path_rate,
+                    layer_id=i_layer,
                 )
                 for i_layer in range(self.num_layers)
             ]
