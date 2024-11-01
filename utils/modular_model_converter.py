@@ -632,8 +632,10 @@ class ModuleMapper(CSTVisitor, ABC):
         for id, node in self.global_nodes.items():
             self.start_lines[id] = self.get_metadata(cst.metadata.PositionProvider, node).start.line
 
-        # Since we added every Name as part of `self.object_dependency_mapping`, we now remove those that
-        # are not part of the recorded objects (i.e. built-in variables, imports, etc)
+    def _restrict_dependencies_to_known_entities(self):
+        """Since we added every Name as part of `self.object_dependency_mapping`, we need to remove those that
+        are not part of the recorded objects in `self.global_nodes` (i.e. built-in variables, imports, etc).
+        This should be called only after all merging operations have been finalized!!"""
         global_objects = set(self.global_nodes.keys())
         for object_name, dependencies in self.object_dependency_mapping.items():
             self.object_dependency_mapping[object_name] = {dep for dep in dependencies if dep in global_objects}
@@ -814,6 +816,8 @@ class ModelFileMapper(ModuleMapper):
         # Correctly re-set the global nodes at this point
         self.global_nodes.update(self.functions)
         self.global_nodes.update(self.assignments)
+        # Restrict the dependency mappings to the know entities to avoid Python's built-ins
+        self._restrict_dependencies_to_known_entities()
         # Create the global mapping of recursive dependencies for functions and assignments
         self.object_recursive_dependency_mapping = self._compute_recursive_object_dependencies()
 
@@ -1147,18 +1151,15 @@ class ModularFileMapper(ModuleMapper):
 
     def leave_Module(self, node):
         """When we leave the modular file, we do the following in order:
-        1. compute the nested (recursive) function and assignment dependencies
-        2. for each modeling file found in the imports, rename it with the new model name, visit it, and update
+        1. for each modeling file found in the imports, rename it with the new model name, visit it, and update
         its dependency graph with the new function and assignment definitions found in the modular
-        3. update the modular dependency graph with the imported functions and assignments (found when visiting the matching files)
+        2. update the modular dependency graph with the imported functions and assignments (found when visiting the matching files)
+        3. compute the nested (recursive) function and assignment dependencies
         """
         # Takes care of finalizing our visit
         super().leave_Module(node)
 
-        # 1. compute the nested (recursive) function and assignment dependencies
-        self.object_recursive_dependency_mapping = self._compute_recursive_object_dependencies()
-
-        # 2. for each modeling file found in the imports, rename it with the new model name, visit it, and update dependencies
+        # 1. for each modeling file found in the imports, rename it with the new model name, visit it, and update dependencies
         self.visited_modules = {}
         self.renamers = {}
         for file, module in self.model_specific_modules.items():
@@ -1178,9 +1179,12 @@ class ModularFileMapper(ModuleMapper):
             # We record it so that we can rename classes later the exact same way
             self.renamers[file] = renamer
 
-        # 3. in turn, we need to add the imported functions/assignments to the dependencies of the modular mapper, using the
+        # 2. in turn, we need to add the imported functions/assignments to the dependencies of the modular mapper, using the
         # definitions found in the visited files
         self.merge_model_specific_imports(self.visited_modules)
+
+        # 3. compute the nested (recursive) function and assignment dependencies
+        self.object_recursive_dependency_mapping = self._compute_recursive_object_dependencies()
 
         # We need to keep track of which objects were imported directly into which modeling file to not add them wrongly later
         # Note that we may visit several of the same file types, thus we save them per file type, not file
@@ -1201,9 +1205,9 @@ class ModularFileMapper(ModuleMapper):
             if object_name in visited_module.functions and object_name not in self.functions:
                 self.functions[object_name] = visited_module.functions[object_name]
                 self.added_objects_file_mapping[object_name] = file
-                dependencies = visited_module.object_recursive_dependency_mapping.get(object_name, None)
+                dependencies = visited_module.object_dependency_mapping.get(object_name, None)
                 if dependencies is not None:
-                    self.object_recursive_dependency_mapping[object_name] = dependencies
+                    self.object_dependency_mapping[object_name] = dependencies
                     for dep in dependencies:
                         if dep not in self.global_nodes:
                             self.added_objects_file_mapping[dep] = file
@@ -1213,9 +1217,9 @@ class ModularFileMapper(ModuleMapper):
             elif object_name in visited_module.assignments and object_name not in self.assignments:
                 self.assignments[object_name] = visited_module.assignments[object_name]
                 self.added_objects_file_mapping[object_name] = file
-                dependencies = visited_module.object_recursive_dependency_mapping.get(object_name, None)
+                dependencies = visited_module.object_dependency_mapping.get(object_name, None)
                 if dependencies is not None:
-                    self.object_recursive_dependency_mapping[object_name] = dependencies
+                    self.object_dependency_mapping[object_name] = dependencies
                     for dep in dependencies:
                         if dep not in self.global_nodes:
                             self.added_objects_file_mapping[dep] = file
@@ -1223,6 +1227,8 @@ class ModularFileMapper(ModuleMapper):
 
         # Do not forget to re-assign all nodes after the merge
         self.global_nodes = {**self.assignments, **self.classes, **self.functions}
+        # And restric dependencies to those nodes only
+        self._restrict_dependencies_to_known_entities()
 
     def compute_relative_order(self, missing_dependencies: set) -> dict[str, int]:
         """Compute in which relative order the `missing_dependencies` should appear when the nodes are added to the final file that
