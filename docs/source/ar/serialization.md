@@ -90,7 +90,7 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 
 ### تصدير نموذج 🤗 Transformers إلى ONNX باستخدام `optimum.onnxruntime`
 
-بدلاً من واجهة سطر الأوامر، يمكنك تصدير نموذج 🤗 Transformers إلى ONNX برمجيًا كما يلي:
+كبديل لواجهة سطر الأوامر، يُمكنك تصدير نموذج 🤗 Transformers إلى ONNX برمجيًا كما يلي:
 
 ```python
 >>> from optimum.onnxruntime import ORTModelForSequenceClassification
