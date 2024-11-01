@@ -455,6 +455,12 @@ See [`TokenClassificationPipeline`] for all details.
     - __call__
     - all
 
+### ImageTextToTextPipeline
+
+[[autodoc]] ImageTextToTextPipeline
+    - __call__
+    - all
+
 ### MaskGenerationPipeline
 
 [[autodoc]] MaskGenerationPipeline

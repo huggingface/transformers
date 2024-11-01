@@ -14,12 +14,12 @@
 # limitations under the License.
 
 import datetime
-import gc
 import math
 import unittest
 
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -343,8 +343,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def _test_lm_generate_xglm_helper(
         self,
