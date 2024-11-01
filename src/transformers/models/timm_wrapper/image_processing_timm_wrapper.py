@@ -46,7 +46,6 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         pretrained_cfg = kwargs.pop("pretrained_cfg", None)
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
-        self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -54,7 +53,6 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         """
         output = super().to_dict()
         output.pop("val_transforms", None)
-        output.pop("train_transforms", None)
         return output
 
     @classmethod
@@ -73,7 +71,6 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
-        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -92,18 +89,15 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         if return_tensors != "pt":
             raise ValueError(f"return_tensors for TimmWrapperImageProcessor must be 'pt', but got {return_tensors}")
 
-        if kwargs:
-            raise ValueError(f"Unknown arguments: {', '.join(kwargs.keys())}")
-
         # If the input a torch tensor, then no conversion needed
         # Otherwise, we need to pass in a list of PIL images
         if not isinstance(images, torch.Tensor):
-            images = self.train_transforms(images)
+            images = self.val_transforms(images)
             # Add batch dimension if a single image
             images = images.unsqueeze(0) if images.ndim == 3 else images
         else:
             images = make_list_of_images(images)
             images = [to_pil_image(image) for image in images]
-            images = torch.stack([self.train_transforms(image) for image in images])
+            images = torch.stack([self.val_transforms(image) for image in images])
 
         return BatchFeature({"pixel_values": images}, tensor_type=return_tensors)
