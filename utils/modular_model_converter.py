@@ -1142,6 +1142,7 @@ class ModularFileMapper(ModuleMapper):
                 if assigned_variable == "__all__":
                     self.all_all_to_add = split_all_assignment(node)
                 else:
+                    self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
 
     def leave_Module(self, node):
@@ -1485,7 +1486,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma/modular_gemma.py"],
+        default=["src/transformers/models/gemma2/modular_gemma2.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
