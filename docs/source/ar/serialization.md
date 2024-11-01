@@ -103,7 +103,7 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 >>> ort_model = ORTModelForSequenceClassification.from_pretrained(model_checkpoint, export=True)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 
->>> # Save the onnx model and tokenizer
+>>> # حفظ نموذج onnx ومجزىء النصوص
 >>> ort_model.save_pretrained(save_directory)
 >>> tokenizer.save_pretrained(save_directory)
 ```
