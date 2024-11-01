@@ -282,7 +282,7 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
         query,
         key,
         value,
-        block_mask=create_block_mask(mask_mod),
+        block_mask=create_block_mask(mask_mod, query.shape[0], query.shape[2], query.shape[1], key.shape[1], _compile=True),
         score_mod=tanh_softcap,
         enable_gqa=True,
         scale=config.scaling,
