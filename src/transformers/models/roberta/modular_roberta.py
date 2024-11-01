@@ -182,7 +182,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class RobertaModel(RobertaPreTrainedModel, BertModel):
+class RobertaModel(BertModel):
     pass
 
 
