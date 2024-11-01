@@ -172,7 +172,7 @@ trainer = Trainer(
 
 يتم تعيين [`Trainer`] إلى `logging.INFO` افتراضيًا والذي يُبلغ عن الأخطاء والتحذيرات ومعلومات أساسية أخرى. يتم تعيين نسخة [`Trainer`] - في البيئات الموزعة - إلى `logging.WARNING` والتي يُبلغ فقط عن الأخطاء والتحذيرات. يمكنك تغيير مستوى تسجيل الأحداث باستخدام معاملي [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) و [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) في [`TrainingArguments`].
 
-لتهيئة إعداد مستوى السجل لكل عقدة، استخدم معلمة [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) لتحديد ما إذا كان سيتم استخدام مستوى السجل على كل عقدة أو فقط على العقدة الرئيسية.
+لتهيئة إعداد مُستوى تسجيل  اﻷحداث لكل عقدة، استخدم معامل [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) لتحديد ما إذا كان سيتم استخدام مُستوى السجل على كل عقدة أو فقط على العقدة الرئيسية.
 
 <Tip>
 
