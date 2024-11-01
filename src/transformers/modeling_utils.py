@@ -4301,7 +4301,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 renamed_keys["beta"] = (key, new_key)
 
         if renamed_keys:
-            warning_msg = f"This model {cls.__name__}"
+            warning_msg = f"A pretrained model of type `{cls.__name__}` "
             warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
             for old_key, new_key in renamed_keys.values():
                 warning_msg += f"* `{old_key}` -> `{new_key}`\n"
