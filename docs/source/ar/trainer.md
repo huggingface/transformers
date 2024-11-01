@@ -422,7 +422,7 @@ trainer.train()
 
 <Tip>
 
-تعرف على المزيد حول استراتيجيات تجزئة FSDP، وإلغاء تحميل وحدة المعالجة المركزية (CPU)، والمزيد مع [`Trainer`] في [دليل Fully Sharded Data Parallel](fsdp).
+تعرف على المزيد حول استراتيجيات تجزئة FSDP، وتفريغ وحدة المعالجة المركزية (CPU)، والمزيد مع [`Trainer`] في [دليل Fully Sharded Data Parallel](fsdp).
 
 </Tip>
 
