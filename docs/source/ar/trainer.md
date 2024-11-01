@@ -364,7 +364,7 @@ trainer = trl.SFTTrainer(
 trainer.train()
 ```
 
-لاحظ أن تحسين الطبقة تجريبي إلى حد ما ولا يدعم DDP (Distributed Data Parallel)، وبالتالي يمكنك تشغيل نص البرنامج النصي للتدريب على وحدة معالجة الرسومات (GPU) واحدة فقط. يرجى الاطلاع على [هذا القسم المناسب](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory) لمزيد من التفاصيل. قد لا تدعم الميزات الأخرى مثل تقليم التدرجات أو DeepSpeed، إلخ. من الصندوق. يرجى [إثارة مشكلة على GitHub](https://github.com/huggingface/transformers/issues) إذا واجهتك مثل هذه المشكلة.
+لاحظ أن تحسين الطبقة تجريبي إلى حد ما ولا يدعم DDP (Distributed Data Parallel)، وبالتالي يمكنك تشغيل التعليمات البرمجية  للتدريب على وحدة معالجة الرسومات (GPU) واحدة فقط. يرجى الاطلاع على [هذا القسم المناسب](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory) لمزيد من التفاصيل. قد لا تدعم الميزات الأخرى مثل تقليم التدرجات أو DeepSpeed، إلخ. من الصندوق. يرجى [تقديم تقرير عن المشكلة على GitHub](https://github.com/huggingface/transformers/issues) إذا واجهتك مثل هذه المشكلة.
 
 ## محسنات LOMO
 
