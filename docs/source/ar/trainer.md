@@ -106,7 +106,7 @@ trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 * [`~Trainer.evaluate`] يُقيّم النموذج ويعيد مقاييس التقييم
 * [`~Trainer.predict`] يُجري التنبؤات (مع المقاييس إذا كانت العلامات متاحة) على مجموعة الاختبار
 
-على سبيل المثال، إذا كنت تريد تخصيص طريقة [`~Trainer.compute_loss`] لاستخدام خسارة مرجحة بدلاً من ذلك.
+على سبيل المثال، إذا كنت تريد تخصيص طريقة [`~Trainer.compute_loss`] لاستخدام دالة خسارة ذات ترجيح بدلاً من ذلك.
 
 ```py
 from torch import nn
