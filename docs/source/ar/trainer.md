@@ -574,4 +574,4 @@ accelerate launch --num_processes=2 \
     --overwrite_output_dir
 ```
 
-تحقق من [إطلاق نص البرنامج النصي Accelerate](https://huggingface.co/docs/accelerate/basic_tutorials/launch) لمعرفة المزيد حول `accelerate_launch` والتكوينات المخصصة.
+اطلع على برنامج تعليمي [Launching your Accelerate scripts](https://huggingface.co/docs/accelerate/basic_tutorials/launch) لمعرفة المزيد حول `accelerate_launch` والتكوينات المخصصة.
