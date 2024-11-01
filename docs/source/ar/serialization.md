@@ -157,7 +157,7 @@ python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 ["last_hidden_state"]
 ```
 
-تكون العملية مماثلة بالنسبة إلى نقاط تفتيش TensorFlow على Hub. على سبيل المثال، لتصدير نقطة تفتيش TensorFlow نقية، قم بما يلي:
+العمليات مُتطابقة لنقاط الحفظ TensorFlow على Hub. على سبيل المثال، صدّر نقطة حفظ TensorFlow خالصة كما يلي:
 
 ```bash
 python -m transformers.onnx --model=keras-io/transformers-qa onnx/
