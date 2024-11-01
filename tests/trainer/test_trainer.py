@@ -2771,6 +2771,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
         # won't be the same since the training dataloader is shuffled).
+        # Duplicate of above test, but with stateful dataloaders.
+        # (Must be a separate test due to different dependencies)
+        from accelerate.state import GradientState
+
         accelerator_config = AcceleratorConfig(use_stateful_dataloader=True)
         with tempfile.TemporaryDirectory() as tmpdir:
             kwargs = {
@@ -2890,6 +2894,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with self.assertRaises(Exception) as context:
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
+
+        print(GradientState().dataloader_references)
+        # `GradientState` is a singleton that's holding references to the dataloaders made by this test.
+        # Clean up the gradient state from this test, as to not pollute later tests.
+        GradientState._reset_state()
 
     @slow
     @require_accelerate
@@ -4618,6 +4627,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
             )
 
 
+# TODO: These tests do not work if the model is using a stateful dataloader.
 @require_torch
 @require_ray
 class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
