@@ -581,7 +581,7 @@ class ClapAudioLayer(nn.Module):
         self.shift_size = shift_size
         self.window_size = config.window_size
         dim = int(config.patch_embeds_hidden_size * 2**layer_id)
-        num_heads = config.num_heads[layer_id]
+        num_heads = config.num_attention_heads[layer_id]
 
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
