@@ -1246,10 +1246,11 @@ class ModularFileMapper(ModuleMapper):
             else:
                 original_dependencies.append(dep)
         # Sort all lists according to the order in their respective file
-        all_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
+        all_dependencies = []
         for file, dependencies in other_files_dependencies.items():
             sorted_dependencies = sorted(dependencies, key=lambda x: self.start_lines_file_mapping[file][x])
             all_dependencies += sorted_dependencies
+        all_dependencies += sorted(original_dependencies, key=lambda x: self.start_lines[x])
 
         # Add all original node first, then merged ones (one file at a time)
         for dep in all_dependencies:
