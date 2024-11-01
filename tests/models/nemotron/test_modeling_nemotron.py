@@ -92,8 +92,8 @@ class NemotronModelTest(GemmaModelTest):
     test_pruning = False
     fx_compatible = False
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "nvidia/nemotron-3-8b-base-4k-hf"
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = NemotronForCausalLM if is_torch_available() else None
 
     def setUp(self):
         self.model_tester = NemotronModelTester(self)

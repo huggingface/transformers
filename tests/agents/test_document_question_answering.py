@@ -24,7 +24,7 @@ from .test_tools_common import ToolTesterMixin
 
 class DocumentQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = load_tool("document-question-answering")
+        self.tool = load_tool("document_question_answering")
         self.tool.setup()
 
     def test_exact_match_arg(self):
