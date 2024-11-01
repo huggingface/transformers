@@ -703,36 +703,6 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
 
 
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
-    # Convert old format to new format if needed from a PyTorch state_dict
-    old_keys = []
-    new_keys = []
-    renamed_keys = {}
-    renamed_gamma = {}
-    renamed_beta = {}
-    warning_msg = f"A pretrained model of type `{model_to_load.__class__.__name__}` "
-    for key in state_dict.keys():
-        new_key = None
-        if "gamma" in key:
-            # We add only the first key as an example
-            new_key = key.replace("gamma", "weight")
-            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
-        if "beta" in key:
-            # We add only the first key as an example
-            new_key = key.replace("beta", "bias")
-            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
-        if new_key:
-            old_keys.append(key)
-            new_keys.append(new_key)
-    renamed_keys = {**renamed_gamma, **renamed_beta}
-    if renamed_keys:
-        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
-        for old_key, new_key in renamed_keys.items():
-            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
-        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
-        logger.info_once(warning_msg)
-    for old_key, new_key in zip(old_keys, new_keys):
-        state_dict[new_key] = state_dict.pop(old_key)
-
     # copy state_dict so _load_from_state_dict can modify it
     metadata = getattr(state_dict, "_metadata", None)
     state_dict = state_dict.copy()
@@ -863,46 +833,7 @@ def _load_state_dict_into_meta_model(
 
     error_msgs = []
 
-    old_keys = []
-    new_keys = []
-    renamed_gamma = {}
-    renamed_beta = {}
     is_quantized = hf_quantizer is not None
-    warning_msg = f"This model {type(model)}"
-    for key in state_dict.keys():
-        new_key = None
-        if "gamma" in key:
-            # We add only the first key as an example
-            new_key = key.replace("gamma", "weight")
-            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
-        if "beta" in key:
-            # We add only the first key as an example
-            new_key = key.replace("beta", "bias")
-            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
-
-        # To reproduce `_load_state_dict_into_model` behaviour, we need to manually rename parametrized weigth norm, if necessary.
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            if "weight_g" in key:
-                new_key = key.replace("weight_g", "parametrizations.weight.original0")
-            if "weight_v" in key:
-                new_key = key.replace("weight_v", "parametrizations.weight.original1")
-        else:
-            if "parametrizations.weight.original0" in key:
-                new_key = key.replace("parametrizations.weight.original0", "weight_g")
-            if "parametrizations.weight.original1" in key:
-                new_key = key.replace("parametrizations.weight.original1", "weight_v")
-        if new_key:
-            old_keys.append(key)
-            new_keys.append(new_key)
-    renamed_keys = {**renamed_gamma, **renamed_beta}
-    if renamed_keys:
-        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
-        for old_key, new_key in renamed_keys.items():
-            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
-        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
-        logger.info_once(warning_msg)
-    for old_key, new_key in zip(old_keys, new_keys):
-        state_dict[new_key] = state_dict.pop(old_key)
 
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
@@ -4349,6 +4280,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return key
 
     @classmethod
+    def _fix_state_dict_keys(cls, state_dict):
+        renamed_keys = {}
+        state_dict_keys = list(state_dict.keys())
+        for key in state_dict_keys:
+            new_key = cls._fix_state_dict_key(key)
+            if new_key != key:
+                state_dict[new_key] = state_dict.pop(key)
+
+            # add it once for logging
+            if "gamma" in key and "gamma" not in renamed_keys:
+                renamed_keys["gamma"] = (key, new_key)
+            if "beta" in key and "beta" not in renamed_keys:
+                renamed_keys["beta"] = (key, new_key)
+
+        if renamed_keys:
+            warning_msg = f"This model {cls.__name__}"
+            warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
+            for old_key, new_key in renamed_keys.values():
+                warning_msg += f"* `{old_key}` -> `{new_key}`\n"
+            warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
+            logger.info_once(warning_msg)
+
+        return state_dict
+
+    @classmethod
     def _load_pretrained_model(
         cls,
         model,
@@ -4642,9 +4598,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # For GGUF models `state_dict` is never set to None as the state dict is always small
             if gguf_path:
+                fixed_state_dict = cls._fix_state_dict_keys(state_dict)
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
-                    state_dict,
+                    fixed_state_dict,
                     start_prefix,
                     expected_keys,
                     device_map=device_map,
@@ -4663,8 +4620,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
+                fixed_state_dict = cls._fix_state_dict_keys(state_dict)
                 error_msgs = _load_state_dict_into_model(
-                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                    model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
                 )
 
         else:
@@ -4728,9 +4686,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                 )
                     else:
+                        fixed_state_dict = cls._fix_state_dict_keys(state_dict)
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
-                            state_dict,
+                            fixed_state_dict,
                             start_prefix,
                             expected_keys,
                             device_map=device_map,
@@ -4751,8 +4710,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         assign_to_params_buffers = check_support_param_buffer_assignment(
                             model_to_load, state_dict, start_prefix
                         )
+                    fixed_state_dict = cls._fix_state_dict_keys(state_dict)
                     error_msgs += _load_state_dict_into_model(
-                        model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                        model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
                     )
 
                 # force memory release
@@ -4884,9 +4844,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
         state_dict = load_state_dict(resolved_archive_file, weights_only=weights_only)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
+        fixed_state_dict = model._fix_state_dict_keys(state_dict)
         error_msgs = _load_state_dict_into_meta_model(
             model,
-            state_dict,
+            fixed_state_dict,
             start_prefix,
             expected_keys=expected_keys,
             hf_quantizer=hf_quantizer,
