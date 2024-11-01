@@ -43,6 +43,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
 * [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
+* [DiffLlama](https://huggingface.co/docs/transformers/model_doc/diffllama#transformers.DiffLlamaModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
