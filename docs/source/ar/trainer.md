@@ -162,7 +162,7 @@ trainer = Trainer(
 )
 ```
 
-## التسجيل Logging
+## تسجيل الأحداث (Logging)
 
 <Tip>
 
