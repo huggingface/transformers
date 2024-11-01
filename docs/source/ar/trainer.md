@@ -238,7 +238,7 @@ trainer = Trainer(..., args=training_args)
 يتم تعطيل NEFTune بعد التدريب لاستعادة طبقة التعلم الأصلية لتجنب أي سلوك غير متوقع.
 
 ## نواة Liger
-Liger-Kernel Kernel هي مجموعة من نوى Triton التي طورتها Linkedin مُصممة خصيصًا لتدريب نماذج اللغة الكبيرة (LLM). لقد قمنا بتنفيذ RMSNorm و RoPE و SwiGLU و CrossEntropy و FusedLinearCrossEntropy مُتوافقة مع Hugging Face، والمزيد قادم. يُمكنها زيادة إنتاجية التدريب متعدد وحدات معالجة الرسومات (GPU) بنسبة 20٪ وتقليل استخدام الذاكرة بنسبة 60٪. تعمل النواة بشكل تلقائي مع flash attention و PyTorch FSDP و Microsoft DeepSpeed.
+[Liger-Kernel](https://github.com/linkedin/Liger-Kernel) Kernel هي مجموعة من نوى Triton التي طورتها Linkedin مُصممة خصيصًا لتدريب نماذج اللغة الكبيرة (LLM). لقد قمنا بتنفيذ RMSNorm و RoPE و SwiGLU و CrossEntropy و FusedLinearCrossEntropy مُتوافقة مع Hugging Face، والمزيد قادم. يُمكنها زيادة إنتاجية التدريب متعدد وحدات معالجة الرسومات (GPU) بنسبة 20٪ وتقليل استخدام الذاكرة بنسبة 60٪. تعمل النواة بشكل تلقائي مع flash attention و PyTorch FSDP و Microsoft DeepSpeed.
 
 احصل على زيادة في الإنتاجية بنسبة 20٪ وتقليل استخدام الذاكرة بنسبة 60٪ على تدريب نماذج LLaMA 3-8B. حقق أطوال سياق أكبر وأحجام دفعات أكبر. كما أنها مُفيدة إذا كنت تُريد زيادة حجم نموذجك إلى تدريب بنماذج متعددة الرؤوس أو أحجام مُفردات ضخمة. أطلق العنان للتدريب بنماذج متعددة الرؤوس (medusa) والمزيد. راجع التفاصيل والأمثلة في [Liger](https://github.com/linkedin/Liger-Kernel/tree/main/examples)
 تأكد أولاً من تثبيت مستودع Liger الرسمي:
@@ -265,7 +265,7 @@ training_args = TrainingArguments(
 )
 ```
 
-تدعم النواة معماريات نماذج Llama و Gemma و Mistral و Mixtral. يُمكن العثور على أحدث قائمة بالنمائج المدعومة هنا. عندما يتم تعيين `use_liger_kernel` إلى `True`، سيتم تصحيح الطبقات المُقابلة في النموذج الأصلي باستخدام تطبيق Liger الفعال، لذلك لا تحتاج إلى فعل أي شيء إضافي بخلاف تعيين قيمة المعامل.
+تدعم النواة معماريات نماذج Llama و Gemma و Mistral و Mixtral. يُمكن العثور على أحدث قائمة بالنمائج المدعومة [هنا](https://github.com/linkedin/Liger-Kernel). عندما يتم تعيين `use_liger_kernel` إلى `True`، سيتم تصحيح الطبقات المُقابلة في النموذج الأصلي باستخدام تطبيق Liger الفعال، لذلك لا تحتاج إلى فعل أي شيء إضافي بخلاف تعيين قيمة المعامل.
 
 ## المُحسِّنات
 يمكنك اختيار مُحسِّن مدمج للتدريب باستخدام:
