@@ -119,9 +119,22 @@ class OneFormerProcessor(ProcessorMixin):
 
         return task_inputs
 
+    @staticmethod
+    def _add_args_for_backward_compatibility(args):
+        """
+        Remove this function once support for args is dropped in __call__
+        """
+        if len(args) > 2:
+            raise ValueError("Too many positional arguments")
+        return {
+            key: value
+            for key, value in zip(("task_inputs", "segmentation_maps"), args)
+        }
+
     def __call__(
         self,
         images: Optional[ImageInput] = None,
+        *args,  # to be deprecated
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -162,6 +175,7 @@ class OneFormerProcessor(ProcessorMixin):
             OneFormerProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
+            **self._add_args_for_backward_compatibility(args),
         )
         segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
         task_inputs = output_kwargs["images_kwargs"].pop("task_inputs", None)
