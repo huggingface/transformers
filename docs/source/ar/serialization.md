@@ -126,7 +126,7 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 pip install transformers[onnx]
 ```
 
-استخدم حزمة `transformers.onnx` كنموذج Python لتصدير نقطة تفتيش باستخدام تكوين جاهز:
+استخدم حزمة `transformers.onnx` كنموذج Python لتصدير نقطة حفظ باستخدام تكوين جاهز:
 
 ```bash
 python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
