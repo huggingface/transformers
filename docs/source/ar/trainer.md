@@ -95,16 +95,16 @@ trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 
 في حين أن فئة [`Trainer`] مُصممة لتكون سهلة الوصول وسهلة الاستخدام، فإنها توفر أيضًا الكثير من قابلية التخصيص للمستخدمين المغامرين.  يُمكن إنشاء فئات فرعية من العديد من أساليب [`Trainer`] وتجاوزها لدعم الوظائف التي تُريدها، دون الحاجة إلى إعادة كتابة حلقة التدريب بأكملها من البداية لاستيعابها. تتضمن هذه الأساليب:
 
-* [`~Trainer.get_train_dataloader`] ينشئ DataLoader تدريب
-* [`~Trainer.get_eval_dataloader`] ينشئ DataLoader تقييم
-* [`~Trainer.get_test_dataloader`] ينشئ DataLoader اختبار
+* [`~Trainer.get_train_dataloader`] ينشئ DataLoader للتدريب
+* [`~Trainer.get_eval_dataloader`] ينشئ DataLoader للتقييم
+* [`~Trainer.get_test_dataloader`] ينشئ DataLoader للاختبار
 * [`~Trainer.log`] يسجل معلومات حول مختلف الكائنات التي تراقب التدريب
-* [`~Trainer.create_optimizer_and_scheduler`] ينشئ محسنًا ومخططًا لمعدل التعلم إذا لم يتم تمريرهما في `__init__`؛ يمكن أيضًا تخصيص هذه الوظائف بشكل منفصل باستخدام [`~Trainer.create_optimizer`] و [`~Trainer.create_scheduler`] على التوالي
-* [`~Trainer.compute_loss`] يحسب الخسارة على دفعة من إدخالات التدريب
-* [`~Trainer.training_step`] يؤدي خطوة التدريب
-* [`~Trainer.prediction_step`] يؤدي خطوة التنبؤ والاختبار
-* [`~Trainer.evaluate`] يقيم النموذج ويعيد مقاييس التقييم
-* [`~Trainer.predict`] يجعل التنبؤات (مع المقاييس إذا كانت العلامات متاحة) على مجموعة الاختبار
+* [`~Trainer.create_optimizer_and_scheduler`] ينشئ محسنًا ومخططًا لمُعدل التعلم إذا لم يتم تمريرهما في `__init__`؛ يمكن أيضًا تخصيص هذه الوظائف بشكل منفصل باستخدام [`~Trainer.create_optimizer`] و [`~Trainer.create_scheduler`] على التوالي
+* [`~Trainer.compute_loss`] يحسب دالة الخسارة على دفعة من مُدخلات التدريب
+* [`~Trainer.training_step`] يُنفذ خطوة التدريب
+* [`~Trainer.prediction_step`] يُنفذ خطوة التنبؤ والاختبار
+* [`~Trainer.evaluate`] يُقيّم النموذج ويعيد مقاييس التقييم
+* [`~Trainer.predict`] يُجري التنبؤات (مع المقاييس إذا كانت العلامات متاحة) على مجموعة الاختبار
 
 على سبيل المثال، إذا كنت تريد تخصيص طريقة [`~Trainer.compute_loss`] لاستخدام خسارة مرجحة بدلاً من ذلك.
 
