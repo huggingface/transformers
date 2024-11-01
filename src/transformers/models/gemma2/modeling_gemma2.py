@@ -226,7 +226,7 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
         softcap=config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
     )
 
-    return attn_output
+    return attn_output, None
 
 
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, target_dtype=torch.float16):
@@ -279,7 +279,7 @@ def sdpa_attention_forward(config, query, key, value, mask, output_attentions=Fa
         is_causal=is_causal,
         scale=config.scaling,
     )
-    return attn_output
+    return attn_output, None
 
 
 GEMMA2_ATTENTION_FUNCTION = {
@@ -363,7 +363,13 @@ class Gemma2Attention(nn.Module):
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output = self.attention_function(
+        if output_attentions and self.attention_type in ["sdpa", "flash_attention_2"]:
+            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
+            attention_type = "flex_attention"
+        else:
+            attention_type = self.attention_type
+
+        attn_output, attn_weights = GEMMA2_ATTENTION_FUNCTION[attention_type](
             self, query_states, key_states, value_states, attention_mask, self.config
         )
 
