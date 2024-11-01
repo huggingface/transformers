@@ -201,9 +201,6 @@ trainer = Trainer(...)
 
 استخدم تركيبات مختلفة من `log_level` و `log_level_replica` لتهيئة ما يتم تسجيله على كل من العقد.
 
-<hfoptions id="logging">
-<hfoption id="single node">
-استخدم تركيبات مختلفة من `log_level` و `log_level_replica` لتهيئة ما يتم تسجيله على كل من العقد.
 
 <hfoptions id="logging">
 <hfoption id="single node">
