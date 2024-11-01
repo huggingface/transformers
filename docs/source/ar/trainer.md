@@ -12,7 +12,7 @@
 
 </Tip>
 
-قبل البدء، تأكد من تثبيت [Accelerate](https://hf.co/docs/accelerate) - وهي مكتبة لتمكين وتشغيل التدريب على PyTorch عبر بيئات موزعة.
+قبل البدء، تأكد من تثبيت مكتبة [Accelerate](https://hf.co/docs/accelerate) - وهي مكتبة تُمكّن تشغيل تدريب PyTorch في بيئات مُوزعة.
 
 ```bash
 pip install accelerate
