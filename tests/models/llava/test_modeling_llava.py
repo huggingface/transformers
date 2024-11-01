@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava model."""
 
-import gc
 import unittest
 
 import requests
@@ -28,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_gpu,
@@ -85,7 +85,7 @@ class LlavaVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 30,
+            "image_size": 8,
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
@@ -118,9 +118,9 @@ class LlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 232
-        self.num_image_tokens = 225
+        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
         self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return LlavaConfig(
@@ -183,7 +183,11 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-to-text": LlavaForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -307,8 +311,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes

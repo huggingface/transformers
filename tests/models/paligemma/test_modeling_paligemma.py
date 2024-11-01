@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch PaliGemma model."""
 
-import gc
 import unittest
 
 import requests
@@ -28,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_read_token,
     require_torch,
     require_torch_sdpa,
@@ -183,6 +183,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
@@ -365,8 +366,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
