@@ -582,6 +582,12 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
+    "LlamaForQuestionAnswering",
+    "MistralForQuestionAnswering",
+    "MixtralForQuestionAnswering",
+    "NemotronForQuestionAnswering",
+    "Qwen2ForQuestionAnswering",
+    "Qwen2MoeForQuestionAnswering",
 ]
 
 # Supported math operations when interpreting the value of defaults.

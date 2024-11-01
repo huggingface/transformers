@@ -61,7 +61,7 @@ class AutoDocstringTest(unittest.TestCase):
         """
 
         @auto_class_docstring
-        class MyCoolClass:
+        class MyModel:
             @auto_docstring
             def __init__(input_ids, flash_attn_kwargs=None, another_warg=True, and_another_on=1):
                 r"""
@@ -82,4 +82,4 @@ class AutoDocstringTest(unittest.TestCase):
                 """
                 pass
 
-        self.assertEqual(MyCoolClass.__init__.__doc__, COOL_CLASS_DOC)
+        self.assertEqual(MyModel.__init__.__doc__, COOL_CLASS_DOC)
