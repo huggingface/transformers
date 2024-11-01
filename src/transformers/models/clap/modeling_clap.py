@@ -573,7 +573,6 @@ class ClapAudioOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->ClapDropPath, Swin->ClapAudio
 class ClapAudioLayer(nn.Module):
     def __init__(self, config, layer_id, input_resolution, drop_path_rate=0.0, shift_size=0):
         super().__init__()

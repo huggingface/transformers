@@ -520,11 +520,11 @@ class MaskFormerSwinOutput(nn.Module):
 
 
 class MaskFormerSwinLayer(nn.Module):
-    def __init__(self, config,input_resolution,layer_id,drop_path_rate=0.0, shift_size=0):
+    def __init__(self, config, input_resolution, layer_id, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.shift_size = shift_size
         dim = int(config.embed_dim * 2**layer_id)
-        num_heads=config.num_heads[layer_id]
+        num_heads = config.num_heads[layer_id]
         self.window_size = config.window_size
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
@@ -636,6 +636,7 @@ class MaskFormerSwinStage(nn.Module):
     def __init__(self, config, grid_size, dpr, layer_id):
         super().__init__()
         self.config = config  # is this even necessary??
+        dim = int(config.embed_dim * 2**layer_id)
         depth = config.depths[layer_id]
         input_resolution = (grid_size[0] // (2**layer_id), grid_size[1] // (2**layer_id))
 
@@ -657,7 +658,7 @@ class MaskFormerSwinStage(nn.Module):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=config.embed_dim * 2**layer_id, norm_layer=nn.LayerNorm)
+            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
         else:
             self.downsample = None
 
