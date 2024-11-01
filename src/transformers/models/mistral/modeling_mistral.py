@@ -1027,6 +1027,7 @@ class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1095,8 +1096,12 @@ class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
             shift_labels = shift_labels.view(-1)
             # Ensure tensors are on the same device
             shift_labels = shift_labels.to(shift_logits.device)
-            loss_fct = CrossEntropyLoss()
+            num_items_in_batch = loss_kwargs.pop("num_items_in_batch", None)
+            reduction = "sum" if num_items_in_batch is not None else "mean"
+            loss_fct = CrossEntropyLoss(reduction=reduction)
             loss = loss_fct(shift_logits, shift_labels)
+            if reduction == "sum":
+                loss = loss / num_items_in_batch
 
         if not return_dict:
             output = (logits,) + outputs[1:]
