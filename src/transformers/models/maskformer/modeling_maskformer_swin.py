@@ -657,7 +657,7 @@ class MaskFormerSwinStage(nn.Module):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
+            self.downsample = downsample(input_resolution, dim=config.embed_dim * 2**layer_id, norm_layer=nn.LayerNorm)
         else:
             self.downsample = None
 
