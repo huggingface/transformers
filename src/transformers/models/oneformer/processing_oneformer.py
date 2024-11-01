@@ -20,13 +20,18 @@ from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
+
+class OneFormerTextKwargs(TextKwargs):
+    max_seq_length: int
+    task_seq_length: int
 
 
 class OneFormerImagesKwargs(ImagesKwargs):
@@ -44,7 +49,12 @@ class OneFormerImagesKwargs(ImagesKwargs):
 
 class OneFormerProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: OneFormerImagesKwargs
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "max_seq_length": 77,
+            "task_seq_length": 77
+        },
+    }
 
 
 class OneFormerProcessor(ProcessorMixin):
@@ -72,8 +82,6 @@ class OneFormerProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
-        max_seq_length: int = 77,
-        task_seq_length: int = 77,
     ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
@@ -81,9 +89,6 @@ class OneFormerProcessor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
-
-        self.max_seq_length = max_seq_length
-        self.task_seq_length = task_seq_length
 
     def _preprocess_text(self, text_list: PreTokenizedInput, max_length: int = 77):
         tokens = self.tokenizer(text_list, padding="max_length", max_length=max_length, truncation=True)
@@ -184,18 +189,32 @@ class OneFormerProcessor(ProcessorMixin):
         for task in task_inputs:
             task_input = f"the task is {task}"
             task_token_inputs.append(task_input)
-        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
+        encoded_inputs["task_inputs"] = self._preprocess_text(
+            task_token_inputs,
+            max_length=output_kwargs["text_kwargs"]["task_seq_length"],
+        )
 
         if hasattr(encoded_inputs, "text_inputs"):
             text_inputs = [
-                self._preprocess_text(texts, max_length=self.max_seq_length).unsqueeze(0)
+                self._preprocess_text(
+                    texts,
+                    max_length=output_kwargs["text_kwargs"]["max_seq_length"],
+                ).unsqueeze(0)
                 for texts in encoded_inputs.text_inputs
             ]
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
         return encoded_inputs
 
-    def encode_inputs(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
+    def encode_inputs(
+        self,
+        images=None,
+        task_inputs=None,
+        segmentation_maps=None,
+        max_seq_length: int = 77,
+        task_seq_length: int = 77,
+        **kwargs,
+    ):
         """
         This method forwards all its arguments to [`OneFormerImageProcessor.encode_inputs`] and then tokenizes the
         task_inputs. Please refer to the docstring of this method for more information.
@@ -211,11 +230,11 @@ class OneFormerProcessor(ProcessorMixin):
         for task in task_inputs:
             task_input = f"the task is {task}"
             task_token_inputs.append(task_input)
-        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
+        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=task_seq_length)
 
         if hasattr(encoded_inputs, "text_inputs"):
             text_inputs = [
-                self._preprocess_text(texts, max_length=self.max_seq_length).unsqueeze(0)
+                self._preprocess_text(texts, max_length=max_seq_length).unsqueeze(0)
                 for texts in encoded_inputs.text_inputs
             ]
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
