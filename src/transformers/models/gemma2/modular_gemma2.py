@@ -353,8 +353,8 @@ class Gemma2Attention(nn.Module):
 
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
-        self.attention_type = config.attn_implementation
-        self.attention_function = GEMMA2_ATTENTION_FUNCTION[config.attn_implementation]
+        self.attention_type = config._attn_implementation
+        self.attention_function = GEMMA2_ATTENTION_FUNCTION[config._attn_implementation]
 
 
         if self.hidden_size % self.num_heads != 0:
