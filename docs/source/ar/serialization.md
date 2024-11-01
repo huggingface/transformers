@@ -141,7 +141,7 @@ python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 >>> session = InferenceSession("onnx/model.onnx")
->>> # ONNX Runtime expects NumPy arrays as input
+>>> # يتوقع ONNX Runtime مصفوفات NumPy كمدخلات
 >>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
 >>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
 ```
