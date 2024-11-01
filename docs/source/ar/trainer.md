@@ -426,7 +426,7 @@ trainer.train()
 
 </Tip>
 
-لاستخدام Accelerate مع [`Trainer`]]، قم بتشغيل الأمر [`accelerate.config`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-config) لإعداد التدريب لبيئة التدريب الخاصة بك. يقوم هذا الأمر بإنشاء `config_file.yaml` الذي سيتم استخدامه عند تشغيل نص البرنامج النصي للتدريب. على سبيل المثال، بعض تكوينات المثال التي يمكنك إعدادها هي:
+لاستخدام Accelerate مع [`Trainer`]]، قم بتشغيل الأمر [`accelerate.config`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-config) لإعداد التدريب لبيئة التدريب الخاصة بك. نشئ هذا الأمر ملف `config_file.yaml` الذي سيتم استخدامه عند تشغيل نص للتدريب البرمجى. على سبيل المثال، بعض تكوينات المثال التي يمكنك إعدادها هي:
 
 <hfoptions id="config">
 <hfoption id="DistributedDataParallel">
