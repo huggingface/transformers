@@ -237,6 +237,62 @@ trainer = Trainer(..., args=training_args)
 
 يتم تعطيل NEFTune بعد التدريب لاستعادة طبقة التعلم الأصلية لتجنب أي سلوك غير متوقع.
 
+## نواة Liger
+Liger-Kernel Kernel هي مجموعة من نوى Triton التي طورتها Linkedin مُصممة خصيصًا لتدريب نماذج اللغة الكبيرة (LLM). لقد قمنا بتنفيذ RMSNorm و RoPE و SwiGLU و CrossEntropy و FusedLinearCrossEntropy مُتوافقة مع Hugging Face، والمزيد قادم. يُمكنها زيادة إنتاجية التدريب متعدد وحدات معالجة الرسومات (GPU) بنسبة 20٪ وتقليل استخدام الذاكرة بنسبة 60٪. تعمل النواة بشكل تلقائي مع flash attention و PyTorch FSDP و Microsoft DeepSpeed.
+
+احصل على زيادة في الإنتاجية بنسبة 20٪ وتقليل استخدام الذاكرة بنسبة 60٪ على تدريب نماذج LLaMA 3-8B. حقق أطوال سياق أكبر وأحجام دفعات أكبر. كما أنها مُفيدة إذا كنت تُريد زيادة حجم نموذجك إلى تدريب بنماذج متعددة الرؤوس أو أحجام مُفردات ضخمة. أطلق العنان للتدريب بنماذج متعددة الرؤوس (medusa) والمزيد. راجع التفاصيل والأمثلة في [Liger](https://github.com/linkedin/Liger-Kernel/tree/main/examples)
+تأكد أولاً من تثبيت مستودع Liger الرسمي:
+```bash
+pip install liger-kernel
+```
+يجب عليك تمرير `use_liger_kernel=True` لتطبيق نواة `liger` على نموذجك، على سبيل المثال:
+
+```python
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="your-model",
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    num_train_epochs=2,
+    weight_decay=0.01,
+    eval_strategy="epoch",
+    save_strategy="epoch",
+    load_best_model_at_end=True,
+    push_to_hub=True,
+    use_liger_kernel=True
+)
+```
+
+تدعم النواة معماريات نماذج Llama و Gemma و Mistral و Mixtral. يُمكن العثور على أحدث قائمة بالنمائج المدعومة هنا. عندما يتم تعيين `use_liger_kernel` إلى `True`، سيتم تصحيح الطبقات المُقابلة في النموذج الأصلي باستخدام تطبيق Liger الفعال، لذلك لا تحتاج إلى فعل أي شيء إضافي بخلاف تعيين قيمة المعامل.
+
+## المُحسِّنات
+يمكنك اختيار مُحسِّن مدمج للتدريب باستخدام:
+```python
+from transformers import TrainingArguments
+training_args = TrainingArguments(..., optim="adamw_torch")
+```
+اطلع على [`OptimizerNames`](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py) للاطلاع على القائمة الكاملة للخيارات. نُدرج أمثلة مُتقدمة في الأقسام أدناه.
+
+يمكنك أيضًا استخدام مُحسِّن PyTorch عشوائي عبر:
+```python
+import torch
+
+optimizer_cls = torch.optim.AdamW
+optimizer_kwargs = {
+    "lr": 4e-3,
+    "betas": (0.9, 0.999),
+    "weight_decay": 0.05,
+}
+
+from transformers import Trainer
+trainer = Trainer(..., optimizer_cls_and_kwargs=(optimizer_cls, optimizer_kwargs))
+```
+
+
+
+
 ## GaLore
 
 إسقاط التدرج ذو الرتبة المنخفضة (GaLore) هو إستراتيجية تدريب ذات رتبة منخفضة فعّالة من حيث الذاكرة، تسمح بتعلم المعلمات الكاملة ولكنها أكثر كفاءة من حيث الذاكرة من أساليب التكيّف الشائعة ذات الرتبة المنخفضة، مثل LoRA.
@@ -415,7 +471,93 @@ trainer = trl.SFTTrainer(
 
 trainer.train()
 ```
+### مُحسِّن GrokAdamW
+تم تصميم مُحسِّن GrokAdamW لتعزيز أداء التدريب واستقراره، خاصةً للنماذج التي تستفيد من دوال إشارة grokking. لاستخدام GrokAdamW، قم أولاً بتثبيت حزمة المُحسِّن باستخدام pip install grokadamw.
+<Tip>
+يُعد GrokAdamW مفيدًا بشكل خاص للنماذج التي تتطلب تقنيات تحسين مُتقدمة لتحقيق أداء واستقرار أفضل.
+</Tip>
 
+فيما يلي نص برمجى بسيط لشرح كيفية ضبط [google/gemma-2b](https://huggingface.co/google/gemma-2b) بدقة على مجموعة بيانات IMDB باستخدام مُحسِّن GrokAdamW:
+```python
+import torch
+import datasets
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM, Trainer
+
+# تحميل مجموعة البيانات IMDB
+train_dataset = datasets.load_dataset('imdb', split='train')
+
+# تعريف معامﻻت التدريب
+args = TrainingArguments(
+    output_dir="./test-grokadamw",
+    max_steps=1000,
+    per_device_train_batch_size=4,
+    optim="grokadamw",
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-5,
+    save_strategy="no",
+    run_name="grokadamw-imdb",
+)
+
+# تحميل النموذج والمجزىء اللغوىء
+model_id = "google/gemma-2b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+
+# تهيئة المدرب
+trainer = Trainer(
+    model=model,
+    args=args,
+    train_dataset=train_dataset,
+)
+
+# تدريب النموذج
+trainer.train()
+```
+يوضح هذا النص البرمجى كيفية ضبط نموذج google/gemma-2b بدقة على مجموعة بيانات IMDB باستخدام مُحسِّن GrokAdamW. يتم تكوين TrainingArguments لاستخدام GrokAdamW، ويتم تمرير مجموعة البيانات إلى Trainer للتدريب.
+
+### مُحسِّن بدون جدوله (Schedule Free Optimizer)
+تم تقديم مُحسِّنات بدون جدوله في [The Road Less Scheduled](https://hf.co/papers/2405.15682).
+يستبدل التعلم بدون جدوله زخم المُحسِّن الأساسي بمزيج من المتوسط ​​والتداخل، لإزالة الحاجة تمامًا إلى تخفيف مُعدل التعلم باستخدام جدوله تقليديه.
+المُحسِّنات المدعومة لـ SFO هي "schedule_free_adamw" و "schedule_free_sgd". قم أولاً بتثبيت `schedulefree` من pypi باستخدام الأمر  `pip install schedulefree`.
+
+فيما يلي نص برمجى بسيط لشرح كيفية ضبط [google/gemma-2b](https://huggingface.co/google/gemma-2b) بدقة على مجموعة بيانات IMDB بدقة كاملة:
+```python
+import torch
+import datasets
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
+import trl
+
+train_dataset = datasets.load_dataset('imdb', split='train')
+
+args = TrainingArguments(
+    output_dir="./test-schedulefree",
+    max_steps=1000,
+    per_device_train_batch_size=4,
+    optim="schedule_free_adamw",
+    gradient_checkpointing=True,
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-6,
+    save_strategy="no",
+    run_name="sfo-imdb",
+)
+
+model_id = "google/gemma-2b"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+
+trainer = trl.SFTTrainer(
+    model=model, 
+    args=args,
+    train_dataset=train_dataset,
+    dataset_text_field='text',
+    max_seq_length=1024,
+)
+
+trainer.train()
+```
 ## تسريع ومدرب
 
 يتم تشغيل فئة [`Trainer`] بواسطة [تسريع](https://hf.co/docs/accelerate)، وهي مكتبة لتدريب نماذج PyTorch بسهولة في بيئات موزعة مع دعم عمليات التكامل مثل [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) و [DeepSpeed](https://www.deepspeed.ai/).
