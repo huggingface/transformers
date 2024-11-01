@@ -923,6 +923,18 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_save_load(self):
         super().test_save_load()
 
+    @unittest.skip(reason="MoshiForConditionalGeneration has specific forward inputs")
+    @parameterized.expand([(False,), (True,)])
+    @pytest.mark.generate
+    def test_generate_with_dynamic_sliding_window_cache(self, left_padding: bool):
+        pass
+
+    @unittest.skip(reason="MoshiForConditionalGeneration has specific forward inputs")
+    @parameterized.expand([(3, 1), (3, 4), (14, 5)])
+    @pytest.mark.generate
+    def test_generate_continue_from_dynamic_sliding_window_cache(self, sliding_window: int, additional_tokens: int):
+        pass
+
 
 def place_dict_on_device(dict_to_place, device):
     for key in dict_to_place:

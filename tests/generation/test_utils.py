@@ -2193,8 +2193,6 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model uses a specific cache format.")
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support Cache classes")
-            if model_class.__name__ == "MoshiForConditionalGeneration":
-                self.skipTest(reason="MoshiForConditionalGeneration has specific forward inputs")
 
             input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
             if left_padding:
@@ -2251,8 +2249,6 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model uses a specific cache format.")
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support Cache classes")
-            if model_class.__name__ == "MoshiForConditionalGeneration":
-                self.skipTest(reason="MoshiForConditionalGeneration has specific forward inputs")
 
             # We need to be sure to always have shape (2, 7) for the different test assumptions to hold
             input_ids = ids_tensor((2, 7), vocab_size=config.vocab_size)
