@@ -1446,7 +1446,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
 
-        if _attn_implementation := getattr(config, "_attn_implementation_internal", None) is not None:
+        if config._attn_implementation_internal is not None:
             # In this case, the config has been created with the attn_implementation set by the user, which we
             # should respect.
             attn_implementation = config._attn_implementation_internal
