@@ -59,8 +59,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.encoder.layers.(\d+).activation.weight": r"encoder.layers.\1.activation_fn.weight",
     #########################################################################################################################################
     # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms + activiation function weight
-    r"transformer.decoder.layers.(\d+).self_attn.out_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn.output_projection.\2",
-    r"transformer.decoder.layers.(\d+).cross_attn.out_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn.output_projection.\2",
+    r"transformer.decoder.layers.(\d+).self_attn.out_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn.output_proj.\2",
+    r"transformer.decoder.layers.(\d+).cross_attn.out_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn.output_proj.\2",
     # FFNs
     r"transformer.decoder.layers.(\d+).linear(\d).(bias|weight)": r"decoder.layers.\1.layer.2.fc\2.\3",
     # nm1
@@ -86,6 +86,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
+# Copied from transformers.models.llama.modeling_conditional_detr.convert_llama_weights_to_hf
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
@@ -192,8 +193,6 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
 
     if push_to_hub:
         model.push_to_hub(repo_id=model_name, commit_message="Add new model")
-
-    return model
 
 
 def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub):
