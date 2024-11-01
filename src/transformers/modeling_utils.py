@@ -4261,6 +4261,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @staticmethod
     def _fix_state_dict_key(key):
+        """Replace legacy parameter names with their modern equivalents. E.g. beta -> bias, gamma -> weight."""
+
         if "beta" in key:
             return key.replace("beta", "bias")
         if "gamma" in key:
@@ -4281,6 +4283,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @classmethod
     def _fix_state_dict_keys(cls, state_dict):
+        """Fixes state dict keys by replacing legacy parameter names with their modern equivalents.
+        Logs if any parameters have been renamed.
+        """
+
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
