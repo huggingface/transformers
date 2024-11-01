@@ -87,20 +87,20 @@ launch_gradio_demo({class_name})
 """
 
 
-def validate_after_init(cls):
+def validate_after_init(cls, do_validate_forward: bool = True):
     original_init = cls.__init__
 
     @wraps(original_init)
     def new_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         if not isinstance(self, PipelineTool):
-            self.validate_arguments()
+            self.validate_arguments(do_validate_forward=do_validate_forward)
 
     cls.__init__ = new_init
     return cls
 
+CONVERSION_DICT = {"str": "string", "int": "integer", "float": "number"}
 
-@validate_after_init
 class Tool:
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
@@ -131,7 +131,12 @@ class Tool:
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
 
-    def validate_arguments(self):
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        validate_after_init(cls, do_validate_forward=False)
+
+
+    def validate_arguments(self, do_validate_forward: bool = True):
         required_attributes = {
             "description": str,
             "name": str,
@@ -145,21 +150,21 @@ class Tool:
             if not isinstance(attr_value, expected_type):
                 raise TypeError(f"You must set an attribute {attr} of type {expected_type.__name__}.")
         for input_name, input_content in self.inputs.items():
-            assert "type" in input_content, f"Input '{input_name}' should specify a type."
+            assert isinstance(input_content, dict), f"Input '{input_name}' should be a dictionary."
+            assert "type" in input_content and "description" in input_content, f"Input '{input_name}' should have keys 'type' and 'description', has only {list(input_content.keys())}."
             if input_content["type"] not in authorized_types:
                 raise Exception(
                     f"Input '{input_name}': type '{input_content['type']}' is not an authorized value, should be one of {authorized_types}."
                 )
-            assert "description" in input_content, f"Input '{input_name}' should have a description."
 
         assert getattr(self, "output_type", None) in authorized_types
-
-        if not isinstance(self, PipelineTool):
-            signature = inspect.signature(self.forward)
-            if not set(signature.parameters.keys()) == set(self.inputs.keys()):
-                raise Exception(
-                    "Tool's 'forward' method should take 'self' as its first argument, then its next arguments should match the keys of tool attribute 'inputs'."
-                )
+        if do_validate_forward:
+            if not isinstance(self, PipelineTool):
+                signature = inspect.signature(self.forward)
+                if not set(signature.parameters.keys()) == set(self.inputs.keys()):
+                    raise Exception(
+                        "Tool's 'forward' method should take 'self' as its first argument, then its next arguments should match the keys of tool attribute 'inputs'."
+                    )
 
     def forward(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
@@ -404,6 +409,61 @@ class Tool:
                 create_pr=create_pr,
                 repo_type="space",
             )
+    
+    @staticmethod
+    def from_space(space_id, name, description):
+        """
+        Creates a [`Tool`] from a Space given its id on the Hub.
+
+        Args:
+            space_id (`str`):
+                The id of the Space on the Hub.
+            name (`str`):
+                The name of the tool.
+            description (`str`):
+                The description of the tool.
+
+        Returns:
+            [`Tool`]:
+                The created tool.
+
+        Example:
+        ```
+        tool = Tool.from_space("black-forest-labs/FLUX.1-schnell", "image-generator", "Generate an image from a prompt")
+        ```
+        """
+        from gradio_client import Client
+
+        class SpaceToolWrapper(Tool):
+            def __init__(self, space_id, name, description):
+                self.client = Client(space_id)
+                self.name = name
+                self.description = description
+                space_description = self.client.view_api(return_format="dict")[
+                    "named_endpoints"
+                ]
+                route = list(space_description.keys())[0]
+                space_description_route = space_description[route]
+                self.inputs = {}
+                for parameter in space_description_route["parameters"]:
+                    if not parameter["parameter_has_default"]:
+                        self.inputs[parameter["parameter_name"]] = {
+                            "type": parameter["type"]["type"],
+                            "description": parameter["python_type"]["description"],
+                        }
+                output_component = space_description_route["returns"][0]["component"]
+                if output_component == "Image":
+                    self.output_type = "image"
+                elif output_component == "Audio":
+                    self.output_type = "audio"
+                else:
+                    self.output_type = "any"
+
+            def forward(self, *args, **kwargs):
+                return self.client.predict(*args, **kwargs)[0] # Usually the first output is the result
+        
+        return SpaceToolWrapper(space_id, name, description)
+
 
     @staticmethod
     def from_gradio(gradio_tool):
@@ -414,16 +474,13 @@ class Tool:
 
         class GradioToolWrapper(Tool):
             def __init__(self, _gradio_tool):
-                super().__init__()
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
                 self.output_type = "string"
                 self._gradio_tool = _gradio_tool
-                func_args = list(inspect.signature(_gradio_tool.run).parameters.keys())
-                self.inputs = {key: "" for key in func_args}
-
-            def forward(self, *args, **kwargs):
-                return self._gradio_tool.run(*args, **kwargs)
+                func_args = list(inspect.signature(_gradio_tool.run).parameters.items())
+                self.inputs = {key: {"type": CONVERSION_DICT[value.annotation], "description": ""} for key, value in func_args}
+                self.forward = self._gradio_tool.run
 
         return GradioToolWrapper(gradio_tool)
 
@@ -435,10 +492,13 @@ class Tool:
 
         class LangChainToolWrapper(Tool):
             def __init__(self, _langchain_tool):
-                super().__init__()
                 self.name = _langchain_tool.name.lower()
                 self.description = _langchain_tool.description
-                self.inputs = parse_langchain_args(_langchain_tool.args)
+                self.inputs = _langchain_tool.args.copy()
+                for input_content in self.inputs.values():
+                    if "title" in input_content:
+                        input_content.pop("title")
+                    input_content["description"] = ""
                 self.output_type = "string"
                 self.langchain_tool = _langchain_tool
 
@@ -803,15 +863,6 @@ class EndpointClient:
             return self.decode_image(response.content)
         else:
             return response.json()
-
-
-def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
-    """Parse the args attribute of a LangChain tool to create a matching inputs dictionary."""
-    inputs = args.copy()
-    for arg_details in inputs.values():
-        if "title" in arg_details:
-            arg_details.pop("title")
-    return inputs
 
 
 class ToolCollection:

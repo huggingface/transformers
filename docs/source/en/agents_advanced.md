@@ -123,6 +123,40 @@ from transformers import load_tool, CodeAgent
 model_download_tool = load_tool("m-ric/hf-model-downloads")
 ```
 
+### Import a Space as a tool 🚀
+
+You can directly import a Space from the Hub as a tool using the [`Tool.from_space`] method!
+
+You only need to provide the id of the Space on the Hub, its name, and a description that will help you agent understand what the tool does. Under the hood, this will use [`gradio-client`](https://pypi.org/project/gradio-client/) library to call the Space.
+
+For instance, let's import the [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) Space from the Hub and use it to generate an image.
+
+```
+from transformers import Tool
+
+image_generation_tool = Tool.from_space(
+    "black-forest-labs/FLUX.1-dev",
+    name="image_generator",
+    description="Generate an image from a prompt")
+
+image_generation_tool("A sunny beach")
+```
+
+And voilà, here's your image! 🏖️
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/sunny_beach.webp">
+
+Then you can use this tool just like any other tool. For example, let's improve the prompt and generate an image of it.
+```python
+from transformers import ReactCodeAgent
+
+agent = ReactCodeAgent(tools=[image_generation_tool])
+
+agent.run(
+    "Improve this prompt, then generate an image of it.", prompt='A rabbit wearing a space suit'
+)
+```
+
 ### Use gradio-tools
 
 [gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
@@ -179,7 +213,7 @@ We love Langchain and think it has a very compelling suite of tools.
 To import a tool from LangChain, use the `from_langchain()` method.
 
 Here is how you can use it to recreate the intro's search result using a LangChain web search tool.
-
+This tool will need `pip install google-search-results` to work properly.
 ```python
 from langchain.agents import load_tools
 from transformers import Tool, ReactCodeAgent
@@ -188,7 +222,7 @@ search_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
 
 agent = ReactCodeAgent(tools=[search_tool])
 
-agent.run("How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?")
+agent.run("How many more blocks (also denoted as layers) are in BERT base encoder compared to the encoder from the architecture proposed in Attention is All You Need?")
 ```
 
 ## Display your agent run in a cool Gradio interface
