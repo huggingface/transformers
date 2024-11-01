@@ -4328,6 +4328,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model
 
+    @staticmethod
+    def _fix_state_dict_key(key):
+        if "beta" in key:
+            return key.replace("beta", "bias")
+        if "gamma" in key:
+            return key.replace("gamma", "weight")
+
+        # to avoid logging parametrized weight norm renaming
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            if "weight_g" in key:
+                return key.replace("weight_g", "parametrizations.weight.original0")
+            if "weight_v" in key:
+                return key.replace("weight_v", "parametrizations.weight.original1")
+        else:
+            if "parametrizations.weight.original0" in key:
+                return key.replace("parametrizations.weight.original0", "weight_g")
+            if "parametrizations.weight.original1" in key:
+                return key.replace("parametrizations.weight.original1", "weight_v")
+        return key
+
     @classmethod
     def _load_pretrained_model(
         cls,
@@ -4383,27 +4403,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hf_quantizer is not None:
             expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
-        def _fix_key(key):
-            if "beta" in key:
-                return key.replace("beta", "bias")
-            if "gamma" in key:
-                return key.replace("gamma", "weight")
-
-            # to avoid logging parametrized weight norm renaming
-            if hasattr(nn.utils.parametrizations, "weight_norm"):
-                if "weight_g" in key:
-                    return key.replace("weight_g", "parametrizations.weight.original0")
-                if "weight_v" in key:
-                    return key.replace("weight_v", "parametrizations.weight.original1")
-            else:
-                if "parametrizations.weight.original0" in key:
-                    return key.replace("parametrizations.weight.original0", "weight_g")
-                if "parametrizations.weight.original1" in key:
-                    return key.replace("parametrizations.weight.original1", "weight_v")
-            return key
-
         original_loaded_keys = loaded_keys
-        loaded_keys = [_fix_key(key) for key in loaded_keys]
+        loaded_keys = [cls._fix_state_dict_key(key) for key in loaded_keys]
 
         if len(prefix) > 0:
             has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)

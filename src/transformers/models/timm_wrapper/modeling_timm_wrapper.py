@@ -82,6 +82,14 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         requires_backends(self, ["vision", "timm"])
         super().__init__(*args, **kwargs)
 
+    @staticmethod
+    def _fix_state_dict_key(key):
+        """
+        Override original method which renames `gamma` and `beta` to `weight` and `bias`.
+        We don't want this behavior for timm wrapped models.
+        """
+        return key
+
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.
