@@ -673,31 +673,6 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         )
 
         if past_key_value is not None:
-            # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
-            if (
-                getattr(self.config, "sliding_window", None) is not None
-                and kv_seq_len > self.config.sliding_window
-                and cache_has_contents
-            ):
-                slicing_tokens = 1 - self.config.sliding_window
-
-                past_key = past_key_value[self.layer_idx][0]
-                past_value = past_key_value[self.layer_idx][1]
-
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
-                        f" {past_key.shape}"
-                    )
-
-                if attention_mask is not None:
-                    attention_mask = attention_mask[:, slicing_tokens:]
-                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
-
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -1346,7 +1321,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                     sliding_attend_mask = torch.arange(target_length, device=device) <= (
                         cache_position.reshape(-1, 1) - config.sliding_window
                     )
-                    diagonal_attend_mask |= sliding_attend_mask
+                    diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
@@ -1443,9 +1418,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen2VisionTransformerPretrainedModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.visual = Qwen2VisionTransformerPretrainedModel._from_config(config.vision_config)
         self.model = Qwen2VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1530,13 +1503,14 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         mrope_position_deltas = []
         if image_grid_thw is not None or video_grid_thw is not None:
             total_input_ids = input_ids
+            if attention_mask is None:
+                attention_mask = torch.ones_like(total_input_ids)
             position_ids = torch.ones(
                 3, input_ids.shape[0], input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device
             )
             image_index, video_index = 0, 0
             for i, input_ids in enumerate(total_input_ids):
-                if attention_mask is not None:
-                    input_ids = input_ids[attention_mask[i] == 1]
+                input_ids = input_ids[attention_mask[i] == 1]
                 image_nums, video_nums = 0, 0
                 vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
                 vision_tokens = input_ids[vision_start_indices + 1]
@@ -1745,6 +1719,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
+
+        if position_ids is None and input_ids is not None:
+            position_ids, _ = self.get_rope_index(input_ids, image_grid_thw, video_grid_thw, attention_mask)
 
         outputs = self.model(
             input_ids=None,

@@ -94,6 +94,12 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
         updated_architecture = "mistral"
+    # FIXME: Currnetly this implementation is only for flan-t5 architecture.
+    # It needs to be developed for supporting legacy t5.
+    elif "t5" in architecture or "t5encoder" in architecture:
+        parsed_parameters["config"]["tie_word_embeddings"] = False
+        parsed_parameters["config"]["is_gated_act"] = True
+        updated_architecture = "t5"
     else:
         updated_architecture = architecture
 
@@ -191,6 +197,13 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 else:
                     weights = reverse_reshape_bias(weights, num_heads, n_embed)
 
+            bid = None
+            if architecture in ("t5", "t5encoder"):
+                for chunk in name.split("."):
+                    if chunk.isdigit():
+                        bid = int(chunk)
+                        break
+
             if architecture == "gpt2":
                 if (
                     "attn_qkv.weight" in name
@@ -207,10 +220,23 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     name = "lm_head.weight"
                     parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
                     continue
+            if architecture == "mamba":
+                if "ssm_d" in name and "bias" not in name and "weight" not in name:
+                    # ssm_d has conflicts with ssm_dt in name checking
+                    # we have to explicitly check that name is exactly ssm_d
+                    name = name.replace("ssm_d", "mixer.D")
+                if "ssm_conv1d.weight" in name:
+                    # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
+                    # quantized one is (5120, 4)
+                    weights = np.expand_dims(weights, axis=1)
+                if "ssm_a" in name:
+                    # Original exponential implementation
+                    # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
+                    weights = np.log(-weights)
 
             for tensor_name in tensor_key_mapping:
-                if tensor_name in name:
-                    name = name.replace(tensor_name, tensor_key_mapping[tensor_name])
+                if tensor_name.format(bid=bid) in name:
+                    name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
 
             # Use copy to avoid errors with numpy and pytorch
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
