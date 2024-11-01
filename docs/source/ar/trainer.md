@@ -145,7 +145,7 @@ class EarlyStoppingCallback(TrainerCallback):
             return {}
 ```
 
-ثم مرره إلى معلمة `callback` في [`Trainer`].
+ثم مرره إلى معامل `callback` في [`Trainer`].
 
 ```py
 from transformers import Trainer
