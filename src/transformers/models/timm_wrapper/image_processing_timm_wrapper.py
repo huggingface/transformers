@@ -46,12 +46,16 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         pretrained_cfg = kwargs.pop("pretrained_cfg", None)
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
+        
+        # useful for training, see examples/pytorch/image-classification/run_image_classification.py
+        self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
         """
         output = super().to_dict()
+        output.pop("train_transforms", None)
         output.pop("val_transforms", None)
         return output
 

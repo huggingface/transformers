@@ -49,25 +49,10 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
 """
 
 
-def _load_timm_model(
-    config: TimmWrapperConfig,
-    model_name: Optional[str] = None,
-    pretrained_model_name_or_path: Optional[str] = None,
-    add_classification_head: bool = False,
-):
-    # model_name passed into kwargs takes precedence
-    if model_name is None and hasattr(config, "model_name"):
-        model_name = config.model_name
-    elif model_name is None and pretrained_model_name_or_path is not None:
-        model_name = pretrained_model_name_or_path
-    elif model_name is None:
-        raise ValueError("model_name must be specified in either the config or kwargs")
-
+def _load_timm_model(config: TimmWrapperConfig, add_classification_head: bool = False):
     # timm model will not add classification head if num_classes = 0
     num_classes = config.num_labels if add_classification_head else 0
-
-    model = timm.create_model(model_name=model_name, pretrained=False, num_classes=num_classes)
-
+    model = timm.create_model(model_name=config.architecture, pretrained=False, num_classes=num_classes)
     return model
 
 
@@ -105,9 +90,9 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     Wrapper class for timm models to be used in transformers.
     """
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, add_classification_head=False, **kwargs)
+        self.timm_model = _load_timm_model(config, add_classification_head=False)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
@@ -137,9 +122,9 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     Wrapper class for timm models to be used in transformers for image classification.
     """
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, add_classification_head=True, **kwargs)
+        self.timm_model = _load_timm_model(config, add_classification_head=True)
         self.num_labels = config.num_labels
         self.post_init()
 
