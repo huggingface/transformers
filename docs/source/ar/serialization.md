@@ -120,7 +120,7 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 
 </Tip>
 
-لتصدير نموذج 🤗 Transformers إلى ONNX باستخدام `tranformers.onnx`، قم بتثبيت الاعتماد الإضافي التالي:
+لتصدير نموذج 🤗 Transformers إلى ONNX باستخدام `tranformers.onnx`، ثبّت التبعيات الإضافية:
 
 ```bash
 pip install transformers[onnx]
