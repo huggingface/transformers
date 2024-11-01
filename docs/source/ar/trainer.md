@@ -84,7 +84,7 @@ trainer.train(resume_from_checkpoint=True)
 trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 ```
 
-يمكنك حفظ نقاط المراقبة الخاصة بك (حالة المحسن غير محفوظة بشكل افتراضي) إلى Hub عن طريق تعيين `push_to_hub=True` في [`TrainingArguments`] لالتزامها ودفعها. الخيارات الأخرى لاتخاذ القرار بشأن كيفية حفظ نقاط المراقبة الخاصة بك هي الإعداد في معلمة [`hub_strategy`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.hub_strategy):
+يمكنك حفظ نقاط الحفظ الخاصة بك (لا يتم حفظ حالة المُجزىء اللغوى تقائيًا)  إلى Hub عن طريق تعيين `push_to_hub=True` في [`TrainingArguments`] لرفعها. الخيارات الأخرى لاتخاذ القرار بشأن كيفية حفظ هذة النقاط الخاصة بك هي الإعداد في معامل [`hub_strategy`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.hub_strategy):
 
 * `hub_strategy="checkpoint"` يدفع أحدث نقطة مراقبة إلى مجلد فرعي يسمى "last-checkpoint" يمكنك استئناف التدريب منه
 * `hub_strategy="all_checkpoints"` يدفع جميع نقاط المراقبة إلى الدليل المحدد في `output_dir` (سترى نقطة مراقبة واحدة لكل مجلد في مستودع النموذج الخاص بك)
