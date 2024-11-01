@@ -86,8 +86,8 @@ trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 
 يمكنك حفظ نقاط الحفظ الخاصة بك (لا يتم حفظ حالة المُجزىء اللغوى تقائيًا)  إلى Hub عن طريق تعيين `push_to_hub=True` في [`TrainingArguments`] لرفعها. الخيارات الأخرى لاتخاذ القرار بشأن كيفية حفظ هذة النقاط الخاصة بك هي الإعداد في معامل [`hub_strategy`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.hub_strategy):
 
-* `hub_strategy="checkpoint"` يدفع أحدث نقطة مراقبة إلى مجلد فرعي يسمى "last-checkpoint" يمكنك استئناف التدريب منه
-* `hub_strategy="all_checkpoints"` يدفع جميع نقاط المراقبة إلى الدليل المحدد في `output_dir` (سترى نقطة مراقبة واحدة لكل مجلد في مستودع النموذج الخاص بك)
+* `hub_strategy="checkpoint"` يدفع أحدث نقطة حفظ إلى مجلد فرعي يسمى "last-checkpoint" يمكنك استئناف التدريب منه
+* `hub_strategy="all_checkpoints"` يدفع جميع نقاط الحفظ إلى الدليل المحدد في `output_dir` (سترى نقطة حفظ واحدة لكل مجلد في مستودع النموذج الخاص بك)
 
 عندما تستأنف التدريب من نقطة مراقبة، تحاول [`Trainer`] الحفاظ على حالات RNG Python وNumPy وPyTorch كما كانت عندما تم حفظ نقطة المراقبة. ولكن لأن PyTorch لديها العديد من الإعدادات الافتراضية غير الحتمية، فإن حالات RNG ليست مضمونة لتكون هي نفسها. إذا كنت تريد تمكين الحتمية الكاملة، فراجع دليل [Controlling sources of randomness](https://pytorch.org/docs/stable/notes/randomness#controlling-sources-of-randomness) لمعرفة ما يمكنك تمكينه لجعل تدريبك حتميًا تمامًا. ضع في اعتبارك أنه من خلال جعل إعدادات معينة حتمية، فقد يكون التدريب أبطأ.
 
