@@ -75,16 +75,29 @@ def retrieve_images_in_messages(
     retrieved_images = []
     for message in messages:
         for content in message["content"]:
-            if isinstance(content, dict) and content.get("type") == "image":
-                if "image" in content:
-                    retrieved_images.append(content["image"])
-                elif idx_images < len(images):
-                    retrieved_images.append(images[idx_images])
-                    idx_images += 1
-                else:
-                    raise ValueError(
-                        "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
-                    )
+            if isinstance(content, dict):
+                if content.get("type") == "image":
+                    if "image" in content:
+                        retrieved_images.append(content["image"])
+                        continue
+                    if idx_images < len(images):
+                        retrieved_images.append(images[idx_images])
+                        idx_images += 1
+                    else:
+                        raise ValueError(
+                            "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
+                        )
+                if content.get("type") == "image_url":
+                    if "image_url" in content and isinstance(content["image_url"], dict):
+                        retrieved_images.append(content["image_url"]["url"])
+                        continue
+                    if idx_images < len(images):
+                        retrieved_images.append(images[idx_images])
+                        idx_images += 1
+                    else:
+                        raise ValueError(
+                            "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
+                        )
 
     # The number of images passed should be consistent with the number of images in the chat without an image key
     if idx_images != len(images):
