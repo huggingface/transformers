@@ -80,7 +80,7 @@ trainer.train()
 # استأنف من أحدث نقطة حفظ
 trainer.train(resume_from_checkpoint=True)
 
-# استأنف من نقطة مراقبة محددة محفوظة في دليل الإخراج
+# استأنف من نقطة حفظ محددة محفوظة في دليل الإخراج
 trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 ```
 
