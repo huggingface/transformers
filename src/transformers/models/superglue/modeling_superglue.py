@@ -177,21 +177,18 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
-    def __init__(self, config: SuperGlueConfig, in_channels: int, out_channels: int, activate: bool) -> None:
+    def __init__(self, config: SuperGlueConfig, in_channels: int, out_channels: int) -> None:
         super().__init__()
         self.linear = nn.Linear(in_channels, out_channels)
-        self.activate = activate
-        if self.activate:
-            self.batch_norm = nn.BatchNorm1d(out_channels)
-            self.activation = nn.ReLU()
+        self.batch_norm = nn.BatchNorm1d(out_channels)
+        self.activation = nn.ReLU()
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.linear(hidden_state)
-        if self.activate:
-            hidden_state = hidden_state.transpose(-1, -2)
-            hidden_state = self.batch_norm(hidden_state)
-            hidden_state = hidden_state.transpose(-1, -2)
-            hidden_state = self.activation(hidden_state)
+        hidden_state = hidden_state.transpose(-1, -2)
+        hidden_state = self.batch_norm(hidden_state)
+        hidden_state = hidden_state.transpose(-1, -2)
+        hidden_state = self.activation(hidden_state)
         return hidden_state
 
 
@@ -202,13 +199,13 @@ class SuperGlueKeypointEncoder(nn.Module):
         feature_dim = config.descriptor_dim
         # 3 here consists of 2 for the (x, y) coordinates and 1 for the score of the keypoint
         encoder_channels = [3] + layer_sizes + [feature_dim]
-        layers = []
-        for i in range(1, len(encoder_channels)):
-            layers.append(
-                SuperGlueMultiLayerPerceptron(
-                    config, encoder_channels[i - 1], encoder_channels[i], i < len(encoder_channels) - 1
-                )
-            )
+
+        layers = [
+            SuperGlueMultiLayerPerceptron(config, encoder_channels[i - 1], encoder_channels[i])
+            if i < len(encoder_channels) - 1
+            else nn.Linear(encoder_channels[i - 1], encoder_channels[i])
+            for i in range(1, len(encoder_channels))
+        ]
         self.encoder = nn.ModuleList(layers)
 
     def forward(
@@ -274,11 +271,12 @@ class SuperGlueAttentionalPropagation(nn.Module):
         descriptor_dim = config.descriptor_dim
         self.attention = SuperGlueMultiHeadAttention(config)
         mlp_channels = [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim]
-        layers = []
-        for i in range(1, len(mlp_channels)):
-            layers.append(
-                SuperGlueMultiLayerPerceptron(config, mlp_channels[i - 1], mlp_channels[i], i < len(mlp_channels) - 1)
-            )
+        layers = [
+            SuperGlueMultiLayerPerceptron(config, mlp_channels[i - 1], mlp_channels[i])
+            if i < len(mlp_channels) - 1
+            else nn.Linear(mlp_channels[i - 1], mlp_channels[i])
+            for i in range(1, len(mlp_channels))
+        ]
         self.mlp = nn.ModuleList(layers)
 
     def forward(
