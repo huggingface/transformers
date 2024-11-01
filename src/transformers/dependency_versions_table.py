@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
-    "accelerate": "accelerate>=1.0.0",
+    "accelerate": "accelerate>=0.26.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "blobfile": "blobfile",
@@ -88,7 +88,6 @@ deps = {
     "tokenizers": "tokenizers>=0.20,<0.21",
     "torch": "torch",
     "torchaudio": "torchaudio",
-    "torchdata": "torchdata>=0.8.0",
     "torchvision": "torchvision",
     "pyctcdecode": "pyctcdecode>=0.4.0",
     "tqdm": "tqdm>=4.27",
