@@ -79,8 +79,7 @@ def retrieve_images_in_messages(
                 if content.get("type") == "image":
                     if "image" in content:
                         retrieved_images.append(content["image"])
-                        continue
-                    if idx_images < len(images):
+                    elif idx_images < len(images):
                         retrieved_images.append(images[idx_images])
                         idx_images += 1
                     else:
@@ -90,8 +89,7 @@ def retrieve_images_in_messages(
                 if content.get("type") == "image_url":
                     if "image_url" in content and isinstance(content["image_url"], dict):
                         retrieved_images.append(content["image_url"]["url"])
-                        continue
-                    if idx_images < len(images):
+                    elif idx_images < len(images):
                         retrieved_images.append(images[idx_images])
                         idx_images += 1
                     else:
