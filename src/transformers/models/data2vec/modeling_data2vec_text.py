@@ -56,8 +56,8 @@ _CHECKPOINT_FOR_DOC = "facebook/data2vec-text-base"
 _CONFIG_FOR_DOC = "Data2VecTextConfig"
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecText
-class Data2VecTextEmbeddings(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecTextForText
+class Data2VecTextForTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
