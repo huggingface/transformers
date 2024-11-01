@@ -96,7 +96,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
-    "accelerate>=1.0.0",
+    "accelerate>=0.26.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "blobfile",
@@ -183,7 +183,6 @@ _deps = [
     "tokenizers>=0.20,<0.21",
     "torch",
     "torchaudio",
-    "torchdata>=0.8.0",
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
