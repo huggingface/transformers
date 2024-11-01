@@ -523,18 +523,17 @@ class ProcessorTesterMixin:
 
     def test_chat_template_save_loading(self):
         processor = self.get_processor()
+        existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
-            existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
             self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
             self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            if hasattr(processor, "tokenizer"):
-                # When we don't use single-file chat template saving, processor and tokenizer chat templates
-                # should remain separate
-                self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
+            # When we don't use single-file chat template saving, processor and tokenizer chat templates
+            # should remain separate
+            self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname, save_raw_chat_template=True)
@@ -544,5 +543,4 @@ class ProcessorTesterMixin:
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
             # When we save as single files, tokenizers and processors share a chat template, which means
             # the reloaded tokenizer should get the chat template as well
-            if hasattr(processor, "tokenizer"):
-                self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
+            self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
