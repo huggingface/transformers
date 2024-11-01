@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from typing import Optional, Tuple, Union
 
 import torch
@@ -21,12 +20,10 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
-from ...modeling_utils import SAFE_WEIGHTS_NAME, PreTrainedModel, load_state_dict
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings_to_model_forward,
     is_timm_available,
-    is_timm_checkpoint,
-    is_timm_hub_checkpoint,
     requires_backends,
 )
 from .configuration_timm_wrapper import TimmWrapperConfig
@@ -47,6 +44,8 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        **kwargs:
+            Additional keyword arguments passed along to the model forward.
 """
 
 
@@ -54,7 +53,7 @@ def _load_timm_model(
     config: TimmWrapperConfig,
     model_name: Optional[str] = None,
     pretrained_model_name_or_path: Optional[str] = None,
-    pretrained: bool = False,
+    add_classification_head: bool = False,
 ):
     # model_name passed into kwargs takes precedence
     if model_name is None and hasattr(config, "model_name"):
@@ -64,20 +63,11 @@ def _load_timm_model(
     elif model_name is None:
         raise ValueError("model_name must be specified in either the config or kwargs")
 
-    # If the pretrained_model_name_or_path is a timm checkpoint, and a local file, we load the checkpoint safetensors file as the model
-    if is_timm_checkpoint(pretrained_model_name_or_path) and not is_timm_hub_checkpoint(pretrained_model_name_or_path):
-        # Set pretrained to False to first create the model architecture from the model_name and then load in
-        # the weights from the safetensors file
-        model = timm.create_model(model_name=model_name, pretrained=False, num_classes=config.num_labels)
-        if pretrained:
-            weights_path = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
-            state_dict = load_state_dict(weights_path)
-            # Remove the prefix "model." from the keys
-            state_dict = {k.replace("timm_model.", ""): v for k, v in state_dict.items()}
-            model.load_state_dict(state_dict)
-    # If the pretrained_model_name_or_path is a timm checkpoint and matches a checkpoint on the hub, we use timm.create_model directly
-    else:
-        model = timm.create_model(model_name=model_name, pretrained=pretrained, num_classes=config.num_labels)
+    # timm model will not add classification head if num_classes = 0
+    num_classes = config.num_labels if add_classification_head else 0
+
+    model = timm.create_model(model_name=model_name, pretrained=False, num_classes=num_classes)
+
     return model
 
 
@@ -88,13 +78,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timm_model"
     _no_split_modules = []
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        requires_backends(cls, ["vision", "timm"])
-        kwargs["pretrained"] = True
-        return super().from_pretrained(
-            pretrained_model_name_or_path=pretrained_model_name_or_path, *model_args, **kwargs
-        )
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision", "timm"])
+        super().__init__(*args, **kwargs)
 
     def _init_weights(self, module):
         """
@@ -113,7 +99,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
 
     def __init__(self, config, **kwargs):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, **kwargs)
+        self.timm_model = _load_timm_model(config, add_classification_head=False, **kwargs)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
@@ -130,12 +116,12 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         if output_hidden_states is not None or output_attentions is not None:
             raise ValueError("Cannot set output_attentions or output_hidden_states for timm models")
 
-        prediction = self.timm_model(pixel_values, **kwargs)
+        features = self.timm_model(pixel_values, **kwargs)
 
         if not return_dict:
-            return (prediction,)
+            return (features,)
 
-        return BaseModelOutput(last_hidden_state=prediction)
+        return BaseModelOutput(last_hidden_state=features)
 
 
 class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
@@ -145,7 +131,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
     def __init__(self, config, **kwargs):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, **kwargs)
+        self.timm_model = _load_timm_model(config, add_classification_head=True, **kwargs)
+        self.num_labels = config.num_labels
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
@@ -167,7 +154,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if output_hidden_states is not None or output_attentions is not None:
-            raise ValueError("Cannot set return_dict, output_attentions or output_hidden_states for timm models")
+            raise ValueError("Cannot set `output_attentions` or `output_hidden_states` for timm models")
 
         logits = self.timm_model(pixel_values, **kwargs)
 
