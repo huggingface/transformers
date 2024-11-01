@@ -284,7 +284,7 @@ trainer = trl.SFTTrainer(
 trainer.train()
 ```
 
-لإرسال الحجج الإضافية المدعومة بواسطة GaLore، يجب عليك إرسال `optim_args` بشكل صحيح، على سبيل المثال:
+لتمرير معامﻻت إضافية يدعمها  GaLore، يجب عليك تمرير `optim_args` بشكل صحيح، على سبيل المثال:
 
 ```python
 import torch
