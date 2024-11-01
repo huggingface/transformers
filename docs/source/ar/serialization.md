@@ -146,7 +146,7 @@ python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 >>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
 ```
 
-يمكن الحصول على أسماء الإخراج المطلوبة (مثل `["last_hidden_state"]`) من خلال إلقاء نظرة على تكوين ONNX لكل نموذج. على سبيل المثال، بالنسبة لـ DistilBERT، لدينا:
+يُمكن الحصول على أسماء المخرجات المطلوبة (مثل `["last_hidden_state"]`) من خلال إلقاء نظرة على تكوين ONNX لكل نموذج. على سبيل المثال، بالنسبة لـ DistilBERT، لدينا:
 
 ```python
 >>> from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
