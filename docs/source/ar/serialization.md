@@ -110,7 +110,7 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 
 ### تصدير نموذج لهندسة غير مدعومة
 
-إذا كنت ترغب في المساهمة من خلال إضافة دعم لنموذج لا يمكن تصديره حاليًا، فيجب عليك أولاً التحقق مما إذا كان مدعومًا في [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/overview)، وإذا لم يكن مدعومًا، [فيمكنك المساهمة في 🤗 Optimum](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute) مباشرة.
+إذا كنت ترغب في المساهمة من خلال إضافة دعم لنموذج لا يُمكن تصديره حاليًا، فيجب عليك أولاً التحقق مما إذا كان مدعومًا في [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/overview)، وإذا لم يكن مدعومًا، [فيمكنك المساهمة في 🤗 Optimum](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute) مُباشرةً.
 
 ### تصدير نموذج باستخدام `transformers.onnx`
 
