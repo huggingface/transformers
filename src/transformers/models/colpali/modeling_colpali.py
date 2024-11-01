@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from typing import ClassVar, List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, StaticCache
@@ -34,17 +33,14 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
+from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_colpali import ColPaliConfig
 
 
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-from ..auto import AutoModel, AutoModelForCausalLM
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -85,11 +81,6 @@ class ColPaliForRetrievalOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
-
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "ColPaliConfig"
 
 
 @dataclass
@@ -199,58 +190,63 @@ class ColPaliPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-COLPALI_INPUTS_DOCSTRING = r"""
+COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
-
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`ColPaliProcessor`] uses
-            [`SiglipImageProcessor`] for processing images).
+            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaliGemmaProcessor`] uses
+            [`SiglipImageProcessor`] for processing images). If none, ColPali will only process text (query embeddings).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
             [What are attention masks?](../glossary#attention-mask)
-
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
-
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
-
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            config.n_positions - 1]`.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -262,16 +258,67 @@ COLPALI_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
+        num_logits_to_keep (`int`, *optional*):
+            Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+            token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+
+    ```python
+    import torch
+    from PIL import Image
+
+    from transformers import ColPali, ColPaliProcessor
+
+    model_name = "vidore/colpali-v1.2-hf"
+
+    model = ColPali.from_pretrained(
+        model_name,
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0",  # or "mps" if on Apple Silicon
+    ).eval()
+
+    processor = ColPaliProcessor.from_pretrained(model_name)
+
+    # Your inputs
+    images = [
+        Image.new("RGB", (32, 32), color="white"),
+        Image.new("RGB", (16, 16), color="black"),
+    ]
+    queries = [
+        "What is the organizational structure for our R&D department?",
+        "Can you provide a breakdown of last year’s financial performance?",
+    ]
+
+    # Process the inputs
+    batch_images = processor(images=images).to(model.device)
+    batch_queries = processor(text=queries).to(model.device)
+
+    # Forward pass
+    with torch.no_grad():
+        image_embeddings = model(**batch_images)
+        query_embeddings = model(**batch_queries)
+
+    scores = processor.score_retrieval(query_embeddings, image_embeddings)
+    ```
 """
 
 
 @add_start_docstrings(
-    """The COLPALI model which consists of a vision backbone and a language model.""",
-    COLPALI_START_DOCSTRING,
+    """
+    ColPali leverages Vision Language Models (VLMs) to construct efficient multi-vector embeddings in the visual space for document retrieval.
+    By feeding the ViT output patches from PaliGemma-3B to a linear projection, we create a multi-vector representation of documents. The model
+    is trained to maximize the similarity between these document embeddings and the query embeddings, following the ColBERT method.
+
+    Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account
+    both the textual and visual content (layout, charts, ...) of a document.
+
+    ColPali was introduced in the following paper: [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+
+    Resources:
+    - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
+    - The code for using and training the original ColPali model and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
+    - Cookbooks to fine-tune ColPali (with optional quantization), generate similarity maps, ... can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
+    """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel, GenerationMixin):
     main_input_name: ClassVar[str] = "input_ids"  # transformers-related
@@ -386,8 +433,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel, GenerationMixin):
         image_features = image_features / (self.config.hidden_size**0.5)
         return image_features
 
-    @add_start_docstrings_to_model_forward(COLPALI_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ColPaliCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING)
+    @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class="ColPaliConfig")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -424,9 +471,9 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, ColPaliForRetrieval
+        >>> from transformers import AutoProcessor, ColPaliForConditionalGeneration
 
-        >>> model = ColPaliForRetrieval.from_pretrained("google/ColPali-test-224px-hf")
+        >>> model = ColPaliForConditionalGeneration.from_pretrained("google/ColPali-test-224px-hf")
         >>> processor = AutoProcessor.from_pretrained("google/ColPali-test-224px-hf")
 
         >>> prompt = "answer en Where is the cow standing?"

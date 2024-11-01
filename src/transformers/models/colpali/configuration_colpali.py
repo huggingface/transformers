@@ -81,6 +81,7 @@ class ColPaliConfig(PretrainedConfig):
         embedding_dim: int = 128,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self._ignore_index = ignore_index
         self.image_token_index = image_token_index
         self._vocab_size = vocab_size
@@ -125,7 +126,6 @@ class ColPaliConfig(PretrainedConfig):
         self.model_type = "colpali"
         self.is_composition = False
         self.embedding_dim = embedding_dim
-        super().__init__(**kwargs)
 
     @property
     def ignore_index(self):

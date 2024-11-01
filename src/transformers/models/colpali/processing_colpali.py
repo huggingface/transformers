@@ -20,47 +20,17 @@
 # limitations under the License.
 
 
-from typing import ClassVar, List, Optional, Tuple, Union
+from typing import ClassVar, List, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-    TextKwargs,
-    Unpack,
-)
-from ...tokenization_utils_base import (
-    AddedToken,
-    PreTokenizedInput,
-    TextInput,
-)
-from ...utils import (
-    logging,
-)
-
-
-logger = logging.get_logger(__name__)
-
-IMAGE_TOKEN = "<image>"
-EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
-
-
-class ColPaliTextKwargs(TextKwargs):
-    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-
-
-class ColPaliImagesKwargs(ImagesKwargs):
-    do_convert_rgb: Optional[bool]
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: ColPaliTextKwargs
-    images_kwargs: ColPaliImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": "longest",
@@ -73,12 +43,8 @@ class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
+IMAGE_TOKEN = "<image>"
+EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
 
 
 def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_images):
