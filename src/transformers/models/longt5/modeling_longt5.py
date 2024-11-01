@@ -1450,7 +1450,7 @@ class LongT5Stack(LongT5PreTrainedModel):
             # it messes indexing later in decoder-stack because cache object is modified in-place
             past_key_values = None
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_past_seen_tokens() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(
                 past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
