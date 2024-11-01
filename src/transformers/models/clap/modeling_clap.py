@@ -707,7 +707,7 @@ class ClapAudioStage(nn.Module):
     def __init__(self, config, grid_size, dpr, layer_id):
         super().__init__()
         self.config = config  # is this even necessary??
-        dim = int(config.embed_dim * 2**layer_id)
+        dim = int(config.patch_embeds_hidden_size * 2**layer_id)
         depth = config.depths[layer_id]
         input_resolution = (grid_size[0] // (2**layer_id), grid_size[1] // (2**layer_id))
 
