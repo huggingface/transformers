@@ -35,7 +35,7 @@
 pip install optimum[exporters]
 ```
 
-للاطلاع على جميع الحجج المتاحة، يرجى الرجوع إلى [وثائق 🤗 Optimum](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli)، أو عرض المساعدة في سطر الأوامر:
+للاطلاع على جميع المعامﻻت المتاحة، يرجى الرجوع إلى [وثائق 🤗 Optimum](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli)، أو عرض المساعدة في سطر الأوامر:
 
 ```bash
 optimum-cli export onnx --help
