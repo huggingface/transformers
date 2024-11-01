@@ -1376,20 +1376,31 @@ class TokenizerTesterMixin:
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
 
+                # Find where to truncate, as the amount of tokens is different for different tokenizers and I want the
+                # truncation to happen in the middle of the assistant content.
+                full_encoding = tokenizer_r.apply_chat_template(
+                    conversations[0],
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_dict=True,
+                )
+                chat_string = tokenizer_r.apply_chat_template(
+                    conversations[0], tokenize=False, chat_template=dummy_template
+                )
+                truncation_position = full_encoding.char_to_token(chat_string.index(", long string to be truncated,"))
+
                 # check batched
                 output = tokenizer_r.apply_chat_template(
                     conversations,
                     chat_template=dummy_template,
                     tokenize=True,
                     return_assistant_tokens_mask=True,
-                    max_length=50,
+                    max_length=truncation_position,
                     truncation=True,
                     return_dict=True,
                 )
                 for i, conv in enumerate(conversations):
-                    chat_string = tokenizer_r.apply_chat_template(
-                        conversations[i], tokenize=False, chat_template=dummy_template
-                    )
+                    chat_string = tokenizer_r.apply_chat_template(conv, tokenize=False, chat_template=dummy_template)
                     assistant_start = output.char_to_token(i, chat_string.index("start turn assistant"))
 
                     # assert 1 from assistant_start to the end because the rest is truncated.
@@ -1405,7 +1416,7 @@ class TokenizerTesterMixin:
                     tokenize=True,
                     return_assistant_tokens_mask=True,
                     return_dict=True,
-                    max_length=50,
+                    max_length=truncation_position,
                     truncation=True,
                 )
 
