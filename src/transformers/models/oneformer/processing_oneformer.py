@@ -50,10 +50,7 @@ class OneFormerImagesKwargs(ImagesKwargs):
 class OneFormerProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: OneFormerImagesKwargs
     _defaults = {
-        "text_kwargs": {
-            "max_seq_length": 77,
-            "task_seq_length": 77
-        },
+        "text_kwargs": {"max_seq_length": 77, "task_seq_length": 77},
     }
 
 
@@ -126,10 +123,7 @@ class OneFormerProcessor(ProcessorMixin):
         """
         if len(args) > 2:
             raise ValueError("Too many positional arguments")
-        return {
-            key: value
-            for key, value in zip(("task_inputs", "segmentation_maps"), args)
-        }
+        return dict(zip(("task_inputs", "segmentation_maps"), args))
 
     def __call__(
         self,
