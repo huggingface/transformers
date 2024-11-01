@@ -96,6 +96,7 @@ if is_torch_available():
 
 
 class GenerationTesterMixin:
+    input_name = "input_ids"
     model_tester = None
     all_generative_model_classes = ()
     max_new_tokens = 3
@@ -1263,6 +1264,9 @@ class GenerationTesterMixin:
 
             if model.get_output_embeddings() is None:
                 self.skipTest("DoLa is not supported for models that don't have output embeddings")
+
+            logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
+
             # Sets dola generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) there are at least two forward passes in the main model, to ensure the input preparation of
@@ -1280,7 +1284,7 @@ class GenerationTesterMixin:
                 "use_cache": getattr(config, "use_cache", False),  # Some models don't support the cache
                 "dola_layers": "low",
             }
-            output_dola = model.generate(**generation_kwargs, **inputs_dict)
+            output_dola = model.generate(**generation_kwargs, **logits_processor_kwargs, **inputs_dict)
             self._check_outputs(output_dola, model.config, use_cache=getattr(config, "use_cache", False))
 
     @pytest.mark.generate
