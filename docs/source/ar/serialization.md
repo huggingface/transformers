@@ -163,7 +163,7 @@ python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 python -m transformers.onnx --model=keras-io/transformers-qa onnx/
 ```
 
-لتصدير نموذج مخزن محليًا، قم بحفظ ملفات أوزان النموذج ومحول الرموز في نفس الدليل (على سبيل المثال `local-pt-checkpoint`)، ثم قم بتصديره إلى ONNX عن طريق توجيه وسيط `--model` لحزمة `transformers.onnx` إلى الدليل المطلوب:
+لتصدير نموذج مُخزن محليًا، احفظ أوزان النموذج ومجزىء اللغوى في نفس الدليل (على سبيل المثال `local-pt-checkpoint`)، ثم قم بتصديره إلى ONNX عن طريق توجيه وسيط `--model` لحزمة `transformers.onnx` إلى الدليل المطلوب:
 
 ```bash
 python -m transformers.onnx --model=local-pt-checkpoint onnx/
