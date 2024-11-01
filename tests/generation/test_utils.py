@@ -96,6 +96,7 @@ if is_torch_available():
 
 
 class GenerationTesterMixin:
+    input_name = "input_ids"
     model_tester = None
     all_generative_model_classes = ()
     max_new_tokens = 3
