@@ -1346,13 +1346,25 @@ class TokenizerTesterMixin:
             [
                 {"role": "system", "content": "system message"},
                 {"role": "user", "content": "user message"},
-                {"role": "assistant", "content": "start turn assistant. long string to be truncated"},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "start turn assistant. long string to be truncated, long string to be truncated, "
+                        "long string to be truncated, long string to be truncated, long string to be truncated"
+                    ),
+                },
                 {"role": "user", "content": "another user message"},
             ],
             [
                 {"role": "system", "content": "system message"},
                 {"role": "user", "content": "user message"},
-                {"role": "assistant", "content": "start turn assistant. long string to be truncated"},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "start turn assistant. long string to be truncated, long string to be truncated, "
+                        "long string to be truncated, long string to be truncated, long string to be truncated"
+                    ),
+                },
                 {"role": "user", "content": "another user message"},
             ],
         ]
