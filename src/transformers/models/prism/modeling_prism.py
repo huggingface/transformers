@@ -1397,6 +1397,7 @@ class PrismModel(PrismPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = PrismScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
+
         self.encoder = PrismEncoder(config, self.shared)
         self.decoder = PrismDecoder(config, self.shared)
 
@@ -1517,7 +1518,6 @@ class PrismForConditionalGeneration(PrismPreTrainedModel, GenerationMixin):
     def __init__(self, config: PrismConfig):
         super().__init__(config)
         self.model = PrismModel(config)
-        # self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -1619,43 +1619,6 @@ class PrismForConditionalGeneration(PrismPreTrainedModel, GenerationMixin):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):

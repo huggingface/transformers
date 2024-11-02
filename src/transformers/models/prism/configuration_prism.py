@@ -28,10 +28,15 @@ logger = logging.get_logger(__name__)
 
 
 class PrismConfig(PretrainedConfig):
-    """
-    This is the configuration class to store the configuration of a `PrismModel`. It is used to instantiate a
+    r"""
+    This is the configuration class to store the configuration of a [`PrismModel`]. It is used to instantiate an
     Prism model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Prism architecture as described in the paper.
+    with the defaults will yield a similar configuration to that of the Prism
+    [dariast/prism](https://huggingface.co/dariast/prism) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
 
     Args:
         vocab_size (`int`, *optional*, defaults to 65400):
@@ -86,10 +91,10 @@ class PrismConfig(PretrainedConfig):
     ```python
     >>> from transformers import PrismConfig, PrismModel
 
-    >>> # Initializing a Prism facebook/prism style configuration
+    >>> # Initializing a Prism dariast/prism style configuration
     >>> configuration = PrismConfig()
 
-    >>> # Initializing a model (with random weights) from the facebook/prism style configuration
+    >>> # Initializing a model (with random weights) from the dariast/prism style configuration
     >>> model = PrismModel(configuration)
 
     >>> # Accessing the model configuration
