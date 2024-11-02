@@ -39,11 +39,16 @@ class SamImagesKwargs(ImagesKwargs):
     input_points: Optional[List[List[float]]]
     input_labels: Optional[List[List[int]]]
     input_boxes: Optional[List[List[List[float]]]]
+    point_pad_value: Optional[int]
 
 
 class SamProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: SamImagesKwargs
-    _defaults = {}
+    _defaults = {
+        "images_kwargs": {
+            "point_pad_value": -10,
+        }
+    }
 
 
 class SamProcessor(ProcessorMixin):
@@ -64,7 +69,6 @@ class SamProcessor(ProcessorMixin):
 
     def __init__(self, image_processor):
         super().__init__(image_processor)
-        self.point_pad_value = -10
         self.target_size = self.image_processor.size["longest_edge"]
 
     @staticmethod
@@ -123,6 +127,7 @@ class SamProcessor(ProcessorMixin):
             input_labels=input_labels,
             input_boxes=input_boxes,
             return_tensors=output_kwargs["common_kwargs"].get("return_tensors"),
+            point_pad_value=output_kwargs["images_kwargs"].get("point_pad_value"),
         )
 
         return encoding_image_processor
@@ -135,6 +140,7 @@ class SamProcessor(ProcessorMixin):
         input_labels=None,
         input_boxes=None,
         return_tensors="pt",
+        point_pad_value=-10,
     ):
         if input_points is not None:
             if len(original_sizes) != len(input_points):
@@ -149,7 +155,9 @@ class SamProcessor(ProcessorMixin):
             # check that all arrays have the same shape
             if not all(point.shape == input_points[0].shape for point in input_points):
                 if input_labels is not None:
-                    input_points, input_labels = self._pad_points_and_labels(input_points, input_labels)
+                    input_points, input_labels = self._pad_points_and_labels(
+                        input_points, input_labels, point_pad_value
+                    )
 
             input_points = np.array(input_points)
 
@@ -202,7 +210,7 @@ class SamProcessor(ProcessorMixin):
 
         return encoding_image_processor
 
-    def _pad_points_and_labels(self, input_points, input_labels):
+    def _pad_points_and_labels(self, input_points, input_labels, point_pad_value):
         r"""
         The method pads the 2D points and labels to the maximum number of points in the batch.
         """
@@ -211,9 +219,9 @@ class SamProcessor(ProcessorMixin):
         for i, point in enumerate(input_points):
             if point.shape[0] != expected_nb_points:
                 point = np.concatenate(
-                    [point, np.zeros((expected_nb_points - point.shape[0], 2)) + self.point_pad_value], axis=0
+                    [point, np.zeros((expected_nb_points - point.shape[0], 2)) + point_pad_value], axis=0
                 )
-                input_labels[i] = np.append(input_labels[i], [self.point_pad_value])
+                input_labels[i] = np.append(input_labels[i], [point_pad_value])
             processed_input_points.append(point)
         input_points = processed_input_points
         return input_points, input_labels
