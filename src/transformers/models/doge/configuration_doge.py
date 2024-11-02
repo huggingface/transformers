@@ -30,7 +30,7 @@ class DogeConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-     Args:
+    Args:
         vocab_size (`int`, *optional*, defaults to 32768):
             Vocabulary size of the Doge model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`DogeModel`]
