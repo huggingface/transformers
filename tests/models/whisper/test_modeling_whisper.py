@@ -1860,8 +1860,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_large_generation_multilingual(self):
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
 
         ds = load_dataset(
@@ -1877,14 +1877,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             input_features, do_sample=False, max_length=20, language="<|de|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        EXPECTED_TRANSCRIPT = " Denken Sie, soeben walten meine Gedanken bei Ihnen in Adela"
+        EXPECTED_TRANSCRIPT = " denken sie soeben weilten meine gedanken bei ihnen in adelaide und ich wünsch"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|de|>", task="translate"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        EXPECTED_TRANSCRIPT = " Think, my thoughts were just rolling with you in Adelaide, and I"
+        EXPECTED_TRANSCRIPT = " Think, my thoughts were just now in Adelaide with you, and I wished to be able"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
