@@ -66,6 +66,7 @@ llama_role_conversions = {
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
+
 class HfApiEngine:
     """A class to interact with Hugging Face's Inference API for language model interaction.
 
@@ -90,8 +91,8 @@ class HfApiEngine:
         self,
         model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
         token: Optional[str] = None,
-        max_tokens: int = 1500,
-        timeout: int = 120,
+        max_tokens: Optional[int] = 1500,
+        timeout: Optional[int] = 120,
     ):
         """Initialize the HfApiEngine."""
         if not model:
@@ -153,6 +154,7 @@ class HfApiEngine:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
         return response
+
 
 class TransformersEngine:
     """This engine uses a pre-initialized local text-generation pipeline."""
