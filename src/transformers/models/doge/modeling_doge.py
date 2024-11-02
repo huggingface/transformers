@@ -18,10 +18,10 @@
 # limitations under the License.
 """ PyTorch Doge model. """
 
-import einx
 import math
 from typing import List, Optional, Tuple, Union
 
+import einx
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
