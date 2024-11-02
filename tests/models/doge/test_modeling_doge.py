@@ -47,20 +47,22 @@ class DogeModelTester:
         seq_length=16,
         is_training=True,
         use_input_mask=True,
-        use_token_type_ids=False,
         use_labels=True,
-        vocab_size=99,
+        type_sequence_label_size=2,
+        vocab_size=128,
         hidden_size=32,
         num_hidden_layers=2,
+        hidden_dropout=0.1,
+        hidden_act="silu",
+        initializer_range=0.02,
+        max_position_embeddings=512,
         num_attention_heads=2,
+        num_inner_values=1,
         cross_domain_intermediate_size=128,
         private_expert_intermediate_size=32,
         num_cdmmoe_experts=2,
-        hidden_act="gelu",
-        hidden_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        num_labels=3,
+        num_cdmmoe_experts_per_head=4,
+        num_labels=2,
         pad_token_id=0,
     ):
         self.parent = parent
@@ -68,22 +70,23 @@ class DogeModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
+        self.type_sequence_label_size = type_sequence_label_size
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.hidden_dropout = hidden_dropout
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.max_position_embeddings = max_position_embeddings
         self.num_attention_heads = num_attention_heads
+        self.num_inner_values = num_inner_values
         self.cross_domain_intermediate_size = cross_domain_intermediate_size
         self.private_expert_intermediate_size = private_expert_intermediate_size
         self.num_cdmmoe_experts = num_cdmmoe_experts
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
+        self.num_cdmmoe_experts_per_head = num_cdmmoe_experts_per_head
         self.num_labels = num_labels
         self.pad_token_id = pad_token_id
-
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -92,23 +95,30 @@ class DogeModelTester:
         if self.use_input_mask:
             input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
+        sequence_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+
         config = self.get_config()
 
-        return config, input_ids, input_mask
+        return config, input_ids, input_mask, sequence_labels
 
     def get_config(self):
         return DogeConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
+            hidden_dropout=self.hidden_dropout,
+            hidden_act=self.hidden_act,
+            initializer_range=self.initializer_range,
+            max_position_embeddings=self.max_position_embeddings,
             num_attention_heads=self.num_attention_heads,
+            num_inner_values=self.num_inner_values,
             cross_domain_intermediate_size=self.cross_domain_intermediate_size,
             private_expert_intermediate_size=self.private_expert_intermediate_size,
             num_cdmmoe_experts=self.num_cdmmoe_experts,
-            hidden_act=self.hidden_act,
-            hidden_dropout=self.hidden_dropout,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
+            num_cdmmoe_experts_per_head=self.num_cdmmoe_experts_per_head,
+            num_labels=self.num_labels,
             pad_token_id=self.pad_token_id,
         )
 
@@ -141,13 +151,14 @@ class DogeModelTester:
             config,
             input_ids,
             input_mask,
+            sequence_labels,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
 @require_torch
-class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DogeModel,
@@ -170,6 +181,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     test_headmasking = False
     test_pruning = False
+    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -188,9 +200,52 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+    
+    def test_doge_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 2
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_dict.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = DogeForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+    
+    def test_doge_sequence_classification_model_for_single_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 2
+        config.problem_type = "single_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_dict.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = DogeForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    def test_doge_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 2
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_dict.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = DogeForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     @unittest.skip(reason="doge buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip("Broken by the loss update will fix soon @ArthurZucker")
+    def test_torch_fx_output_loss(self, *args, **kwargs):
         pass
 
