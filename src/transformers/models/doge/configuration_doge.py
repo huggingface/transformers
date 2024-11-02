@@ -16,7 +16,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Doge model configuration """
+"""PyTorch Doge model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -144,7 +144,7 @@ class DogeConfig(PretrainedConfig):
         num_cdmmoe_experts=4096,
         num_cdmmoe_heads=1,
         num_cdmmoe_experts_per_head=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

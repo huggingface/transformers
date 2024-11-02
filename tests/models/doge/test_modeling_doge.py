@@ -98,9 +98,7 @@ class DogeModelTester:
 
         sequence_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor(
-                [self.batch_size], self.type_sequence_label_size
-            )
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
@@ -179,9 +177,7 @@ class DogeModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -234,17 +230,13 @@ class DogeModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[
-            :, -3:, random_slice_idx
-        ].detach()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(
-            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
-        )
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -259,14 +251,8 @@ class DogeModelTester:
 
 
 @require_torch
-class DogeModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
-):
-    all_model_classes = (
-        (DogeModel, DogeForCausalLM, DogeForSequenceClassification)
-        if is_torch_available()
-        else ()
-    )
+class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (DogeModel, DogeForCausalLM, DogeForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (DogeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -306,9 +292,7 @@ class DogeModelTest(
         config.num_labels = 2
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
-        )
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
         model = DogeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
@@ -324,9 +308,7 @@ class DogeModelTest(
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
-        )
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
         model = DogeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
@@ -355,9 +337,7 @@ class DogeModelTest(
             (self.model_tester.batch_size, self.model_tester.num_labels),
         )
 
-    @unittest.skip(
-        reason="doge buffers include complex numbers, which breaks this test"
-    )
+    @unittest.skip(reason="doge buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 

@@ -366,11 +366,7 @@ def check_config_attributes_being_used(config_class):
     config_source_file = inspect.getsourcefile(config_class)
     model_dir = os.path.dirname(config_source_file)
     # Let's check against all frameworks: as long as one framework uses an attribute, we are good.
-    modeling_paths = [
-        os.path.join(model_dir, fn)
-        for fn in os.listdir(model_dir)
-        if fn.startswith("modeling_")
-    ]
+    modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
 
     # Get the source code strings
     modeling_sources = []
@@ -388,9 +384,7 @@ def check_config_attributes_being_used(config_class):
         if config_param in reversed_attribute_map:
             attributes.append(reversed_attribute_map[config_param])
 
-        if not check_attribute_being_used(
-            config_class, attributes, default_value, modeling_sources
-        ):
+        if not check_attribute_being_used(config_class, attributes, default_value, modeling_sources):
             unused_attributes.append(attributes[0])
 
     return sorted(unused_attributes)
@@ -416,9 +410,7 @@ def check_config_attributes():
         for config_class in config_classes_in_module:
             unused_attributes = check_config_attributes_being_used(config_class)
             if len(unused_attributes) > 0:
-                configs_with_unused_attributes[config_class.__name__] = (
-                    unused_attributes
-                )
+                configs_with_unused_attributes[config_class.__name__] = unused_attributes
 
     if len(configs_with_unused_attributes) > 0:
         error = "The following configuration classes contain unused attributes in the corresponding modeling files:\n"
