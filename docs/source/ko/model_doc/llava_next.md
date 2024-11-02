@@ -224,7 +224,7 @@ prompts = [prompt_1, prompt_2]
 # 각 "<image>" 토큰은 하나의 이미지를 사용하며, 다음 "<image>" 토큰에는 그다음 이미지가 할당됩니다
 inputs = processor(text=prompts, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(model.device)
 
-# 생성합니다
+# 텍스트를 생성합니다
 generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 ```
