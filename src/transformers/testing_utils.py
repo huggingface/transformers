@@ -114,6 +114,7 @@ from .utils import (
     is_seqio_available,
     is_soundfile_availble,
     is_spacy_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -1139,6 +1140,13 @@ def require_aqlm(test_case):
     Decorator marking a test that requires aqlm
     """
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
+def require_spqr(test_case):
+    """
+    Decorator marking a test that requires aqlm
+    """
+    return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
 
 
 def require_eetq(test_case):
