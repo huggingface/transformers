@@ -27,17 +27,17 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.activations import ACT2FN
-from transformers.cache_utils import Cache, DynamicCache, StaticCache
-from transformers.generation import GenerationMixin
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from transformers.modeling_outputs import (
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_outputs import (
     BaseModelOutputWithPast,
     SequenceClassifierOutputWithPast,
     CausalLMOutputWithPast,
 )
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import (
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,

@@ -18,8 +18,8 @@
 # limitations under the License.
 """ PyTorch Doge model configuration """
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 
 
 class DogeConfig(PretrainedConfig):
