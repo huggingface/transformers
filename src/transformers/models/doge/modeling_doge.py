@@ -21,7 +21,6 @@
 import math
 from typing import List, Optional, Tuple, Union
 
-import einx
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -43,9 +42,16 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import is_einx_available
 from .configuration_doge import DogeConfig
 
 logger = logging.get_logger(__name__)
+
+if is_einx_available():
+    try:
+        from einx import add as einx_add
+    except ImportError:
+        raise ImportError("Please run `pip install einx` to install einx.")
 
 _CONFIG_FOR_DOC = "DogeConfig"
 
@@ -458,8 +464,8 @@ class DogeCDMoE(nn.Module):
         sim = torch.einsum('p b t h d, h k p d -> p b t h k', queries, self.keys)
         # get expert scores and indices with the highest similarity
         (scores_x, scores_y), (indices_x, indices_y) = sim.topk(self.num_cdmmoe_experts_per_head, dim=-1)
-        all_scores = einx.add('... i, ... j -> ... (i j)', scores_x, scores_y)
-        all_indices = einx.add('... i, ... j -> ... (i j)', indices_x * self.num_keys, indices_y)
+        all_scores = einx_add('... i, ... j -> ... (i j)', scores_x, scores_y)
+        all_indices = einx_add('... i, ... j -> ... (i j)', indices_x * self.num_keys, indices_y)
         scores, pk_indices = all_scores.topk(self.num_cdmmoe_experts_per_head, dim=-1)
         indices = all_indices.gather(-1, pk_indices)
 
