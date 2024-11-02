@@ -367,6 +367,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
         query_embeddings: Union[torch.Tensor, List[torch.Tensor]],
         passage_embeddings: Union[torch.Tensor, List[torch.Tensor]],
         batch_size: int = 128,
+        output_dtype: Optional[torch.dtype] = torch.float32,
+        output_device: Union[torch.device, str] = "cpu",
     ) -> torch.Tensor:
         """
         Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
@@ -377,10 +379,13 @@ class ColPaliProcessor(PaliGemmaProcessor):
             query_embeddings (`List[torch.Tensor]`): List of query embeddings.
             passage_embeddings (`List[torch.Tensor]`): List of passage embeddings.
             batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
+            output_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): The dtype of the output tensor.
+                If `None`, the dtype of the input embeddings is used.
+            output_device (`torch.device` or `str`, *optional*, defaults to "cpu"): The device of the output tensor.
 
         Returns:
-            `torch.Tensor`: A tensor of shape `(len(qs), len(ps))` containing the scores
-                (device=cpu, dtype=float32).
+            `torch.Tensor`: A tensor of shape `(len(qs), len(ps))` containing the scores. The score
+            tensor is saved on the "cpu" device.
         """
 
         if len(query_embeddings) == 0:
@@ -390,6 +395,12 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
         if query_embeddings[0].device != passage_embeddings[0].device:
             raise ValueError("Queries and passages must be on the same device")
+
+        if query_embeddings[0].dtype != passage_embeddings[0].dtype:
+            raise ValueError("Queries and passages must have the same dtype")
+
+        if output_dtype is None:
+            output_dtype = query_embeddings[0].dtype
 
         scores: List[torch.Tensor] = []
 
@@ -405,11 +416,9 @@ class ColPaliProcessor(PaliGemmaProcessor):
                 batch_scores.append(
                     torch.einsum("bnd,csd->bcns", batch_queries, batch_passages).max(dim=3)[0].sum(dim=2)
                 )
-            scores.append(torch.cat(batch_scores, dim=1).cpu())
+            scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
 
-        scores = torch.cat(scores, dim=0).to(torch.float32)
-
-        return scores
+        return torch.cat(scores, dim=0)
 
     def get_n_patches(
         self,
