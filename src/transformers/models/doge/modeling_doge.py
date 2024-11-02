@@ -43,7 +43,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-
 from .configuration_doge import DogeConfig
 
 logger = logging.get_logger(__name__)
