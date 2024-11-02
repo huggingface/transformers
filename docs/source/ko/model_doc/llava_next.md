@@ -220,7 +220,7 @@ prompt_1 = processor.apply_chat_template(conversation_1, add_generation_prompt=T
 prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=True)
 prompts = [prompt_1, prompt_2]
 
-# 우리는 텍스트 프롬프트에서 사용해야 할 순서대로 이미지를 간단히 입력할 수 있습니다
+# 텍스트 프롬프트에서 사용해야 할 순서대로 이미지를 간단히 입력할 수 있습니다
 # 각 "<image>" 토큰은 하나의 이미지를 사용하며, 다음 "<image>" 토큰에는 그다음 이미지가 할당됩니다
 inputs = processor(text=prompts, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(model.device)
 
