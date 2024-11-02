@@ -78,7 +78,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-    _torch_compile_test_ckpt = "google/gemma-2-9b"
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)
