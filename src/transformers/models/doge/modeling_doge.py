@@ -480,7 +480,7 @@ class DogeCDMoE(nn.Module):
         sim = torch.einsum("p b t h d, h k p d -> p b t h k", queries, self.keys)
         # get expert scores and indices with the highest similarity
         (scores_x, scores_y), (indices_x, indices_y) = sim.topk(self.num_cdmmoe_experts_per_head, dim=-1)
-        
+
         if einx_add is not None:
             all_scores = einx_add("... i, ... j -> ... (i j)", scores_x, scores_y)
             all_indices = einx_add("... i, ... j -> ... (i j)", indices_x * self.num_keys, indices_y)
