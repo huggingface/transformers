@@ -448,7 +448,7 @@ class DogeCDMoE(nn.Module):
         hidden_states: torch.Tensor,
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        bsz, seq_len, hidden_size = hidden_states.shape
+        bsz, seq_len, _ = hidden_states.shape
         # cross-domain
         hidden_states = self.shared_down_proj(self.act_fn(self.shared_up_proj(hidden_states)))
 
