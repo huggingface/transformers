@@ -16,7 +16,6 @@
 
 import unittest
 
-
 from transformers import DogeConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
@@ -135,7 +134,7 @@ class DogeModelTester:
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-    
+
     def create_and_check_model_as_decoder(
         self, config, input_ids, input_mask, sequence_labels, encoder_hidden_states, encoder_attention_mask
     ):
@@ -169,7 +168,7 @@ class DogeModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-    
+
     def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask, sequence_labels, encoder_hidden_states, encoder_attention_mask):
         config.is_decoder = True
         config.add_cross_attention = True
@@ -277,7 +276,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-    
+
     def test_doge_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 2
@@ -289,7 +288,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-    
+
     def test_doge_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 2
@@ -325,4 +324,3 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip("Broken by the loss update will fix soon @ArthurZucker")
     def test_torch_fx_output_loss(self, *args, **kwargs):
         pass
-    

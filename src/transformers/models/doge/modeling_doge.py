@@ -219,7 +219,6 @@ class DogeInnerFuncAttn(nn.Module):
             self.hidden_size,
             bias=config.hidden_bias,
         )
-    
 
     def _update_causal_mask(
         self,
@@ -259,7 +258,6 @@ class DogeInnerFuncAttn(nn.Module):
         )
 
         return causal_mask
-    
 
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position_and_dynamic_mask(
@@ -445,7 +443,6 @@ class DogeCDMoE(nn.Module):
             self.num_cdmmoe_experts,
             self.private_expert_intermediate_dim,
         )
-        
 
     def forward(
         self, 
@@ -679,13 +676,13 @@ class DogeModel(DogePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-    
+
     def get_input_embeddings(self):
         return self.word_embed
 
     def set_input_embeddings(self, value):
         self.word_embed = value
-    
+
     @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -808,7 +805,7 @@ class DogeModel(DogePreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-    
+
     """Move to DogeInnerFuncAttn"""
     # def _update_causal_mask(
     #     self,
@@ -1037,13 +1034,13 @@ class DogeForSequenceClassification(DogePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.init_weights()
-    
+
     def get_input_embeddings(self):
         return self.model.word_embed
-    
+
     def set_input_embeddings(self, value):
         self.model.word_embed = value
-    
+
     @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
     def forward(
         self,
