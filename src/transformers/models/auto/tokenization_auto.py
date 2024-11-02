@@ -168,6 +168,7 @@ else:
                 ),
             ),
             ("distilbert", ("DistilBertTokenizer", "DistilBertTokenizerFast" if is_tokenizers_available() else None)),
+            ("doge", (None, "LlamaTokenizer" if is_sentencepiece_available() else None)),
             (
                 "dpr",
                 (
@@ -175,7 +176,6 @@ else:
                     "DPRQuestionEncoderTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("doge", (None, "LlamaTokenizer" if is_sentencepiece_available() else None)),
             ("electra", ("ElectraTokenizer", "ElectraTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),

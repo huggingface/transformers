@@ -36,10 +36,10 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_doge"] = [
-        "DogePreTrainedModel",
-        "DogeModel",
         "DogeForCausalLM",
         "DogeForSequenceClassification",
+        "DogeModel",
+        "DogePreTrainedModel",
     ]
 
 
