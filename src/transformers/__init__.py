@@ -2120,10 +2120,10 @@ else:
     )
     _import_structure["models.doge"].extend(
         [
-            "DogePreTrainedModel",
-            "DogeModel",
             "DogeForCausalLM",
             "DogeForSequenceClassification",
+            "DogeModel",
+            "DogePreTrainedModel",
         ]
     )
     _import_structure["models.dpr"].extend(
@@ -6899,10 +6899,10 @@ if TYPE_CHECKING:
             DistilBertPreTrainedModel,
         )
         from .models.doge import (
-            DogePreTrainedModel,
-            DogeModel,
             DogeForCausalLM,
             DogeForSequenceClassification,
+            DogeModel,
+            DogePreTrainedModel,
         )
         from .models.donut import (
             DonutSwinModel,

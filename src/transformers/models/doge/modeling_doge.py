@@ -18,6 +18,7 @@
 # limitations under the License.
 """ PyTorch Doge model. """
 
+import einx
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -25,8 +26,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-
-import einx
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -414,7 +413,7 @@ class DogeCDMoE(nn.Module):
         # shared parameter down Linear
         self.shared_down_proj = nn.Linear(
             self.cross_domain_intermediate_size,
-            self.private_expert_intermediate_dim, 
+            self.private_expert_intermediate_dim,
             bias=config.hidden_bias,
         )
 
@@ -445,7 +444,7 @@ class DogeCDMoE(nn.Module):
         )
 
     def forward(
-        self, 
+        self,
         hidden_states: torch.Tensor,
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
