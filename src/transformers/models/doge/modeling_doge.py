@@ -24,6 +24,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from einx import add as einx_add
 from torch import nn
 
 from ...activations import ACT2FN
@@ -42,24 +43,12 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_einx_available
 from .configuration_doge import DogeConfig
 
-
-if is_einx_available():
-    from einx import add as einx_add
-else:
-    einx_add = None
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DogeConfig"
-
-
-if einx_add is None:
-    logger.warning(
-        "You have to install einx with `pip install einx` to use the Doge model. "
-    )
 
 
 class RMSNorm(nn.Module):
