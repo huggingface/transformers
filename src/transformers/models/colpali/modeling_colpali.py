@@ -267,11 +267,11 @@ COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING = r"""
     import torch
     from PIL import Image
 
-    from transformers import ColPali, ColPaliProcessor
+    from transformers import ColPaliForRetrieval, ColPaliProcessor
 
     model_name = "vidore/colpali-v1.2-hf"
 
-    model = ColPali.from_pretrained(
+    model = ColPaliForRetrieval.from_pretrained(
         model_name,
         torch_dtype=torch.bfloat16,
         device_map="cuda:0",  # or "mps" if on Apple Silicon
