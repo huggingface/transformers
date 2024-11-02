@@ -115,6 +115,7 @@ class DogeConfig(PretrainedConfig):
         num_cdmmoe_experts_per_head (`int`, *optional*, defaults to 2):
             Number of Private Experts per head for the Cross Domain Mixture of Experts.
     """
+
     model_type = "doge"
     keys_to_ignore_at_inference = ["past_key_values"]
 

@@ -57,6 +57,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DogeConfig"
 
+
 class RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -92,7 +93,9 @@ class RotaryEmbedding(nn.Module):
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, **self.rope_kwargs)
+        inv_freq, self.attention_scaling = self.rope_init_fn(
+            self.config, **self.rope_kwargs
+        )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -107,10 +110,15 @@ class RotaryEmbedding(nn.Module):
             inv_freq, self.attention_scaling = self.rope_init_fn(
                 self.config, device, seq_len=seq_len, **self.rope_kwargs
             )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
@@ -120,12 +128,20 @@ class RotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -204,12 +220,16 @@ class DogeInnerFuncAttn(nn.Module):
             self.attention_head_dim * self.num_attention_heads,
             bias=config.hidden_bias,
         )
-        self.dynamic_mask = nn.Parameter(torch.round(torch.ones(self.num_attention_heads, config.max_position_embeddings)))
-        self.v_queries = nn.Linear(
-                self.hidden_size,
-                self.attention_head_dim,
-                bias=config.hidden_bias,
+        self.dynamic_mask = nn.Parameter(
+            torch.round(
+                torch.ones(self.num_attention_heads, config.max_position_embeddings)
             )
+        )
+        self.v_queries = nn.Linear(
+            self.hidden_size,
+            self.attention_head_dim,
+            bias=config.hidden_bias,
+        )
         self.v_keys = nn.Parameter(
             torch.zeros(
                 self.num_inner_values,
@@ -237,7 +257,9 @@ class DogeInnerFuncAttn(nn.Module):
         # for SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -252,15 +274,17 @@ class DogeInnerFuncAttn(nn.Module):
             )
 
         # in case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position_and_dynamic_mask(
-            attention_mask=attention_mask,
-            dynamic_mask=self.dynamic_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
+        causal_mask = (
+            self._prepare_4d_causal_attention_mask_with_cache_position_and_dynamic_mask(
+                attention_mask=attention_mask,
+                dynamic_mask=self.dynamic_mask,
+                sequence_length=sequence_length,
+                target_length=target_length,
+                dtype=dtype,
+                device=device,
+                cache_position=cache_position,
+                batch_size=input_tensor.shape[0],
+            )
         )
 
         return causal_mask
@@ -311,24 +335,34 @@ class DogeInnerFuncAttn(nn.Module):
                 (sequence_length, target_length),
                 fill_value=min_dtype,
                 dtype=dtype,
-                device=device
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, num_heads, -1, -1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(
+                batch_size, num_heads, -1, -1
+            )
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()   # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                attention_mask = attention_mask[:, None, None, :].expand(-1, num_heads, 1, -1)
+                attention_mask = attention_mask[:, None, None, :].expand(
+                    -1, num_heads, 1, -1
+                )
                 if dynamic_mask is not None:
-                    dynamic_mask = dynamic_mask[None, :, None, :mask_length].expand(batch_size, -1, 1, -1)
+                    dynamic_mask = dynamic_mask[None, :, None, :mask_length].expand(
+                        batch_size, -1, 1, -1
+                    )
                     attention_mask = attention_mask.clone() * dynamic_mask
 
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask == 0, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask == 0, min_dtype)
 
         return causal_mask
 
@@ -361,36 +395,61 @@ class DogeInnerFuncAttn(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.inner_func(hidden_states)
 
-        query_states = query_states.reshape(bsz, seq_len, self.num_attention_heads, self.attention_head_dim).transpose(1, 2)
-        key_states = key_states.reshape(bsz, seq_len, self.num_attention_heads, self.attention_head_dim).transpose(1, 2)
-        value_states = value_states.reshape(bsz, seq_len, self.num_attention_heads, self.attention_head_dim).transpose(1, 2)
+        query_states = query_states.reshape(
+            bsz, seq_len, self.num_attention_heads, self.attention_head_dim
+        ).transpose(1, 2)
+        key_states = key_states.reshape(
+            bsz, seq_len, self.num_attention_heads, self.attention_head_dim
+        ).transpose(1, 2)
+        value_states = value_states.reshape(
+            bsz, seq_len, self.num_attention_heads, self.attention_head_dim
+        ).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, query_states = apply_QK_rotary_pos_emb(query_states, query_states, cos, sin)
+        query_states, query_states = apply_QK_rotary_pos_emb(
+            query_states, query_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2)) / math.sqrt(self.attention_head_dim)
+        attn_weights = torch.matmul(
+            query_states, key_states.transpose(-1, -2)
+        ) / math.sqrt(self.attention_head_dim)
 
-        causal_mask = self._update_causal_mask(attention_mask, hidden_states, cache_position, past_key_value)
+        causal_mask = self._update_causal_mask(
+            attention_mask, hidden_states, cache_position, past_key_value
+        )
         # no matter the length, we just slice it
         causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+            query_states.dtype
+        )
         attn_output = torch.matmul(attn_weights, value_states)
 
-        if attn_output.size() != (bsz, self.num_attention_heads, seq_len, self.attention_head_dim):
+        if attn_output.size() != (
+            bsz,
+            self.num_attention_heads,
+            seq_len,
+            self.attention_head_dim,
+        ):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_attention_heads, seq_len, self.attention_head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.transpose(1, 2).contiguous().reshape(bsz, seq_len, self.hidden_size)
+        attn_output = (
+            attn_output.transpose(1, 2)
+            .contiguous()
+            .reshape(bsz, seq_len, self.hidden_size)
+        )
         attn_output = self.o_proj(attn_output)
 
         return attn_output, past_key_value
@@ -436,7 +495,7 @@ class DogeCDMoE(nn.Module):
                 self.num_cdmmoe_heads,
                 self.num_keys,
                 2,
-                self.private_expert_intermediate_dim // 2
+                self.private_expert_intermediate_dim // 2,
             )
         )
 
@@ -457,17 +516,25 @@ class DogeCDMoE(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         bsz, seq_len, _ = hidden_states.shape
         # cross-domain
-        hidden_states = self.shared_down_proj(self.act_fn(self.shared_up_proj(hidden_states)))
+        hidden_states = self.shared_down_proj(
+            self.act_fn(self.shared_up_proj(hidden_states))
+        )
 
         # queries
         queries = self.queries(hidden_states)
-        queries = queries.reshape(bsz, seq_len, 2, self.num_cdmmoe_heads, -1).permute(2, 0, 1, 3, 4)
+        queries = queries.reshape(bsz, seq_len, 2, self.num_cdmmoe_heads, -1).permute(
+            2, 0, 1, 3, 4
+        )
         # get similarity with keys
-        sim = torch.einsum('p b t h d, h k p d -> p b t h k', queries, self.keys)
+        sim = torch.einsum("p b t h d, h k p d -> p b t h k", queries, self.keys)
         # get expert scores and indices with the highest similarity
-        (scores_x, scores_y), (indices_x, indices_y) = sim.topk(self.num_cdmmoe_experts_per_head, dim=-1)
-        all_scores = einx_add('... i, ... j -> ... (i j)', scores_x, scores_y)
-        all_indices = einx_add('... i, ... j -> ... (i j)', indices_x * self.num_keys, indices_y)
+        (scores_x, scores_y), (indices_x, indices_y) = sim.topk(
+            self.num_cdmmoe_experts_per_head, dim=-1
+        )
+        all_scores = einx_add("... i, ... j -> ... (i j)", scores_x, scores_y)
+        all_indices = einx_add(
+            "... i, ... j -> ... (i j)", indices_x * self.num_keys, indices_y
+        )
         scores, pk_indices = all_scores.topk(self.num_cdmmoe_experts_per_head, dim=-1)
         indices = all_indices.gather(-1, pk_indices)
 
@@ -476,9 +543,13 @@ class DogeCDMoE(nn.Module):
         up_embed = self.up_embed(indices)
 
         # efficient retrieval of private experts
-        hidden_states = torch.einsum('b t d, b t h k d -> b t h k', hidden_states, down_embed)
+        hidden_states = torch.einsum(
+            "b t d, b t h k d -> b t h k", hidden_states, down_embed
+        )
         hidden_states = self.act_fn(hidden_states * scores.softmax(dim=-1))
-        hidden_states = torch.einsum('b t h k, b t h k d -> b t d', hidden_states, up_embed)
+        hidden_states = torch.einsum(
+            "b t h k, b t h k d -> b t d", hidden_states, up_embed
+        )
         return hidden_states
 
 
@@ -503,7 +574,9 @@ class DogeDecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -540,14 +613,18 @@ class DogeDecoderLayer(nn.Module):
             **kwargs,
         )
         self_attn_weights = None
-        hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
+        hidden_states = F.dropout(
+            hidden_states, p=self.hidden_dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
 
         # state transformation
         residual = hidden_states
         hidden_states = self.in_ff_layernorm(hidden_states)
         hidden_states = self.feed_forward(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
+        hidden_states = F.dropout(
+            hidden_states, p=self.hidden_dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -672,10 +749,15 @@ class DogeModel(DogePreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.word_embed = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embed = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
         self.rotary_emb = RotaryEmbedding(config)
         self.layers = nn.ModuleList(
-            [DogeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                DogeDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.final_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
@@ -703,12 +785,20 @@ class DogeModel(DogePreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both input_ids and inputs_embeds")
@@ -737,9 +827,13 @@ class DogeModel(DogePreTrainedModel):
                 )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -803,7 +897,11 @@ class DogeModel(DogePreTrainedModel):
             next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -850,7 +948,6 @@ class DogeModel(DogePreTrainedModel):
     #     )
 
     #     return causal_mask
-
 
     # @staticmethod
     # def _prepare_4d_causal_attention_mask_with_cache_position(
@@ -941,7 +1038,9 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         return self.model
 
     @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -970,11 +1069,19 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder output consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -997,7 +1104,9 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.vocab_size, **loss_kwargs
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1064,7 +1173,9 @@ class DogeForSequenceClassification(DogePreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1086,23 +1197,34 @@ class DogeForSequenceClassification(DogePreTrainedModel):
             batch_size = inputs_embeds.shape[0]
 
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+            raise ValueError(
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
             if input_ids is not None:
                 # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = (
+                    torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                )
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[
+            torch.arange(batch_size, device=logits.device), sequence_lengths
+        ]
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                pooled_logits=pooled_logits,
+                config=self.config,
+            )
 
         if not return_dict:
             output = (pooled_logits,) + outputs[1:]
