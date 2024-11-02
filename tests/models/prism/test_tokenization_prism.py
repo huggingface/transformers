@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import PrismTokenizer, is_torch_available
+from transformers import PrismTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -38,16 +38,14 @@ if is_sentencepiece_available():
     SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
-if is_torch_available():
-    pass
-
 EN_CODE = 37
-FR_CODE = 71
+FR_CODE = 85
+CHECKPOINT_NAME = "dariast/prism"
 
 
 @require_sentencepiece
 class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "dariast/prism"
+    from_pretrained_id = CHECKPOINT_NAME
     tokenizer_class = PrismTokenizer
     test_rust_tokenizer = False
     test_seq2seq = False
@@ -107,11 +105,10 @@ class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class PrismTokenizerIntegrationTest(unittest.TestCase):
-    checkpoint_name = "dariast/prism"
+    checkpoint_name = CHECKPOINT_NAME
     src_text = ["Hi world.", "This is a Test.", "Some of my Best Friends are Linguists."]
-    tgt_text = ["<fr> Hé, monde!", "<fr> C'est un test.", "<fr> Certains de mes meilleurs amis sont linguistes."]
 
-    expected_src_tokens = [37, 5050, 21, 1951, 13934, 33789, 7, 269, 11348, 983, 9393, 6, 2]
+    expected_src_tokens = [EN_CODE, 5050, 21, 1951, 13934, 33789, 7, 269, 11348, 983, 9393, 6, 2]
 
     @classmethod
     def setUpClass(cls):
@@ -139,6 +136,33 @@ class PrismTokenizerIntegrationTest(unittest.TestCase):
         self.tokenizer.src_lang = "en"
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[2]
         self.assertListEqual(self.expected_src_tokens, ids)
+
+    def test_tokenizer_decode_ignores_language_codes(self):
+        generated_ids = [
+            FR_CODE,
+            16370,
+            15443,
+            5,
+            160,
+            50,
+            11,
+            1814,
+            21392,
+            8,
+            14787,
+            8,
+            14,
+            747,
+            125,
+            3522,
+            15352,
+            6,
+            2,
+        ]
+        result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        expected_french = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        self.assertEqual(result, expected_french)
+        self.assertNotIn(self.tokenizer.eos_token, result)
 
     def test_encoding(self):
         text = "Hello, world!"

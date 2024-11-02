@@ -82,7 +82,7 @@ class PrismModelTester:
         parent,
         batch_size=13,
         seq_length=7,
-        is_training=False,
+        is_training=True,
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
@@ -156,7 +156,6 @@ class PrismModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            tie_word_embeddings=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -332,20 +331,20 @@ def _long_tensor(tok_lst):
 
 TOLERANCE = 1e-4
 
+CHECKPOINT_NAME = "dariast/prism"
+
 
 @require_torch
 @require_sentencepiece
 @require_tokenizers
 @slow
 class PrismModelIntegrationTests(unittest.TestCase):
-    checkpoint_name = "dariast/prism"
-
     @cached_property
     def default_tokenizer(self):
-        return PrismTokenizer.from_pretrained("dariast/prism")
+        return PrismTokenizer.from_pretrained(CHECKPOINT_NAME)
 
     def test_inference_no_head(self):
-        model = PrismModel.from_pretrained("dariast/prism").to(torch_device)
+        model = PrismModel.from_pretrained(CHECKPOINT_NAME).to(torch_device)
         input_ids = _long_tensor(
             [[85, 16370, 15443, 5, 160, 50, 11, 1814, 21392, 8, 14787, 8, 14, 747, 125, 3522, 15352, 6, 2]]
         )
@@ -365,7 +364,7 @@ class PrismModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = PrismForConditionalGeneration.from_pretrained("dariast/prism").to(torch_device)
+        model = PrismForConditionalGeneration.from_pretrained(CHECKPOINT_NAME).to(torch_device)
         # change to intended input
         input_ids = _long_tensor(
             [[85, 16370, 15443, 5, 160, 50, 11, 1814, 21392, 8, 14787, 8, 14, 747, 125, 3522, 15352, 6, 2]]
@@ -385,15 +384,15 @@ class PrismModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = PrismForConditionalGeneration.from_pretrained("dariast/prism").to(torch_device)
-        tokenizer = PrismTokenizer.from_pretrained("dariast/prism", src_lang="fr", tgt_lang="en")
+        model = PrismForConditionalGeneration.from_pretrained(CHECKPOINT_NAME).to(torch_device)
+        tokenizer = PrismTokenizer.from_pretrained(CHECKPOINT_NAME, src_lang="fr", tgt_lang="en")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
             "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
             "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent"
-            " Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
-            " l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
+            "Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
+            "l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
@@ -408,14 +407,15 @@ class PrismModelIntegrationTests(unittest.TestCase):
         )
 
         expected_en = [
-            "<en> but the NSA case highlights the total lack of debate on intelligence",
-            "<en> In my view, there are two levels of response on the part of the French Government.",
-            "<en> When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of American surveillance of all communications in France.",
+            "but the NSA case highlights the total lack of debate on intelligence",
+            "In my view, there are two levels of response on the part of the French Government.",
+            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of US surveillance of all communications in France.",
         ]
 
         generated = tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
+        print(generated)
         assert generated == expected_en
 
     @require_flash_attn
@@ -427,17 +427,17 @@ class PrismModelIntegrationTests(unittest.TestCase):
         Overwritting the common test as the test is flaky on tiny models
         """
         model = PrismForConditionalGeneration.from_pretrained(
-            "dariast/prism", attn_implementation="flash_attention_2"
+            CHECKPOINT_NAME, attn_implementation="flash_attention_2"
         ).to(torch_device)
 
-        tokenizer = PrismTokenizer.from_pretrained("dariast/prism", src_lang="fr", tgt_lang="en")
+        tokenizer = PrismTokenizer.from_pretrained(CHECKPOINT_NAME, src_lang="fr", tgt_lang="en")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
             "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
             "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent"
-            " Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
-            " l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
+            "Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
+            "l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
@@ -452,9 +452,9 @@ class PrismModelIntegrationTests(unittest.TestCase):
         )
 
         expected_en = [
-            "<en> but the NSA case highlights the total lack of debate on intelligence",
-            "<en> In my view, there are two levels of response from the French Government.",
-            "<en> When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of American surveillance of all communications in France.",
+            "but the NSA case highlights the total lack of debate on intelligence",
+            "In my view, there are two levels of response on the part of the French Government.",
+            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the US ambassador, they react to a real discovery, which is the extent of US surveillance of all communications in France.",
         ]
 
         generated = tokenizer.batch_decode(

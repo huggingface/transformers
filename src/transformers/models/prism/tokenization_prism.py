@@ -192,7 +192,10 @@ class PrismTokenizer(PreTrainedTokenizer):
         current_sub_tokens = []
         out_string = ""
         for token in tokens:
-            # make sure that special tokens are not decoded using sentencepiece model
+            # Skip language tokens during decoding
+            if token in self.lang_code_to_token.values():
+                continue
+            # Ensure special tokens are not decoded with the sentencepiece model
             if token in self.all_special_tokens:
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 current_sub_tokens = []
