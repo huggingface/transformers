@@ -32,6 +32,16 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    # `num_inner_values` is used in the modeling file to define InnerFuncAttn
+    # `cross_domain_intermediate_size`, `private_expert_intermediate_size`, `num_cdmmoe_experts`, `num_cdmmoe_heads`, `num_cdmmoe_experts_per_head` are used in the modeling file to define CDMoE
+    "DogeConfig": [
+        "num_inner_values",
+        "cross_domain_intermediate_size",
+        "private_expert_intermediate_size",
+        "num_cdmmoe_experts",
+        "num_cdmmoe_heads",
+        "num_cdmmoe_experts_per_head"
+    ],
     # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
     # periods and offsers are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
     "JambaConfig": [

@@ -396,9 +396,7 @@ _import_structure = {
         "DistilBertTokenizer",
     ],
     "models.dit": [],
-    "models.doge": [
-        "DogeConfig",
-    ],
+    "models.doge": ["DogeConfig"],
     "models.donut": [
         "DonutProcessor",
         "DonutSwinConfig",

@@ -70,6 +70,7 @@ from .utils import (
     is_cython_available,
     is_detectron2_available,
     is_eetq_available,
+    is_einx_available,
     is_essentia_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
@@ -535,6 +536,16 @@ def require_natten(test_case):
 
     """
     return unittest.skipUnless(is_natten_available(), "test requires natten")(test_case)
+
+
+def require_einx(test_case):
+    """
+    Decorator marking a test that requires EINX.
+
+    These tests are skipped when EINX isn't installed.
+
+    """
+    return unittest.skipUnless(is_einx_available(), "test requires einx")(test_case)
 
 
 def require_torch(test_case):

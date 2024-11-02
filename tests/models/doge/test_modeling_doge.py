@@ -60,8 +60,9 @@ class DogeModelTester:
         num_inner_values=1,
         cross_domain_intermediate_size=128,
         private_expert_intermediate_size=32,
-        num_cdmmoe_experts=2,
-        num_cdmmoe_experts_per_head=4,
+        num_cdmmoe_experts=128,
+        num_cdmmoe_heads=1,
+        num_cdmmoe_experts_per_head=2,
         num_labels=2,
         pad_token_id=0,
     ):
@@ -84,6 +85,7 @@ class DogeModelTester:
         self.cross_domain_intermediate_size = cross_domain_intermediate_size
         self.private_expert_intermediate_size = private_expert_intermediate_size
         self.num_cdmmoe_experts = num_cdmmoe_experts
+        self.num_cdmmoe_heads = num_cdmmoe_heads
         self.num_cdmmoe_experts_per_head = num_cdmmoe_experts_per_head
         self.num_labels = num_labels
         self.pad_token_id = pad_token_id
@@ -117,19 +119,42 @@ class DogeModelTester:
             cross_domain_intermediate_size=self.cross_domain_intermediate_size,
             private_expert_intermediate_size=self.private_expert_intermediate_size,
             num_cdmmoe_experts=self.num_cdmmoe_experts,
+            num_cdmmoe_heads=self.num_cdmmoe_heads,
             num_cdmmoe_experts_per_head=self.num_cdmmoe_experts_per_head,
             num_labels=self.num_labels,
             pad_token_id=self.pad_token_id,
+            is_decoder=False,
         )
 
     def create_and_check_model(
-        self, config, input_ids, input_mask
+        self, config, input_ids, input_mask, sequence_labels
     ):
         model = DogeModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+    
+    def create_and_check_model_as_decoder(
+        self, config, input_ids, input_mask, sequence_labels, encoder_hidden_states, encoder_attention_mask
+    ):
+        config.add_cross_attention = True
+        model = DogeModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
@@ -144,6 +169,57 @@ class DogeModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+    
+    def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask, sequence_labels, encoder_hidden_states, encoder_attention_mask):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        model = DogeModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            use_cache=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -182,6 +258,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
+    has_attentions = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -205,7 +282,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 2
         input_ids = input_dict["input_ids"]
-        attention_mask = input_dict.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
         model = DogeForSequenceClassification(config)
         model.to(torch_device)
@@ -218,7 +295,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config.num_labels = 2
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
-        attention_mask = input_dict.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
         model = DogeForSequenceClassification(config)
         model.to(torch_device)
@@ -231,9 +308,9 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config.num_labels = 2
         config.problem_type = "multi_label_classification"
         input_ids = input_dict["input_ids"]
-        attention_mask = input_dict.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
         model = DogeForSequenceClassification(config)
         model.to(torch_device)
@@ -248,4 +325,4 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip("Broken by the loss update will fix soon @ArthurZucker")
     def test_torch_fx_output_loss(self, *args, **kwargs):
         pass
-
+    

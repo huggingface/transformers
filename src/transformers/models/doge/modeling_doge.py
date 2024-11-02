@@ -19,7 +19,6 @@
 """ PyTorch Doge model. """
 
 import math
-from einops.layers.torch import Rearrange
 import einx
 from typing import List, Optional, Tuple, Union
 
@@ -41,7 +40,6 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    add_code_sample_docstrings,
     replace_return_docstrings,
     logging,
 )
@@ -353,7 +351,7 @@ class DogeInnerFuncAttn(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[Cache]]:
-        bsz, seq_len, hidden_size = hidden_states.size()
+        bsz, seq_len, hidden_size = hidden_states.shape
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -423,13 +421,10 @@ class DogeCDMoE(nn.Module):
         )
 
         # queries and keys for retrieval private experts
-        self.queries = nn.Sequential(
-            nn.Linear(
-                self.private_expert_intermediate_dim,
-                self.private_expert_intermediate_dim * self.num_cdmmoe_heads,
-                bias=False,
-            ),
-            Rearrange('b t (p h d) -> p b t h d', p = 2, h = self.num_cdmmoe_heads)
+        self.queries = nn.Linear(
+            self.private_expert_intermediate_dim,
+            self.private_expert_intermediate_dim * self.num_cdmmoe_heads,
+            bias=False,
         )
         self.num_keys = int(math.sqrt(self.num_cdmmoe_experts))
         self.keys = nn.Parameter(
@@ -457,11 +452,13 @@ class DogeCDMoE(nn.Module):
         hidden_states: torch.Tensor,
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        bsz, seq_len, hidden_size = hidden_states.shape
         # cross-domain
         hidden_states = self.shared_down_proj(self.act_fn(self.shared_up_proj(hidden_states)))
    
         # queries
         queries = self.queries(hidden_states)
+        queries = queries.reshape(bsz, seq_len, 2, self.num_cdmmoe_heads, -1).permute(2, 0, 1, 3, 4)
         # get similarity with keys
         sim = torch.einsum('p b t h d, h k p d -> p b t h k', queries, self.keys)
         # get expert scores and indices with the highest similarity
@@ -475,7 +472,7 @@ class DogeCDMoE(nn.Module):
         down_embed = self.down_embed(indices)
         up_embed = self.up_embed(indices)
         
-        # mixture of private experts
+        # efficient retrieval of private experts
         hidden_states = torch.einsum('b t d, b t h k d -> b t h k', hidden_states, down_embed)
         hidden_states = self.act_fn(hidden_states * scores.softmax(dim=-1))
         hidden_states = torch.einsum('b t h k, b t h k d -> b t d', hidden_states, up_embed)

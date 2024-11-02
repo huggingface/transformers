@@ -113,6 +113,7 @@ _coloredlogs_available = _is_package_available("coloredlogs")
 _cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
 _detectron2_available = _is_package_available("detectron2")
+_einx_available = _is_package_available("einx")
 # We need to check both `faiss` and `faiss-cpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
@@ -444,6 +445,16 @@ def is_causal_conv1d_available():
         if not torch.cuda.is_available():
             return False
         return _is_package_available("causal_conv1d")
+    return False
+
+
+def is_einx_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        return _einx_available
     return False
 
 
