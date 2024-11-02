@@ -66,14 +66,13 @@ llama_role_conversions = {
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
-
 class HfApiEngine:
     """A class to interact with Hugging Face's Inference API for language model interaction.
 
     This engine allows you to communicate with Hugging Face's models using the Inference API. It can be used in both serverless mode or with a dedicated endpoint, supporting features like stop sequences and grammar customization.
 
     Parameters:
-        model (`str`, *optional*, defaults to "meta-llama/Meta-Llama-3.1-8B-Instruct"):
+        model (`str`, *optional*, defaults to `"meta-llama/Meta-Llama-3.1-8B-Instruct"`):
             The Hugging Face model ID to be used for inference. This can be a path or model identifier from the Hugging Face model hub.
         token (`str`, *optional*):
             The Hugging Face API token for authentication. If not provided, the class will use the token stored in the Hugging Face CLI configuration.
@@ -103,7 +102,10 @@ class HfApiEngine:
         self.max_tokens = max_tokens
 
     def __call__(
-        self, messages: List[Dict[str, str]], stop_sequences: List[str] = [], grammar: Optional[str] = None
+        self,
+        messages: List[Dict[str, str]],
+        stop_sequences: Optional[List[str]] = [],
+        grammar: Optional[str] = None,
     ) -> str:
         """Process the input messages and return the model's response.
 
@@ -151,7 +153,6 @@ class HfApiEngine:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
         return response
-
 
 class TransformersEngine:
     """This engine uses a pre-initialized local text-generation pipeline."""
