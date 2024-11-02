@@ -348,7 +348,7 @@ class DogeInnerFuncAttn(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[Cache]]:
-        bsz, seq_len, hidden_size = hidden_states.shape
+        bsz, seq_len, _ = hidden_states.shape
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -383,7 +383,7 @@ class DogeInnerFuncAttn(nn.Module):
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.transpose(1, 2).contiguous().reshape(bsz, seq_len, hidden_size)
+        attn_output = attn_output.transpose(1, 2).contiguous().reshape(bsz, seq_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
 
         return attn_output, past_key_value
