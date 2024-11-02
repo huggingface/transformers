@@ -45,6 +45,7 @@ from ...utils import (
 from ...utils.import_utils import is_einx_available
 from .configuration_doge import DogeConfig
 
+
 if is_einx_available():
     try:
         from einx import add as einx_add
