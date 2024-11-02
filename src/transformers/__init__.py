@@ -2112,18 +2112,18 @@ else:
             "DistilBertPreTrainedModel",
         ]
     )
-    _import_structure["models.donut"].extend(
-        [
-            "DonutSwinModel",
-            "DonutSwinPreTrainedModel",
-        ]
-    )
     _import_structure["models.doge"].extend(
         [
             "DogeForCausalLM",
             "DogeForSequenceClassification",
             "DogeModel",
             "DogePreTrainedModel",
+        ]
+    )
+    _import_structure["models.donut"].extend(
+        [
+            "DonutSwinModel",
+            "DonutSwinPreTrainedModel",
         ]
     )
     _import_structure["models.dpr"].extend(
