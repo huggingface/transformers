@@ -47,15 +47,19 @@ from .configuration_doge import DogeConfig
 
 
 if is_einx_available():
-    try:
-        from einx import add as einx_add
-    except ImportError:
-        raise ImportError("Please run `pip install einx` to install einx.")
-
+    from einx import add as einx_add
+else:
+    einx_add = None
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DogeConfig"
+
+
+if einx_add is None:
+    logger.warning(
+        "You have to install einx with `pip install einx` to use the Doge model. "
+    )
 
 
 class RMSNorm(nn.Module):
