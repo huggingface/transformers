@@ -81,6 +81,7 @@ class RMSNorm(nn.Module):
 class RotaryEmbedding(nn.Module):
     def __init__(self, config: Optional[DogeConfig] = None):
         super().__init__()
+        self.rope_kwargs = {}
 
         if config.rope_scaling is None:
             self.rope_type = "default"
@@ -89,12 +90,10 @@ class RotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.base = config.rope_theta
-        self.dim = config.hidden_size // config.num_attention_heads
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        self.rope_kwargs = {"base": self.base, "dim": self.dim}
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, **self.rope_kwargs)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
