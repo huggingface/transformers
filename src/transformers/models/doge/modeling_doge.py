@@ -45,13 +45,14 @@ from ...utils import (
 from ...utils.import_utils import is_einx_available
 from .configuration_doge import DogeConfig
 
-logger = logging.get_logger(__name__)
-
 if is_einx_available():
     try:
         from einx import add as einx_add
     except ImportError:
         raise ImportError("Please run `pip install einx` to install einx.")
+
+
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DogeConfig"
 
