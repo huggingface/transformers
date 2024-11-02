@@ -1,6 +1,6 @@
 # coding=utf-8
 # Copyright 2024 Jingze Shi and the HuggingFace Inc. team.    All rights reserved.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -54,10 +54,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_doge import (
-            DogePreTrainedModel,
-            DogeModel,
             DogeForCausalLM,
             DogeForSequenceClassification,
+            DogeModel,
+            DogePreTrainedModel,
         )
 
 

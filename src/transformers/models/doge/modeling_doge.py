@@ -4,7 +4,7 @@
 # This code is based on the Wonderful Matrices paper implementation.
 #     https://arxiv.org/abs/2407.16958
 # But removed the SSD part to adapt to most environments.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -19,7 +19,6 @@
 """ PyTorch Doge model. """
 
 import math
-import einx
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -27,25 +26,26 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+import einx
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
-    SequenceClassifierOutputWithPast,
     CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
     logging,
+    replace_return_docstrings,
 )
 
 from .configuration_doge import DogeConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -75,7 +75,7 @@ class RotaryEmbedding(nn.Module):
     def __init__(self, config: Optional[DogeConfig] = None):
         super().__init__()
         self.rope_kwargs = {}
-     
+
         if config.rope_scaling is None:
             self.rope_type = "default"
         else:
@@ -206,13 +206,13 @@ class DogeInnerFuncAttn(nn.Module):
             )
         self.v_keys = nn.Parameter(
             torch.zeros(
-                self.num_inner_values, 
-                self.attention_head_dim
+                self.num_inner_values,
+                self.attention_head_dim,
             )
         )
         self.v_embed = nn.Embedding(
             self.num_inner_values,
-            self.attention_head_dim * self.num_attention_heads
+            self.attention_head_dim * self.num_attention_heads,
         )
         self.o_proj = nn.Linear(
             self.hidden_size,
@@ -302,9 +302,9 @@ class DogeInnerFuncAttn(nn.Module):
             num_heads = 1 if dynamic_mask is None else dynamic_mask.size(0)
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), 
-                fill_value=min_dtype, 
-                dtype=dtype, 
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
                 device=device
             )
             if sequence_length != 1:
@@ -318,7 +318,7 @@ class DogeInnerFuncAttn(nn.Module):
                 if dynamic_mask is not None:
                     dynamic_mask = dynamic_mask[None, :, None, :mask_length].expand(batch_size, -1, 1, -1)
                     attention_mask = attention_mask.clone() * dynamic_mask
-        
+
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask == 0, min_dtype
@@ -327,8 +327,8 @@ class DogeInnerFuncAttn(nn.Module):
         return causal_mask
 
     def inner_func(
-        self, 
-        hidden_states: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
     ) -> torch.Tensor:
         """
         Each value can share weights with other values to increase the expressive power
@@ -354,7 +354,7 @@ class DogeInnerFuncAttn(nn.Module):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.inner_func(hidden_states)
-    
+
         query_states = query_states.reshape(bsz, seq_len, self.num_attention_heads, self.attention_head_dim).transpose(1, 2)
         key_states = key_states.reshape(bsz, seq_len, self.num_attention_heads, self.attention_head_dim).transpose(1, 2)
         value_states = value_states.reshape(bsz, seq_len, self.num_attention_heads, self.attention_head_dim).transpose(1, 2)
@@ -366,14 +366,14 @@ class DogeInnerFuncAttn(nn.Module):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-        
+
         attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2)) / math.sqrt(self.attention_head_dim)
-        
+
         causal_mask = self._update_causal_mask(attention_mask, hidden_states, cache_position, past_key_value)
         # no matter the length, we just slice it
         causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
-        
+
         # upcast attention to fp32
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_output = torch.matmul(attn_weights, value_states)
@@ -383,7 +383,7 @@ class DogeInnerFuncAttn(nn.Module):
                 f"`attn_output` should be of size {(bsz, self.num_attention_heads, seq_len, self.attention_head_dim)}, but is"
                 f" {attn_output.size()}"
             )
-        
+
         attn_output = attn_output.transpose(1, 2).contiguous().reshape(bsz, seq_len, hidden_size)
         attn_output = self.o_proj(attn_output)
 
@@ -404,18 +404,18 @@ class DogeCDMoE(nn.Module):
         self.num_cdmmoe_experts = config.num_cdmmoe_experts
         self.num_cdmmoe_heads = config.num_cdmmoe_heads
         self.num_cdmmoe_experts_per_head = config.num_cdmmoe_experts_per_head
-        
+
         # shared parameter up Linear
         self.shared_up_proj = nn.Linear(
-            self.hidden_dim, 
-            self.cross_domain_intermediate_size, 
-            bias=config.hidden_bias, 
+            self.hidden_dim,
+            self.cross_domain_intermediate_size,
+            bias=config.hidden_bias,
         )
         # shared parameter down Linear
         self.shared_down_proj = nn.Linear(
             self.cross_domain_intermediate_size,
             self.private_expert_intermediate_dim, 
-            bias=config.hidden_bias, 
+            bias=config.hidden_bias,
         )
 
         # queries and keys for retrieval private experts
@@ -427,8 +427,8 @@ class DogeCDMoE(nn.Module):
         self.num_keys = int(math.sqrt(self.num_cdmmoe_experts))
         self.keys = nn.Parameter(
             torch.zeros(
-                self.num_cdmmoe_heads, 
-                self.num_keys, 
+                self.num_cdmmoe_heads,
+                self.num_keys,
                 2,
                 self.private_expert_intermediate_dim // 2
             )
@@ -452,7 +452,7 @@ class DogeCDMoE(nn.Module):
         bsz, seq_len, hidden_size = hidden_states.shape
         # cross-domain
         hidden_states = self.shared_down_proj(self.act_fn(self.shared_up_proj(hidden_states)))
-   
+
         # queries
         queries = self.queries(hidden_states)
         queries = queries.reshape(bsz, seq_len, 2, self.num_cdmmoe_heads, -1).permute(2, 0, 1, 3, 4)
@@ -468,7 +468,7 @@ class DogeCDMoE(nn.Module):
         # get related expert embeddings based on indices
         down_embed = self.down_embed(indices)
         up_embed = self.up_embed(indices)
-        
+
         # efficient retrieval of private experts
         hidden_states = torch.einsum('b t d, b t h k d -> b t h k', hidden_states, down_embed)
         hidden_states = self.act_fn(hidden_states * scores.softmax(dim=-1))
@@ -782,7 +782,7 @@ class DogeModel(DogePreTrainedModel):
 
             if use_cache:
                 next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-            
+
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -798,7 +798,7 @@ class DogeModel(DogePreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -844,7 +844,7 @@ class DogeModel(DogePreTrainedModel):
     #     )
 
     #     return causal_mask
-    
+
 
     # @staticmethod
     # def _prepare_4d_causal_attention_mask_with_cache_position(

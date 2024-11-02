@@ -4,7 +4,7 @@
 # This code is based on the Wonderful Matrices paper implementation.
 #     https://arxiv.org/abs/2407.16958
 # But removed the SSD part to adapt to most environments.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -141,8 +141,8 @@ class DogeConfig(PretrainedConfig):
         cross_domain_intermediate_size=4096,
         private_expert_intermediate_size=1024,
         num_cdmmoe_experts=4096,
-        num_cdmmoe_heads=1, 
-        num_cdmmoe_experts_per_head=2, 
+        num_cdmmoe_heads=1,
+        num_cdmmoe_experts_per_head=2,
         **kwargs
     ):
         self.vocab_size = vocab_size
