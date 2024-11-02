@@ -1841,8 +1841,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_large_generation(self):
         torch_device = "cpu"
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(1)
@@ -1854,7 +1854,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
