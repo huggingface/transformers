@@ -34,7 +34,7 @@ if is_torch_available():
     from transformers import (
         DogeForCausalLM,
         DogeForSequenceClassification,
-        DogeModel
+        DogeModel,
     )
 
 
