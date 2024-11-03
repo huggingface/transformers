@@ -155,10 +155,10 @@ class SuperGlueMultiHeadAttentionConversionModel:
 
     @staticmethod
     def convert_state_dict(state_dict):
-        state_dict["q_proj.weight"] = state_dict["q_proj.weight"].squeeze(-1)
-        state_dict["k_proj.weight"] = state_dict["k_proj.weight"].squeeze(-1)
-        state_dict["v_proj.weight"] = state_dict["v_proj.weight"].squeeze(-1)
-        state_dict["out_proj.weight"] = state_dict["out_proj.weight"].squeeze(-1)
+        state_dict["self.query.weight"] = state_dict["self.query.weight"].squeeze(-1)
+        state_dict["self.key.weight"] = state_dict["self.key.weight"].squeeze(-1)
+        state_dict["self.value.weight"] = state_dict["self.value.weight"].squeeze(-1)
+        state_dict["output.dense.weight"] = state_dict["output.dense.weight"].squeeze(-1)
         return state_dict
 
 
@@ -256,14 +256,14 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"kenc.encoder.(\d+).running_mean": r"keypoint_encoder.encoder.mlp_layers.\1.running_mean",
     r"kenc.encoder.(\d+).running_var": r"keypoint_encoder.encoder.mlp_layers.\1.running_var",
     r"kenc.encoder.(\d+).num_batches_tracked": r"keypoint_encoder.encoder.mlp_layers.\1.num_batches_tracked",
-    r"gnn.layers.(\d+).attn.proj.0.weight": r"gnn.gnn_layers.\1.attention.q_proj.weight",
-    r"gnn.layers.(\d+).attn.proj.0.bias": r"gnn.gnn_layers.\1.attention.q_proj.bias",
-    r"gnn.layers.(\d+).attn.proj.1.weight": r"gnn.gnn_layers.\1.attention.k_proj.weight",
-    r"gnn.layers.(\d+).attn.proj.1.bias": r"gnn.gnn_layers.\1.attention.k_proj.bias",
-    r"gnn.layers.(\d+).attn.proj.2.weight": r"gnn.gnn_layers.\1.attention.v_proj.weight",
-    r"gnn.layers.(\d+).attn.proj.2.bias": r"gnn.gnn_layers.\1.attention.v_proj.bias",
-    r"gnn.layers.(\d+).attn.merge.weight": r"gnn.gnn_layers.\1.attention.out_proj.weight",
-    r"gnn.layers.(\d+).attn.merge.bias": r"gnn.gnn_layers.\1.attention.out_proj.bias",
+    r"gnn.layers.(\d+).attn.proj.0.weight": r"gnn.gnn_layers.\1.attention.self.query.weight",
+    r"gnn.layers.(\d+).attn.proj.0.bias": r"gnn.gnn_layers.\1.attention.self.query.bias",
+    r"gnn.layers.(\d+).attn.proj.1.weight": r"gnn.gnn_layers.\1.attention.self.key.weight",
+    r"gnn.layers.(\d+).attn.proj.1.bias": r"gnn.gnn_layers.\1.attention.self.key.bias",
+    r"gnn.layers.(\d+).attn.proj.2.weight": r"gnn.gnn_layers.\1.attention.self.value.weight",
+    r"gnn.layers.(\d+).attn.proj.2.bias": r"gnn.gnn_layers.\1.attention.self.value.bias",
+    r"gnn.layers.(\d+).attn.merge.weight": r"gnn.gnn_layers.\1.attention.output.dense.weight",
+    r"gnn.layers.(\d+).attn.merge.bias": r"gnn.gnn_layers.\1.attention.output.dense.bias",
     r"gnn.layers.(\d+).mlp.(\d+).weight": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.weight",
     r"gnn.layers.(\d+).mlp.(\d+).bias": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.bias",
     r"gnn.layers.(\d+).mlp.(\d+).running_mean": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.running_mean",
@@ -402,7 +402,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_outdoor.pth",
+        default="https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_indoor.pth",
         type=str,
         help="URL of the original SuperGlue checkpoint you'd like to convert.",
     )

@@ -104,4 +104,9 @@ class SuperGlueConfig(PretrainedConfig):
         self.keypoint_detector_config = keypoint_detector_config
         self.initializer_range = initializer_range
 
+        self.hidden_size = self.descriptor_dim
+        self.num_attention_heads = self.num_heads
+        self.attention_probs_dropout_prob = 0
+        self.is_decoder = False
+
         super().__init__(**kwargs)
