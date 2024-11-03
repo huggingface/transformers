@@ -761,7 +761,7 @@ class DabDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 TOLERANCE = 1e-4
-CHECKPOINT = "davidhajdu/dab-detr-resnet-50"
+CHECKPOINT = "IDEA-Research/dab-detr-resnet-50"
 
 
 # We will verify our results on an image of cute cats

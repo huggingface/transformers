@@ -214,9 +214,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pretrained_model_weights_path",
-        default="/Users/davidhajdu/Desktop/all_weights/R50/checkpoint.pth",
+        default="modelzoo/R50/checkpoint.pth",
         type=str,
-        help="The path of the original model weights like: Users/username/Desktop/checkpoint.pth",
+        help="The path of the original model weights like: modelzoo/checkpoint.pth",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default="DAB_DETR", type=str, help="Path to the folder to output PyTorch model."
