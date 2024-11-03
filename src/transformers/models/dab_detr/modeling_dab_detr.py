@@ -22,6 +22,7 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -33,7 +34,6 @@ from ...utils import (
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_dab_detr import DabDetrConfig
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 
 
 logger = logging.get_logger(__name__)
@@ -140,7 +140,7 @@ class DabDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrImageProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~DabDetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -1089,7 +1089,6 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         hidden_size = config.hidden_size
         self.layernorm = nn.LayerNorm(hidden_size)
 
-
         # Default cond-elewise
         self.query_scale = DabDetrMLP(hidden_size, hidden_size, hidden_size, 2)
 
@@ -1288,7 +1287,9 @@ class DabDetrModel(DabDetrPreTrainedModel):
             self.query_refpoint_embeddings.weight.data[:, :2].requires_grad = False
 
         # Create projection layer
-        self.input_projection = nn.Conv2d(self.backbone.intermediate_channel_sizes[-1], config.hidden_size, kernel_size=1)
+        self.input_projection = nn.Conv2d(
+            self.backbone.intermediate_channel_sizes[-1], config.hidden_size, kernel_size=1
+        )
         self.backbone = DabDetrConvModel(self.backbone, object_queries)
 
         self.encoder = DabDetrEncoder(config)
@@ -1693,46 +1694,6 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
             encoder_hidden_states=model_outputs.encoder_hidden_states if output_hidden_states else None,
             encoder_attentions=model_outputs.encoder_attentions if output_attentions else None,
         )
-
-
-# Copied from transformers.models.detr.modeling_detr.NestedTensor
-class NestedTensor:
-    def __init__(self, tensors, mask: Optional[Tensor]):
-        self.tensors = tensors
-        self.mask = mask
-
-    def to(self, device):
-        cast_tensor = self.tensors.to(device)
-        mask = self.mask
-        if mask is not None:
-            cast_mask = mask.to(device)
-        else:
-            cast_mask = None
-        return NestedTensor(cast_tensor, cast_mask)
-
-    def decompose(self):
-        return self.tensors, self.mask
-
-    def __repr__(self):
-        return str(self.tensors)
-
-
-# Copied from transformers.models.detr.modeling_detr.nested_tensor_from_tensor_list
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
-    if tensor_list[0].ndim == 3:
-        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        batch_shape = [len(tensor_list)] + max_size
-        batch_size, num_channels, height, width = batch_shape
-        dtype = tensor_list[0].dtype
-        device = tensor_list[0].device
-        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
-        for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], : img.shape[2]] = False
-    else:
-        raise ValueError("Only 3-dimensional tensors are supported")
-    return NestedTensor(tensor, mask)
 
 
 __all__ = [

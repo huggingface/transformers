@@ -23,7 +23,7 @@ from pathlib import Path
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import DabDetrConfig, DabDetrForObjectDetection, ConditionalDetrImageProcessor
+from transformers import DabDetrConfig, DabDetrForObjectDetection, DetrImageProcessor
 from transformers.utils import logging
 
 
@@ -33,60 +33,60 @@ logger = logging.get_logger(__name__)
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
     # for dab-DETR, also convert reference point head and query scale MLP
-    r"input_proj.(bias|weight)": r"input_projection.\1",
-    r"refpoint_embed.weight": r"query_refpoint_embeddings.weight",
-    r"class_embed.(bias|weight)": r"class_embed.\1",
+    r"input_proj\.(bias|weight)": r"input_projection.\1",
+    r"refpoint_embed\.weight": r"query_refpoint_embeddings.weight",
+    r"class_embed\.(bias|weight)": r"class_embed.\1",
     # negative lookbehind because of the overlap
-    r"(?<!transformer\.decoder\.)bbox_embed.layers.(\d+).(bias|weight)": r"bbox_predictor.layers.\1.\2",
-    r"transformer.encoder.query_scale.layers.(\d+).(bias|weight)": r"encoder.query_scale.layers.\1.\2",
-    r"transformer.decoder.bbox_embed.layers.(\d+).(bias|weight)": r"decoder.bbox_embed.layers.\1.\2",
-    r"transformer.decoder.norm.(bias|weight)": r"decoder.layernorm.\1",
-    r"transformer.decoder.ref_point_head.layers.(\d+).(bias|weight)": r"decoder.ref_point_head.layers.\1.\2",
-    r"transformer.decoder.ref_anchor_head.layers.(\d+).(bias|weight)": r"decoder.ref_anchor_head.layers.\1.\2",
-    r"transformer.decoder.query_scale.layers.(\d+).(bias|weight)": r"decoder.query_scale.layers.\1.\2",
-    r"transformer.decoder.layers.0.ca_qpos_proj.(bias|weight)": r"decoder.layers.0.layer.1.cross_attn_query_pos_proj.\1",
+    r"(?<!transformer\.decoder\.)bbox_embed\.layers\.(\d+)\.(bias|weight)": r"bbox_predictor.layers.\1.\2",
+    r"transformer\.encoder\.query_scale\.layers\.(\d+)\.(bias|weight)": r"encoder.query_scale.layers.\1.\2",
+    r"transformer\.decoder\.bbox_embed\.layers\.(\d+)\.(bias|weight)": r"decoder.bbox_embed.layers.\1.\2",
+    r"transformer\.decoder\.norm\.(bias|weight)": r"decoder.layernorm.\1",
+    r"transformer\.decoder\.ref_point_head\.layers\.(\d+)\.(bias|weight)": r"decoder.ref_point_head.layers.\1.\2",
+    r"transformer\.decoder\.ref_anchor_head\.layers\.(\d+)\.(bias|weight)": r"decoder.ref_anchor_head.layers.\1.\2",
+    r"transformer\.decoder\.query_scale\.layers\.(\d+)\.(bias|weight)": r"decoder.query_scale.layers.\1.\2",
+    r"transformer\.decoder\.layers\.0\.ca_qpos_proj\.(bias|weight)": r"decoder.layers.0.layer.1.cross_attn_query_pos_proj.\1",
     # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms + activation function
     # output projection
-    r"transformer.encoder.layers.(\d+).self_attn.out_proj.(bias|weight)": r"encoder.layers.\1.self_attn.out_proj.\2",
+    r"transformer\.encoder\.layers\.(\d+)\.self_attn\.out_proj\.(bias|weight)": r"encoder.layers.\1.self_attn.out_proj.\2",
     # FFN layers
-    r"transformer.encoder.layers.(\d+).linear(\d).(bias|weight)": r"encoder.layers.\1.fc\2.\3",
+    r"transformer\.encoder\.layers\.(\d+)\.linear(\d)\.(bias|weight)": r"encoder.layers.\1.fc\2.\3",
     # normalization layers
     # nm1
-    r"transformer.encoder.layers.(\d+).norm1.(bias|weight)": r"encoder.layers.\1.self_attn_layer_norm.\2",
+    r"transformer\.encoder\.layers\.(\d+)\.norm1\.(bias|weight)": r"encoder.layers.\1.self_attn_layer_norm.\2",
     # nm2
-    r"transformer.encoder.layers.(\d+).norm2.(bias|weight)": r"encoder.layers.\1.final_layer_norm.\2",
+    r"transformer\.encoder\.layers\.(\d+)\.norm2\.(bias|weight)": r"encoder.layers.\1.final_layer_norm.\2",
     # activation function weight
-    r"transformer.encoder.layers.(\d+).activation.weight": r"encoder.layers.\1.activation_fn.weight",
+    r"transformer\.encoder\.layers\.(\d+)\.activation\.weight": r"encoder.layers.\1.activation_fn.weight",
     #########################################################################################################################################
     # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms + activiation function weight
-    r"transformer.decoder.layers.(\d+).self_attn.out_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn.output_proj.\2",
-    r"transformer.decoder.layers.(\d+).cross_attn.out_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn.output_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.self_attn\.out_proj\.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn.output_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.cross_attn\.out_proj\.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn.output_proj.\2",
     # FFNs
-    r"transformer.decoder.layers.(\d+).linear(\d).(bias|weight)": r"decoder.layers.\1.layer.2.fc\2.\3",
+    r"transformer\.decoder\.layers\.(\d+)\.linear(\d)\.(bias|weight)": r"decoder.layers.\1.layer.2.fc\2.\3",
     # nm1
-    r"transformer.decoder.layers.(\d+).norm1.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_layer_norm.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.norm1\.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_layer_norm.\2",
     # nm2
-    r"transformer.decoder.layers.(\d+).norm2.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_layer_norm.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.norm2\.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_layer_norm.\2",
     # nm3
-    r"transformer.decoder.layers.(\d+).norm3.(bias|weight)": r"decoder.layers.\1.layer.2.final_layer_norm.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.norm3\.(bias|weight)": r"decoder.layers.\1.layer.2.final_layer_norm.\2",
     # activation function weight
-    r"transformer.decoder.layers.(\d+).activation.weight": r"decoder.layers.\1.layer.2.activation_fn.weight",
+    r"transformer\.decoder\.layers\.(\d+)\.activation\.weight": r"decoder.layers.\1.layer.2.activation_fn.weight",
     # q, k, v projections and biases in self-attention in decoder
-    r"transformer.decoder.layers.(\d+).sa_qcontent_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_query_content_proj.\2",
-    r"transformer.decoder.layers.(\d+).sa_kcontent_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_key_content_proj.\2",
-    r"transformer.decoder.layers.(\d+).sa_qpos_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_query_pos_proj.\2",
-    r"transformer.decoder.layers.(\d+).sa_kpos_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_key_pos_proj.\2",
-    r"transformer.decoder.layers.(\d+).sa_v_proj.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_value_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.sa_qcontent_proj\.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_query_content_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.sa_kcontent_proj\.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_key_content_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.sa_qpos_proj\.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_query_pos_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.sa_kpos_proj\.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_key_pos_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.sa_v_proj\.(bias|weight)": r"decoder.layers.\1.layer.0.self_attn_value_proj.\2",
     # q, k, v projections in cross-attention in decoder
-    r"transformer.decoder.layers.(\d+).ca_qcontent_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_query_content_proj.\2",
-    r"transformer.decoder.layers.(\d+).ca_kcontent_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_key_content_proj.\2",
-    r"transformer.decoder.layers.(\d+).ca_kpos_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_key_pos_proj.\2",
-    r"transformer.decoder.layers.(\d+).ca_v_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_value_proj.\2",
-    r"transformer.decoder.layers.(\d+).ca_qpos_sine_proj.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_query_pos_sine_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.ca_qcontent_proj\.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_query_content_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.ca_kcontent_proj\.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_key_content_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.ca_kpos_proj\.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_key_pos_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.ca_v_proj\.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_value_proj.\2",
+    r"transformer\.decoder\.layers\.(\d+)\.ca_qpos_sine_proj\.(bias|weight)": r"decoder.layers.\1.layer.1.cross_attn_query_pos_sine_proj.\2",
 }
 
 
-# Copied from transformers.models.llama.modeling_conditional_detr.convert_llama_weights_to_hf
+# Copied from transformers.models.mllama.convert_mllama_weights_to_hf.convert_old_keys_to_new_keys
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
@@ -108,7 +108,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
 def write_image_processor(model_name, pytorch_dump_folder_path, push_to_hub):
     logger.info("Converting image processor...")
     format = "coco_detection"
-    image_processor = ConditionalDetrImageProcessor(format=format)
+    image_processor = DetrImageProcessor(format=format)
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
@@ -186,7 +186,7 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
     # finally, create HuggingFace model and load state dict
     model = DabDetrForObjectDetection(config)
     model.load_state_dict(state_dict)
-
+    model.eval()
     logger.info(f"Saving PyTorch model to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
