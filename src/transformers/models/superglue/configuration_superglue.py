@@ -70,7 +70,7 @@ class SuperGlueConfig(PretrainedConfig):
         num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,
-        initializer_range=0.02,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
