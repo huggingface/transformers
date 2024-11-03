@@ -37,20 +37,18 @@ can be readily integrated into modern SfM or SLAM systems. The code and trained 
 ## How to use
 
 Here is a quick example of using the model. Since this model is an image matching model, it requires pairs of images to be matched. 
-The outputs contain the list of keypoints detected by the keypoint detector as well as the list of matches with their corresponding 
-matching scores. Due to the nature of SuperGlue, to output a dynamic number of matches, you will need to use the mask attribute to 
-retrieve the respective information:
-
+The raw outputs contain the list of keypoints detected by the keypoint detector as well as the list of matches with their corresponding 
+matching scores.
 ```python
 from transformers import AutoImageProcessor, AutoModel
 import torch
 from PIL import Image
 import requests
 
-url_image1 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur1.jpg?raw=true"
-image1 = Image.open(requests.get(url_image1, stream=True).raw)
-url_image2 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur2.jpg?raw=true"
-image2 = Image.open(requests.get(url_image2, stream=True).raw)
+url_image_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+image_1 = Image.open(requests.get(url_image_1, stream=True).raw)
+url_image_2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
 
 images = [image1, image2]
 
@@ -74,42 +72,61 @@ image0_matching_scores = outputs.matching_scores[0, 0][image0_indices]
 image1_matching_scores = outputs.matching_scores[0, 1][image1_indices]
 ```
 
-You can then print the matched keypoints on a side-by-side image to visualize the result:
-
+You can use the `post_process_keypoint_matching` method from the `SuperGlueImageProcessor` to get the keypoints and matches in a more readable format:
 ```python
-import numpy as np
+image_sizes = [[(image.height, image.width) for image in images]]
+outputs = processor.post_process_keypoint_matching(outputs, image_sizes)
+for i, output in enumerate(outputs):
+    print("For the image pair", i)
+    for keypoint0, keypoint1, matching_score in zip(
+            output["keypoints0"], output["keypoints1"], output["matching_scores"]
+    ):
+        print(
+            f"Keypoint at coordinate {keypoint0.numpy()} in the first image matches with keypoint at coordinate {keypoint1.numpy()} in the second image with a score of {matching_score}."
+        )
+
+```
+
+From the outputs, you can visualize the matches between the two images using the following code:
+```python
 import matplotlib.pyplot as plt
+import numpy as np
 
 # Create side by side image
-input_data = inputs["pixel_values"]
-height, width = input_data.shape[-2:]
-matched_image = np.zeros((height, width * 2, 3))
-matched_image[:, :width] = input_data.squeeze()[0].permute(1, 2, 0).cpu().numpy()
-matched_image[:, width:] = input_data.squeeze()[1].permute(1, 2, 0).cpu().numpy()
-matched_image = (matched_image * 255).astype(np.uint8)
+merged_image = np.zeros((max(image1.height, image2.height), image1.width + image2.width, 3))
+merged_image[: image1.height, : image1.width] = np.array(image1) / 255.0
+merged_image[: image2.height, image1.width :] = np.array(image2) / 255.0
+plt.imshow(merged_image)
+plt.axis("off")
 
-# Get the respective image keypoints
-image0_keypoints = outputs.keypoints[0, 0][image0_mask]
-image1_keypoints = outputs.keypoints[0, 1][image0_matches[image0_matches > -1]]
+# Retrieve the keypoints and matches
+output = outputs[0]
+keypoints0 = output["keypoints0"]
+keypoints1 = output["keypoints1"]
+matching_scores = output["matching_scores"]
+keypoints0_x, keypoints0_y = keypoints0[:, 0].numpy(), keypoints0[:, 1].numpy()
+keypoints1_x, keypoints1_y = keypoints1[:, 0].numpy(), keypoints1[:, 1].numpy()
 
-# Draw matches
-plt.imshow(matched_image)
-plt.axis('off')
+# Plot the matches
+for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
+        keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, matching_scores
+):
+    plt.plot(
+        [keypoint0_x, keypoint1_x + image1.width],
+        [keypoint0_y, keypoint1_y],
+        color=plt.get_cmap("RdYlGn")(matching_score.item()),
+        alpha=0.9,
+        linewidth=0.5,
+    )
+    plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
+    plt.scatter(keypoint1_x + image1.width, keypoint1_y, c="black", s=2)
 
-# Draw matches based on score threshold
-for keypoint0, keypoint1, score in zip(image0_keypoints, image1_keypoints, image0_matching_scores):
-    if score > 0.1:
-        keypoint0_x, keypoint0_y = int(keypoint0[0]), int(keypoint0[1])
-        keypoint1_x, keypoint1_y = int(keypoint1[0] + width), int(keypoint1[1])
-        color = [score.item()] * 3  # Set color based on score
-        plt.plot([keypoint0_x, keypoint1_x], [keypoint0_y, keypoint1_y], color=color, linewidth=1)
-
-# Save the image
-plt.savefig("matched_image.png")
+# Save the plot
+plt.savefig("matched_image.png", dpi=300, bbox_inches='tight')
 plt.close()
 ```
 
-![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/PiLL7svnN2dTqOxrsobJb.png)
+![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/01ZYaLB1NL5XdA8u7yCo4.png)
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 The original code can be found [here](https://github.com/magicleap/SuperGluePretrainedNetwork).
