@@ -102,48 +102,7 @@ boxes = [pascal_voc_to_coco(boxes.cpu().numpy())]
 image_processor = VitPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple")
 model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
 
-keypoint_edges = [
-    [15, 13],
-    [13, 11],
-    [16, 14],
-    [14, 12],
-    [11, 12],
-    [5, 11],
-    [6, 12],
-    [5, 6],
-    [5, 7],
-    [6, 8],
-    [7, 9],
-    [8, 10],
-    [1, 2],
-    [0, 1],
-    [0, 2],
-    [1, 3],
-    [2, 4],
-    [3, 5],
-    [4, 6],
-],
-keypoint_nodes = [
-    "Nose",
-    "L_Eye",
-    "R_Eye",
-    "L_Ear",
-    "R_Ear",
-    "L_Shoulder",
-    "R_Shoulder",
-    "L_Elbow",
-    "R_Elbow",
-    "L_Wrist",
-    "R_Wrist",
-    "L_Hip",
-    "R_Hip",
-    "L_Knee",
-    "R_Knee",
-    "L_Ankle",
-    "R_Ankle",
-],
-
-config = VitPoseConfig(keypoint_edges=keypoint_edges, keypoint_nodes=keypoint_nodes)
+config = VitPoseConfig()
 
 # Stage 2. Run ViTPose
 pixel_values = image_processor(image, boxes=boxes, return_tensors="pt").pixel_values
