@@ -233,7 +233,7 @@ urllib3==1.26.19
 wasabi==0.9.0
 wcwidth==0.2.5
 websocket-client==1.3.1
-Werkzeug==3.0.3
+Werkzeug==3.0.6
 wrapt==1.14.0
 xxhash==3.0.0
 yarl==1.7.2
