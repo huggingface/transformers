@@ -15,10 +15,15 @@ limitations under the License.
 -->
 
 <p align="center">
-    <br>
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo_name.png" width="400"/>
-    <br>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://huggingface.co/datasets/huggingface/documentation-images/raw/main/transformers-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://huggingface.co/datasets/huggingface/documentation-images/raw/main/transformers-logo-light.svg">
+    <img alt="Hugging Face Transformers Library" src="https://huggingface.co/datasets/huggingface/documentation-images/raw/main/transformers-logo-light.svg" width="352" height="59" style="max-width: 100%;">
+  </picture>
+  <br/>
+  <br/>
 </p>
+
 <p align="center">
     <a href="https://circleci.com/gh/huggingface/transformers"><img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/main"></a>
     <a href="https://github.com/huggingface/transformers/blob/main/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/huggingface/transformers.svg?color=blue"></a>
@@ -119,10 +124,10 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 
 만일 소유한 혹은 사용하고 계신 프로젝트가 이 리스트에 꼭 등재되어야 한다고 믿으신다면, PR을 열고 추가하여 주세요!
 
-## Hugging Face 팀과 직접 대화하고 싶으신가요?
+## 조직 안에서 AI 사용에 대해 진지하게 고민 중이신가요? Hugging Face Enterprise Hub을 통해 더 빨리 구축해 보세요.
 
-<a target="_blank" href="https://huggingface.co/support">
-    <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+<a target="_blank" href="https://huggingface.co/enterprise">
+    <img alt="Hugging Face Enterprise Hub" src="https://github.com/user-attachments/assets/247fb16d-d251-4583-96c4-d3d76dda4925">
 </a><br>
 
 ## 퀵 투어
@@ -132,7 +137,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 ```python
 >>> from transformers import pipeline
 
-# Allocate a pipeline for sentiment-analysis
+# 감정 분석 파이프라인을 할당하세요
 >>> classifier = pipeline('sentiment-analysis')
 >>> classifier('We are very happy to introduce pipeline to the transformers repository.')
 [{'label': 'POSITIVE', 'score': 0.9996980428695679}]
@@ -202,7 +207,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 
 토크나이저는 사전학습 모델의 모든 전처리를 책임집니다. 그리고 (위의 예시처럼) 1개의 스트링이나 리스트도 처리할 수 있습니다. 토크나이저는 딕셔너리를 반환하는데, 이는 다운스트림 코드에 사용하거나 언패킹 연산자 ** 를 이용해 모델에 바로 전달할 수도 있습니다.
 
-모델 자체는 일반적으로 사용되는 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)나 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)입니다. [이 튜토리얼](https://huggingface.co/docs/transformers/ko/training)은 이러한 모델을 표준적인 PyTorch나 TensorFlow 학습 과정에서 사용하는 방법, 또는 새로운 데이터로 fine-tune하기 위해 `Trainer` API를 사용하는 방법을 설명해 줍니다.
+모델 자체는 일반적으로 사용되는 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)이나 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)입니다. [이 튜토리얼](https://huggingface.co/docs/transformers/ko/training)은 이러한 모델을 표준적인 PyTorch나 TensorFlow 학습 과정에서 사용하는 방법, 또는 새로운 데이터로 파인 튜닝하기 위해 `Trainer` API를 사용하는 방법을 설명해 줍니다.
 
 ## 왜 transformers를 사용해야 할까요?
 
@@ -219,7 +224,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 
 1. 모델의 각 생애주기에 적합한 프레임워크:
     - 코드 3줄로 최첨단 모델을 학습하세요.
-    - 자유롭게 모델을 TF2.0나 PyTorch 프레임워크로 변환하세요.
+    - 목적에 알맞게 모델을 TF2.0/Pytorch/Jax 프레임 워크 중 하나로 이동시키세요.
     - 학습, 평가, 공개 등 각 단계에 맞는 프레임워크를 원하는대로 선택하세요.
 
 1. 필요한 대로 모델이나 예시를 커스터마이즈하세요:
@@ -237,7 +242,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 
 ### pip로 설치하기
 
-이 저장소는 Python 3.8+, Flax 0.4.1+, PyTorch 1.11+, TensorFlow 2.6+에서 테스트 되었습니다.
+이 저장소는 Python 3.9+, Flax 0.4.1+, PyTorch 1.11+, TensorFlow 2.6+에서 테스트 되었습니다.
 
 [가상 환경](https://docs.python.org/3/library/venv.html)에 🤗 Transformers를 설치하세요. Python 가상 환경에 익숙하지 않다면, [사용자 가이드](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/)를 확인하세요.
 
@@ -265,6 +270,7 @@ conda install conda-forge::transformers
 > **_노트:_** `huggingface` 채널에서 `transformers`를 설치하는 것은 사용이 중단되었습니다.
 
 Flax, PyTorch, TensorFlow 설치 페이지에서 이들을 conda로 설치하는 방법을 확인하세요.
+
 > **_노트:_** 윈도우 환경에서 캐싱의 이점을 위해 개발자 모드를 활성화할 수 있습니다. 만약 여러분에게 있어서 선택이 아닌 필수라면 [이 이슈](https://github.com/huggingface/huggingface_hub/issues/1062)를 통해 알려주세요.
 
 ## 모델 구조
@@ -286,9 +292,9 @@ Flax, PyTorch, TensorFlow 설치 페이지에서 이들을 conda로 설치하는
 | [도큐먼트](https://huggingface.co/transformers/ko/) | 전체 API 도큐먼트와 튜토리얼 |
 | [과제 요약](https://huggingface.co/docs/transformers/ko/task_summary) | 🤗 Transformers가 지원하는 과제들 |
 | [전처리 튜토리얼](https://huggingface.co/docs/transformers/ko/preprocessing) | `Tokenizer` 클래스를 이용해 모델을 위한 데이터 준비하기 |
-| [학습과 fine-tuning](https://huggingface.co/docs/transformers/ko/training) | 🤗 Transformers가 제공하는 모델 PyTorch/TensorFlow 학습 과정과 `Trainer` API에서 사용하기 |
-| [퀵 투어: Fine-tuning/사용 스크립트](https://github.com/huggingface/transformers/tree/main/examples) | 다양한 과제에서 모델 fine-tuning하는 예시 스크립트 |
-| [모델 공유 및 업로드](https://huggingface.co/docs/transformers/ko/model_sharing) | 커뮤니티에 fine-tune된 모델을 업로드 및 공유하기 |
+| [학습과 파인 튜닝](https://huggingface.co/docs/transformers/ko/training) | 🤗 Transformers가 제공하는 모델 PyTorch/TensorFlow 학습 과정과 `Trainer` API에서 사용하기 |
+| [퀵 투어: 파인 튜닝/사용 스크립트](https://github.com/huggingface/transformers/tree/main/examples) | 다양한 과제에서 모델을 파인 튜닝하는 예시 스크립트 |
+| [모델 공유 및 업로드](https://huggingface.co/docs/transformers/ko/model_sharing) | 커뮤니티에 파인 튜닝된 모델을 업로드 및 공유하기 |
 
 ## 인용
 
