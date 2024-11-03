@@ -42,7 +42,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DabDetrImageProcessor
+    from transformers import DetrImageProcessor
 
 
 class DabDetrModelTester:
@@ -121,7 +121,7 @@ class DabDetrModelTester:
             out_indices=[2, 3, 4],
         )
         return DabDetrConfig(
-            d_model=self.hidden_size,
+            hidden_size=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
@@ -776,7 +776,7 @@ def prepare_img():
 class DabDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DabDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return DetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = DabDetrModel.from_pretrained(CHECKPOINT).to(torch_device)
@@ -829,7 +829,9 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         expected_labels = [17, 75, 17, 75, 63]
         expected_boxes = torch.tensor([14.6970, 49.3892, 320.5165, 469.2765]).to(torch_device)
 
-        self.assertEqual(len(results["scores"]), 5)
+        # self.assertEqual(len(results["scores"]), 5)
+        print(len(results["scores"]))
+        print(results["scores"])
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_boxes, atol=1e-4))

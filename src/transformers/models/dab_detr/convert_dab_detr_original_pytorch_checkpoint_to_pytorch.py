@@ -23,7 +23,7 @@ from pathlib import Path
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import DabDetrConfig, DabDetrForObjectDetection, DabDetrImageProcessor
+from transformers import DabDetrConfig, DabDetrForObjectDetection, ConditionalDetrImageProcessor
 from transformers.utils import logging
 
 
@@ -108,7 +108,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
 def write_image_processor(model_name, pytorch_dump_folder_path, push_to_hub):
     logger.info("Converting image processor...")
     format = "coco_detection"
-    image_processor = DabDetrImageProcessor(format=format)
+    image_processor = ConditionalDetrImageProcessor(format=format)
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     image_processor.save_pretrained(pytorch_dump_folder_path)
 

@@ -69,12 +69,6 @@ Option 3: Instantiate DAB-DETR with randomly initialized weights for backbone + 
 
 [[autodoc]] DabDetrConfig
 
-## DabDetrImageProcessor
-
-[[autodoc]] DabDetrImageProcessor
-    - preprocess
-    - post_process_object_detection
-
 ## DabDetrModel
 
 [[autodoc]] DabDetrModel
