@@ -26,11 +26,15 @@ from transformers import (
     PaliGemmaForConditionalGeneration,
     PaliGemmaProcessor,
     SiglipImageProcessor,
+    Gemma2Config
 )
 from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
 import numpy as np
-
+from numpy import load
+import jax.numpy as jnp
+import numpy as np
+import ml_dtypes
 device = "cuda"  # "cpu"
 
 logging.set_verbosity_info()
@@ -42,7 +46,7 @@ PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896
 VARIANT_CONFIGS = {
     "2b": {
         "hidden_size": 2304,
-        "num_hidden_layers": 18,
+        "num_hidden_layers": 26,
         "intermediate_size": 9216,
         "num_key_value_heads": 4,
         "num_attention_heads": 8,
@@ -85,7 +89,8 @@ def get_paligemma2_config(variant: str, precision: str):
         num_image_tokens = (image_size**2) // (patch_size**2)
         config["projection_dim"] = 2304
         config["image_token_index"] = 257152
-        text_config = {
+        text_config = Gemma2Config.from_pretrained('google/gemma-2-2b-it').to_dict()
+        sup_text_config = {
             "model_type": "gemma2",
             "vocab_size": 257152,
             "num_hidden_layers": variant_config["num_hidden_layers"],
@@ -93,11 +98,13 @@ def get_paligemma2_config(variant: str, precision: str):
             "head_dim": variant_config["head_dim"],
             "torch_dtype": precision,
             "hidden_size": variant_config["hidden_size"],
-            "hidden_activation": "gelu",
+            "hidden_activation": "gelu_pytorch_tanh",
             "num_attention_heads": variant_config["num_attention_heads"],
             "intermediate_size": variant_config["intermediate_size"],
             "is_encoder_decoder": False,
         }
+        text_config.update(sup_text_config)
+
         vision_config = {
             "torch_dtype": precision,
             "image_size": image_size,
@@ -107,8 +114,9 @@ def get_paligemma2_config(variant: str, precision: str):
             "intermediate_size": 4304,
             "num_hidden_layers": 27,
             "num_attention_heads": 16,
-            "projection_dim": 2304,  # 2304 ? has changed from paligemma-1?
-            "projector_hidden_act": "gelu_fast",
+            "projection_dim": 2304,
+            "hidden_act": "gelu_pytorch_tanh",
+            #"": "gelu_fast",
             "vision_use_head": False,
         }
         final_config = PaliGemmaConfig(text_config=text_config, vision_config=vision_config, **config)
@@ -248,16 +256,23 @@ def slice_state_dict(state_dict, config):
         state_dict[f"language_model.model.layers.{i}.post_feedforward_layernorm.weight"] = llm_post_feedforward_layernorm[i]
     state_dict["language_model.model.norm.weight"] = state_dict.pop("llm/final_norm/scale")
     state_dict["language_model.lm_head.weight"] = embedding_vector # weights are tied.
-    #breakpoint()
     [k for k in state_dict.keys() if not k.startswith('vision') and not k.startswith('language')]
     # fmt: on
     for key, value in state_dict.items():
         if not isinstance(value, torch.Tensor):
-            state_dict[key] = torch.from_numpy(value)
+            try:
+                if value.dtype == jnp.bfloat16:
+                    value = jnp.array(value).astype(jnp.float32)
+                    value = np.array(value)
+                    state_dict[key] = torch.from_numpy(value).to(torch.bfloat16)
+                else:
+                    state_dict[key] = torch.from_numpy(value)
+            except:
+                raise ValueError(f"Conversion failed from jax weights. Check your inputs.")
     return state_dict
 
 
-def flatten_nested_dict(params, parent_key="", sep="/"):
+def flatten_nested_dict(params, parent_key="", sep="/", precision:int="float32"):
     items = []
 
     for k, v in params.items():
@@ -265,8 +280,13 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
         new_key = parent_key + sep + k if parent_key else k
 
         if isinstance(v, collections.abc.MutableMapping):
-            items.extend(flatten_nested_dict(v, parent_key=new_key, sep=sep).items())
+            items.extend(flatten_nested_dict(v, parent_key=new_key, sep=sep, precision=precision).items())
         else:
+            if precision == 'bfloat16':
+                try:
+                    v = v.view(ml_dtypes.bfloat16)
+                except:
+                    raise ValueError(f"Conversion failed from bfloat16, check your inputs.")
             items.append((new_key, v))
     return dict(items)
 
@@ -283,6 +303,7 @@ def convert_paligemma2_checkpoint(
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
     config = get_paligemma2_config(variant, precision=precision)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     if do_convert_weights:
         tokenizer_id = "google/paligemma-3b-pt-224"  # same tokenizer as paligemma 1
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
@@ -292,56 +313,53 @@ def convert_paligemma2_checkpoint(
 
         # tokenizer.padding_side = 'right' # uncomment for testing purposes only.
 
-        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor = SiglipImageProcessor.from_pretrained("google/paligemma-3b-pt-224")
         image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
         image_processor.image_seq_length = config.vision_config.num_image_tokens
 
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        data = load(checkpoint_path)
-        state_dict = flatten_nested_dict(data)
+        data = jnp.load(checkpoint_path)
+        state_dict = flatten_nested_dict(data, precision=precision)
         del data
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
         del config.hidden_size # this key is unused
-
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
         model = PaliGemmaForConditionalGeneration(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
+        model.config.text_config._attn_implementation = "sdpa"
+
+        # model expansion to get random embeds of image tokens
+        pad_shape = 64  # for performance reasons
+        pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
+        mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+        n = pre_expansion_embeddings.size()[0]
+        sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+        dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
+        # We add an image token so we resize the model
+        model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
+        model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
+            tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))),
+            dim=0,
+        )
+        model.language_model.lm_head.weight.data[257152:] = torch.stack(
+            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0]))),
+            dim=0,
+        )
+        # convert to needed precision
+
+        model.to(DTYPES[precision])
+        model.save_pretrained(pytorch_dump_folder_path, safe_serialization=True)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     else:
-        processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
+        processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path, do_rescale=False)
         model = (
             PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa")
             .to(device)
             .eval()
         )
-    model.config.text_config._attn_implementation = "sdpa"
-
-    # model expansion to get random embeds of image tokens
-    pad_shape = 64  # for performance reasons
-    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
-    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    n = pre_expansion_embeddings.size()[0]
-    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
-    # We add an image token so we resize the model
-    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
-    model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))),
-        dim=0,
-    )
-    model.language_model.lm_head.weight.data[257152:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0]))),
-        dim=0,
-    )
-    # convert to needed precision
-
-    model.to(DTYPES[precision])
-    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=True)
-    processor.save_pretrained(pytorch_dump_folder_path)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
