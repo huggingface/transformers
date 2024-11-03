@@ -82,6 +82,8 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2TextToUnitModel",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
+    "Idefics2PerceiverResampler",
+    "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
 ]
 
@@ -225,7 +227,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "ChineseCLIPTextModel",
     "ChineseCLIPVisionModel",
-    "CLIPTextModel",
     "CLIPTextModelWithProjection",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
@@ -328,6 +329,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SiglipTextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
+    "CLIPTextModel",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
 ]
 

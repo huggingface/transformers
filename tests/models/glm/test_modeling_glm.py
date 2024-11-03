@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -306,10 +305,6 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_headmasking = False
     test_pruning = False
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "THUDM/glm-4-9b"
-    _torch_compile_test_revision = "refs/pr/15"
-
     def setUp(self):
         self.model_tester = GlmModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GlmConfig, hidden_size=37)
@@ -425,41 +420,6 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             print(torch.abs(normalized_0 - normalized_1).max())
 
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """Overwrite the common test as the test is flaky on tiny models."""
-        model = GlmForCausalLM.from_pretrained(
-            "THUDM/glm-4-9b",
-            device_map={"": 0},
-            torch_dtype=torch.bfloat16,
-            revision="refs/pr/15",
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b", revision="refs/pr/15")
-        tokenizer.padding_side = "right"
-
-        texts = ["hi", "Hello this is a very long sentence"]
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=15, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = GlmForCausalLM.from_pretrained(
-            "THUDM/glm-4-9b",
-            device_map={"": 0},
-            attn_implementation="flash_attention_2",
-            torch_dtype=torch.bfloat16,
-            revision="refs/pr/15",
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=15, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -757,77 +717,6 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                                             )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
-
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        """Overwrite to add flakyness: outputs sometimes start to diverge after some tokens"""
-
-        max_new_tokens = 30
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(f"{model_class.__name__} does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                    attn_implementation="eager",
-                ).to(torch_device)
-
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa:
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
-                # Just test that a large cache works as expected
-                res_eager = model_eager.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                res_sdpa = model_sdpa.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
 
 @slow

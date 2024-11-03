@@ -815,7 +815,7 @@ class BatchEncoding(UserDict):
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) for k, v in self.data.items() if isinstance(v, torch.Tensor)}
+            self.data = {k: v.to(device=device) if isinstance(v, torch.Tensor) else v for k, v in self.data.items()}
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
@@ -1687,8 +1687,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
-            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}"
+            f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces},"
+            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
         )
 
     def __len__(self) -> int:
@@ -1874,7 +1874,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     **template_kwargs,
                 )
             if continue_final_message:
-                final_message = chat[-1]["content"].strip()
+                final_message = chat[-1]["content"]
+                if isinstance(final_message, (list, tuple)):
+                    final_message = final_message[-1]["text"]
+                final_message = final_message.strip()
                 rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
             rendered.append(rendered_chat)
 
