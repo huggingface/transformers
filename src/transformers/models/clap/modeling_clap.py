@@ -701,7 +701,6 @@ class ClapAudioLayer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->ClapAudio
 class ClapAudioStage(nn.Module):
     def __init__(self, config, grid_size, dpr, layer_id):
         super().__init__()
