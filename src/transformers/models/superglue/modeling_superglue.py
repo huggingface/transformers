@@ -198,9 +198,9 @@ class SuperGlueKeypointEncoder(nn.Module):
     def __init__(self, config: SuperGlueConfig) -> None:
         super().__init__()
         layer_sizes = config.keypoint_encoder_sizes
-        feature_dim = config.descriptor_dim
+        hidden_size = config.hidden_size
         # 3 here consists of 2 for the (x, y) coordinates and 1 for the score of the keypoint
-        encoder_channels = [3] + layer_sizes + [feature_dim]
+        encoder_channels = [3] + layer_sizes + [hidden_size]
 
         layers = [
             SuperGlueMultiLayerPerceptron(config, encoder_channels[i - 1], encoder_channels[i])
@@ -431,9 +431,9 @@ class SuperGlueAttention(nn.Module):
 class SuperGlueAttentionalPropagation(nn.Module):
     def __init__(self, config: SuperGlueConfig) -> None:
         super().__init__()
-        descriptor_dim = config.descriptor_dim
+        hidden_size = config.hidden_size
         self.attention = SuperGlueAttention(config)
-        mlp_channels = [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim]
+        mlp_channels = [hidden_size * 2, hidden_size * 2, hidden_size]
         layers = [
             SuperGlueMultiLayerPerceptron(config, mlp_channels[i - 1], mlp_channels[i])
             if i < len(mlp_channels) - 1
@@ -475,7 +475,7 @@ class SuperGlueAttentionalPropagation(nn.Module):
 class SuperGlueAttentionalGNN(nn.Module):
     def __init__(self, config: SuperGlueConfig) -> None:
         super().__init__()
-        self.descriptor_dim = config.descriptor_dim
+        self.hidden_size = config.hidden_size
         self.layers_types = config.gnn_layers_types
         self.layers = nn.ModuleList([SuperGlueAttentionalPropagation(config) for _ in range(len(self.layers_types))])
 
@@ -498,9 +498,9 @@ class SuperGlueAttentionalGNN(nn.Module):
             encoder_attention_mask = None
             if layer_type == "cross":
                 encoder_hidden_states = (
-                    descriptors.reshape(-1, 2, num_keypoints, self.descriptor_dim)
+                    descriptors.reshape(-1, 2, num_keypoints, self.hidden_size)
                     .flip(1)
-                    .reshape(batch_size, num_keypoints, self.descriptor_dim)
+                    .reshape(batch_size, num_keypoints, self.hidden_size)
                 )
                 encoder_attention_mask = (
                     mask.reshape(-1, 2, 1, 1, num_keypoints).flip(1).reshape(batch_size, 1, 1, num_keypoints)
@@ -530,8 +530,8 @@ class SuperGlueAttentionalGNN(nn.Module):
 class SuperGlueFinalProjection(nn.Module):
     def __init__(self, config: SuperGlueConfig) -> None:
         super().__init__()
-        descriptor_dim = config.descriptor_dim
-        self.final_proj = nn.Linear(descriptor_dim, descriptor_dim, bias=True)
+        hidden_size = config.hidden_size
+        self.final_proj = nn.Linear(hidden_size, hidden_size, bias=True)
 
     def forward(self, descriptors: torch.Tensor) -> torch.Tensor:
         return self.final_proj(descriptors)
@@ -634,7 +634,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple, Tuple]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple, Tuple]:
         """
         Perform keypoint matching between two images.
         Args:
@@ -681,7 +681,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         batch_size, _, num_keypoints, _ = keypoints.shape
         # (batch_size, 2, num_keypoints, 2) -> (batch_size * 2, num_keypoints, 2)
         keypoints = keypoints.reshape(batch_size * 2, num_keypoints, 2)
-        descriptors = descriptors.reshape(batch_size * 2, num_keypoints, self.config.descriptor_dim)
+        descriptors = descriptors.reshape(batch_size * 2, num_keypoints, self.config.hidden_size)
         scores = scores.reshape(batch_size * 2, num_keypoints)
         mask = mask.reshape(batch_size * 2, num_keypoints) if mask is not None else None
 
@@ -714,13 +714,13 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         projected_descriptors = self.final_projection(descriptors)
 
         # (batch_size * 2, num_keypoints, descriptor_dim) -> (batch_size, 2, num_keypoints, descriptor_dim)
-        final_descriptors = projected_descriptors.reshape(batch_size, 2, num_keypoints, self.config.descriptor_dim)
+        final_descriptors = projected_descriptors.reshape(batch_size, 2, num_keypoints, self.config.hidden_size)
         final_descriptors0 = final_descriptors[:, 0]
         final_descriptors1 = final_descriptors[:, 1]
 
         # Compute matching descriptor distance.
         scores = torch.einsum("bnd,bmd->bnm", final_descriptors0, final_descriptors1)
-        scores = scores / self.config.descriptor_dim**0.5
+        scores = scores / self.config.hidden_size**0.5
 
         if mask is not None:
             mask = mask.reshape(batch_size, 2, num_keypoints)
@@ -818,9 +818,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         max_keypoints = max([keypoint_detection[0].shape[1] for keypoint_detection in list_keypoint_detection])
         keypoints = torch.zeros((batch_size, 2, max_keypoints, 2), device=pixel_values.device)
         scores = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device)
-        descriptors = torch.zeros(
-            (batch_size, 2, max_keypoints, self.config.descriptor_dim), device=pixel_values.device
-        )
+        descriptors = torch.zeros((batch_size, 2, max_keypoints, self.config.hidden_size), device=pixel_values.device)
         mask = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device, dtype=torch.int)
 
         for i, keypoint_detection_output in enumerate(list_keypoint_detection):

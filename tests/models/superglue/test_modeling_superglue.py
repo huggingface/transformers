@@ -42,10 +42,10 @@ class SuperGlueModelTester:
         image_width=80,
         image_height=60,
         keypoint_detector_config=None,
-        descriptor_dim: int = 64,
+        hidden_size: int = 64,
         keypoint_encoder_sizes: List[int] = [32, 64],
         gnn_layers_types: List[str] = ["self", "cross"] * 2,
-        num_heads: int = 4,
+        num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,
     ):
@@ -66,10 +66,10 @@ class SuperGlueModelTester:
         self.image_height = image_height
 
         self.keypoint_detector_config = keypoint_detector_config
-        self.descriptor_dim = descriptor_dim
+        self.hidden_size = hidden_size
         self.keypoint_encoder_sizes = keypoint_encoder_sizes
         self.gnn_layers_types = gnn_layers_types
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.sinkhorn_iterations = sinkhorn_iterations
         self.matching_threshold = matching_threshold
 
@@ -82,10 +82,10 @@ class SuperGlueModelTester:
     def get_config(self):
         return SuperGlueConfig(
             keypoint_detector_config=self.keypoint_detector_config,
-            descriptor_dim=self.descriptor_dim,
+            hidden_size=self.hidden_size,
             keypoint_encoder_sizes=self.keypoint_encoder_sizes,
             gnn_layers_types=self.gnn_layers_types,
-            num_heads=self.num_heads,
+            num_attention_heads=self.num_attention_heads,
             sinkhorn_iterations=self.sinkhorn_iterations,
             matching_threshold=self.matching_threshold,
         )
@@ -129,7 +129,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SuperGlueModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SuperGlueConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SuperGlueConfig, has_text_modality=False, hidden_size=64)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -201,10 +201,10 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states_sizes = (
                 self.model_tester.keypoint_encoder_sizes
-                + [self.model_tester.descriptor_dim]
-                + [self.model_tester.descriptor_dim, self.model_tester.descriptor_dim * 2]
+                + [self.model_tester.hidden_size]
+                + [self.model_tester.hidden_size, self.model_tester.hidden_size * 2]
                 * len(self.model_tester.gnn_layers_types)
-                + [self.model_tester.descriptor_dim] * 2
+                + [self.model_tester.hidden_size] * 2
             )
 
             for i, hidden_states_size in enumerate(hidden_states_sizes):
@@ -237,7 +237,11 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             attentions = outputs.attentions
             maximum_num_matches = outputs.mask.shape[-1]
 
-            expected_attention_shape = [self.model_tester.num_heads, maximum_num_matches, maximum_num_matches]
+            expected_attention_shape = [
+                self.model_tester.num_attention_heads,
+                maximum_num_matches,
+                maximum_num_matches,
+            ]
 
             for i, attention in enumerate(attentions):
                 self.assertListEqual(

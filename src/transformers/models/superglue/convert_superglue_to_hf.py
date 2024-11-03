@@ -314,7 +314,7 @@ def write_model(
     # ------------------------------------------------------------
 
     config = SuperGlueConfig(
-        descriptor_dim=256,
+        hidden_size=256,
         keypoint_encoder_sizes=[32, 64, 128, 256],
         gnn_layers_types=["self", "cross"] * 9,
         sinkhorn_iterations=100,

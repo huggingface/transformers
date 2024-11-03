@@ -36,12 +36,12 @@ class SuperGlueConfig(PretrainedConfig):
     Args:
         keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
             The config object or dictionary of the keypoint detector.
-        descriptor_dim (`int`, *optional*, defaults to 256): The dimension of the descriptors.
+        hidden_size (`int`, *optional*, defaults to 256): The dimension of the descriptors.
         keypoint_encoder_sizes (`List[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
             The sizes of the keypoint encoder layers.
         gnn_layers_types (`List[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
             The types of the GNN layers. Must be either 'self' or 'cross'.
-        num_heads (`int`, *optional*, defaults to 4): The number of heads in the GNN layers.
+        num_attention_heads (`int`, *optional*, defaults to 4): The number of heads in the GNN layers.
         sinkhorn_iterations (`int`, *optional*, defaults to 100): The number of Sinkhorn iterations.
         matching_threshold (`float`, *optional*, defaults to 0.2): The matching threshold.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -64,10 +64,10 @@ class SuperGlueConfig(PretrainedConfig):
     def __init__(
         self,
         keypoint_detector_config: SuperPointConfig = None,
-        descriptor_dim: int = 256,
+        hidden_size: int = 256,
         keypoint_encoder_sizes: List[int] = None,
         gnn_layers_types: List[str] = None,
-        num_heads: int = 4,
+        num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,
         initializer_range=0.02,
@@ -78,16 +78,16 @@ class SuperGlueConfig(PretrainedConfig):
         if not all(layer_type in ["self", "cross"] for layer_type in self.gnn_layers_types):
             raise ValueError("All gnn_layers_types must be either 'self' or 'cross'")
 
-        if descriptor_dim % num_heads != 0:
-            raise ValueError("descriptor_dim % num_heads is different from zero")
+        if hidden_size % num_attention_heads != 0:
+            raise ValueError("hidden_size % num_attention_heads is different from zero")
 
         self.keypoint_encoder_sizes = (
             keypoint_encoder_sizes if keypoint_encoder_sizes is not None else [32, 64, 128, 256]
         )
-        self.descriptor_dim = descriptor_dim
+        self.hidden_size = hidden_size
         self.keypoint_encoder_sizes = keypoint_encoder_sizes
         self.gnn_layers_types = gnn_layers_types
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.sinkhorn_iterations = sinkhorn_iterations
         self.matching_threshold = matching_threshold
 
@@ -103,9 +103,6 @@ class SuperGlueConfig(PretrainedConfig):
 
         self.keypoint_detector_config = keypoint_detector_config
         self.initializer_range = initializer_range
-
-        self.hidden_size = self.descriptor_dim
-        self.num_attention_heads = self.num_heads
         self.attention_probs_dropout_prob = 0
         self.is_decoder = False
 
