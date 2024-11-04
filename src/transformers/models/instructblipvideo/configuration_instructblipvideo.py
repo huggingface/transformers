@@ -339,8 +339,6 @@ class InstructBlipVideoConfig(PretrainedConfig):
         text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
-
         self.num_query_tokens = num_query_tokens
         self.video_token_index = video_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
