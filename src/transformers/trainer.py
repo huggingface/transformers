@@ -233,6 +233,7 @@ if is_accelerate_available():
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
+        extract_model_from_parallel,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
