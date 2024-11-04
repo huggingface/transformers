@@ -350,21 +350,9 @@ class Olmo1124ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch
 class Olmo1124IntegrationTest(unittest.TestCase):
     @slow
-    def test_model_1b_logits(self):
-        input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo1124ForCausalLM.from_pretrained("allenai/OLMo-7B-1124-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits.float()
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[2.2869, 0.3315, 0.9876, 1.4146, 1.8804, 2.0430, 1.7055, 1.2065]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([2.5551, -1.1230, 11.0510, 12.4977, 7.9651, 7.2342, 6.1885, 7.8340, 9.9847, 12.6695, 12.2345, 10.7970, 8.4749, 14.2483, 12.9588, 13.9233, 11.0496, 5.5749, 7.4466, 7.7914, 6.8440, 5.8951, 4.8180, 4.1935, 4.5216, 4.7256, 3.9553, 12.2870, 12.4990, 8.1591])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
-
-    @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo1124ForCausalLM.from_pretrained("allenai/OLMo November 2024-7B-hf", device_map="auto")
+        model = Olmo1124ForCausalLM.from_pretrained("shanearora/OLMo-7B-1124-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[0.0271, 0.0249, -0.0578, -0.0870, 0.0167, 0.0710, 0.1002, 0.0677]])
@@ -374,24 +362,12 @@ class Olmo1124IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
 
     @slow
-    def test_model_7b_twin_2t_logits(self):
-        input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo1124ForCausalLM.from_pretrained("allenai/OLMo November 2024-7B-Twin-2T-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits.float()
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-0.3636, -0.3825, -0.4800, -0.3696, -0.8388, -0.9737, -0.9849, -0.8356]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-2.0833, -1.9234, 8.7312, 7.8049, 1.0372, 0.8941, 3.1548, 1.8502, 5.5511, 5.5793, 8.1166, 4.5906, 1.8691, 11.6377, 8.9858, 11.6447, 7.4549, 1.4725, 2.8399, 2.7568, 1.4011, 1.6958, 0.5572, 0.5231, 0.3068, 0.5364, 0.6769, 7.9636, 8.2379, 1.7950])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
-
-    @slow
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that \nthe speed of light is the same for all observers.\n\nThe theory of relativity is a theory of physics that describes the \nmovement of objects in space and time.\n\nThe theory of relativity is a theory of physics that describes the \nmovement of objects in space and time.\n\n"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo November 2024-7B-hf", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo-7B-1124-hf", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
-        model = Olmo1124ForCausalLM.from_pretrained("allenai/OLMo November 2024-7B-hf", device_map="auto")
+        model = Olmo1124ForCausalLM.from_pretrained("shanearora/OLMo-7B-1124-hf", device_map="auto")
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
@@ -400,7 +376,7 @@ class Olmo1124IntegrationTest(unittest.TestCase):
 
     @require_tokenizers
     def test_fast_special_tokens(self):
-        fast_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-7B-1124-hf")
+        fast_tokenizer = GPTNeoXTokenizerFast.from_pretrained("shanearora/OLMo-7B-1124-hf")
 
         original_add_eos_token = fast_tokenizer.add_eos_token
 
@@ -416,7 +392,7 @@ class Olmo1124IntegrationTest(unittest.TestCase):
 
     @require_tokenizers
     def test_simple_encode_decode(self):
-        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-7B-1124-hf")
+        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("shanearora/OLMo-7B-1124-hf")
 
         self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
         self.assertEqual(rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test")
@@ -453,7 +429,7 @@ class Olmo1124IntegrationTest(unittest.TestCase):
             convert_and_export_with_cache,
         )
 
-        olmo_1124_model = "allenai/OLMo-7B-1124-hf"
+        olmo_1124_model = "shanearora/OLMo-7B-1124-hf"
 
         tokenizer = AutoTokenizer.from_pretrained(olmo_1124_model, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = [
