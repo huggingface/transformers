@@ -83,6 +83,7 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_head_masking = False
     test_pruning = False
     has_attentions = False
+    test_model_parallel = True
     pipeline_model_mapping = (
         {"image-feature-extraction": TimmWrapperModel, "image-classification": TimmWrapperForImageClassification}
         if is_torch_available()
@@ -115,15 +116,7 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="TimmWrapper doesn't support output_attentions.")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapper doesn't support output_hidden_states.")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapper doesn't support output_hidden_states.")
+    @unittest.skip(reason="TimmWrapper doesn't support this.")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
