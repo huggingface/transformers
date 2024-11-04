@@ -71,7 +71,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
+        """Models quantized using compressed tensors can be finetuned"""
         return True
 
     def is_serializable(self, safe_serialization=None) -> bool:
+        """Models quantized using compressed tensors can be saved to disk"""
         return True

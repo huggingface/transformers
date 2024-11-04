@@ -1092,6 +1092,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             do not override, should be compressed-tensors
     """
 
+    QUANTIZATION_NAME = "compressed-tensors"
+
     def __init__(
         self,
         config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
@@ -1166,16 +1168,20 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def to_dict(self) -> Dict[str, Any]:
         """
+        Quantization config to be added to config.json
+
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
-        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+        quantization_config = {}
+        if self.quantization_config is not None:
+            quantization_config = self.quantization_config.dict()
+        else:
+            quantization_config["quant_method"] = self.QUANTIZATION_NAME
 
-        return {
-            "quantization_config": quantization_config,
-            "sparsity_config": sparsity_config,
-        }
+        quantization_config["sparsity_config"] = self.sparsity_config.dict()
+
+        return quantization_config
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
