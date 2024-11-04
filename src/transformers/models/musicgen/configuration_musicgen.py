@@ -191,9 +191,9 @@ class MusicgenConfig(PretrainedConfig):
 
     model_type = "musicgen"
     sub_configs = {
-        "text_encoder_config": AutoConfig,
-        "audio_encoder_config": AutoConfig,
-        "decoder_config": MusicgenDecoderConfig,
+        "text_encoder": AutoConfig,
+        "audio_encoder": AutoConfig,
+        "decoder": MusicgenDecoderConfig,
     }
     is_composition = True
 
