@@ -33,6 +33,8 @@ class Olmo1124Config(OlmoConfig):
         The epsilon used by the rms normalization layers.
     """
 
+    model_type = "olmo-1124"
+
     def __init__(
         self,
         vocab_size=50304,

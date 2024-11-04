@@ -70,7 +70,9 @@ class Olmo1124Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        rms_norm_eps (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
+        clip_qkv (`float`, *optional*):
+            If not `None`, elements of query, key and value attention states are clipped so that their
+            absolute value does not exceed this value.
 
     ```python
     >>> from transformers import Olmo1124Model, Olmo1124Config
@@ -88,7 +90,7 @@ class Olmo1124Config(PretrainedConfig):
             The epsilon used by the rms normalization layers.
     """
 
-    model_type = "olmo_1124"
+    model_type = "olmo-1124"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
