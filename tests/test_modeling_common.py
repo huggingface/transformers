@@ -3990,8 +3990,10 @@ class ModelTesterMixin:
         if hasattr(self.model_tester, "num_hidden_layers"):
             self.model_tester.num_hidden_layers = 1
         if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
+            self.model_tester.vision_config = copy.deepcopy(self.model_tester.vision_config)
             self.model_tester.vision_config["num_hidden_layers"] = 1
         if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
+            self.model_tester.text_config = copy.deepcopy(self.model_tester.text_config)
             self.model_tester.text_config["num_hidden_layers"] = 1
 
         for model_class in self.all_model_classes:
