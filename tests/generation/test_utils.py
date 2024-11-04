@@ -185,7 +185,7 @@ class GenerationTesterMixin:
         # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
         # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
         if config is not None:
-            for key in ["image_token_index", "image_token_id", "video_token_index", "video_token_id"]:
+            for key in ["image_token_index", "image_token_id", "video_token_index", "video_token_id", "vision_start_token_id"]:
                 token_index = getattr(config, key, None)
                 if token_index is not None and token_index < config.get_text_config().vocab_size:
                     logits_processor_kwargs["bad_words_ids"].append([token_index])
