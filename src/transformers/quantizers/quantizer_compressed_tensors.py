@@ -38,7 +38,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
-        breakpoint()
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
