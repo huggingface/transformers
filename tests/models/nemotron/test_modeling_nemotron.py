@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (

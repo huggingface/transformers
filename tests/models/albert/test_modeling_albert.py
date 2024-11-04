@@ -16,12 +16,12 @@
 
 import unittest
 
-from parameterized import parameterized
 from packaging import version
+from parameterized import parameterized
 
 from transformers import AlbertConfig, AutoTokenizer, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch_sdpa, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_sdpa, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask

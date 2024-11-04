@@ -17,7 +17,6 @@
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     PaliGemmaConfig,
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     cleanup,
     require_read_token,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )

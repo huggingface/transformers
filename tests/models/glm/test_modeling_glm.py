@@ -14,13 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch Glm model."""
 
-import inspect
-import tempfile
 import unittest
 
-import numpy as np
 import pytest
-from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GlmConfig, is_torch_available
 from transformers.testing_utils import (
@@ -32,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester

@@ -30,12 +30,10 @@ from transformers import (
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     cleanup,
-    is_flaky,
     require_bitsandbytes,
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
