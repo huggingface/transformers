@@ -409,6 +409,8 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
+    # Overwrite to use `audio_values` as the tensors to compare.
+    # TODO: Try to do this in the parent class.
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
