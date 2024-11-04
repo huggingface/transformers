@@ -53,7 +53,7 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 if is_torch_greater_or_equal("2.5"):
-    from torch.nn.attention.flex_attention import create_block_mask, flex_attention
+    from torch.nn.attention.flex_attention import flex_attention
 
 logger = logging.get_logger(__name__)
 
@@ -171,7 +171,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def eager_attention_forward(config, query, key, value, mask):
+def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -189,10 +189,10 @@ def eager_attention_forward(config, query, key, value, mask):
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
     attn_output = torch.matmul(attn_weights, value_states)
-    return attn_output
+    return attn_output, attn_weights
 
 
-def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16):
+def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
     if mask is not None:
         seq_len = mask.shape[1]
         query = query[:, :, :seq_len]
@@ -229,32 +229,33 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
     return attn_output, None
 
 
-def flex_attention_forward(config, query, key, value, mask, output_attentions=False, target_dtype=torch.float16):
-    def mask_mod(b, h, q_idx, kv_idx):
-        if mask is None:
-            return None
-        return mask[:, :, :, :kv_idx]
+# torch._dynamo.config.capture_scalar_outputs = True
+def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
+    if mask is not None:
+        mask = mask[0][0]
 
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
-        return soft_cap * torch.tanh(score / soft_cap)
+        score = soft_cap * torch.tanh(score / soft_cap)
+        if mask is not None:
+            score = score + mask[q_idx, kv_idx]
+        return score
 
     attn_output = flex_attention(
         query,
         key,
         value,
-        block_mask=create_block_mask(
-            mask_mod, query.shape[0], query.shape[2], query.shape[1], key.shape[1], _compile=True
-        ),
         score_mod=tanh_softcap,
         enable_gqa=True,
         scale=config.scaling,
         return_lse=output_attentions,
     )
+    if not output_attentions:
+        return attn_output, None
     return attn_output
 
 
-def sdpa_attention_forward(config, query, key, value, mask, output_attentions=False, target_dtype=torch.float16):
+def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
 
@@ -316,7 +317,7 @@ class Gemma2Attention(nn.Module):
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
         self.attention_type = config._attn_implementation
         self.attention_function = GEMMA2_ATTENTION_FUNCTION[config._attn_implementation]
-
+        self.attn_logit_softcapping = config.attn_logit_softcapping
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -373,7 +374,7 @@ class Gemma2Attention(nn.Module):
             attention_type = self.attention_type
 
         attn_output, attn_weights = GEMMA2_ATTENTION_FUNCTION[attention_type](
-            self, query_states, key_states, value_states, attention_mask, self.config
+            self, query_states, key_states, value_states, attention_mask
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
