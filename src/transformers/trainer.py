@@ -233,7 +233,6 @@ if is_accelerate_available():
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
-        GradientAccumulationPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -589,8 +588,10 @@ class Trainer:
             if not _is_peft_model(unwrapped_model)
             else unwrapped_model.get_base_model().forward
         )
-
-        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
+        forward_params = inspect.signature(model_forward).parameters
+        self.model_accepts_loss_kwargs = (
+            "loss_kwargs" in forward_params and forward_params["loss_kwargs"].kind == inspect.Parameter.VAR_KEYWORD
+        )
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -2424,7 +2425,7 @@ class Trainer:
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
                 batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
-                for inputs in batch_samples:
+                for i, inputs in enumerate(batch_samples):
                     step += 1
                     total_batched_samples += 1
                     is_last_step_and_steps_less_than_grad_acc = (
@@ -2470,7 +2471,13 @@ class Trainer:
                     if step % args.gradient_accumulation_steps == 0:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                    with self.accelerator.accumulate(model):
+                    # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
+                    context = (
+                        functools.partial(self.accelerator.no_sync, model=model)
+                        if i == len(batch_samples) - 1
+                        else contextlib.nullcontext
+                    )
+                    with context():
                         tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
                     if (
@@ -3602,15 +3609,11 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            if num_items_in_batch is not None:
-                if self.compute_loss_func or self.model_accepts_loss_kwargs:
-                    loss *= self.args.gradient_accumulation_steps
-                # Average tokens across devices is orthogonal to gradient accumulation
-                if self.args.average_tokens_across_devices:
-                    loss *= self.args.world_size
             self.accelerator.backward(loss, **kwargs)
-
-        return loss.detach() / self.args.gradient_accumulation_steps
+            # Finally we need to normalize the loss for reporting
+            if num_items_in_batch is None:
+                return loss.detach() / self.args.gradient_accumulation_steps
+            return loss.detach()
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
@@ -3622,9 +3625,6 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
-            num_items_in_batch_tensor = torch.tensor(num_items_in_batch, device=self.args.device)
-            num_items_in_batch = int(self.accelerator.gather(num_items_in_batch_tensor).sum().cpu())
         if self.model_accepts_loss_kwargs:
             loss_kwargs = {}
             if num_items_in_batch is not None:
@@ -3657,6 +3657,9 @@ class Trainer:
                 )
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        if self.args.average_tokens_across_devices and self.model_accepts_loss_kwargs:
+            loss *= self.accelerator.num_processes
 
         return (loss, outputs) if return_outputs else loss
 
@@ -4902,24 +4905,21 @@ class Trainer:
             self.repo.git_push()
 
     def create_accelerator_and_postprocess(self):
+        # We explicitly don't rely on the `Accelerator` to do gradient accumulation
         grad_acc_kwargs = {}
         if is_accelerate_available("0.28.0") and self.args.accelerator_config.gradient_accumulation_kwargs is not None:
             grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
 
         # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
-        if "num_steps" in grad_acc_kwargs and self.args.gradient_accumulation_steps > 1:
-            # raise because we do not know which setting is intended.
-            raise ValueError(
-                "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
-                "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
-            )
-        elif "num_steps" not in grad_acc_kwargs:
-            # take the gradient_accumulation_steps setting from TrainingArguments.
-            grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
-
-        grad_acc_kwargs["sync_with_dataloader"] = False
-
-        gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
+        if "num_steps" in grad_acc_kwargs:
+            if self.args.gradient_accumulation_steps > 1:
+                # raise because we do not know which setting is intended.
+                raise ValueError(
+                    "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
+                    "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
+                )
+            else:
+                self.args.gradient_accumulation_steps = grad_acc_kwargs["num_steps"]
 
         accelerator_config = self.args.accelerator_config.to_dict()
 
@@ -4950,7 +4950,6 @@ class Trainer:
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
-            "gradient_accumulation_plugin": gradient_accumulation_plugin,
         }
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
@@ -5046,12 +5045,18 @@ class Trainer:
                 batch_samples += [next(epoch_iterator)]
             except StopIteration:
                 break
+
+        # Keep default behavior the same
+        if not self.model_accepts_loss_kwargs:
+            return batch_samples, None
+
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum(
-                    [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
-                )
-            except TypeError:
+                num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
+            except (TypeError, AttributeError):
                 pass
+
+        if self.args.average_tokens_across_devices:
+            num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
         return batch_samples, num_items_in_batch
