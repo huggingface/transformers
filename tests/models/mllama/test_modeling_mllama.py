@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Mllama model."""
 
-import gc
 import unittest
 
 import requests
@@ -30,6 +29,7 @@ from transformers import (
 )
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
+    cleanup,
     is_flaky,
     require_bitsandbytes,
     require_read_token,
@@ -126,17 +126,10 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
-    _torch_compile_test_ckpt = "nltpt/Llama-3.2-11B-Vision"
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
-
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
 
 
 class MllamaVisionText2TextModelTester:
@@ -271,6 +264,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
@@ -363,12 +357,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
-
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
     def test_eager_matches_sdpa_inference_1_bfloat16(self):
         # A workaround to override parametrized test with flaky decorator
         super().test_eager_matches_sdpa_inference_1_bfloat16()
@@ -409,8 +397,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.instruct_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_gpu

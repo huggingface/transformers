@@ -23,7 +23,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -49,7 +48,10 @@ from ...utils import (
 from .configuration_gemma import GemmaConfig
 
 
+logger = logging.get_logger(__name__)
+
 _CHECKPOINT_FOR_DOC = "google/gemma-7b"
+_CONFIG_FOR_DOC = "GemmaConfig"
 
 
 class GemmaRMSNorm(nn.Module):
@@ -70,9 +72,6 @@ class GemmaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-logger = logging.get_logger(__name__)
 
 
 class GemmaRotaryEmbedding(nn.Module):
@@ -624,9 +623,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-_CONFIG_FOR_DOC = "GemmaConfig"
-
-
 GEMMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1030,6 +1026,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1087,7 +1084,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

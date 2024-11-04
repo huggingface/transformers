@@ -881,18 +881,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # Take the first device used by `accelerate`.
                 device = next(iter(hf_device_map.values()))
             else:
-                device = -1
-                if (
-                    is_torch_mlu_available()
-                    or is_torch_cuda_available()
-                    or is_torch_npu_available()
-                    or is_torch_xpu_available(check_device=True)
-                    or is_torch_mps_available()
-                ):
-                    logger.warning(
-                        "Hardware accelerator e.g. GPU is available in the environment, but no `device` argument"
-                        " is passed to the `Pipeline` object. Model will be on CPU."
-                    )
+                device = 0
 
         if is_torch_available() and self.framework == "pt":
             if device == -1 and self.model.device is not None:
@@ -920,9 +909,11 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             elif is_torch_mps_available():
                 self.device = torch.device(f"mps:{device}")
             else:
-                raise ValueError(f"{device} unrecognized or not available.")
+                self.device = torch.device("cpu")
         else:
             self.device = device if device is not None else -1
+
+        logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
@@ -959,6 +950,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
+
+        # In processor only mode, we can get the modality processors from the processor
+        if self.processor is not None and all(
+            [self.tokenizer is None, self.feature_extractor is None, self.image_processor is None]
+        ):
+            self.tokenizer = getattr(self.processor, "tokenizer", None)
+            self.feature_extractor = getattr(self.processor, "feature_extractor", None)
+            self.image_processor = getattr(self.processor, "image_processor", None)
 
         if self.image_processor is None and self.feature_extractor is not None:
             if isinstance(self.feature_extractor, BaseImageProcessor):

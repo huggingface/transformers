@@ -2027,6 +2027,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **loss_kwargs,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -2128,6 +2129,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 enc_topk_logits=enc_topk_logits,
                 enc_topk_bboxes=enc_topk_bboxes,
                 denoising_meta_values=denoising_meta_values,
+                **loss_kwargs,
             )
 
         if not return_dict:
