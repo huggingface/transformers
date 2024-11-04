@@ -1,79 +1,28 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
--->
-
 # AltCLIP
 
-## Overview
+## 개요
 
-The AltCLIP model was proposed in [AltCLIP: Altering the Language Encoder in CLIP for Extended Language Capabilities](https://arxiv.org/abs/2211.06679v2) by Zhongzhi Chen, Guang Liu, Bo-Wen Zhang, Fulong Ye, Qinghong Yang, Ledell Wu. AltCLIP
-(Altering the Language Encoder in CLIP) is a neural network trained on a variety of image-text and text-text pairs. By switching CLIP's
-text encoder with a pretrained multilingual text encoder XLM-R, we could obtain very close performances with CLIP on almost all tasks, and extended original CLIP's capabilities such as multilingual understanding.
+AltCLIP 모델은 Zhongzhi Chen, Guang Liu, Bo-Wen Zhang, Fulong Ye, Qinghong Yang, Ledell Wu의 [AltCLIP: Altering the Language Encoder in CLIP for Extended Language Capabilities](https://arxiv.org/abs/2211.06679v2) 논문에서 제안되었습니다. AltCLIP(CLIP의 언어 인코더를 변경하여 언어 기능 확장)은 다양한 이미지-텍스트 및 텍스트-텍스트 쌍으로 훈련된 신경망입니다. CLIP의 텍스트 인코더를 사전 훈련된 다국어 텍스트 인코더 XLM-R로 교체하여, 거의 모든 작업에서 CLIP와 유사한 성능을 얻을 수 있었으며, 원래 CLIP의 다국어 이해와 같은 기능도 확장되었습니다.
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다:
 
-*In this work, we present a conceptually simple and effective method to train a strong bilingual multimodal representation model. 
-Starting from the pretrained multimodal representation model CLIP released by OpenAI, we switched its text encoder with a pretrained 
-multilingual text encoder XLM-R, and aligned both languages and image representations by a two-stage training schema consisting of 
-teacher learning and contrastive learning. We validate our method through evaluations of a wide range of tasks. We set new state-of-the-art 
-performances on a bunch of tasks including ImageNet-CN, Flicker30k- CN, and COCO-CN. Further, we obtain very close performances with 
-CLIP on almost all tasks, suggesting that one can simply alter the text encoder in CLIP for extended capabilities such as multilingual understanding.*
+*본 연구에서는 강력한 이중 언어 멀티모달 표현 모델을 훈련하는 개념적으로 간단하고 효과적인 방법을 제시합니다. OpenAI에서 출시한 사전 훈련된 멀티모달 표현 모델 CLIP에서 시작하여, 그 텍스트 인코더를 사전 훈련된 다국어 텍스트 인코더 XLM-R로 교체하고, 교사 학습과 대조 학습으로 구성된 2단계 훈련 스키마를 통해 언어와 이미지 표현을 정렬했습니다. 우리는 광범위한 작업 평가를 통해 우리의 방법을 검증했습니다. ImageNet-CN, Flicker30k-CN, COCO-CN을 포함한 여러 작업에서 새로운 최고 성능을 달성했으며, 거의 모든 작업에서 CLIP와 유사한 성능을 얻었습니다. 이는 CLIP의 텍스트 인코더를 단순히 변경하여 다국어 이해와 같은 확장 기능을 얻을 수 있음을 시사합니다.*
 
-This model was contributed by [jongjyh](https://huggingface.co/jongjyh).
+이 모델은 [jongjyh](https://huggingface.co/jongjyh)에 의해 기여되었습니다.
 
-## Usage tips and example
+## 사용 팁과 예제
 
-The usage of AltCLIP is very similar to the CLIP. the difference between CLIP is the text encoder. Note that we use bidirectional attention instead of casual attention
-and we take the [CLS] token in XLM-R to represent text embedding.
+AltCLIP의 사용법은 CLIP와 매우 유사하며, 차이점은 텍스트 인코더에 있습니다. 일반적인 어텐션 대신 양방향 어텐션을 사용하며, XLM-R의 [CLS] 토큰을 사용하여 텍스트 임베딩을 나타냅니다.
 
-AltCLIP is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image
-classification. AltCLIP uses a ViT like transformer to get visual features and a bidirectional language model to get the text
-features. Both the text and visual features are then projected to a latent space with identical dimension. The dot
-product between the projected image and text features is then used as a similar score.
+AltCLIP은 멀티모달 비전 및 언어 모델입니다. 이미지-텍스트 유사성 및 제로샷 이미지 분류에 사용할 수 있습니다. AltCLIP은 ViT와 같은 트랜스포머를 사용하여 시각적 특징을 얻고, 양방향 언어 모델을 사용하여 텍스트 특징을 얻습니다. 이후 텍스트와 시각적 특징 모두 동일한 차원의 잠재 공간으로 투사됩니다. 투사된 이미지와 텍스트 특징 간의 내적(dot product)을 유사도 점수로 사용합니다.
 
-To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
-which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image. The authors
-also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
-The [`CLIPImageProcessor`] can be used to resize (or rescale) and normalize images for the model.
+트랜스포머 인코더에 이미지를 공급하기 위해, 각 이미지는 고정 크기의 겹치지 않는 패치 시퀀스로 분할된 후 선형 임베딩됩니다. 전체 이미지를 나타내기 위해 [CLS] 토큰이 추가됩니다. 저자들은 절대 위치 임베딩도 추가하여 결과 벡터 시퀀스를 표준 트랜스포머 인코더에 공급합니다. [`CLIPImageProcessor`]는 모델을 위해 이미지를 크기 조정하고 정규화하는 데 사용할 수 있습니다.
 
-The [`AltCLIPProcessor`] wraps a [`CLIPImageProcessor`] and a [`XLMRobertaTokenizer`] into a single instance to both
-encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
-[`AltCLIPProcessor`] and [`AltCLIPModel`].
-
-```python
->>> from PIL import Image
->>> import requests
-
->>> from transformers import AltCLIPModel, AltCLIPProcessor
-
->>> model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
->>> processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
-
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
-
->>> outputs = model(**inputs)
->>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
->>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
-```
+[`AltCLIPProcessor`]는 [`CLIPImageProcessor`]와 [`XLMRobertaTokenizer`]를 하나의 인스턴스로 묶어 텍스트를 인코딩하고 이미지를 준비합니다. 다음 예제는 [`AltCLIPProcessor`]와 [`AltCLIPModel`]을 사용하여 이미지-텍스트 유사도 점수를 얻는 방법을 보여줍니다.
 
 <Tip>
 
-This model is based on `CLIPModel`, use it like you would use the original [CLIP](clip).
+이 모델은 `CLIPModel`을 기반으로 하므로, 원래 CLIP처럼 사용할 수 있습니다.
 
 </Tip>
 
