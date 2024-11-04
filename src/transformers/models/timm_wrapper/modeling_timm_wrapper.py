@@ -60,6 +60,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     config_class = TimmWrapperConfig
+    base_model_prefix = "model"
     _no_split_modules = []
 
     def __init__(self, *args, **kwargs):
@@ -70,11 +71,10 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def _fix_state_dict_key(key):
         """
         Override original method which renames `gamma` and `beta` to `weight` and `bias`.
-        We don't want this behavior for timm wrapped models.
+        We don't want this behavior for timm wrapped models. Instead, this method adds
+        "timm_model." prefix to be able to load official timm Hub checkpoints.
         """
-        # timm models on Hub does not have "timm_model." prefix, add it here to be able to
-        # load weights correctly.
-        if not key.startswith("timm_model."):
+        if "timm_model." not in key:
             return f"timm_model.{key}"
         return key
 
@@ -93,9 +93,9 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     Wrapper class for timm models to be used in transformers.
     """
 
-    def __init__(self, config: TimmWrapperConfig):
+    def __init__(self, config: TimmWrapperConfig, add_classification_head: bool = False):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, add_classification_head=False)
+        self.timm_model = _load_timm_model(config, add_classification_head=add_classification_head)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
@@ -108,8 +108,12 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         **kwargs,
     ) -> Union[BaseModelOutput, Tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        if output_attentions is not None:
+        if output_attentions:
             raise ValueError("Cannot set `output_attentions` for timm models")
 
         if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
@@ -124,16 +128,19 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
             # to enable hidden states selection
             if isinstance(output_hidden_states, (list, tuple)):
                 kwargs["indices"] = output_hidden_states
-            features, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
         else:
-            features = self.timm_model(pixel_values, **kwargs)
+            last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
             hidden_states = None
 
+        # logits in case add_classification_head=True, otherwise it would be pooled output
+        head_output = self.timm_model.forward_head(last_hidden_state)
+
         if not return_dict:
-            output = (features, hidden_states) if hidden_states is not None else (features,)
+            output = (head_output, hidden_states) if hidden_states is not None else (head_output,)
             return output
 
-        return BaseModelOutput(last_hidden_state=features, hidden_states=hidden_states)
+        return BaseModelOutput(last_hidden_state=head_output, hidden_states=hidden_states)
 
 
 class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
@@ -143,7 +150,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
     def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, add_classification_head=True)
+        self.model = TimmWrapperModel(config, add_classification_head=True)
         self.num_labels = config.num_labels
         self.post_init()
 
@@ -165,28 +172,17 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if output_attentions is not None:
-            raise ValueError("Cannot set `output_attentions` for timm models")
-
-        if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
-            raise ValueError(
-                "Cannot set `output_hidden_states` for this timm models, consider using different "
-                "architecture or updating timm package."
-            )
-
-        pixel_values = pixel_values.to(self.device, self.dtype)
-
-        if output_hidden_states:
-            # to enable hidden states selection
-            if isinstance(output_hidden_states, (list, tuple)):
-                kwargs["indices"] = output_hidden_states
-            logits, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
-        else:
-            logits = self.timm_model(pixel_values, **kwargs)
-            hidden_states = None
+        outputs = self.model(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            **kwargs,
+        )
 
         loss = None
         if labels is not None:
+            logits = outputs.last_hidden_state
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -208,12 +204,12 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (loss, logits) if loss is not None else (logits,)
-            output = output + (hidden_states,) if hidden_states is not None else output
+            output = (loss,) + outputs
+            output = tuple(output for output in output if output is not None)
             return output
 
         return ImageClassifierOutput(
             loss=loss,
-            logits=logits,
-            hidden_states=hidden_states,
+            logits=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
         )
