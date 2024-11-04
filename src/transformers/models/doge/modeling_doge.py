@@ -2,8 +2,8 @@
 # Copyright 2024 Jingze Shi and the HuggingFace Inc. team.    All rights reserved.
 #
 # This code is based on the Wonderful Matrices paper implementation.
+#
 #     https://arxiv.org/abs/2407.16958
-# But removed the SSD part to adapt to most environments.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
