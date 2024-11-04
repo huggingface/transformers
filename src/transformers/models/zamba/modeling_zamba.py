@@ -922,7 +922,7 @@ class ZambaMambaDecoderLayer(nn.Module):
         return outputs
 
 
-class HybridLayer(nn.Module):
+class ZambaHybridLayer(nn.Module):
     def __init__(self, shared_transf: ZambaAttentionDecoderLayer, linear: nn.Linear, mamba: ZambaMambaDecoderLayer):
         super().__init__()
         self.shared_transf = shared_transf
@@ -1201,7 +1201,7 @@ class ZambaModel(ZambaPreTrainedModel):
                     "shared_transf.pre_ff_layernorm.weight",
                 ]
                 self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
-                layers.append(HybridLayer(block, next(linear_layers), next(mamba_layers)))
+                layers.append(ZambaHybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))
         self.layers = nn.ModuleList(layers)
