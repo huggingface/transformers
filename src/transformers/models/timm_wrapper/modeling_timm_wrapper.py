@@ -60,7 +60,6 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     config_class = TimmWrapperConfig
-    base_model_prefix = "timm_model"
     _no_split_modules = []
 
     def __init__(self, *args, **kwargs):
@@ -73,6 +72,10 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         Override original method which renames `gamma` and `beta` to `weight` and `bias`.
         We don't want this behavior for timm wrapped models.
         """
+        # timm models on Hub does not have "timm_model." prefix, add it here to be able to
+        # load weights correctly.
+        if not key.startswith("timm_model."):
+            return f"timm_model.{key}"
         return key
 
     def _init_weights(self, module):
