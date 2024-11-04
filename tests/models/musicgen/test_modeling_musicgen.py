@@ -664,6 +664,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
+
 def prepare_musicgen_inputs_dict(
     config,
     input_ids,
