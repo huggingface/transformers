@@ -99,6 +99,7 @@ _accelerate_available, _accelerate_version = _is_package_available("accelerate",
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
 _av_available = importlib.util.find_spec("av") is not None
+_decord_available = importlib.util.find_spec("decord") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -111,6 +112,7 @@ _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
 # `importlib.metadata.util` doesn't work with `opencv-python-headless`.
 _cv2_available = importlib.util.find_spec("cv2") is not None
+_yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
 _datasets_available = _is_package_available("datasets")
 _detectron2_available = _is_package_available("detectron2")
 # We need to check both `faiss` and `faiss-cpu`.
@@ -308,6 +310,10 @@ def is_kenlm_available():
 
 def is_cv2_available():
     return _cv2_available
+
+
+def is_yt_dlp_available():
+    return _yt_dlp_available
 
 
 def is_torch_available():
@@ -807,6 +813,10 @@ def is_av_available():
     return _av_available
 
 
+def is_decord_available():
+    return _decord_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -1237,6 +1247,22 @@ pip install av
 Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+YT_DLP_IMPORT_ERROR = """
+{0} requires the YT-DLP library but it was not found in your environment. You can install it with:
+```
+pip install yt-dlp
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+DECORD_IMPORT_ERROR = """
+{0} requires the PyAv library but it was not found in your environment. You can install it with:
+```
+pip install decord
+```
+Please note that you may need to restart your runtime after installation.
+"""
 
 # docstyle-ignore
 CV2_IMPORT_ERROR = """
@@ -1577,6 +1603,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
@@ -1615,6 +1642,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
+        ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
     ]
 )
 

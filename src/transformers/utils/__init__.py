@@ -129,6 +129,7 @@ from .import_utils import (
     is_cv2_available,
     is_cython_available,
     is_datasets_available,
+    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -230,6 +231,7 @@ from .import_utils import (
     is_training_run_on_sagemaker,
     is_uroman_available,
     is_vision_available,
+    is_yt_dlp_available,
     requires_backends,
     torch_only_method,
 )

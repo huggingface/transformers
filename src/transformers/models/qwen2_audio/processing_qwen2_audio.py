@@ -16,13 +16,22 @@
 Processor class for Qwen2Audio.
 """
 
-from typing import List, Optional, Union
+from typing import List, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "audio_kwargs": {},
+    }
 
 
 class Qwen2AudioProcessor(ProcessorMixin):
@@ -55,9 +64,9 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audios: Union[np.ndarray, List[np.ndarray]] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        sampling_rate: Optional[int] = None,
-        **kwargs,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
@@ -73,26 +82,24 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             audios (`np.ndarray`, `List[np.ndarray]`):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            sampling_rate (`int`, defaults to 16000):
-                The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+            kwargs (`dict`, *optional*):
+                Additional kwargs to be used by the audio preprocessor or tokenizer.
         """
 
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
-        inputs = self.tokenizer(text, padding=padding, **kwargs)
+
+        output_kwargs = self._merge_kwargs(
+            Qwen2AudioProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if audios is not None:
             audio_inputs = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length", **kwargs
+                audios, return_attention_mask=True, padding="max_length", **output_kwargs["audio_kwargs"]
             )
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
