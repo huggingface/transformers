@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2Audio model."""
 
-import gc
 import tempfile
 import unittest
 from io import BytesIO
@@ -29,6 +28,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_torch_sdpa,
     slow,
@@ -222,8 +222,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test_single(self):
