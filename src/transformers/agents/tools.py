@@ -99,7 +99,9 @@ def validate_after_init(cls, do_validate_forward: bool = True):
     cls.__init__ = new_init
     return cls
 
+
 CONVERSION_DICT = {"str": "string", "int": "integer", "float": "number"}
+
 
 class Tool:
     """
@@ -135,7 +137,6 @@ class Tool:
         super().__init_subclass__(**kwargs)
         validate_after_init(cls, do_validate_forward=False)
 
-
     def validate_arguments(self, do_validate_forward: bool = True):
         required_attributes = {
             "description": str,
@@ -151,7 +152,9 @@ class Tool:
                 raise TypeError(f"You must set an attribute {attr} of type {expected_type.__name__}.")
         for input_name, input_content in self.inputs.items():
             assert isinstance(input_content, dict), f"Input '{input_name}' should be a dictionary."
-            assert "type" in input_content and "description" in input_content, f"Input '{input_name}' should have keys 'type' and 'description', has only {list(input_content.keys())}."
+            assert (
+                "type" in input_content and "description" in input_content
+            ), f"Input '{input_name}' should have keys 'type' and 'description', has only {list(input_content.keys())}."
             if input_content["type"] not in authorized_types:
                 raise Exception(
                     f"Input '{input_name}': type '{input_content['type']}' is not an authorized value, should be one of {authorized_types}."
@@ -409,7 +412,7 @@ class Tool:
                 create_pr=create_pr,
                 repo_type="space",
             )
-    
+
     @staticmethod
     def from_space(space_id, name, description):
         """
@@ -439,9 +442,7 @@ class Tool:
                 self.client = Client(space_id)
                 self.name = name
                 self.description = description
-                space_description = self.client.view_api(return_format="dict")[
-                    "named_endpoints"
-                ]
+                space_description = self.client.view_api(return_format="dict")["named_endpoints"]
                 route = list(space_description.keys())[0]
                 space_description_route = space_description[route]
                 self.inputs = {}
@@ -460,10 +461,9 @@ class Tool:
                     self.output_type = "any"
 
             def forward(self, *args, **kwargs):
-                return self.client.predict(*args, **kwargs)[0] # Usually the first output is the result
-        
-        return SpaceToolWrapper(space_id, name, description)
+                return self.client.predict(*args, **kwargs)[0]  # Usually the first output is the result
 
+        return SpaceToolWrapper(space_id, name, description)
 
     @staticmethod
     def from_gradio(gradio_tool):
@@ -479,7 +479,9 @@ class Tool:
                 self.output_type = "string"
                 self._gradio_tool = _gradio_tool
                 func_args = list(inspect.signature(_gradio_tool.run).parameters.items())
-                self.inputs = {key: {"type": CONVERSION_DICT[value.annotation], "description": ""} for key, value in func_args}
+                self.inputs = {
+                    key: {"type": CONVERSION_DICT[value.annotation], "description": ""} for key, value in func_args
+                }
                 self.forward = self._gradio_tool.run
 
         return GradioToolWrapper(gradio_tool)
