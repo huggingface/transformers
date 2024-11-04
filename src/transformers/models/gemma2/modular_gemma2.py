@@ -520,6 +520,20 @@ class Gemma2DecoderLayer(nn.Module):
 class Gemma2PreTrainedModel(GemmaPreTrainedModel):
     _supports_quantized_cache = False
 
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
+        """
+        Overloads `PreTrainedModel._check_and_enable_sdpa` so as to DISABLE torch SDPA by default on Gemma2 models.
+        SDPA reduces the model performance on Gemma2 because of the logits softcapping.
+        """
+        config = super()._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
+
+        # if using the default path -> swap sdpa by eager
+        if not hard_check_only and config._attn_implementation == "sdpa":
+            config._attn_implementation = "eager"
+
+        return config
+
 
 class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):
