@@ -813,7 +813,8 @@ class QuantoQuantizedCache(QuantizedCache):
         if is_optimum_quanto_available():
             from optimum.quanto import quantize_weight
 
-            qtensor = quantize_weight(tensor, self.qtype, axis, self.q_group_size)
+            scale, zeropoint = self.optimizer(tensor, self.qtype, axis, self.q_group_size)
+            qtensor = quantize_weight(tensor, self.qtype, axis, scale, zeropoint, self.q_group_size)
             return qtensor
         elif is_quanto_available():
             logger.warning_once(
