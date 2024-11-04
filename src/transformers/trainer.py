@@ -66,7 +66,7 @@ from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint
+from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -233,7 +233,6 @@ if is_accelerate_available():
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
-        extract_model_from_parallel,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -2281,7 +2280,7 @@ class Trainer:
         if use_accelerator_prepare and self.is_fsdp_enabled:
             # In case of auto_find_batch_size=True
             # Remove FSDP wrapping from sub-models.
-            self.model = extract_model_from_parallel(self.model, recursive=True)
+            self.model = unwrap_model(self.model, recursive=True)
             # configure fsdp plugin for qlora if any
             self._fsdp_qlora_plugin_updates()
 
