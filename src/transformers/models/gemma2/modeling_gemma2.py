@@ -248,7 +248,8 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
     )
     if not output_attentions:
         return attn_output, None
-    return attn_output
+    else:
+        return attn_output[0], attn_output[1]
 
 
 def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):

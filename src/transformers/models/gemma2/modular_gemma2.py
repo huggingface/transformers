@@ -291,7 +291,8 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
     )
     if not output_attentions:
         return attn_output, None
-    return attn_output
+    else:
+        return attn_output[0], attn_output[1]
 
 
 def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
@@ -411,7 +412,7 @@ class Gemma2Attention(nn.Module):
             attention_type = self.config._attn_implementation
 
         attn_output, attn_weights = GEMMA2_ATTENTION_FUNCTION[attention_type](
-            self, query_states, key_states, value_states, attention_mask
+            self, query_states, key_states, value_states, attention_mask, output_attentions=output_attentions
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
