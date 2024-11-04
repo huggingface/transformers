@@ -368,7 +368,7 @@ class Gemma2Attention(nn.Module):
             attention_type = self.config._attn_implementation
 
         attn_output, attn_weights = GEMMA2_ATTENTION_FUNCTION[attention_type](
-            self, query_states, key_states, value_states, attention_mask
+            self, query_states, key_states, value_states, attention_mask, output_attentions=output_attentions
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()

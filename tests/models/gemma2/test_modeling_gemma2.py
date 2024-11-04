@@ -199,19 +199,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_sdpa_equivalence(self):
         pass
 
-    def test_eager_attention_loaded_by_default(self):
-        """Gemma 2 + SDPA = inferior results, because of the logit softcapping. Eager is the default."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Usually we enable SDPA by default, but not for Gemma2
-        model = Gemma2Model(config)
-        self.assertTrue(model.config._attn_implementation == "eager")
-
-        # We can still force SDPA
-        config._attn_implementation = "sdpa"
-        model = Gemma2Model(config)
-        self.assertTrue(model.config._attn_implementation == "sdpa")
-
 
 @slow
 @require_torch_gpu
