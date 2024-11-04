@@ -697,6 +697,8 @@ class TensorBoardCallback(TrainerCallback):
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
                     self.tb_writer.add_scalar(k, v, state.global_step)
+                elif isinstance(v, str):
+                    self.tb_writer.add_text(k, v, state.global_step)
                 else:
                     logger.warning(
                         "Trainer is attempting to log a value of "
