@@ -444,15 +444,6 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 if not has_flash:
                     raise ValueError("The flash model should have flash attention layers")
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        """
-        skipping the test since mup is very flaky and gets consistently different outputs
-        """
-        self.skipTest("skipping the test since mup is very flaky and gets consistently different outputs")
-
 
 @require_torch_gpu
 class GraniteMoeIntegrationTest(unittest.TestCase):

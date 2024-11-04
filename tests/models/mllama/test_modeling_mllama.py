@@ -354,13 +354,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        # A workaround to override parametrized test with flaky decorator
-        super().test_eager_matches_sdpa_inference_1_bfloat16()
-
     @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
     def test_sdpa_can_compile_dynamic(self):
         pass

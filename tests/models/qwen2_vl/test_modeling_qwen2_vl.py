@@ -66,12 +66,12 @@ class Qwen2VLVisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=2,
-        vision_start_token_id=151652,
-        image_token_id=151655,
-        video_token_id=151656,
+        vision_start_token_id=3,
+        image_token_id=4,
+        video_token_id=5,
         hidden_act="silu",
         hidden_size=32,
-        vocab_size=152064,
+        vocab_size=99,
         intermediate_size=37,
         max_position_embeddings=512,
         max_window_layers=3,
@@ -166,6 +166,8 @@ class Qwen2VLVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
+        input_ids[:, -1] = self.pad_token_id
+        input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         labels = torch.zeros(

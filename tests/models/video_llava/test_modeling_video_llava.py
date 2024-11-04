@@ -57,8 +57,8 @@ class VideoLlavaVisionText2TextModelTester:
         image_token_index=0,
         video_token_index=1,
         projector_hidden_act="gelu",
-        seq_length=13,
-        num_frames=8,
+        seq_length=3,
+        num_frames=2,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         text_config={
@@ -88,7 +88,7 @@ class VideoLlavaVisionText2TextModelTester:
         vision_config={
             "model_type": "clip_vision_model",
             "batch_size": 12,
-            "image_size": 30,
+            "image_size": 8,
             "patch_size": 6,
             "num_channels": 3,
             "is_training": True,
@@ -123,10 +123,11 @@ class VideoLlavaVisionText2TextModelTester:
         self.batch_size = 5
         self.num_channels = 3
         self.image_size = 224
-        self.encoder_seq_length = 246
-        self.num_image_tokens = 25
-        self.num_video_tokens = 26 * self.num_frames
+
+        self.num_image_tokens = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
+        self.num_video_tokens = (self.num_image_tokens + 1) * self.num_frames
         self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return VideoLlavaConfig(
