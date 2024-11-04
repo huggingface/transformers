@@ -186,7 +186,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
 
-        if self.assistant_model.generation_config.assistant_confidence_threshold:
+        if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
             self.probs = []
             self.matches = []
 
@@ -240,7 +240,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
-        if self.assistant_model.generation_config.assistant_confidence_threshold:
+        if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
             for i, score in enumerate(assistant_output.scores):
                 id = assistant_output.sequences[-1, i - len(assistant_output.scores)]
                 p = score.softmax(-1)[0, id].item()
