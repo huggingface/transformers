@@ -14,15 +14,21 @@
 # limitations under the License.
 
 import unittest
-from transformers.agents.monitoring import stream_to_gradio
-from transformers.agents.agents import ReactCodeAgent, ReactJsonAgent, AgentError
-from transformers.agents.agent_types import AgentImage
 
-class TestMonitoring(unittest.TestCase):
+from transformers.agents.agent_types import AgentImage
+from transformers.agents.agents import AgentError, ReactCodeAgent, ReactJsonAgent
+from transformers.agents.monitoring import stream_to_gradio
+
+
+class MonitoringTester(unittest.TestCase):
     def test_streaming_agent_text_output(self):
         # Create a dummy LLM engine that returns a final answer
         def dummy_llm_engine(prompt, **kwargs):
-            return "final_answer('This is the final answer.')"
+            return """
+Code:
+````
+final_answer('This is the final answer.')
+```"""
 
         agent = ReactCodeAgent(
             tools=[],
@@ -31,7 +37,7 @@ class TestMonitoring(unittest.TestCase):
         )
 
         # Use stream_to_gradio to capture the output
-        outputs = list(stream_to_gradio(agent, task="Test task"))
+        outputs = list(stream_to_gradio(agent, task="Test task", test_mode=True))
 
         # Check that the final output is a ChatMessage with the expected content
         self.assertEqual(len(outputs), 3)
@@ -51,10 +57,10 @@ class TestMonitoring(unittest.TestCase):
         )
 
         # Use stream_to_gradio to capture the output
-        outputs = list(stream_to_gradio(agent, task="Test task", image=AgentImage(value="path.png")))
+        outputs = list(stream_to_gradio(agent, task="Test task", image=AgentImage(value="path.png"), test_mode=True))
 
         # Check that the final output is a ChatMessage with the expected content
-        self.assertEqual(len(outputs), 3)
+        self.assertEqual(len(outputs), 2)
         final_message = outputs[-1]
         self.assertEqual(final_message.role, "assistant")
         self.assertIsInstance(final_message.content, dict)
@@ -64,7 +70,7 @@ class TestMonitoring(unittest.TestCase):
     def test_streaming_with_agent_error(self):
         # Create a dummy LLM engine that raises an error
         def dummy_llm_engine(prompt, **kwargs):
-            raise AgentError("Simulated agent error.")
+            raise AgentError("Simulated agent error")
 
         agent = ReactCodeAgent(
             tools=[],
@@ -73,12 +79,10 @@ class TestMonitoring(unittest.TestCase):
         )
 
         # Use stream_to_gradio to capture the output
-        outputs = list(stream_to_gradio(agent, task="Test task"))
+        outputs = list(stream_to_gradio(agent, task="Test task", test_mode=True))
 
         # Check that the error message is yielded
-        print("OUTPUTTTTS", outputs)
         self.assertEqual(len(outputs), 3)
         final_message = outputs[-1]
         self.assertEqual(final_message.role, "assistant")
         self.assertIn("Simulated agent error", final_message.content)
-
