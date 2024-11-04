@@ -2416,7 +2416,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # Perform post-processing to get instance segmentation map
-        >>> pred_instance_map = image_processor.post_process_semantic_segmentation(
+        >>> pred_instance_map = image_processor.post_process_instance_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]
         >>> print(pred_instance_map.shape)
