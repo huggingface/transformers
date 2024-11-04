@@ -35,6 +35,7 @@ import torch
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from datasets import load_dataset
+from huggingface_hub import HfApi
 from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision.io import ImageReadMode, read_image
@@ -42,7 +43,6 @@ from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Res
 from torchvision.transforms.functional import InterpolationMode
 from tqdm.auto import tqdm
 
-from huggingface_hub import HfApi
 import transformers
 from transformers import (
     AutoImageProcessor,
