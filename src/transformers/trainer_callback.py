@@ -598,7 +598,7 @@ class ProgressCallback(TrainerCallback):
 
         Args:
             max_str_len (`int`):
-                Maximum length of strings to display in logs. 
+                Maximum length of strings to display in logs.
                 Longer strings will be truncated with a message.
         """
         self.training_bar = None
