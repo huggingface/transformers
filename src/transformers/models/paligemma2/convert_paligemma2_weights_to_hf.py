@@ -118,7 +118,7 @@ def get_paligemma2_config(variant: str, precision: str):
             "intermediate_size": 4304,
             "num_hidden_layers": 27,
             "num_attention_heads": 16,
-            "projection_dim": 2304,
+            "projection_dim": variant_config["hidden_size"],
             "hidden_act": "gelu_pytorch_tanh",
             #"": "gelu_fast",
             "vision_use_head": False,
