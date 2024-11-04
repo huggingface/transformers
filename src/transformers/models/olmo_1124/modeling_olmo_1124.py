@@ -8,7 +8,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -16,10 +15,7 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -34,6 +30,11 @@ from .configuration_olmo_1124 import Olmo1124Config
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
+
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "Olmo1124Config"
 
 
 class Olmo1124RMSNorm(nn.Module):
@@ -54,9 +55,6 @@ class Olmo1124RMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-logger = logging.get_logger(__name__)
 
 
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo1124
@@ -205,9 +203,9 @@ class Olmo1124Attention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
+        self._init_rope()
         self.q_norm = Olmo1124RMSNorm(self.num_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo1124RMSNorm(self.num_key_value_heads * self.head_dim, config.rms_norm_eps)
-        self._init_rope()
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -295,21 +293,6 @@ class Olmo1124Attention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-
-class Olmo1124MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 class Olmo1124FlashAttention2(Olmo1124Attention):
@@ -496,6 +479,21 @@ class Olmo1124SdpaAttention(Olmo1124Attention):
         return attn_output, None, past_key_value
 
 
+class Olmo1124MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
 OLMO_1124_ATTENTION_CLASSES = {
     "eager": Olmo1124Attention,
     "flash_attention_2": Olmo1124FlashAttention2,
@@ -619,9 +617,6 @@ class Olmo1124PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-
-_CONFIG_FOR_DOC = "Olmo1124Config"
 
 
 OLMO_1124_INPUTS_DOCSTRING = r"""
