@@ -28,6 +28,7 @@ import argparse
 import logging
 import math
 import os
+from pathlib import Path
 
 import datasets
 import torch
@@ -41,6 +42,7 @@ from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Res
 from torchvision.transforms.functional import InterpolationMode
 from tqdm.auto import tqdm
 
+from huggingface_hub import HfApi
 import transformers
 from transformers import (
     AutoImageProcessor,
