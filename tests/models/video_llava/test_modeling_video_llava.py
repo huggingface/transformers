@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoLlava model."""
 
-import gc
 import unittest
 
 import numpy as np
@@ -29,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_gpu,
@@ -443,8 +443,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes

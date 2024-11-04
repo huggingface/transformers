@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
-import gc
 import unittest
 
 import requests
@@ -28,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     slow,
@@ -216,6 +216,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": LlavaNextForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -376,8 +377,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes
