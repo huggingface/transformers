@@ -269,10 +269,11 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
 
 
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, target_dtype=torch.float16):
+    if mask is None:
+        mask = mask[:, :, :, : key.shape[-2]]
+
     def mask_mod(b, h, q_idx, kv_idx):
-        if mask is None:
-            return None
-        return mask[:, :, :, : kv_idx]
+        return mask
 
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
