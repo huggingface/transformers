@@ -90,7 +90,7 @@ def get_paligemma2_config(variant: str, precision: str):
         variant_config = VARIANT_CONFIGS[base_variant]
         patch_size = 14
         num_image_tokens = (image_size**2) // (patch_size**2)
-        config["projection_dim"] = 2304
+        config["projection_dim"] = variant_config["hidden_size"]
         config["image_token_index"] = 257152
         text_config = Gemma2Config.from_pretrained('google/gemma-2-2b-it').to_dict()
         sup_text_config = {
@@ -120,7 +120,6 @@ def get_paligemma2_config(variant: str, precision: str):
             "num_attention_heads": 16,
             "projection_dim": variant_config["hidden_size"],
             "hidden_act": "gelu_pytorch_tanh",
-            #"": "gelu_fast",
             "vision_use_head": False,
         }
         final_config = PaliGemmaConfig(text_config=text_config, vision_config=vision_config, **config)
