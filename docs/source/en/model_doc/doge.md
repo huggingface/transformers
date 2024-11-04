@@ -31,6 +31,8 @@ Tips:
 - The core logic of sequence transformation and state transformation of the Doge model is respectively held in the `DogeInnerFuncAttn` class and the `DogeCDMoE` class.
 - Since the fast cuda/triton kernels in `mamba-ssm` have not been updated for a while, and the speed of the naive implementation is slow, the Doge model temporarily removes part of the `State Space Duality`.
 
+For more information about this model, you can refer to the [Doge](https://github.com/LoserCheems/Doge) repository, including data processing, model training, and ongoing research.
+
 ## Usage
 
 ### Prerequisites
