@@ -388,7 +388,7 @@ class SamTwoWayTransformer(nn.Module):
         for i in range(self.num_hidden_layers):
             self.layers.append(SamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
 
-        self.final_attn_token_to_image = SamAttention(config)
+        self.final_attn_token_to_image = SAM_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm_final_attn = nn.LayerNorm(config.hidden_size)
 
     def forward(
