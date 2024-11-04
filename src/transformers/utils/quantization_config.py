@@ -1154,15 +1154,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
         """
-        ver = config_dict.get("version", None)
 
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
                 **config_dict["quantization_config"],
             )
-        if ver is not None:
-            config_dict["version"] = ver
 
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
@@ -1179,7 +1176,10 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         else:
             quantization_config["quant_method"] = self.QUANTIZATION_NAME
 
-        quantization_config["sparsity_config"] = self.sparsity_config.dict()
+        if self.sparsity_config is not None:
+            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+        else:
+            quantization_config["sparsity_config"] = {}
 
         return quantization_config
 
