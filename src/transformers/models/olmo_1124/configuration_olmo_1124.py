@@ -10,7 +10,7 @@ from ...configuration_utils import PretrainedConfig
 
 class Olmo1124Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Olmo1124Model`]. It is used to instantiate an Olmo1124
+    This is the configuration class to store the configuration of a [`Olmo1124Model`]. It is used to instantiate an OLMo November 2024
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the [allenai/Olmo1124-7B-hf](https://huggingface.co/allenai/Olmo1124-7B-hf).
 
@@ -69,24 +69,21 @@ class Olmo1124Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        clip_qkv (`float`, *optional*):
-            If not `None`, elements of query, key and value attention states are clipped so that their
-            absolute value does not exceed this value.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
 
     ```python
     >>> from transformers import Olmo1124Model, Olmo1124Config
 
-    >>> # Initializing a Olmo1124 7B style configuration
+    >>> # Initializing a Olmo November 2024 7B style configuration
     >>> configuration = Olmo1124Config()
 
-    >>> # Initializing a model from the Olmo1124 7B style configuration
+    >>> # Initializing a model from the Olmo November 2024 7B style configuration
     >>> model = Olmo1124Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
     """
 
     model_type = "olmo-1124"
