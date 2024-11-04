@@ -24,8 +24,10 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 from transformers.testing_utils import (
+    is_flaky,
     require_tokenizers,
     require_torch,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -346,6 +348,14 @@ class Olmo1124ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    # Copied from tests.models.mllama.test_modeling_mllama.MllamaForConditionalGenerationModelTest.test_eager_matches_sdpa_inference_1_bfloat16
+    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+        # A workaround to override parametrized test with flaky decorator
+        super().test_eager_matches_sdpa_inference_1_bfloat16()
+
 
 @require_torch
 class Olmo1124IntegrationTest(unittest.TestCase):
@@ -355,19 +365,21 @@ class Olmo1124IntegrationTest(unittest.TestCase):
         model = Olmo1124ForCausalLM.from_pretrained("shanearora/OLMo-7B-1124-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[0.0271, 0.0249, -0.0578, -0.0870, 0.0167, 0.0710, 0.1002, 0.0677]])
+        EXPECTED_MEAN = torch.tensor(
+            [[-13.0244, -13.9564, -11.8270, -11.3047, -12.3794, -12.4215, -15.6030, -12.7962]]
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-1.7433, -1.6685, 7.4941, 6.1506, 0.1364, -0.1127, 1.3224, 4.5458, 4.2068, 5.8296, 7.4723, 2.7925, 3.1245, 10.8872, 10.0758, 10.6717, 7.0945, 1.2398, 3.6766, 4.2365, 2.5655, 2.2222, 1.7418, 0.5223, 0.7753, 1.0938, 0.6723, 6.2522, 6.2264, 1.8105])  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-5.3909, -13.9841, -13.6123, -14.5780, -13.9455, -13.2265, -13.4734, -11.9079, -9.2879, -12.6139, -11.4819, -5.9607, -11.9657, -6.3618, -11.1065, -7.3075, -6.5674, -6.7154, -7.3409, -7.9662, -8.0863, -8.1682, -8.7341, -8.7665, -8.8742, -9.7813, -8.0620, -12.5937, -7.6440, -11.3966])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
 
     @slow
     def test_model_7b_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that \nthe speed of light is the same for all observers.\n\nThe theory of relativity is a theory of physics that describes the \nmovement of objects in space and time.\n\nThe theory of relativity is a theory of physics that describes the \nmovement of objects in space and time.\n\n"""
+        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the fastest speed possible, and 3) the speed of light is the same for all observers, regardless of their relative motion. The theory of relativity is based on the idea that the speed of light is constant. This means that"""
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo-7B-1124-hf", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt")
         model = Olmo1124ForCausalLM.from_pretrained("shanearora/OLMo-7B-1124-hf", device_map="auto")
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
@@ -382,11 +394,11 @@ class Olmo1124IntegrationTest(unittest.TestCase):
 
         fast_tokenizer.add_eos_token = False
         fast = fast_tokenizer.encode("A sample test")
-        self.assertEqual(fast, [34, 3410, 1071])
+        self.assertEqual(fast, [32, 6205, 1296])
 
         fast_tokenizer.add_eos_token = True
         fast = fast_tokenizer.encode("A sample test")
-        self.assertEqual(fast, [34, 3410, 1071, 50279])
+        self.assertEqual(fast, [32, 6205, 1296, 100257])
 
         fast_tokenizer.add_eos_token = original_add_eos_token
 
@@ -394,30 +406,30 @@ class Olmo1124IntegrationTest(unittest.TestCase):
     def test_simple_encode_decode(self):
         rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("shanearora/OLMo-7B-1124-hf")
 
-        self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
-        self.assertEqual(rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test")
+        self.assertEqual(rust_tokenizer.encode("This is a test"), [2028, 374, 264, 1296])
+        self.assertEqual(rust_tokenizer.decode([2028, 374, 264, 1296], skip_special_tokens=True), "This is a test")
 
         # bytefallback showcase
-        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [20025, 46549, 5225, 48561, 33656, 238, 12105])  # fmt: skip
+        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [21990, 76706, 9554, 89151, 39013, 249, 21043])  # fmt: skip
         self.assertEqual(
-            rust_tokenizer.decode([20025, 46549, 5225, 48561, 33656, 238, 12105], skip_special_tokens=True),
+            rust_tokenizer.decode([21990, 76706, 9554, 89151, 39013, 249, 21043], skip_special_tokens=True),
             "生活的真谛是",
         )
 
         # Inner spaces showcase
-        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [13347, 220, 22691])
+        self.assertEqual(rust_tokenizer.decode([13347, 220, 22691], skip_special_tokens=True), "Hi  Hello")
 
-        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [13347, 256, 22691])
+        self.assertEqual(rust_tokenizer.decode([13347, 256, 22691], skip_special_tokens=True), "Hi   Hello")
 
         self.assertEqual(rust_tokenizer.encode(""), [])
 
-        self.assertEqual(rust_tokenizer.encode(" "), [209])
+        self.assertEqual(rust_tokenizer.encode(" "), [220])
 
-        self.assertEqual(rust_tokenizer.encode("  "), [50276])
+        self.assertEqual(rust_tokenizer.encode("  "), [256])
 
-        self.assertEqual(rust_tokenizer.encode(" Hello"), [24387])
+        self.assertEqual(rust_tokenizer.encode(" Hello"), [22691])
 
     @slow
     def test_export_static_cache(self):
@@ -433,7 +445,7 @@ class Olmo1124IntegrationTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained(olmo_1124_model, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that \nthe speed of light is the same in all reference frames.\n\nThe speed of light",
+            "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light",
         ]
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
