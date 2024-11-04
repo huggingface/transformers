@@ -50,7 +50,7 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 if is_torch_greater_or_equal("2.5"):
-    from torch.nn.attention.flex_attention import flex_attention, create_block_mask
+    from torch.nn.attention.flex_attention import flex_attention
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
@@ -213,6 +213,7 @@ class Gemma2MLP(nn.Module):
 class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
     pass
 
+
 def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
@@ -270,7 +271,7 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
 
     return attn_output, None
 
-# torch._dynamo.config.capture_scalar_outputs = True
+
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping

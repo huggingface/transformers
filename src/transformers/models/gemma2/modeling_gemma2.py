@@ -229,7 +229,6 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
     return attn_output, None
 
 
-# torch._dynamo.config.capture_scalar_outputs = True
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
