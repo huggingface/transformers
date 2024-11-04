@@ -589,11 +589,21 @@ class DefaultFlowCallback(TrainerCallback):
 class ProgressCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that displays the progress of training or evaluation.
+    You can modify `max_str_len` to control how long strings are truncated when logging.
     """
 
-    def __init__(self):
+    def __init__(self, max_str_len: int = 100):
+        """
+        Initialize the callback with optional max_str_len parameter to control string truncation length.
+
+        Args:
+            max_str_len (`int`):
+                Maximum length of strings to display in logs.
+                Longer strings will be truncated with a message.
+        """
         self.training_bar = None
         self.prediction_bar = None
+        self.max_str_len = max_str_len
 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
@@ -631,7 +641,13 @@ class ProgressCallback(TrainerCallback):
             # but avoid doing any value pickling.
             shallow_logs = {}
             for k, v in logs.items():
-                shallow_logs[k] = v
+                if isinstance(v, str) and len(v) > self.max_str_len:
+                    shallow_logs[k] = (
+                        f"[String too long to display, length: {len(v)} > {self.max_str_len}. "
+                        "Consider increasing `max_str_len` if needed.]"
+                    )
+                else:
+                    shallow_logs[k] = v
             _ = shallow_logs.pop("total_flos", None)
             # round numbers so that it looks better in console
             if "epoch" in shallow_logs:
