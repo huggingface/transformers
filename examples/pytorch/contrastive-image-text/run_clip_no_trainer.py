@@ -24,21 +24,18 @@ Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://hugg
 Text models: BERT, ROBERTa (https://huggingface.co/models?filter=fill-mask)
 """
 
-import logging
-import os
-import sys
-import math
-from dataclasses import dataclass, field
-from typing import Optional
 import argparse
+import logging
+import math
+import os
 
+import datasets
 import torch
-from torch.utils.data import DataLoader
 from accelerate import Accelerator
 from accelerate.utils import set_seed
-import datasets
 from datasets import load_dataset
 from PIL import Image
+from torch.utils.data import DataLoader
 from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
@@ -48,11 +45,10 @@ import transformers
 from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
-    VisionTextDualEncoderModel,
     SchedulerType,
+    VisionTextDualEncoderModel,
     get_scheduler,
 )
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
@@ -74,140 +70,89 @@ def parse_args():
         "--vision_model_name_or_path",
         type=str,
         required=True,
-        help="Path to pretrained model or model identifier from huggingface.co/models"
+        help="Path to pretrained model or model identifier from huggingface.co/models",
     )
     parser.add_argument(
         "--text_model_name_or_path",
         type=str,
         required=True,
-        help="Path to pretrained model or model identifier from huggingface.co/models"
+        help="Path to pretrained model or model identifier from huggingface.co/models",
     )
     parser.add_argument(
-        "--config_name",
-        type=str,
-        default=None,
-        help="Pretrained config name or path if not the same as model_name"
+        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name"
     )
     parser.add_argument(
         "--tokenizer_name",
         type=str,
         default=None,
-        help="Pretrained tokenizer name or path if not the same as model_name"
+        help="Pretrained tokenizer name or path if not the same as model_name",
     )
+    parser.add_argument("--image_processor_name", type=str, default=None, help="Name or path of preprocessor config.")
     parser.add_argument(
-        "--image_processor_name",
-        type=str,
-        default=None,
-        help="Name or path of preprocessor config."
-    )
-    parser.add_argument(
-        "--cache_dir",
-        type=str,
-        default=None,
-        help="Where to store the pretrained models downloaded from s3"
+        "--cache_dir", type=str, default=None, help="Where to store the pretrained models downloaded from s3"
     )
     parser.add_argument(
         "--model_revision",
         type=str,
         default="main",
-        help="Specific model version to use (can be branch name, tag name, or commit id)"
+        help="Specific model version to use (can be branch name, tag name, or commit id)",
     )
     parser.add_argument(
         "--use_fast_tokenizer",
         action="store_true",
-        help="Use one of the fast tokenizers backed by the tokenizers library"
+        help="Use one of the fast tokenizers backed by the tokenizers library",
     )
-    parser.add_argument(
-        "--token",
-        type=str,
-        default=None,
-        help="HTTP bearer authorization token for remote files"
-    )
+    parser.add_argument("--token", type=str, default=None, help="HTTP bearer authorization token for remote files")
     parser.add_argument(
         "--trust_remote_code",
         action="store_true",
-        help="Trust execution of code from datasets/models defined on the Hub. Only use for trusted repositories"
+        help="Trust execution of code from datasets/models defined on the Hub. Only use for trusted repositories",
     )
+    parser.add_argument("--freeze_vision_model", action="store_true", help="Freeze the vision model parameters")
+    parser.add_argument("--freeze_text_model", action="store_true", help="Freeze the text model parameters")
     parser.add_argument(
-        "--freeze_vision_model",
-        action="store_true",
-        help="Freeze the vision model parameters"
-    )
-    parser.add_argument(
-        "--freeze_text_model",
-        action="store_true",
-        help="Freeze the text model parameters"
-    )
-    parser.add_argument(
-        "--dataset_name",
-        type=str,
-        default=None,
-        help="Name of the dataset to use (via the datasets library)"
+        "--dataset_name", type=str, default=None, help="Name of the dataset to use (via the datasets library)"
     )
     parser.add_argument(
         "--dataset_config_name",
         type=str,
         default=None,
-        help="Configuration name of the dataset to use (via the datasets library)"
+        help="Configuration name of the dataset to use (via the datasets library)",
     )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default=None,
-        help="Directory containing input data files"
-    )
+    parser.add_argument("--data_dir", type=str, default=None, help="Directory containing input data files")
     parser.add_argument(
         "--image_column",
         type=str,
         default="image_path",
-        help="Column name in the dataset containing the image file paths"
+        help="Column name in the dataset containing the image file paths",
     )
     parser.add_argument(
-        "--caption_column",
-        type=str,
-        default="caption",
-        help="Column name in the dataset containing image captions"
+        "--caption_column", type=str, default="caption", help="Column name in the dataset containing image captions"
     )
     parser.add_argument(
-        "--train_file",
-        type=str,
-        default=None,
-        help="Path to the input training data file (jsonlines format)"
+        "--train_file", type=str, default=None, help="Path to the input training data file (jsonlines format)"
     )
     parser.add_argument(
-        "--validation_file",
-        type=str,
-        default=None,
-        help="Optional input evaluation data file (jsonlines format)"
+        "--validation_file", type=str, default=None, help="Optional input evaluation data file (jsonlines format)"
     )
-    parser.add_argument(
-        "--max_seq_length",
-        type=int,
-        default=128,
-        help="Max input sequence length after tokenization"
-    )
+    parser.add_argument("--max_seq_length", type=int, default=128, help="Max input sequence length after tokenization")
     parser.add_argument(
         "--max_train_samples",
         type=int,
         default=None,
-        help="Limit the number of training examples (for debugging or quicker training)"
+        help="Limit the number of training examples (for debugging or quicker training)",
     )
     parser.add_argument(
         "--max_eval_samples",
         type=int,
         default=None,
-        help="Limit the number of evaluation examples (for debugging or quicker training)"
+        help="Limit the number of evaluation examples (for debugging or quicker training)",
     )
     parser.add_argument(
-        "--overwrite_cache",
-        action="store_true",
-        help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
-        "--preprocessing_num_workers",
-        type=int,
-        default=None,
-        help="Number of processes to use for data preprocessing"
+        "--preprocessing_num_workers", type=int, default=None, help="Number of processes to use for data preprocessing"
     )
 
     parser.add_argument(
@@ -447,7 +392,7 @@ def main():
             token=args.token,
         )
 
-    # Load tokenizer 
+    # Load tokenizer
     if args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
             args.tokenizer_name,
@@ -557,9 +502,7 @@ def main():
         max_train_samples = min(len(train_dataset), args.max_train_samples)
         train_dataset = train_dataset.select(range(max_train_samples))
 
-    train_dataset = train_dataset.filter(
-        filter_corrupt_images, batched=True, num_proc=args.preprocessing_num_workers
-    )
+    train_dataset = train_dataset.filter(filter_corrupt_images, batched=True, num_proc=args.preprocessing_num_workers)
     train_dataset = train_dataset.map(
         function=tokenize_captions,
         batched=True,
@@ -577,9 +520,7 @@ def main():
         max_eval_samples = min(len(eval_dataset), args.max_eval_samples)
         eval_dataset = eval_dataset.select(range(max_eval_samples))
 
-    eval_dataset = eval_dataset.filter(
-        filter_corrupt_images, batched=True, num_proc=args.preprocessing_num_workers
-    )
+    eval_dataset = eval_dataset.filter(filter_corrupt_images, batched=True, num_proc=args.preprocessing_num_workers)
     eval_dataset = eval_dataset.map(
         function=tokenize_captions,
         batched=True,
@@ -707,7 +648,6 @@ def main():
 
     # update the progress_bar if load from checkpoint
     progress_bar.update(completed_steps)
-
 
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
