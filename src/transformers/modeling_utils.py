@@ -28,7 +28,7 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import lru_cache, partial, wraps
+from functools import partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
@@ -5028,7 +5028,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.hf_quantizer.is_trainable
 
     @property
-    @lru_cache
     def loss_function(self):
         if getattr(self.config, "loss_type", None) is not None:
             loss_type = self.config.loss_type
