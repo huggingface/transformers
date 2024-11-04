@@ -327,7 +327,7 @@
       - local: model_doc/bartpho
         title: BARTpho
       - local: in_translation
-        title: (번역중) BERT
+        title: BERT
       - local: in_translation
         title: (번역중) BertGeneration
       - local: model_doc/bert-japanese
