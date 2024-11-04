@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# ConvBERT
+# ConvBERT [[convbert]]
 
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=convbert">
@@ -25,45 +25,35 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-## Overview
+## 개요 [[overview]]
 
-The ConvBERT model was proposed in [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://arxiv.org/abs/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng
-Yan.
+ConvBERT 모델은 Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng Yan에 의해 제안되었으며, 제안 논문 제목은 [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://arxiv.org/abs/2008.02496)입니다.
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다:
 
-*Pre-trained language models like BERT and its variants have recently achieved impressive performance in various
-natural language understanding tasks. However, BERT heavily relies on the global self-attention block and thus suffers
-large memory footprint and computation cost. Although all its attention heads query on the whole input sequence for
-generating the attention map from a global perspective, we observe some heads only need to learn local dependencies,
-which means the existence of computation redundancy. We therefore propose a novel span-based dynamic convolution to
-replace these self-attention heads to directly model local dependencies. The novel convolution heads, together with the
-rest self-attention heads, form a new mixed attention block that is more efficient at both global and local context
-learning. We equip BERT with this mixed attention design and build a ConvBERT model. Experiments have shown that
-ConvBERT significantly outperforms BERT and its variants in various downstream tasks, with lower training cost and
-fewer model parameters. Remarkably, ConvBERTbase model achieves 86.4 GLUE score, 0.7 higher than ELECTRAbase, while
-using less than 1/4 training cost. Code and pre-trained models will be released.*
+*BERT와 그 변형 모델과 같은 사전 학습된 언어 모델들은 최근 다양한 자연어 이해 과제에서 놀라운 성과를 이루었습니다. 그러나 BERT는 글로벌 셀프 어텐션 블록에 크게 의존하기 때문에 메모리 사용량이 많고 계산 비용이 큽니다. 모든 어텐션 헤드가 글로벌 관점에서 어텐션 맵을 생성하기 위해 입력 시퀀스 전체를 탐색하지만, 일부 헤드는 로컬 종속성만 학습할 필요가 있다는 것을 발견했습니다. 이는 불필요한 계산이 포함되어 있음을 의미합니다. 따라서 우리는 이러한 self-attention 헤드들을 대체하여 로컬 종속성을 직접 모델링하기 위해 새로운 span 기반 동적 컨볼루션을 제안합니다. 새로운 컨볼루션 헤드와 나머지 self-attention 헤드들이 결합하여 글로벌 및 로컬 문맥 학습에 더 효율적인 혼합 어텐션 블록을 구성합니다. 우리는 BERT에 이 혼합 어텐션 설계를 적용하여 ConvBERT 모델을 구축했습니다. 실험 결과, ConvBERT는 다양한 다운스트림 과제에서 BERT 및 그 변형 모델보다 더 우수한 성능을 보였으며, 훈련 비용과 모델 파라미터 수가 더 적었습니다. 특히 ConvBERTbase 모델은 GLUE 스코어 86.4를 달성하여 ELECTRAbase보다 0.7 높은 성과를 보이며, 훈련 비용은 1/4 이하로 줄었습니다. 코드와 사전 학습된 모델은 공개될 예정입니다.*
 
-This model was contributed by [abhishek](https://huggingface.co/abhishek). The original implementation can be found
-here: https://github.com/yitu-opensource/ConvBert
+이 모델은 [abhishek](https://huggingface.co/abhishek)에 의해 기여되었으며, 원본 구현은 여기에서 찾을 수 있습니다 : https://github.com/yitu-opensource/ConvBert
 
-## Usage tips
 
-ConvBERT training tips are similar to those of BERT. For usage tips refer to [BERT documentation](bert).
 
-## Resources
+## 사용 팁 [[usage-tips]]
+ConvBERT 훈련 팁은 BERT와 유사합니다. 사용 팁은 [BERT 문서](bert).를 참고하십시오.
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
 
-## ConvBertConfig
+## 리소스 [[resources]]
+
+- [텍스트 분류 작업 가이드 (Text classification task guide)](../tasks/sequence_classification)
+- [토큰 분류 작업 가이드 (Token classification task guide)](../tasks/token_classification)
+- [질의응답 작업 가이드 (Question answering task guide)](../tasks/question_answering)
+- [마스킹된 언어 모델링 작업 가이드 (Masked language modeling task guide)](../tasks/masked_language_modeling)
+- [다중 선택 작업 가이드 (Multiple choice task guide)](../tasks/multiple_choice)
+
+## ConvBertConfig [[transformers.ConvBertConfig]]
 
 [[autodoc]] ConvBertConfig
 
-## ConvBertTokenizer
+## ConvBertTokenizer [[transformers.ConvBertTokenizer]]
 
 [[autodoc]] ConvBertTokenizer
     - build_inputs_with_special_tokens
@@ -71,39 +61,39 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## ConvBertTokenizerFast
+## ConvBertTokenizerFast [[transformers.ConvBertTokenizerFast]]
 
 [[autodoc]] ConvBertTokenizerFast
 
 <frameworkcontent>
 <pt>
 
-## ConvBertModel
+## ConvBertModel [[transformers.ConvBertModel]]
 
 [[autodoc]] ConvBertModel
     - forward
 
-## ConvBertForMaskedLM
+## ConvBertForMaskedLM [[transformers.ConvBertForMaskedLM]]
 
 [[autodoc]] ConvBertForMaskedLM
     - forward
 
-## ConvBertForSequenceClassification
+## ConvBertForSequenceClassification [[transformers.ConvBertForSequenceClassification]]
 
 [[autodoc]] ConvBertForSequenceClassification
     - forward
 
-## ConvBertForMultipleChoice
+## ConvBertForMultipleChoice [[transformers.ConvBertForMultipleChoice]]
 
 [[autodoc]] ConvBertForMultipleChoice
     - forward
 
-## ConvBertForTokenClassification
+## ConvBertForTokenClassification [[transformers.ConvBertForTokenClassification]]
 
 [[autodoc]] ConvBertForTokenClassification
     - forward
 
-## ConvBertForQuestionAnswering
+## ConvBertForQuestionAnswering [[transformers.ConvBertForQuestionAnswering]]
 
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
@@ -111,32 +101,32 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 </pt>
 <tf>
 
-## TFConvBertModel
+## TFConvBertModel [[transformers.TFConvBertModel]]
 
 [[autodoc]] TFConvBertModel
     - call
 
-## TFConvBertForMaskedLM
+## TFConvBertForMaskedLM [[transformers.TFConvBertForMaskedLM]]
 
-[[autodoc]] TFConvBertForMaskedLM
+[[autodoc]] TFConvBertForMaskedLM 
     - call
 
-## TFConvBertForSequenceClassification
+## TFConvBertForSequenceClassification [[transformers.TFConvBertForSequenceClassification]]
 
 [[autodoc]] TFConvBertForSequenceClassification
     - call
 
-## TFConvBertForMultipleChoice
+## TFConvBertForMultipleChoice [[transformers.TFConvBertForMultipleChoice]]
 
 [[autodoc]] TFConvBertForMultipleChoice
     - call
 
-## TFConvBertForTokenClassification
+## TFConvBertForTokenClassification [[transformers.TFConvBertForTokenClassification]]
 
 [[autodoc]] TFConvBertForTokenClassification
     - call
 
-## TFConvBertForQuestionAnswering
+## TFConvBertForQuestionAnswering [[transformers.TFConvBertForQuestionAnswering]]
 
 [[autodoc]] TFConvBertForQuestionAnswering
     - call
