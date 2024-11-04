@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
@@ -52,7 +52,9 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
 def _load_timm_model(config: TimmWrapperConfig, add_classification_head: bool = False):
     # timm model will not add classification head if num_classes = 0
     num_classes = config.num_labels if add_classification_head else 0
-    model = timm.create_model(model_name=config.architecture, pretrained=False, num_classes=num_classes)
+    model = timm.create_model(
+        model_name=config.architecture, pretrained=False, num_classes=num_classes, scriptable=True
+    )
     return model
 
 
@@ -93,7 +95,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     Wrapper class for timm models to be used in transformers.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
         self.timm_model = _load_timm_model(config, add_classification_head=False)
         self.post_init()
@@ -109,16 +111,31 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     ) -> Union[BaseModelOutput, Tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if output_hidden_states is not None or output_attentions is not None:
-            raise ValueError("Cannot set output_attentions or output_hidden_states for timm models")
+        if output_attentions is not None:
+            raise ValueError("Cannot set `output_attentions` for timm models")
+
+        if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
+            raise ValueError(
+                "Cannot set `output_hidden_states` for this timm models, consider using different "
+                "architecture or updating timm package."
+            )
 
         pixel_values = pixel_values.to(self.device, self.dtype)
-        features = self.timm_model(pixel_values, **kwargs)
+
+        if output_hidden_states:
+            # to enable hidden states selection
+            if isinstance(output_hidden_states, (list, tuple)):
+                kwargs["indices"] = output_hidden_states
+            features, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+        else:
+            features = self.timm_model(pixel_values, **kwargs)
+            hidden_states = None
 
         if not return_dict:
-            return (features,)
+            output = (features, hidden_states) if hidden_states is not None else (features,)
+            return output
 
-        return BaseModelOutput(last_hidden_state=features)
+        return BaseModelOutput(last_hidden_state=features, hidden_states=hidden_states)
 
 
 class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
@@ -126,7 +143,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     Wrapper class for timm models to be used in transformers for image classification.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
         self.timm_model = _load_timm_model(config, add_classification_head=True)
         self.num_labels = config.num_labels
@@ -138,10 +155,10 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[BaseModelOutput, Tuple[Tensor, ...]]:
+    ) -> Union[ImageClassifierOutput, Tuple[Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -150,11 +167,25 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if output_hidden_states is not None or output_attentions is not None:
-            raise ValueError("Cannot set `output_attentions` or `output_hidden_states` for timm models")
+        if output_attentions is not None:
+            raise ValueError("Cannot set `output_attentions` for timm models")
+
+        if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
+            raise ValueError(
+                "Cannot set `output_hidden_states` for this timm models, consider using different "
+                "architecture or updating timm package."
+            )
 
         pixel_values = pixel_values.to(self.device, self.dtype)
-        logits = self.timm_model(pixel_values, **kwargs)
+
+        if output_hidden_states:
+            # to enable hidden states selection
+            if isinstance(output_hidden_states, (list, tuple)):
+                kwargs["indices"] = output_hidden_states
+            logits, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+        else:
+            logits = self.timm_model(pixel_values, **kwargs)
+            hidden_states = None
 
         loss = None
         if labels is not None:
@@ -179,11 +210,12 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            return (loss, logits) if loss is not None else (logits,)
+            output = (loss, logits) if loss is not None else (logits,)
+            output = output + (hidden_states,) if hidden_states is not None else output
+            return output
 
         return ImageClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,
-            attentions=None,
+            hidden_states=hidden_states,
         )
