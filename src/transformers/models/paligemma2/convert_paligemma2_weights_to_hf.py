@@ -45,6 +45,7 @@ logger = logging.get_logger(__name__)
 PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896", "27b-224", "27b-448"]
 VARIANT_CONFIGS = {
     "2b": {
+        "num_positions": 256,
         "hidden_size": 2304,
         "num_hidden_layers": 26,
         "intermediate_size": 9216,
@@ -53,6 +54,7 @@ VARIANT_CONFIGS = {
         "head_dim": 256,
     },
     "9b": {
+        "num_positions": 1024,
         "hidden_size": 3584,
         "num_hidden_layers": 28,
         "intermediate_size": 14336,
@@ -61,6 +63,7 @@ VARIANT_CONFIGS = {
         "head_dim": 256,
     },
     "27b": {
+        "num_positions": 4096,
         "hidden_size": 4608,
         "num_hidden_layers": 46,
         "intermediate_size": 36864,
@@ -106,6 +109,7 @@ def get_paligemma2_config(variant: str, precision: str):
         text_config.update(sup_text_config)
 
         vision_config = {
+            "num_positions": variant_config['num_positions'], # not useful, to remove
             "torch_dtype": precision,
             "image_size": image_size,
             "patch_size": patch_size,
