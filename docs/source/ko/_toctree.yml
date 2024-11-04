@@ -358,8 +358,8 @@
         title: (번역중) CodeGen
       - local: model_doc/cohere
         title: Cohere
-      - local: in_translation
-        title: (번역중) ConvBERT
+      - local: model_doc/convbert
+        title: ConvBERT
       - local: in_translation
         title: (번역중) CPM
       - local: in_translation
