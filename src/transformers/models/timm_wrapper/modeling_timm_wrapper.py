@@ -112,6 +112,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         if output_hidden_states is not None or output_attentions is not None:
             raise ValueError("Cannot set output_attentions or output_hidden_states for timm models")
 
+        pixel_values = pixel_values.to(self.device, self.dtype)
         features = self.timm_model(pixel_values, **kwargs)
 
         if not return_dict:
@@ -152,6 +153,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         if output_hidden_states is not None or output_attentions is not None:
             raise ValueError("Cannot set `output_attentions` or `output_hidden_states` for timm models")
 
+        pixel_values = pixel_values.to(self.device, self.dtype)
         logits = self.timm_model(pixel_values, **kwargs)
 
         loss = None
