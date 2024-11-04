@@ -308,6 +308,7 @@ class WhisperGenerationMixin(GenerationMixin):
         num_segment_frames: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         time_precision: float = 0.02,
+        time_precision_features: float = 0.01,
         return_token_timestamps: Optional[bool] = None,
         return_segments: bool = False,
         return_dict_in_generate: Optional[bool] = None,
@@ -417,6 +418,8 @@ class WhisperGenerationMixin(GenerationMixin):
             time_precision (`int`, *optional*, defaults to 0.02):
                 The duration of output token in seconds. *E.g.* 0.02 means that a generated token on average accounts
                 for 20 ms.
+            time_precision_features (`int`, *optional*, defaults to 0.01):
+                The duration represented by a feature frame in seconds.
             return_token_timestamps (`bool`, *optional*):
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
@@ -718,6 +721,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     timestamp_begin=timestamp_begin,
                     seek_num_frames=seek_num_frames,
                     time_precision=time_precision,
+                    time_precision_features=time_precision_features,
                     input_stride=input_stride,
                     prev_idx=prev_i,
                     idx=i,
@@ -1778,6 +1782,7 @@ class WhisperGenerationMixin(GenerationMixin):
         timestamp_begin,
         seek_num_frames,
         time_precision,
+        time_precision_features,
         input_stride,
         prev_idx,
         idx,
@@ -1805,10 +1810,11 @@ class WhisperGenerationMixin(GenerationMixin):
 
             last_slice = 0
             # Add each segment to list of all segments
-            for current_slice in slices:
+            for i, current_slice in enumerate(slices):
+                is_last_slice = i == len(slices) - 1
                 sliced_tokens = seek_sequence[last_slice:current_slice]
                 start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
-                end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
+                end_timestamp_pos = sliced_tokens[-1 if not is_last_slice else -2].item() - timestamp_begin
                 segments.append(
                     {
                         "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
@@ -1830,13 +1836,13 @@ class WhisperGenerationMixin(GenerationMixin):
                 # otherwise, ignore the unfinished segment and seek to the last timestamp
                 # here we throw away all predictions after the last predicted "end of segment"
                 # since we are cutting right in the middle of an audio
-                last_timestamp_pos = seek_sequence[last_slice - 1].item() - timestamp_begin
+                last_timestamp_pos = seek_sequence[last_slice - 2].item() - timestamp_begin
                 segment_offset = last_timestamp_pos * input_stride
         else:
             # If whisper does not predict any "end of segment" token, then
             # the whole decoding is considered a segment and we add it to the list of segments
             timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
-            last_timestamp_pos = seek_num_frames[prev_idx]
+            last_timestamp_pos = int(seek_num_frames[prev_idx] * time_precision_features / time_precision)
             if timestamps.numel() > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 last_timestamp_pos = timestamps[-1].item() - timestamp_begin

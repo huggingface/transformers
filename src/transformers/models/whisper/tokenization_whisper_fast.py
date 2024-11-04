@@ -181,20 +181,23 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         cur_max_timestamp = 0.0
         prev_segments_len = 0.0
-        # track if last timestamp was single ending
         penultimate_timestamp = 0.0
 
-        for token in token_ids:
+        for i, token in enumerate(token_ids):
             if token >= timestamp_begin:
                 timestamp = float((token - timestamp_begin) * time_precision)
 
                 if timestamp < cur_max_timestamp:
                     # next segment has started
-                    last_was_single_ending = not cur_max_timestamp == penultimate_timestamp
+                    last_was_single_ending = i >= 2 and not (
+                        token_ids[i - 1] >= timestamp_begin and token_ids[i - 2] >= timestamp_begin
+                    )
                     if last_was_single_ending:
                         prev_segments_len += time_precision * segment_size
                     else:
-                        prev_segments_len += cur_max_timestamp
+                        cur_max_timestamp = penultimate_timestamp
+                        prev_segments_len += penultimate_timestamp
+                        outputs = outputs[:-2]
 
                 penultimate_timestamp = cur_max_timestamp
                 cur_max_timestamp = timestamp
@@ -250,8 +253,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
                 if start_timestamp_position < cur_max_timestamp:
                     # next segment has started
-                    # here in the worst case we have [<|start_timestamp_position before|>, <|cur_max_timestamp|>, <|start_timestamp_position|>], so last_slice (idx of start_timestamp_position) - 2 is safe
-                    is_single_ending = not token_ids[last_slice - 2] == token_ids[last_slice - 1]
+                    is_single_ending = last_slice >= 2 and not (
+                        token_ids[last_slice - 2] >= timestamp_begin and token_ids[last_slice - 1] >= timestamp_begin
+                    )
                     if is_single_ending:
                         prev_segments_len += segment_size
                     else:
