@@ -383,7 +383,7 @@ class Gemma2Attention(nn.Module):
 class Gemma2FlashAttention2(Gemma2Attention):
     def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.attention_function = GEMMA2_ATTENTION_FUNCTION["flash_attention"]
+        self.config._attn_implementation = GEMMA2_ATTENTION_FUNCTION["flash_attention"]
         logger.warning_once(
             "The `Gemma2FlashAttention2` class is deprecated in favor of simply modify the `attention_function`"
             "attribute of the `GemmaAttention` class! It will be removed in v4.48"
@@ -393,7 +393,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
 class Gemma2SdpaAttention(Gemma2Attention):
     def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.attention_function = GEMMA2_ATTENTION_FUNCTION["sdpa"]
+        self.config._attn_implementation = GEMMA2_ATTENTION_FUNCTION["sdpa"]
         logger.warning_once(
             "The `Gemma2FlashAttention2` class is deprecated in favor of simply modify the `attention_function`"
             "attribute of the `GemmaAttention` class! It will be removed in v4.48"
