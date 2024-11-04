@@ -105,7 +105,7 @@ class Olmo1124Config(OlmoConfig):
     ```
     """
 
-    model_type = "olmo-1124"
+    model_type = "olmo_1124"
 
     def __init__(
         self,

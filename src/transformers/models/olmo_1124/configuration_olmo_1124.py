@@ -86,7 +86,7 @@ class Olmo1124Config(PretrainedConfig):
     ```
     """
 
-    model_type = "olmo-1124"
+    model_type = "olmo_1124"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
