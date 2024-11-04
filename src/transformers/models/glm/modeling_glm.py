@@ -24,13 +24,12 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -38,10 +37,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
@@ -49,10 +49,10 @@ from ...utils import (
 from .configuration_glm import GlmConfig
 
 
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
+logger = logging.get_logger(__name__)
 
-from ...modeling_flash_attention_utils import _flash_attention_forward
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
+_CONFIG_FOR_DOC = "GlmConfig"
 
 
 class GlmRMSNorm(nn.Module):
@@ -123,7 +123,16 @@ class GlmMLP(nn.Module):
         return self.down_proj(up_states)
 
 
-logger = logging.get_logger(__name__)
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def rotate_half(x):
@@ -172,18 +181,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
     k_embed = torch.cat([k_embed, k_pass], dim=-1)
     return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class GlmAttention(nn.Module):
@@ -610,9 +607,6 @@ class GlmPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-_CONFIG_FOR_DOC = "GlmConfig"
-
-
 GLM_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -737,6 +731,7 @@ class GlmModel(GlmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -818,6 +813,7 @@ class GlmModel(GlmPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
+                    **flash_attn_kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -921,6 +917,7 @@ class GlmModel(GlmPreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -1014,6 +1011,7 @@ class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1071,18 +1069,7 @@ class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1186,27 +1173,8 @@ class GlmForSequenceClassification(GlmPreTrainedModel):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1251,6 +1219,11 @@ class GlmForTokenClassification(GlmPreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1289,8 +1262,7 @@ class GlmForTokenClassification(GlmPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = self.loss_function(logits, labels, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

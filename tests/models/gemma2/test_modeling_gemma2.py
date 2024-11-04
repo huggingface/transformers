@@ -78,7 +78,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-    _torch_compile_test_ckpt = "google/gemma-2-9b"
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)
@@ -86,6 +85,10 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
+        pass
+
+    @unittest.skip("Gemma2's forcefully disables sdpa due to softcapping")
+    def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])

@@ -92,7 +92,6 @@ from .logits_process import (
     TopPLogitsWarper,
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
-    WatermarkLogitsProcessor,
 )
 from .stopping_criteria import (
     ConfidenceCriteria,
@@ -379,10 +378,14 @@ class GenerationMixin:
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None or cache_position[-1] >= input_ids.shape[1]:  # Exception 1 or Exception 3
+            if (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -415,7 +418,7 @@ class GenerationMixin:
         for model_input_name in ["position_ids", "token_type_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
-                if past_key_values:
+                if past_key_values is not None:
                     model_input = model_input[:, -input_ids.shape[1] :]
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input
@@ -569,27 +572,34 @@ class GenerationMixin:
 
     def _prepare_attention_mask_for_generation(
         self,
-        inputs: torch.Tensor,
-        pad_token_id: Optional[torch.Tensor],
-        eos_token_id: Optional[torch.Tensor],
+        inputs_tensor: torch.Tensor,
+        generation_config: GenerationConfig,
+        model_kwargs: Dict[str, Any],
     ) -> torch.LongTensor:
+        pad_token_id = generation_config._pad_token_tensor
+        eos_token_id = generation_config._eos_token_tensor
+
+        # `input_ids` may be present in the model kwargs, instead of being the main input (e.g. multimodal model)
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
         # No information for attention mask inference -> return default attention mask
-        default_attention_mask = torch.ones(inputs.shape[:2], dtype=torch.long, device=inputs.device)
+        default_attention_mask = torch.ones(inputs_tensor.shape[:2], dtype=torch.long, device=inputs_tensor.device)
         if pad_token_id is None:
             return default_attention_mask
 
-        is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
         if not is_input_ids:
             return default_attention_mask
 
         is_pad_token_in_inputs = (pad_token_id is not None) and (
-            isin_mps_friendly(elements=inputs, test_elements=pad_token_id).any()
+            isin_mps_friendly(elements=inputs_tensor, test_elements=pad_token_id).any()
         )
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
             isin_mps_friendly(elements=eos_token_id, test_elements=pad_token_id).any()
         )
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
-        attention_mask_from_padding = inputs.ne(pad_token_id).long()
+        attention_mask_from_padding = inputs_tensor.ne(pad_token_id).long()
 
         attention_mask = (
             attention_mask_from_padding * can_infer_attention_mask + default_attention_mask * ~can_infer_attention_mask
@@ -1011,15 +1021,7 @@ class GenerationMixin:
             )
         if generation_config.watermarking_config is not None:
             processors.append(
-                WatermarkLogitsProcessor(
-                    vocab_size=self.config.vocab_size,
-                    device=device,
-                    greenlist_ratio=generation_config.watermarking_config.greenlist_ratio,
-                    bias=generation_config.watermarking_config.bias,
-                    hashing_key=generation_config.watermarking_config.hashing_key,
-                    seeding_scheme=generation_config.watermarking_config.seeding_scheme,
-                    context_width=generation_config.watermarking_config.context_width,
-                )
+                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
             )
 
         # TODO (joao): find a strategy to specify the order of the processors
@@ -1449,6 +1451,11 @@ class GenerationMixin:
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
+        elif has_default_max_length:  # by default let's always generate 20 new tokens
+            generation_config.max_length = generation_config.max_length + input_ids_length
+            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            if max_position_embeddings is not None:
+                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1535,8 +1542,12 @@ class GenerationMixin:
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
-        if "inputs_embeds" in model_kwargs:
+        if "inputs_embeds" in model_kwargs and not self.config.is_encoder_decoder:
             cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
+        elif "decoder_inputs_embeds" in model_kwargs and self.config.is_encoder_decoder:
+            cache_position = (
+                torch.ones_like(model_kwargs["decoder_inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
+            )
         else:
             cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
 
@@ -1633,7 +1644,7 @@ class GenerationMixin:
 
             cache_kwargs = {
                 "config": self.config.get_text_config(),
-                "max_batch_size": batch_size,
+                "batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,
@@ -2020,7 +2031,7 @@ class GenerationMixin:
 
         if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                inputs_tensor, generation_config._pad_token_tensor, generation_config._eos_token_tensor
+                inputs_tensor, generation_config, model_kwargs
             )
         elif kwargs_has_attention_mask:
             # TODO (joao): generalize this check with other types of inputs

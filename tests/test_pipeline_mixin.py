@@ -34,6 +34,7 @@ from huggingface_hub import (
     ImageToTextInput,
     ObjectDetectionInput,
     QuestionAnsweringInput,
+    VideoClassificationInput,
     ZeroShotImageClassificationInput,
 )
 
@@ -47,6 +48,7 @@ from transformers.pipelines import (
     ImageToTextPipeline,
     ObjectDetectionPipeline,
     QuestionAnsweringPipeline,
+    VideoClassificationPipeline,
     ZeroShotImageClassificationPipeline,
 )
 from transformers.testing_utils import (
@@ -69,6 +71,7 @@ from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
+from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
@@ -100,6 +103,7 @@ pipeline_test_mapping = {
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-feature-extraction": {"test": ImageFeatureExtractionPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
+    "image-text-to-text": {"test": ImageTextToTextPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
@@ -132,6 +136,7 @@ task_to_pipeline_and_spec_mapping = {
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
     "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
+    "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
@@ -585,6 +590,18 @@ class PipelineTesterMixin:
 
     @is_pipeline_test
     @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text(self):
+        self.run_task_tests(task="image-text-to-text")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text_fp16(self):
+        self.run_task_tests(task="image-text-to-text", torch_dtype="float16")
+
+    @is_pipeline_test
+    @require_vision
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
 
@@ -913,6 +930,8 @@ def parse_args_from_docstring_by_indentation(docstring):
 
 
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
+    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout"]
+
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
     docstring_args = set(parse_args_from_docstring_by_indentation(docstring))
     hub_args = set(get_arg_names_from_hub_spec(hub_spec))
@@ -929,6 +948,11 @@ def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
     ):
         hub_args.remove(js_generate_args[0])
         docstring_args.remove(docstring_generate_args[0])
+
+    # Special casing 2: We permit some transformers-only arguments that don't affect pipeline output
+    for arg in ALLOWED_TRANSFORMERS_ONLY_ARGS:
+        if arg in docstring_args and arg not in hub_args:
+            docstring_args.remove(arg)
 
     if hub_args != docstring_args:
         error = [f"{pipeline_class.__name__} differs from JS spec {hub_spec.__name__}"]
