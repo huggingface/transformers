@@ -52,9 +52,7 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
 def _load_timm_model(config: TimmWrapperConfig, add_classification_head: bool = False):
     # timm model will not add classification head if num_classes = 0
     num_classes = config.num_labels if add_classification_head else 0
-    model = timm.create_model(
-        model_name=config.architecture, pretrained=False, num_classes=num_classes, scriptable=True
-    )
+    model = timm.create_model(model_name=config.architecture, pretrained=False, num_classes=num_classes)
     return model
 
 
