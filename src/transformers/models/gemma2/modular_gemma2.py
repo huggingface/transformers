@@ -277,7 +277,7 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
         soft_cap = config.attn_logit_softcapping
         score = soft_cap * torch.tanh(score / soft_cap)
         if mask is not None:
-            return score + mask[b][h]
+            return score + mask[b][h][q_idx][kv_idx]
         return score
 
     attn_output = flex_attention(
