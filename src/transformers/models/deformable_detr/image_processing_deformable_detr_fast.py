@@ -63,14 +63,11 @@ from .image_processing_deformable_detr import (
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
-
-
 if is_torchvision_available():
     from torchvision.io import read_image
 
-    from ...image_utils import pil_torch_interpolation_mapping
+    if is_vision_available():
+        from ...image_utils import pil_torch_interpolation_mapping
 
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
