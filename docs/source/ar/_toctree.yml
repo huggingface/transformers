@@ -123,8 +123,8 @@
     title: المدرب
 #   - local: sagemaker
 #     title: تشغيل التدريب على Amazon SageMaker
-#   - local: serialization
-#     title: التصدير إلى ONNX
+  - local: serialization
+    title: التصدير إلى ONNX
   - local: tflite
     title: التصدير إلى TFLite
 #   - local: torchscript
