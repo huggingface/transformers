@@ -17,7 +17,6 @@
 import gc
 import unittest
 
-import pytest
 import requests
 
 from transformers import (
@@ -246,91 +245,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
-        """Overwrite from generation/test_utils.py because Qwen2-VL needs `rope_deltas` to be passed when continuing from cache"""
-        # Tests that we can continue generating from past key values, returned from a previous `generate` call
-        for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt"]):
-                self.skipTest(reason="Won't fix: old model with unique inputs/caches/other")
-            if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
-                self.skipTest(reason="TODO: needs modeling or test input preparation fixes for compatibility")
-
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            if not hasattr(config, "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-
-            # Let's make it always:
-            # 1. use cache (for obvious reasons)
-            # 2. generate to max length (which can be achieved by setting the eos token to an invalid value), which
-            #    would make the test flaky (e.g. EOS is generated on iteration 1 on both generations, but the
-            #    continuation would force it to generate beyond an EOS token)
-            # 3. ignore `token_type_ids` for simplicity
-            # 4. ignore `forced_eos_token_id`, which requires further manipulation of the continuation inputs and is
-            #    active by default on some models
-            # 5. ignore `encoder_no_repeat_ngram_size`, which is set by default in some encoder-decoder models. When
-            #    we use their decoder as a stand-alone model, `encoder_no_repeat_ngram_size` actually prevents
-            #    repetition exclusively from the prompt. This test relies on comparing one call vs 2 calls
-            #    with cache, what is considered a prompt is different in the two cases.
-
-            if "token_type_ids" in inputs:
-                del inputs["token_type_ids"]
-
-            model = model_class(config).to(torch_device)
-            model.eval()
-            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
-            model.generation_config.forced_eos_token_id = None
-            model.generation_config.encoder_no_repeat_ngram_size = 0
-            model.generation_config.use_cache = True
-
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
-            outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
-
-            # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
-            outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
-
-            # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
-            # inputs may need to be tweaked across `generate` calls (like the attention mask).
-            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
-
-            # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
-            new_attention_len = outputs_cached.sequences.shape[-1]
-            if config.is_encoder_decoder:
-                inputs["decoder_input_ids"] = outputs_cached.sequences
-                if "decoder_attention_mask" in inputs:
-                    inputs["decoder_attention_mask"] = torch.nn.functional.pad(
-                        inputs["decoder_attention_mask"],
-                        (0, new_attention_len - inputs["decoder_attention_mask"].shape[1]),
-                        mode="constant",
-                        value=1,
-                    )
-            else:
-                inputs["input_ids"] = outputs_cached.sequences
-                inputs["rope_deltas"] = torch.zeros_like(inputs["input_ids"])[:, -1:]
-                if "attention_mask" in inputs:
-                    inputs["attention_mask"] = torch.nn.functional.pad(
-                        inputs["attention_mask"],
-                        (0, new_attention_len - inputs["attention_mask"].shape[1]),
-                        mode="constant",
-                        value=1,
-                    )
-            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
-
-            # The two sets of generated text and past kv should be equal to each other
-            self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
-
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -399,6 +313,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
+    def test_generate_compile_fullgraph(self):
         pass
 
 
