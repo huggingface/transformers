@@ -86,7 +86,7 @@ class MixtralConfig(PretrainedConfig):
             parameter
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
