@@ -661,6 +661,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 config=self.config,
                 device=init_tokens.device,
                 suppress_tokens=suppress_tokens,
+                timestamp_begin=timestamp_begin,
                 kwargs=kwargs,
             )
 
