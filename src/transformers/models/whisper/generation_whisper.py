@@ -1669,6 +1669,7 @@ class WhisperGenerationMixin(GenerationMixin):
         config,
         device,
         suppress_tokens,
+        timestamp_begin,
         kwargs,
     ):
         if "decoder_input_ids" in kwargs:
@@ -1687,6 +1688,14 @@ class WhisperGenerationMixin(GenerationMixin):
         if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
             active_segments = [current_segments[i] if do_condition_on_prev_tokens[i] else None for i in batch_idx_map]
+
+            for segments in active_segments:
+                for seg in segments:
+                    if len(seg["tokens"]) > 2 and seg["tokens"][-2] >= timestamp_begin:
+                        # the segment finishes with two timestamp tokens
+                        # we need to ignore the last timestamp token
+                        # see https://github.com/huggingface/transformers/pull/34537
+                        seg["tokens"] = seg["tokens"][:-1]
 
             if prompt_ids is not None and generation_config.prompt_condition_type == "all-segments":
                 prev_ids = prompt_ids
