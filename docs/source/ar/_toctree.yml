@@ -121,8 +121,8 @@
     title: قوالب لنماذج الدردشة
   - local: trainer
     title: المدرب
-#   - local: sagemaker
-#     title: تشغيل التدريب على Amazon SageMaker
+  - local: sagemaker
+    title: تشغيل التدريب على Amazon SageMaker
   - local: serialization
     title: التصدير إلى ONNX
   - local: tflite
