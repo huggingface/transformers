@@ -900,7 +900,7 @@ class Zamba2MambaMixer(nn.Module):
             out = self.out_proj(hidden_states)[:, None, ...]
         # if no cache is found, calling the kernel
         else:
-            if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+            if attention_mask is not None and not torch.all(attention_mask == 1):
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                 dtype = hidden_states.dtype
                 hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
@@ -908,8 +908,12 @@ class Zamba2MambaMixer(nn.Module):
             projected_states = self.in_proj(hidden_states)
             A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
             dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+            if attention_mask is not None:
+                input_not_masked = torch.all(attention_mask == 1)
+            else:
+                input_not_masked = True
 
-            if self.training and cache_params is None:
+            if self.training and cache_params is None and input_not_masked:
                 out, ssm_state = mamba_split_conv1d_scan_combined(
                     projected_states,
                     self.conv1d.weight.squeeze(1),
@@ -960,7 +964,7 @@ class Zamba2MambaMixer(nn.Module):
                     [self.intermediate_size, groups_time_state_size, groups_time_state_size],
                     dim=-1,
                 )
-                if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+                if attention_mask is not None and not torch.all(attention_mask == 1):
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
                     hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
@@ -1020,7 +1024,7 @@ class Zamba2MambaMixer(nn.Module):
                 )
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, :seq_len, :]     # [batch, intermediate_size, seq_len]
-                if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+                if attention_mask is not None and not torch.all(attention_mask==1):
                     dtype = hidden_states.dtype
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
@@ -1182,7 +1186,7 @@ class Zamba2MambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
-        if not is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
@@ -1552,26 +1556,9 @@ class Zamba2PreTrainedModel(PreTrainedModel):
         Replaces `ZambaPreTrainedModel._check_and_enable_flash_attn_2` with `PreTrainedModel._check_and_enable_flash_attn_2`
         as we do not want to disable Flash Attention 2 in Zamba2.
         """
-        """
-        Overloads `PreTrainedModel._check_and_enable_flash_attn_2` so as to DISABLE Flash Attention 2 by default on Zamba2 models.
-        Flash attention 2 is currently not supported in the HuggingFace implementation of Zamba2 v1.
-        """
-        config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
-
-        # if using the default path -> swap sdpa by eager
-        if not hard_check_only and config._attn_implementation == "flash_attention_2":
-            config._attn_implementation = "eager"
-        """
-        Replaces `ZambaPreTrainedModel._check_and_enable_flash_attn_2` with `PreTrainedModel._check_and_enable_flash_attn_2`
-        as we do not want to disable Flash Attention 2 in Zamba2.
-        """
         return PreTrainedModel._check_and_enable_flash_attn_2(
             config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
         )
-
-        return config
 
 
 _CONFIG_FOR_DOC = "Zamba2Config"
