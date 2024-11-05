@@ -75,6 +75,9 @@ def find_bad_commit(target_test, start_commit, end_commit):
         `str`: The earliest commit at which `target_test` fails.
     """
 
+    if start_commit == end_commit:
+        return start_commit
+
     create_script(target_test=target_test)
 
     bash = f"""

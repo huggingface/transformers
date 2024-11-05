@@ -206,8 +206,8 @@
       title: 다중 CPU에서 훈련하기
     - local: perf_train_tpu_tf
       title: TensorFlow로 TPU에서 훈련하기
-    - local: in_translation
-      title: (번역중) PyTorch training on Apple silicon
+    - local: perf_train_special
+      title: Apple 실리콘에서 PyTorch 학습
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
     - local: hpo_train
@@ -322,8 +322,8 @@
         title: (번역중) ALBERT
       - local: model_doc/bart
         title: BART
-      - local: in_translation
-        title: (번역중) BARThez
+      - local: model_doc/barthez
+        title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
       - local: in_translation

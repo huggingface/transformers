@@ -863,13 +863,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_list.remove("additional_special_tokens")
         for token in special_tokens_list:
-            # Get the private one to avoid unnecessary warnings.
-            if getattr(self, f"_{token}") is not None:
+            if getattr(self, token) is not None:
                 special_token = getattr(self, token)
                 if special_tokens_map is not None and special_token in special_tokens_map:
                     special_token = special_tokens_map[special_token]
 
-                special_token_full = getattr(self, f"_{token}")
+                special_token_full = self._special_tokens_map.get(token, None)
                 if isinstance(special_token_full, AddedToken):
                     # Create an added token with the same parameters except the content
                     kwargs[token] = AddedToken(
