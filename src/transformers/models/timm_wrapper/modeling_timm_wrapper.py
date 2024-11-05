@@ -60,7 +60,6 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     config_class = TimmWrapperConfig
-    base_model_prefix = "model"
     _no_split_modules = []
 
     def __init__(self, *args, **kwargs):
@@ -103,7 +102,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[BaseModelOutput, Tuple[Tensor, ...]]:
@@ -143,14 +142,13 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         return BaseModelOutput(last_hidden_state=head_output, hidden_states=hidden_states)
 
 
-class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
+class TimmWrapperForImageClassification(TimmWrapperModel):
     """
     Wrapper class for timm models to be used in transformers for image classification.
     """
 
     def __init__(self, config: TimmWrapperConfig):
-        super().__init__(config)
-        self.model = TimmWrapperModel(config, add_classification_head=True)
+        super().__init__(config, add_classification_head=True)
         self.num_labels = config.num_labels
         self.post_init()
 
@@ -172,7 +170,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs = super().forward(
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -182,7 +180,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
         loss = None
         if labels is not None:
-            logits = outputs.last_hidden_state
+            logits = outputs[0]
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"

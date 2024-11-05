@@ -3441,7 +3441,7 @@ class ModelTesterMixin:
                 r"^swiftformer\.",
                 r"^swinv2\.",
                 r"^transformers\.models\.swiftformer\.",
-                r"^model\.timm_model\.",
+                r"^timm_model\.",
                 r"^unispeech\.",
                 r"^unispeech_sat\.",
                 r"^vision_model\.",
