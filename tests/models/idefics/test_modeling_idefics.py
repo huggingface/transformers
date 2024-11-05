@@ -332,7 +332,11 @@ class IdeficsModelTester:
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -768,13 +772,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_custom_4d_attention_mask(self):
-        pass
-
-    @unittest.skip(
-        reason="IDEFICS has specific requirements for working with inputs embeds like passing also the ids and pixels"
-    )
-    @parameterized.expand([(1,), (2,)])
-    def test_generate_from_inputs_embeds_decoder_only(self, num_beams):
         pass
 
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
