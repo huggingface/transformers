@@ -51,6 +51,25 @@ token space (e.g., getting the index of the token comprising a given character o
 to a given token).
 
 
+# Multimodal Tokenizer
+
+Apart from that each tokenizer can be a "multimodal" tokenizer which means that the tokenizer will hold all relevant special tokens
+as part of tokenizer attributes for easier access. For example, if the tokenizer is loaded from a vision-language model like LLaVA, you will
+be able to access `tokenizer.image_token_id` to obtain the special image token used as a placeholder. 
+
+To enable extra special tokens for any type of tokenizer, you have to add the following lines and save the tokenizer. Extra special tokens do not
+have to be modality related and can ne anything that the model often needs access to. In the below code, tokenizer at `output_dir` will have direct access
+to three more special tokens.  
+
+```python
+vision_tokenizer = AutoTokenizer.from_pretrained(
+    "llava-hf/llava-1.5-7b-hf",
+    extra_special_tokens={"image_token": "<image>", "boi_token": "<image_start>", "eoi_token": "<image_end>"}
+)
+print(vision_tokenizer.image_token, vision_tokenizer.image_token_id)
+("<image>", 32000)
+```
+
 ## PreTrainedTokenizer
 
 [[autodoc]] PreTrainedTokenizer

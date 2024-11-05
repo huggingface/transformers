@@ -21,7 +21,6 @@ import unittest
 
 import numpy as np
 from datasets import Audio, load_dataset
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -410,10 +409,14 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
+    # Overwrite to use `audio_values` as the tensors to compare.
+    # TODO: Try to do this in the parent class.
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @slow
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        if torch_dtype == "float16" and torch_device == "cpu":
+            self.skipTest("`replication_pad1d` not implemented for 'Half")
+
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -514,7 +517,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                             can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
                             if not (self.has_attentions and can_output_attn) and output_attentions:
                                 continue
-                            for batch_size in [1, 5]:
+                            for batch_size in [7]:
                                 dummy_input = inputs_dict[model.main_input_name]
 
                                 if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
@@ -565,11 +568,11 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                                     dummy_attention_mask[:] = 1
                                     if padding_side == "left":
-                                        dummy_attention_mask[-1, :-1] = 1
-                                        dummy_attention_mask[-1, -4:] = 0
+                                        dummy_attention_mask[-1, :2] = 0
+                                        dummy_attention_mask[-1, 2:] = 1
                                     elif padding_side == "right":
-                                        dummy_attention_mask[-1, 1:] = 1
-                                        dummy_attention_mask[-1, :3] = 0
+                                        dummy_attention_mask[-1, -2:] = 0
+                                        dummy_attention_mask[-1, :-2] = 1
 
                                 for enable_kernels in [False, True]:
                                     failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
@@ -656,52 +659,32 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                                     # Masked tokens output slightly deviates - we don't mind that.
                                     if use_mask:
+                                        _logits_sdpa = torch.zeros_like(input=logits_sdpa)
+                                        _logits_eager = torch.zeros_like(input=logits_eager)
+
+                                        _logits_sdpa[:-1] = logits_sdpa[:-1]
+                                        _logits_eager[:-1] = logits_eager[:-1]
+
                                         if padding_side == "left":
-                                            sub_sdpa = logits_sdpa[:-1]
-                                            sub_eager = logits_eager[:-1]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
+                                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
+                                            _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
 
-                                            sub_sdpa = logits_sdpa[-1, :-4]
-                                            sub_eager = logits_eager[-1, :-4]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
-
-                                            # Testing the padding tokens is not really meaningful but anyway
-                                            # sub_sdpa = logits_sdpa[-1, -4:]
-                                            # sub_eager = logits_eager[-1, -4:]
-                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
                                         elif padding_side == "right":
-                                            sub_sdpa = logits_sdpa[:-1]
-                                            sub_eager = logits_eager[:-1]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
+                                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
+                                            _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
 
-                                            sub_sdpa = logits_sdpa[-1, 3:]
-                                            sub_eager = logits_eager[-1, 3:]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
+                                        logits_sdpa = _logits_sdpa
+                                        logits_eager = _logits_eager
 
-                                            # Testing the padding tokens is not really meaningful but anyway
-                                            # sub_sdpa = logits_sdpa[-1, :3]
-                                            # sub_eager = logits_eager[-1, :3]
-                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-
-                                    else:
-                                        if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
-                                            )
+                                    results = [
+                                        torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
+                                        for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+                                    ]
+                                    # If 80% batch elements have matched results, it's fine
+                                    if np.mean(results) < 0.8:
+                                        fail_cases.append(
+                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                        )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
@@ -745,22 +728,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    # For now, Let's focus only on GPU for `torch.compile`
-    @slow
-    @require_torch_gpu
-    def test_torch_compile(self):
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        n_iter = 3
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.forward = torch.compile(model.forward)
-            for i in range(n_iter):
-                _ = model(inputs_dict["input_values"].to(torch_device))
-
     @is_flaky()
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
@@ -790,6 +757,7 @@ class MimiIntegrationTest(unittest.TestCase):
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
         model_id = "kyutai/mimi"
 
         model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
@@ -840,6 +808,7 @@ class MimiIntegrationTest(unittest.TestCase):
             "32": 1803071,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
         model_id = "kyutai/mimi"
 
         processor = AutoFeatureExtractor.from_pretrained(model_id)

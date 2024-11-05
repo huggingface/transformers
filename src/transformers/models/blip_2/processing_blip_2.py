@@ -74,8 +74,11 @@ class Blip2Processor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         tokenizer.return_token_type_ids = False
         self.current_processor = image_processor
-        self.image_token = AddedToken("<image>", normalized=False, special=True)
-        tokenizer.add_tokens([self.image_token], special_tokens=True)
+        if not hasattr(tokenizer, "image_token"):
+            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            tokenizer.add_tokens([self.image_token], special_tokens=True)
+        else:
+            self.image_token = tokenizer.image_token
         self.num_query_tokens = num_query_tokens
 
         super().__init__(image_processor, tokenizer)
@@ -137,7 +140,9 @@ class Blip2Processor(ProcessorMixin):
             # because BLIP expects image tokens to be at the beginning even before BOS token
             if self.num_query_tokens is not None:
                 image_tokens = self.image_token.content * self.num_query_tokens
-                image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
+                image_token_encoding = self.tokenizer(
+                    [image_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding
