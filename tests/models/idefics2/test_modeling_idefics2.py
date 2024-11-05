@@ -15,7 +15,6 @@
 """Testing suite for the PyTorch Idefics2 model."""
 
 import copy
-import gc
 import tempfile
 import unittest
 from io import BytesIO
@@ -31,6 +30,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -375,6 +375,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -583,8 +584,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_multi_gpu
