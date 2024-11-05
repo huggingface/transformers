@@ -4005,6 +4005,8 @@ class ModelTesterMixin:
             config.norm_epsilon = 1.0
             config.layer_norm_epsilon = 1.0
 
+            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
+            # (We don't need the original epsilon values to check eager/sdpa matches)
             for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
                 if hasattr(config, attr):
                     getattr(config, attr).rms_norm_eps = 1.0
@@ -4033,6 +4035,7 @@ class ModelTesterMixin:
                 )
                 model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
 
+                # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
                 for x in model_eager.modules():
                     if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
                         x.eps = 1.0
