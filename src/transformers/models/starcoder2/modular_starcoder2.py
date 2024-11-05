@@ -25,38 +25,27 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
-    replace_return_docstrings,
 )
-from .configuration_starcoder2 import Starcoder2Config
-
 from ..llama.modeling_llama import (
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
-from ..mistral.modeling_mistral import MistralModel, MistralForCausalLM, MistralForSequenceClassification, MistralForTokenClassification, MistralDecoderLayer, MistralPreTrainedModel
-from ..qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2PreTrainedModel
-from ..phi3.modeling_phi3 import Phi3Model
+from ..qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2ForCausalLM, Qwen2Model, Qwen2PreTrainedModel
+from .configuration_starcoder2 import Starcoder2Config
 
 
 if is_flash_attn_2_available():
@@ -314,7 +303,6 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
     SDPA API.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -414,7 +402,7 @@ STARCODER2_ATTENTION_CLASSES = {
 
 class Starcoder2DecoderLayer(Qwen2DecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
-        super().__init__() # no-unravel: we cannot use Qwen2's __init__ as it contains a warning we don't want
+        super().__init__()  # no-unravel: we cannot use Qwen2's __init__ as it contains a warning we don't want
         self.hidden_size = config.hidden_size
 
         self.self_attn = STARCODER2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
@@ -428,9 +416,11 @@ class Starcoder2DecoderLayer(Qwen2DecoderLayer):
 class Starcoder2PreTrainedModel(Qwen2PreTrainedModel):
     pass
 
-STARCODER2_INPUTS_DOCSTRING = None # will be automatically redefined
 
-class Starcoder2Model(Phi3Model):
+STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
+
+
+class Starcoder2Model(Qwen2Model):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
 
@@ -441,10 +431,7 @@ class Starcoder2Model(Phi3Model):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
         self.embedding_dropout = config.embedding_dropout
-        del self.embed_dropout
-        self._attn_implementation = config._attn_implementation
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
-        self.rotary_emb = Starcoder2RotaryEmbedding(config=config)
 
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
@@ -574,13 +561,13 @@ class Starcoder2Model(Phi3Model):
         )
 
 
-class Starcoder2ForCausalLM(MistralForCausalLM):
+class Starcoder2ForCausalLM(Qwen2ForCausalLM):
     pass
 
 
-class Starcoder2ForSequenceClassification(MistralForSequenceClassification):
+class Starcoder2ForSequenceClassification(LlamaForSequenceClassification):
     pass
 
 
-class Starcoder2ForTokenClassification(MistralForTokenClassification):
+class Starcoder2ForTokenClassification(LlamaForTokenClassification):
     pass

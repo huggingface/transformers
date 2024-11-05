@@ -237,6 +237,7 @@ def merge_docstrings(original_docstring, updated_docstring):
 # Similar to "noqa" for linters: add this as an inline comment in a call to super() to avoid unraveling the parent's code
 CALL_TO_SUPER_ESCAPE_COMMENT = "no-unravel"
 
+
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
