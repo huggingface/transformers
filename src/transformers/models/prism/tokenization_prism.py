@@ -79,6 +79,68 @@ FAIRSEQ_LANGUAGE_CODES = {
 
 
 class PrismTokenizer(PreTrainedTokenizer):
+    """
+    Construct an Prism tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
+
+    Args:
+        vocab_file (`str`):
+            Path to the vocabulary file.
+        spm_file (`str`):
+            Path to [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
+            contains the vocabulary.
+        src_lang (`str`, *mandatory*, *optional*):
+            A string representing the source language.
+        tgt_lang (`str`, *mandatory*, *optional*):
+            A string representing the target language.
+        bos_token (`str`, *optional*, defaults to `"<s>"`): 
+            The beginning of sequence token.
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+        sep_token (`str`, *optional*, defaults to `"</s>"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        language_codes (`str`, *optional*, defaults to `"prism"`):
+            What language codes to use. Should be one of `"prism"`.
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
+        num_madeup_words (`int`, *optional*, defaults to 8): number of made-up words to use for translation.
+
+    Examples:
+
+    ```python
+    >>> from transformers import PrismForConditionalGeneration, PrismTokenizer
+
+    >>> model = PrismForConditionalGeneration.from_pretrained("dariast/prism")
+    >>> tokenizer = PrismTokenizer.from_pretrained("dariast/prism", src_lang="en", tgt_lang="ro")
+    >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
+    >>> tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
+    >>> model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
+    >>> outputs = model(**model_inputs)  # should work
+    ```
+        """
+    
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
