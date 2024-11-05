@@ -90,7 +90,7 @@ class LlavaNextVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 16,
+            "image_size": 8,
             "patch_size": 4,
             "num_channels": 3,
             "is_training": True,
@@ -123,10 +123,10 @@ class LlavaNextVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 95
-        self.image_grid_pinpoints = [[32, 32]]
-        self.num_image_tokens = 88
+        self.image_grid_pinpoints = [[16, 16]]
+        self.num_image_tokens = 24
         self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return LlavaNextConfig(

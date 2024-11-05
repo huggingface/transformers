@@ -191,7 +191,7 @@ class LlavaNextVideoPooler(nn.Module):
         mode = config.spatial_pool_mode
         stride = config.spatial_pool_stride
         out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = config.vision_config.image_size // config.vision_config.patch_size**2
+        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
 
         if mode == "average":
             self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
