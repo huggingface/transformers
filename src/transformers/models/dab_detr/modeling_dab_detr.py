@@ -1086,19 +1086,20 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
             [DabDetrDecoderLayer(config, is_first=(layer_id == 0)) for layer_id in range(config.decoder_layers)]
         )
         # in DAB-DETR, the decoder uses layernorm after the last decoder layer output
-        hidden_size = config.hidden_size
-        self.layernorm = nn.LayerNorm(hidden_size)
+        self.hidden_size = config.hidden_size
+        self.layernorm = nn.LayerNorm(self.hidden_size)
 
         # Default cond-elewise
-        self.query_scale = DabDetrMLP(hidden_size, hidden_size, hidden_size, 2)
+        self.query_scale = DabDetrMLP(self.hidden_size, self.hidden_size, self.hidden_size, 2)
 
-        self.ref_point_head = DabDetrMLP(config.query_dim // 2 * hidden_size, hidden_size, hidden_size, 2)
+        self.ref_point_head = DabDetrMLP(
+            config.query_dim // 2 * self.hidden_size, self.hidden_size, self.hidden_size, 2
+        )
 
         self.bbox_embed = None
-        self.hidden_size = hidden_size
 
         # Default decoder_modulate_hw_attn is True
-        self.ref_anchor_head = DabDetrMLP(hidden_size, hidden_size, 2, 2)
+        self.ref_anchor_head = DabDetrMLP(self.hidden_size, self.hidden_size, 2, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1175,7 +1176,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
             pos_transformation = 1 if layer_id == 0 else self.query_scale(hidden_states)
 
             # apply transformation
-            query_sine_embed = query_sine_embed[..., : self.config.hidden_size] * pos_transformation
+            query_sine_embed = query_sine_embed[..., : self.hidden_size] * pos_transformation
 
             # modulated HW attentions
             refHW_cond = self.ref_anchor_head(hidden_states).sigmoid()  # nq, bs, 2
@@ -1304,7 +1305,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
             Warning("num_patterns should be int but {}".format(type(self.num_patterns)))
             self.num_patterns = 0
         if self.num_patterns > 0:
-            self.patterns = nn.Embedding(self.num_patterns, config.hidden_size)
+            self.patterns = nn.Embedding(self.num_patterns, self.hidden_size)
 
         self.aux_loss = config.auxiliary_loss
 
