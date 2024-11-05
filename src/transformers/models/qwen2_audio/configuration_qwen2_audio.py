@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -157,7 +157,7 @@ class Qwen2AudioConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_audio"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
 
     def __init__(
         self,

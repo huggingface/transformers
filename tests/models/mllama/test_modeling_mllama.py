@@ -272,7 +272,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_index"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):

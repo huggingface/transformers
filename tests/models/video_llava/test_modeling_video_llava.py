@@ -217,7 +217,13 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     def setUp(self):
         self.model_tester = VideoLlavaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VideoLlavaConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=VideoLlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
