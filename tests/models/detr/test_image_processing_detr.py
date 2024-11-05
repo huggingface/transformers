@@ -677,7 +677,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
 
         target = {"image_id": 39769, "annotations": target}
 
-        processor = self.image_processor_list[1].from_pretrained("facebook/detr-resnet-50")
+        processor = self.image_processor_list[1]()
         # 1. run processor on CPU
         encoding_cpu = processor(images=image, annotations=target, return_tensors="pt", device="cpu")
         # 2. run processor on GPU
@@ -734,7 +734,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
-        processor = self.image_processor_list[1].from_pretrained("facebook/detr-resnet-50-panoptic")
+        processor = self.image_processor_list[1](format="coco_panoptic")
         # 1. run processor on CPU
         encoding_cpu = processor(
             images=image, annotations=target, masks_path=masks_path, return_tensors="pt", device="cpu"

@@ -94,6 +94,10 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 replacing the placeholder with the candidate_labels. Pass "{}" if *candidate_labels* are
                 already formatted.
 
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
+
         Return:
             A list of dictionaries containing one entry per proposed label. Each dictionary contains the
             following keys:
@@ -113,9 +117,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = kwargs["candidate_labels"]
         if "timeout" in kwargs:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_params["timeout"] = kwargs["timeout"]
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
