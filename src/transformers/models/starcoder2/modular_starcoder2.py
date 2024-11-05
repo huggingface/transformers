@@ -51,14 +51,12 @@ from .configuration_starcoder2 import Starcoder2Config
 
 from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
-    rotate_half,
     apply_rotary_pos_emb,
     repeat_kv,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-    LlamaModel,
 )
-from ..qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2DecoderLayer, Qwen2PreTrainedModel
+from ..mistral.modeling_mistral import MistralModel, MistralForCausalLM, MistralForSequenceClassification, MistralForTokenClassification, MistralDecoderLayer, MistralPreTrainedModel
+from ..qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2PreTrainedModel
+from ..phi3.modeling_phi3 import Phi3Model
 
 
 if is_flash_attn_2_available():
@@ -68,6 +66,7 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Starcoder2Config"
+_CHECKPOINT_FOR_DOC = "bigcode/starcoder2-7b"
 
 
 class Starcoder2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -249,32 +248,6 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
-            kv_seq_len = key_states.shape[-2] + cache_position[0]
-            if (
-                getattr(self.config, "sliding_window", None) is not None
-                and kv_seq_len > self.config.sliding_window
-                and cache_has_contents
-            ):
-                slicing_tokens = 1 - self.config.sliding_window
-
-                past_key = past_key_value[self.layer_idx][0]
-                past_value = past_key_value[self.layer_idx][1]
-
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
-                        f" {past_key.shape}"
-                    )
-
-                if attention_mask is not None:
-                    attention_mask = attention_mask[:, slicing_tokens:]
-                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
-
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -306,7 +279,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        # Reashape to the expected shape for Flash Attention
+        # Reshape to the expected shape for Flash Attention
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
@@ -441,6 +414,7 @@ STARCODER2_ATTENTION_CLASSES = {
 
 class Starcoder2DecoderLayer(Qwen2DecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
+        super().__init__() # no-unravel: we cannot use Qwen2's __init__ as it contains a warning we don't want
         self.hidden_size = config.hidden_size
 
         self.self_attn = STARCODER2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
@@ -454,10 +428,9 @@ class Starcoder2DecoderLayer(Qwen2DecoderLayer):
 class Starcoder2PreTrainedModel(Qwen2PreTrainedModel):
     pass
 
-
 STARCODER2_INPUTS_DOCSTRING = None # will be automatically redefined
 
-class Starcoder2Model(Starcoder2PreTrainedModel, LlamaModel):
+class Starcoder2Model(Phi3Model):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
 
@@ -468,13 +441,10 @@ class Starcoder2Model(Starcoder2PreTrainedModel, LlamaModel):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
         self.embedding_dropout = config.embedding_dropout
-        self.layers = nn.ModuleList(
-            [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        del self.embed_dropout
         self._attn_implementation = config._attn_implementation
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.rotary_emb = Starcoder2RotaryEmbedding(config=config)
-        self.post_init()
 
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
@@ -604,17 +574,13 @@ class Starcoder2Model(Starcoder2PreTrainedModel, LlamaModel):
         )
 
 
-class Starcoder2ForCausalLM(Qwen2ForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Starcoder2Model(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-
-class Starcoder2ForSequenceClassification(LlamaForSequenceClassification):
+class Starcoder2ForCausalLM(MistralForCausalLM):
     pass
 
 
-class Starcoder2ForTokenClassification(LlamaForTokenClassification):
+class Starcoder2ForSequenceClassification(MistralForSequenceClassification):
+    pass
+
+
+class Starcoder2ForTokenClassification(MistralForTokenClassification):
     pass

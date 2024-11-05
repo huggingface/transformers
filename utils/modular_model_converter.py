@@ -234,6 +234,9 @@ def merge_docstrings(original_docstring, updated_docstring):
     return updated_docstring
 
 
+# Similar to "noqa" for linters: add this as an inline comment in a call to super() to avoid unraveling the parent's code
+CALL_TO_SUPER_ESCAPE_COMMENT = "no-unravel"
+
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
@@ -336,9 +339,16 @@ class SuperTransformer(cst.CSTTransformer):
 
         for i, expr in enumerate(node.body):
             if is_call_to_super(expr, func_name):
-                has_super_call = True
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body[i + 1 :]))
-                new_body = self._fix_init_location(new_body)
+                comment = expr.trailing_whitespace.comment
+                # If we have a magic comment, do not unravel the call to super and just remove the comment
+                if comment is not None and CALL_TO_SUPER_ESCAPE_COMMENT in comment.value:
+                    new_space = cst.TrailingWhitespace(newline=expr.trailing_whitespace.newline)
+                    expr = expr.with_changes(trailing_whitespace=new_space)
+                # Otherwise, unravel it
+                else:
+                    has_super_call = True
+                    new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body[i + 1 :]))
+                    new_body = self._fix_init_location(new_body)
             else:
                 expr = expr.visit(self.transformer)
             if m.matches(expr, DOCSTRING_NODE):
