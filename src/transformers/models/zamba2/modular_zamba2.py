@@ -593,8 +593,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 class Zamba2Attention(ZambaAttention):
     """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
-    and "Generating Long Sequences with Sparse Transformers".
+    Multi-headed attention from 'Attention Is All You Need' paper. 
 
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
     The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
@@ -603,37 +602,44 @@ class Zamba2Attention(ZambaAttention):
     Additionally, replaced
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
+    Finally, this attention layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this 
+    layer is tied, un-tied LoRA modules are added to the q, k, v projectors to increase expressivity with a small memory overhead.
     """
 
-    def __init__(self, config: Zamba2Config, layer_idx: Optional[int] = None, num_mem_blocks = None):
+    def __init__(self, config: Zamba2Config, layer_idx: Optional[int] = None, num_fwd_mem_blocks = None, block_id: int = None):
         super().__init__(config, layer_idx)
-        self.num_mem_blocks = num_mem_blocks
+        self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.rope_theta = config.rope_theta
         self.layer_block_map = layer_type_list(config)
-        
-        ### add to config:
-        # config.attention_hidden_size
-        # config.attention_head_dim
-        # config.max_position_embeddings
+        self.block_id = block_id
+
         if config.use_shared_attention_lora:
-            self.linear_q_lora_A_list = nn.ParameterList([])
-            self.linear_q_lora_B_list = nn.ParameterList([])
-            self.linear_k_lora_A_list = nn.ParameterList([])
-            self.linear_k_lora_B_list = nn.ParameterList([])
-            self.linear_v_lora_A_list = nn.ParameterList([])
-            self.linear_v_lora_B_list = nn.ParameterList([])
+            self.linear_q_lora_A_list = nn.ModuleList([])
+            self.linear_q_lora_B_list = nn.ModuleList([])
+            self.linear_k_lora_A_list = nn.ModuleList([])
+            self.linear_k_lora_B_list = nn.ModuleList([])
+            self.linear_v_lora_A_list = nn.ModuleList([])
+            self.linear_v_lora_B_list = nn.ModuleList([])
             
-            for i in range(self.num_mem_blocks):
-                linear_q_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias = False)
-                linear_q_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias = False)
+            for i in range(self.num_fwd_mem_blocks):
+                if i % config.num_mem_blocks == block_id:
+                    linear_q_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias = False)
+                    linear_q_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias = False)
+                    linear_k_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias = False)
+                    linear_k_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias = False)
+                    linear_v_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias = False)
+                    linear_v_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias = False)
+                else:
+                    linear_q_lora_A = nn.Identity()
+                    linear_q_lora_B = nn.Identity()
+                    linear_k_lora_A = nn.Identity()
+                    linear_k_lora_B = nn.Identity()
+                    linear_v_lora_A = nn.Identity()
+                    linear_v_lora_B = nn.Identity()
                 self.linear_q_lora_A_list.append(linear_q_lora_A)
                 self.linear_q_lora_B_list.append(linear_q_lora_B)
-                linear_k_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias = False)
-                linear_k_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias = False)
                 self.linear_k_lora_A_list.append(linear_k_lora_A)
                 self.linear_k_lora_B_list.append(linear_k_lora_B)
-                linear_v_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias = False)
-                linear_v_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias = False)
                 self.linear_v_lora_A_list.append(linear_v_lora_A)
                 self.linear_v_lora_B_list.append(linear_v_lora_B)
 
@@ -1394,15 +1400,16 @@ class Zamba2MambaMixer(nn.Module):
 
 
 class Zamba2MLP(nn.Module):
-    def __init__(self, config: Zamba2Config, num_mem_blocks = None):
+    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks = None, block_id: int = None):
         """
-        Shared MLP layer. To the intermediate activations of the MLP, we add un-shared LoRA's, which
-        introduce some amount of diversification across the shared MLP layers.
+        This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer 
+        is tied, un-tied LoRA modules are added to the up and gate projectors to increase expressivity with a small memory overhead.
         """
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.num_mem_blocks = num_mem_blocks
+        self.num_fwd_mem_blocks = num_fwd_mem_blocks
+        self.block_id = block_id
         self.ffn_intermediate_size = config.intermediate_size
         
         self.act_fn = ACT2FN[config.hidden_act]
@@ -1411,16 +1418,20 @@ class Zamba2MLP(nn.Module):
 
             return self.act_fn(x[0]) * x[1]
         self.gated_act_fn = gated_act_fn
-        
+
         self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.ffn_intermediate_size, bias = config.add_bias_linear)
         self.down_proj = nn.Linear(self.ffn_intermediate_size, self.hidden_size, bias=config.add_bias_linear)
         
         if self.config.use_shared_block_lora:
             self.gate_up_proj_lora_A_list = nn.ModuleList([])
             self.gate_up_proj_lora_B_list = nn.ModuleList([])
-            for i in range(self.num_mem_blocks):
-                gate_up_proj_lora_A = nn.Linear(self.config.hidden_size, self.config.lora_rank, bias = False)
-                gate_up_proj_lora_B = nn.Linear(self.config.lora_rank, 2 * self.ffn_intermediate_size, bias = False)
+            for i in range(self.num_fwd_mem_blocks):
+                if i % config.num_mem_blocks == block_id:
+                    gate_up_proj_lora_A = nn.Linear(self.config.hidden_size, self.config.lora_rank, bias = False)
+                    gate_up_proj_lora_B = nn.Linear(self.config.lora_rank, 2 * self.ffn_intermediate_size, bias = False)
+                else:
+                    gate_up_proj_lora_A = nn.Identity()
+                    gate_up_proj_lora_B = nn.Identity()
                 self.gate_up_proj_lora_A_list.append(gate_up_proj_lora_A)
                 self.gate_up_proj_lora_B_list.append(gate_up_proj_lora_B)
         
@@ -1445,11 +1456,12 @@ class Zamba2MLP(nn.Module):
 
 
 class Zamba2AttentionDecoderLayer(nn.Module):
-    def __init__(self, config: Zamba2Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: Zamba2Config, block_id: int = None, layer_idx: Optional[int] = None):
         super().__init__()
         num_gs = count_mem_blocks_in_config(config)
-        self.self_attn = ZAMBA2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=-1, num_mem_blocks = num_gs)
-        self.feed_forward = Zamba2MLP(config, num_mem_blocks = num_gs)
+        self.block_id = block_id
+        self.self_attn = ZAMBA2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
+        self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
         self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1752,7 +1764,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         self.vocab_size = config.vocab_size
         
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        blocks = [Zamba2AttentionDecoderLayer(config) for _ in range(config.num_mem_blocks)]
+        blocks = [Zamba2AttentionDecoderLayer(config, block_id=k) for k in range(config.num_mem_blocks)]
         mamba_layers = []
         linear_layers = []
         self.layers_block_type = config.layers_block_type
