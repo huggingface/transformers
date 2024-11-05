@@ -1309,7 +1309,8 @@ class TorchAoConfig(QuantizationConfigMixin):
         return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
 
     def __repr__(self):
-        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
 
 
 @dataclass
