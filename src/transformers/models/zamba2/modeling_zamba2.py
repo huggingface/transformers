@@ -187,11 +187,6 @@ class Zamba2DynamicCache(DynamicCache):
         raise NotImplementedError("Zamba2DynamicCache does not have a legacy cache equivalent.")
 
 
-# is_fast_path_available = all(
-#     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
-# )
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -521,6 +516,7 @@ class Zamba2FlashAttention2(Zamba2Attention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self.is_causal = True
 
     def forward(
         self,
@@ -614,6 +610,7 @@ class Zamba2FlashAttention2(Zamba2Attention):
             value_states,
             attention_mask,
             q_len,
+            is_causal = self.is_causal,
             dropout=dropout_rate,
             softmax_scale=softmax_scale,
         )
@@ -1563,27 +1560,6 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             with torch.no_grad():
                 module.dt_bias.copy_(inv_dt)
             module.dt_bias._no_reinit = True
-
-    @classmethod
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        hard_check_only: bool = False,
-        check_device_map: bool = False,
-    ):
-        """
-        Overloads `PreTrainedModel._check_and_enable_flash_attn_2` so as to DISABLE Flash Attention 2 by default on Zamba2 models.
-        Flash attention 2 is currently not supported in the HuggingFace implementation of Zamba2 v1.
-
-        Replaces `ZambaPreTrainedModel._check_and_enable_flash_attn_2` with `PreTrainedModel._check_and_enable_flash_attn_2`
-        as we do not want to disable Flash Attention 2 in Zamba2.
-        """
-        return PreTrainedModel._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
 
 
 _CONFIG_FOR_DOC = "Zamba2Config"

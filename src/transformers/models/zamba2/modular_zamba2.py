@@ -612,6 +612,7 @@ class Zamba2Attention(ZambaAttention):
         self.rope_theta = config.rope_theta
         self.layer_block_map = layer_type_list(config)
         self.block_id = block_id
+        self.is_causal = True
 
         if config.use_shared_attention_lora:
             self.linear_q_lora_A_list = nn.ModuleList([])
@@ -848,6 +849,7 @@ class Zamba2FlashAttention2(Zamba2Attention):
             q_len,
             dropout=dropout_rate,
             softmax_scale=softmax_scale,
+            is_causal=self.is_causal,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.attention_hidden_size).contiguous()
@@ -1627,10 +1629,16 @@ ZAMBA2_START_DOCSTRING = r"""
     "The bare Zamba2 Model outputting raw hidden-states without any specific head on top.",
     ZAMBA2_START_DOCSTRING,
 )
-class Zamba2PreTrainedModel(ZambaPreTrainedModel):
+class Zamba2PreTrainedModel(PreTrainedModel):
+    config_class = Zamba2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    # Leaving this commented out for now until testing
-    # _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
+    _supports_sdpa = False
+    _supports_cache_class = True  # Note: only supports Zamba2DynamicCache
+    _is_stateful = True
     
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1658,23 +1666,6 @@ class Zamba2PreTrainedModel(ZambaPreTrainedModel):
             with torch.no_grad():
                 module.dt_bias.copy_(inv_dt)
             module.dt_bias._no_reinit = True
-
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        hard_check_only: bool = False,
-        check_device_map: bool = False,
-    ):
-        """
-        Replaces `ZambaPreTrainedModel._check_and_enable_flash_attn_2` with `PreTrainedModel._check_and_enable_flash_attn_2`
-        as we do not want to disable Flash Attention 2 in Zamba2.
-        """
-        return PreTrainedModel._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
 
 
 ZAMBA2_INPUTS_DOCSTRING = r"""
