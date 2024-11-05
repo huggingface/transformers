@@ -1557,6 +1557,7 @@ class TokenizerTesterMixin:
                                 {"name": "template2", "template": "{{'b'}}"},
                             ],
                         )
+                        self.assertFalse(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
                         new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
                     # Assert that the serialized list is correctly reconstructed as a single dict
                     self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
