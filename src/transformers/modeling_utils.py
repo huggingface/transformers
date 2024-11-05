@@ -29,7 +29,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
-from threading import Thread, local
+from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
@@ -137,9 +137,7 @@ logger = logging.get_logger(__name__)
 
 _init_weights = True
 _is_quantized = False
-
-_thread_data = local()
-_thread_data.is_ds_init_called = False
+_is_ds_init_called = False
 
 
 def is_fsdp_enabled():
@@ -225,6 +223,15 @@ def set_quantized_state():
         yield
     finally:
         _is_quantized = False
+
+@contextmanager
+def set_zero3_state():
+    global _is_ds_init_called
+    _is_ds_init_called = True
+    try:
+        yield
+    finally:
+        _is_ds_init_called = False
 
 
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
@@ -1545,14 +1552,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch_dtype=torch_dtype,
             )
 
-        if is_deepspeed_zero3_enabled() and not _is_quantized and not _thread_data.is_ds_init_called:
+        if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            _thread_data.is_ds_init_called = True
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
+            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
+            with ContextManagers(init_contexts):
                 model = cls(config, **kwargs)
 
         else:
@@ -4088,12 +4095,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
-        if is_deepspeed_zero3_enabled() and not is_quantized and not _thread_data.is_ds_init_called:
+        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            _thread_data.is_ds_init_called = True
-            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
+            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()] + init_contexts
         elif low_cpu_mem_usage:
             if not is_accelerate_available():
                 raise ImportError(
