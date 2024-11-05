@@ -1035,7 +1035,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
         Only supports PyTorch. If instances could overlap, set either return_coco_annotation or return_binary_maps
-        to `True` to get the correct segmentation result. 
+        to `True` to get the correct segmentation result.
 
         Args:
             outputs ([`Mask2FormerForUniversalSegmentation`]):
