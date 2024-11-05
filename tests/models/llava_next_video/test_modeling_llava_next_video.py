@@ -130,7 +130,6 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.num_image_tokens = 24
         self.num_video_tokens = 8
         self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
-        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return LlavaNextVideoConfig(
