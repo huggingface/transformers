@@ -1652,7 +1652,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits , labels)
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
