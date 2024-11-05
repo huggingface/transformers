@@ -186,7 +186,7 @@ class FlaxDinov2Embeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.astype(target_dtype)
         patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
 
-        class_pos_embed_expanded = np.repeat(class_pos_embed[jnp.newaxis, :], hidden_states.shape[0], axis=0)
+        class_pos_embed_expanded = jnp.repeat(class_pos_embed[jnp.newaxis, :], hidden_states.shape[0], axis=0)
 
         return jnp.concatenate((class_pos_embed_expanded, patch_pos_embed), axis=1)
 
