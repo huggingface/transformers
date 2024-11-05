@@ -1132,6 +1132,7 @@ class TokenizerTesterMixin:
                 # Check that no error raised
                 new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
+
     @require_jinja
     def test_chat_template_batched(self):
         dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
@@ -1561,6 +1562,22 @@ class TokenizerTesterMixin:
                         new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
                     # Assert that the serialized list is correctly reconstructed as a single dict
                     self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+
+    @require_jinja
+    def test_chat_template_file_priority(self):
+        dummy_template1 = "a"
+        dummy_template2 = "b"
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    tokenizer.chat_template = dummy_template1
+                    tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=False)
+                    with open(os.path.join(tmp_dir_name, "chat_template.jinja"), "w") as f:
+                        f.write(dummy_template2)
+                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                # Assert the file template clobbers any template in the config
+                self.assertEqual(new_tokenizer.chat_template, dummy_template2)
 
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
