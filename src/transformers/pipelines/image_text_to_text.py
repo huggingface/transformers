@@ -90,6 +90,10 @@ def retrieve_images_in_messages(
                 elif content.get("type") == "image_url":
                     if isinstance(content.get("image_url"), dict) and "url" in content["image_url"]:
                         retrieved_images.append(content["image_url"]["url"])
+                        # Rewrite content to be in the Transformers chat format
+                        content["type"] = "image"
+                        content["image"] = content["image_url"]["url"]
+                        del content["image_url"]
                     else:
                         raise ValueError(
                             "Wrong format for 'image_url' content type. The content should have an 'image_url' dict with a 'url' key."
