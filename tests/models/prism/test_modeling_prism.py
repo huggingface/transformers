@@ -89,7 +89,7 @@ class PrismModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
-        hidden_act="relu",
+        hidden_act="relu", 
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         encoder_layerdrop=0.0,
