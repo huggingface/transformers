@@ -2064,7 +2064,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         gguf_file = kwargs.get("gguf_file", None)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
 
-
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
         if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
