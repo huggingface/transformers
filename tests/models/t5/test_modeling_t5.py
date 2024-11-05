@@ -539,9 +539,9 @@ class T5ModelTester:
         embed_size = self.hidden_size
 
         test_input = torch.randn((batch_size, seq_len, embed_size), device=torch_device)
-        output = model(test_input)
+        attn_out, _kv_state, _pos_bias = model(test_input)
 
-        self.parent.assertFalse(torch.isnan(output).any().item())
+        self.parent.assertFalse(torch.isnan(attn_out).any().item())
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
