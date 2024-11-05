@@ -190,6 +190,8 @@ class PretrainedConfig(PushToHubMixin):
     """
 
     model_type: str = ""
+    base_config_key: str = ""
+    sub_configs: Dict[str, "PretrainedConfig"] = {}
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
     _auto_class: Optional[str] = None
@@ -543,11 +545,22 @@ class PretrainedConfig(PushToHubMixin):
         cls._set_token_in_kwargs(kwargs, token)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if cls.base_config_key and cls.base_config_key in config_dict:
+            config_dict = config_dict[cls.base_config_key]
+
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
+            # sometimes the config has no `base_config_key` if the config is used in several composite models
+            # e.g. LlamaConfig. In that case we try to see if there is match in `model_type` before raising a warning
+            for k, v in config_dict.items():
+                if isinstance(v, dict) and v.get("model_type") == cls.model_type:
+                    config_dict = v
+
+            # raise warning only if we still can't see a match in `model_type`
+            if config_dict["model_type"] != cls.model_type:
+                logger.warning(
+                    f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                    f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+                )
 
         return cls.from_dict(config_dict, **kwargs)
 
