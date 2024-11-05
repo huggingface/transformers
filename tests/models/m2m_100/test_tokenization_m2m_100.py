@@ -87,7 +87,7 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_vocab(self):
         tokenizer = self.get_tokenizer()
         vocab_keys = list(tokenizer.get_vocab().keys())
-
+        print(vocab_keys)
         self.assertEqual(vocab_keys[0], "</s>")
         self.assertEqual(vocab_keys[1], "<unk>")
         self.assertEqual(vocab_keys[-1], "<s>")

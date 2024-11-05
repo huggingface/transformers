@@ -18,9 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The `Prism` model, a state-of-the-art multilingual neural machine translation (NMT) system developed for translation. The model supports translation across 39 languages, leveraging a zero-shot paraphrasing approach that does not require human judgments for training.
-
-The `Prism` model was designed to be a lexically/syntactically unbiased paraphraser. The core idea is to treat paraphrasing as a zero-shot translation task, which allows the model to cover a wide range of languages effectively.
+The Prism model is a multilingual neural machine translation (NMT) system. The model supports translation across 39 languages, leveraging a zero-shot paraphrasing approach as a machine translation evaluation technique.
 
 The model was proposed in [Automatic Machine Translation Evaluation in Many Languages via Zero-Shot Paraphrasing](https://aclanthology.org/2020.emnlp-main.8.pdf) by Brian Thompson and Matt Post.
 
@@ -64,10 +62,6 @@ generated_tokens = model.generate(**encoded_ja, forced_bos_token_id=tokenizer.ge
 print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 # => 'Life is like a box of chocolate.'
 ```
-
-## Languages Covered
-Albanian (sq), Arabic (ar), Bengali (bn), Bulgarian (bg), Catalan; Valencian (ca), Chinese (zh), Croatian (hr), Czech (cs), Danish (da), Dutch (nl), English (en), Esperanto (eo), Estonian (et), Finnish (fi), French (fr), German (de), Greek, Modern (el), Hebrew (modern) (he), Hungarian (hu), Indonesian (id), Italian (it), Japanese (ja), Kazakh (kk), Latvian (lv), Lithuanian (lt), Macedonian (mk), Norwegian (no), Polish (pl), Portuguese (pt), Romanian, Moldovan (ro), Russian (ru), Serbian (sr), Slovak (sk), Slovene (sl), Spanish; Castilian (es), Swedish (sv), Turkish (tr), Ukrainian (uk), Vietnamese (vi).
-
 
 ## Resources
 
