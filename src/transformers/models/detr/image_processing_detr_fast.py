@@ -21,7 +21,13 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    SizeDict,
+    get_image_size_for_max_height_width,
+    get_max_height_width,
+    safe_squeeze,
+)
 from ...image_transforms import (
     center_to_corners_format,
     corners_to_center_format,
@@ -55,7 +61,6 @@ from .image_processing_detr import (
     compute_segments,
     convert_segmentation_to_rle,
     get_size_with_aspect_ratio,
-    max_across_indices,
     remove_low_and_no_objects,
 )
 
@@ -83,60 +88,6 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
-
-
-def get_image_size_for_max_height_width(
-    image_size: Tuple[int, int],
-    max_height: int,
-    max_width: int,
-) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
-    Important, even if image_height < max_height and image_width < max_width, the image will be resized
-    to at least one of the edges be equal to max_height or max_width.
-
-    For example:
-        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
-        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The image to resize.
-        max_height (`int`):
-            The maximum allowed height.
-        max_width (`int`):
-            The maximum allowed width.
-    """
-    height, width = image_size
-    height_scale = max_height / height
-    width_scale = max_width / width
-    min_scale = min(height_scale, width_scale)
-    new_height = int(height * min_scale)
-    new_width = int(width * min_scale)
-    return new_height, new_width
-
-
-def safe_squeeze(tensor: torch.Tensor, axis: Optional[int] = None) -> torch.Tensor:
-    """
-    Squeezes a tensor, but only if the axis specified has dim 1.
-    """
-    if axis is None:
-        return tensor.squeeze()
-
-    try:
-        return tensor.squeeze(axis=axis)
-    except ValueError:
-        return tensor
-
-
-def get_max_height_width(images: List[torch.Tensor]) -> Tuple[int]:
-    """
-    Get the maximum height and width across all images in a batch.
-    """
-
-    _, max_height, max_width = max_across_indices([img.shape for img in images])
-
-    return (max_height, max_width)
 
 
 # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
@@ -191,18 +142,21 @@ def prepare_coco_detection_annotation(
 
     # Get all COCO annotations for the given image.
     annotations = target["annotations"]
-    annotations = [obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0]
+    classes = []
+    area = []
+    boxes = []
+    keypoints = []
+    for obj in annotations:
+        if "iscrowd" not in obj or obj["iscrowd"] == 0:
+            classes.append(obj["category_id"])
+            area.append(obj["area"])
+            boxes.append(obj["bbox"])
+            if "keypoints" in obj:
+                keypoints.append(obj["keypoints"])
 
-    classes = [obj["category_id"] for obj in annotations]
     classes = torch.as_tensor(classes, dtype=torch.int64, device=image.device)
-
-    # for conversion to coco api
-    area = torch.as_tensor([obj["area"] for obj in annotations], dtype=torch.float32, device=image.device)
-    iscrowd = torch.as_tensor(
-        [obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=torch.int64, device=image.device
-    )
-
-    boxes = [obj["bbox"] for obj in annotations]
+    area = torch.as_tensor(area, dtype=torch.float32, device=image.device)
+    iscrowd = torch.zeros_like(classes, dtype=torch.int64, device=image.device)
     # guard against no boxes via resizing
     boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(-1, 4)
     boxes[:, 2:] += boxes[:, :2]
@@ -211,19 +165,16 @@ def prepare_coco_detection_annotation(
 
     keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
 
-    new_target = {}
-    new_target["image_id"] = image_id
-    new_target["class_labels"] = classes[keep]
-    new_target["boxes"] = boxes[keep]
-    new_target["area"] = area[keep]
-    new_target["iscrowd"] = iscrowd[keep]
-    new_target["orig_size"] = torch.as_tensor(
-        [int(image_height), int(image_width)], dtype=torch.int64, device=image.device
-    )
+    new_target = {
+        "image_id": image_id,
+        "class_labels": classes[keep],
+        "boxes": boxes[keep],
+        "area": area[keep],
+        "iscrowd": iscrowd[keep],
+        "orig_size": torch.as_tensor([int(image_height), int(image_width)], dtype=torch.int64, device=image.device),
+    }
 
-    if annotations and "keypoints" in annotations[0]:
-        keypoints = [obj["keypoints"] for obj in annotations]
-        # Converting the filtered keypoints list to a numpy array
+    if keypoints:
         keypoints = torch.as_tensor(keypoints, dtype=torch.float32, device=image.device)
         # Apply the keep mask here to filter the relevant annotations
         keypoints = keypoints[keep]
@@ -911,84 +862,81 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         if input_data_format == ChannelDimension.LAST:
             images = [image.permute(2, 0, 1).contiguous() for image in images]
 
-        # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
-        if annotations is not None:
-            prepared_images = []
-            prepared_annotations = []
-            for image, target in zip(images, annotations):
-                target = self.prepare_annotation(
+        if do_rescale and do_normalize:
+            # fused rescale and normalize
+            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
+            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
+
+        processed_images = []
+        processed_annotations = []
+        pixel_masks = []  # Initialize pixel_masks here
+        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+            # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
+            if annotations is not None:
+                annotation = self.prepare_annotation(
                     image,
-                    target,
+                    annotation,
                     format,
                     return_segmentation_masks=return_segmentation_masks,
                     masks_path=masks_path,
                     input_data_format=input_data_format,
                 )
-                prepared_images.append(image)
-                prepared_annotations.append(target)
-            images = prepared_images
-            annotations = prepared_annotations
-            del prepared_images, prepared_annotations
 
-        if do_resize:
-            if isinstance(resample, (PILImageResampling, int)):
-                interpolation = pil_torch_interpolation_mapping[resample]
-            else:
-                interpolation = resample
-            resized_images = [self.resize(image, size=size, interpolation=interpolation) for image in images]
-            if annotations is not None:
-                for i, (image, target) in enumerate(zip(resized_images, annotations)):
-                    annotations[i] = self.resize_annotation(
-                        target,
-                        orig_size=images[i].size()[-2:],
-                        target_size=image.size()[-2:],
+            if do_resize:
+                interpolation = (
+                    pil_torch_interpolation_mapping[resample]
+                    if isinstance(resample, (PILImageResampling, int))
+                    else resample
+                )
+                resized_image = self.resize(image, size=size, interpolation=interpolation)
+                if annotations is not None:
+                    annotation = self.resize_annotation(
+                        annotation,
+                        orig_size=image.size()[-2:],
+                        target_size=resized_image.size()[-2:],
                     )
-            images = resized_images
-            del resized_images
+                image = resized_image
 
-        if do_rescale and do_normalize:
-            # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
-            images = [F.normalize(image.to(dtype=torch.float32), new_mean, new_std) for image in images]
-        elif do_rescale:
-            images = [image * rescale_factor for image in images]
-        elif do_normalize:
-            images = [F.normalize(image, image_mean, image_std) for image in images]
+            if do_rescale and do_normalize:
+                # fused rescale and normalize
+                image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+            elif do_rescale:
+                image = image * rescale_factor
+            elif do_normalize:
+                image = F.normalize(image, image_mean, image_std)
 
-        if do_convert_annotations and annotations is not None:
-            annotations = [
-                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
-                for annotation, image in zip(annotations, images)
-            ]
+            if do_convert_annotations and annotations is not None:
+                annotation = self.normalize_annotation(annotation, get_image_size(image, input_data_format))
+
+            processed_images.append(image)
+            processed_annotations.append(annotation)
+        images = processed_images
+        annotations = processed_annotations if annotations is not None else None
 
         if do_pad:
-            # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
+            # depends on all resized image shapes so we need another loop
             if pad_size is not None:
                 padded_size = (pad_size["height"], pad_size["width"])
             else:
                 padded_size = get_max_height_width(images)
 
-            annotation_list = annotations if annotations is not None else [None] * len(images)
             padded_images = []
-            pixel_masks = []
             padded_annotations = []
-            for image, annotation in zip(images, annotation_list):
+            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
                 if padded_size == image.size()[-2:]:
                     padded_images.append(image)
                     pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
                     padded_annotations.append(annotation)
                     continue
-                padded_image, pixel_mask, padded_annotation = self.pad(
+                image, pixel_mask, annotation = self.pad(
                     image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
                 )
-                padded_images.append(padded_image)
+                padded_images.append(image)
+                padded_annotations.append(annotation)
                 pixel_masks.append(pixel_mask)
-                padded_annotations.append(padded_annotation)
             images = padded_images
-            if annotations is not None:
-                annotations = padded_annotations
-            del padded_images, padded_annotations
+            annotations = padded_annotations if annotations is not None else None
             data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
 
         data.update({"pixel_values": torch.stack(images, dim=0)})
