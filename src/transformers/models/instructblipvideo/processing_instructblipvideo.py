@@ -63,8 +63,11 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     qformer_tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
-        self.video_token = AddedToken("<video>", normalized=False, special=True)
-        tokenizer.add_tokens([self.video_token], special_tokens=True)
+        if not hasattr(tokenizer, "video_token"):
+            self.video_token = AddedToken("<video>", normalized=False, special=True)
+            tokenizer.add_tokens([self.video_token], special_tokens=True)
+        else:
+            self.video_token = tokenizer.video_token
         self.num_query_tokens = num_query_tokens
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
@@ -131,7 +134,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 video_tokens = (
                     self.video_token.content * self.num_query_tokens * 4
                 )  # InstrucBLIP works with 4 frames only
-                video_token_encoding = self.tokenizer([video_tokens], add_special_tokens=False, return_tensors=None)
+                video_token_encoding = self.tokenizer(
+                    [video_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding

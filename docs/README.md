@@ -276,14 +276,14 @@ building the return.
 
 Here's an example of a single value return:
 
-```
+```python
     Returns:
         `List[int]`: A list of integers in the range [0, 1] --- 1 for a special token, 0 for a sequence token.
 ```
 
 Here's an example of a tuple return, comprising several objects:
 
-```
+```python
     Returns:
         `tuple(torch.FloatTensor)` comprising various elements depending on the configuration ([`BertConfig`]) and inputs:
         - ** loss** (*optional*, returned when `masked_lm_labels` is provided) `torch.FloatTensor` of shape `(1,)` --
@@ -322,10 +322,9 @@ includes an example of how to transcribe speech to text in the
 
 The syntax for Example docstrings can look as follows:
 
-```
+```python
     Example:
 
-    ```python
     >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
     >>> from datasets import load_dataset
     >>> import torch
@@ -347,7 +346,6 @@ The syntax for Example docstrings can look as follows:
     >>> transcription = processor.batch_decode(predicted_ids)
     >>> transcription[0]
     'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
-    ```
 ```
 
 The docstring should give a minimal, clear example of how the respective model 

@@ -15,7 +15,6 @@
 """Testing suite for the PyTorch Idefics3 model."""
 
 import copy
-import gc
 import unittest
 from io import BytesIO
 
@@ -26,7 +25,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_bitsandbytes, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -180,10 +179,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
-        pass
-
-    @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
@@ -321,6 +316,8 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -336,11 +333,29 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         pass
 
     @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
+    def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_inference_padding_right(self):
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(
+        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
+    )
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -482,8 +497,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @unittest.skip("multi-gpu tests are disabled for now")
