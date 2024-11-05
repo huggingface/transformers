@@ -531,7 +531,7 @@ class T5ModelTester:
 
     def create_and_check_attention_forward(self, config):
         torch.manual_seed(0)
-        model = T5Model(config=config).get_decoder().block[0].layer[0] # T5LayerSelfAttention
+        model = T5Model(config=config).get_decoder().block[0].layer[0]  # T5LayerSelfAttention
         model.to(torch_device).eval()
 
         seq_len = self.encoder_seq_length
@@ -945,6 +945,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_create_and_check_attention_forward(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
         self.model_tester.create_and_check_attention_forward(config)
+
 
 class T5EncoderOnlyModelTester:
     def __init__(
