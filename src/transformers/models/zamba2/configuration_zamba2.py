@@ -156,6 +156,14 @@ class Zamba2Config(PretrainedConfig):
         use_long_context=False,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.tie_word_embeddings = tie_word_embeddings
@@ -225,7 +233,7 @@ class Zamba2Config(PretrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
         self.use_mem_eff_path = use_mem_eff_path
 
-        # Below, "mmamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
+        # Below, "mamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
         self.layers_block_type = (
             ["mamba"]
             + (["mamba"] * 5 + ["hybrid"]) * 7
@@ -234,12 +242,4 @@ class Zamba2Config(PretrainedConfig):
             + ["mamba"] * 3
             + ["hybrid"]
             + ["mamba"] * 2
-        )
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
         )

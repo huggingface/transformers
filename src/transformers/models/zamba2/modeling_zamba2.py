@@ -741,7 +741,7 @@ def segment_sum(input_tensor):
     return tensor_segsum
 
 
-class Zamba2Mamba2Mixer(nn.Module):
+class Zamba2MambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
     A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
@@ -1299,10 +1299,10 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         return outputs
 
 
-class Zamba2Mamba2DecoderLayer(nn.Module):
+class Zamba2MambaDecoderLayer(nn.Module):
     def __init__(self, config: Zamba2Config, layer_idx: int):
         super().__init__()
-        self.mamba = Zamba2Mamba2Mixer(config=config, layer_idx=layer_idx)
+        self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
 
@@ -1368,7 +1368,7 @@ class Zamba2Mamba2DecoderLayer(nn.Module):
 
 
 class Zamba2HybridLayer(nn.Module):
-    def __init__(self, shared_transf: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2Mamba2DecoderLayer):
+    def __init__(self, shared_transf: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer):
         super().__init__()
         self.shared_transf = shared_transf
         self.linear = linear
@@ -1467,7 +1467,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     config_class = Zamba2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2Mamba2DecoderLayer"]
+    _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = False
@@ -1484,7 +1484,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Zamba2Mamba2Mixer):
+        elif isinstance(module, Zamba2MambaMixer):
             module.A_log._no_weight_decay = True
             module.D._no_weight_decay = True
 
@@ -1617,10 +1617,10 @@ ZAMBA2_INPUTS_DOCSTRING = r"""
 )
 class Zamba2Model(Zamba2PreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ZambaDecoderLayer`]
+    Model consisting of *config.num_hidden_layers* layers.
 
     Args:
-        config: ZambaConfig
+        config: Zamba2Config
     """
 
     def __init__(self, config: Zamba2Config):
@@ -1635,10 +1635,10 @@ class Zamba2Model(Zamba2PreTrainedModel):
         self.layers_block_type = config.layers_block_type
         for i in range(config.num_hidden_layers):
             if config.layers_block_type[i] == "mamba":
-                mamba_layers.append(Zamba2Mamba2DecoderLayer(config, layer_idx=i))
+                mamba_layers.append(Zamba2MambaDecoderLayer(config, layer_idx=i))
             elif config.layers_block_type[i] == "hybrid":
                 linear_layers.append(nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False))
-                mamba_layers.append(Zamba2Mamba2DecoderLayer(config, layer_idx=i))
+                mamba_layers.append(Zamba2MambaDecoderLayer(config, layer_idx=i))
         mamba_layers = iter(mamba_layers)
         linear_layers = iter(linear_layers)
         blocks = cycle(blocks)
