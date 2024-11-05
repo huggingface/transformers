@@ -96,6 +96,7 @@ if is_torch_available():
 
 
 class GenerationTesterMixin:
+    input_name = "input_ids"
     model_tester = None
     all_generative_model_classes = ()
     max_new_tokens = 3
@@ -184,16 +185,16 @@ class GenerationTesterMixin:
         # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
         # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
         if config is not None:
-            image_token_index = (
-                config.image_token_index
-                if getattr(config, "image_token_index", None) is not None
-                else getattr(config, "image_token_id", None)
-            )
-            video_token_index = config.video_token_index if hasattr(config, "video_token_index") else None
-            if image_token_index is not None and image_token_index < config.get_text_config().vocab_size:
-                logits_processor_kwargs["bad_words_ids"].append([image_token_index])
-            if video_token_index is not None and video_token_index < config.get_text_config().vocab_size:
-                logits_processor_kwargs["bad_words_ids"].append([video_token_index])
+            for key in [
+                "image_token_index",
+                "image_token_id",
+                "video_token_index",
+                "video_token_id",
+                "vision_start_token_id",
+            ]:
+                token_index = getattr(config, key, None)
+                if token_index is not None and token_index < config.get_text_config().vocab_size:
+                    logits_processor_kwargs["bad_words_ids"].append([token_index])
 
         return logits_processor_kwargs
 
@@ -1263,6 +1264,9 @@ class GenerationTesterMixin:
 
             if model.get_output_embeddings() is None:
                 self.skipTest("DoLa is not supported for models that don't have output embeddings")
+
+            logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True, config=model.config)
+
             # Sets dola generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) there are at least two forward passes in the main model, to ensure the input preparation of
@@ -1280,7 +1284,7 @@ class GenerationTesterMixin:
                 "use_cache": getattr(config, "use_cache", False),  # Some models don't support the cache
                 "dola_layers": "low",
             }
-            output_dola = model.generate(**generation_kwargs, **inputs_dict)
+            output_dola = model.generate(**generation_kwargs, **logits_processor_kwargs, **inputs_dict)
             self._check_outputs(output_dola, model.config, use_cache=getattr(config, "use_cache", False))
 
     @pytest.mark.generate
@@ -1610,7 +1614,7 @@ class GenerationTesterMixin:
                 inputs_dict.pop("pixel_values_images", None)
             #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
-                model_name in model_class.__name__.lower() for model_name in ["moshi"]
+                model_name in model_class.__name__.lower() for model_name in ["moshi", "qwen2vl"]
             )
             # 3 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
             # we infer it from `input_ids`. The last test case will fail if there is a pad token in the original input.
