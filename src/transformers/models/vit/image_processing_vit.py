@@ -68,7 +68,7 @@ class ViTImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+        do_convert_rgb (`bool`, *optional*):
             Whether to convert the image to RGB.
     """
 
