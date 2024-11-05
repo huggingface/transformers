@@ -83,12 +83,12 @@ API나 기반 모델이 자주 업데이트되므로, 에이전트가 제공하�
 1. 입력(`List[Dict[str, str]]`)에 대한 [메시지 형식](../chat_templating.md)을 따르고 문자열을 반환해야 합니다.
 2. 인수 `stop_sequences`에 시퀀스가 전달되기 *전에* 출력을 생성하는 것을 중지해야 합니다.
 
-### HfEngine [[hfengine]]
+### HfApiEngine [[HfApiEngine]]
 
-편의를 위해, 위의 사항을 구현하고 대규모 언어 모델 실행을 위해 추론 엔드포인트를 사용하는 `HfEngine`을 추가했습니다.
+편의를 위해, 위의 사항을 구현하고 대규모 언어 모델 실행을 위해 추론 엔드포인트를 사용하는 `HfApiEngine`을 추가했습니다.
 
 ```python
->>> from transformers import HfEngine
+>>> from transformers import HfApiEngine
 
 >>> messages = [
 ...   {"role": "user", "content": "Hello, how are you?"},
@@ -96,12 +96,12 @@ API나 기반 모델이 자주 업데이트되므로, 에이전트가 제공하�
 ...   {"role": "user", "content": "No need to help, take it easy."},
 ... ]
 
->>> HfEngine()(messages, stop_sequences=["conversation"])
+>>> HfApiEngine()(messages, stop_sequences=["conversation"])
 
 "That's very kind of you to say! It's always nice to have a relaxed "
 ```
 
-[[autodoc]] HfEngine
+[[autodoc]] HfApiEngine
 
 
 ## 에이전트 유형 [[agent-types]]

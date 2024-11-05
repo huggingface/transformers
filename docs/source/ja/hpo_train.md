@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 これらを使用する前に、ハイパーパラメーター検索バックエンドをインストールする必要があります。
 ```bash
-pip install optuna/sigopt/wandb/ray[tune] 
+pip install optuna/sigopt/wandb/ray[tune]
 ```
 
 ## How to enable Hyperparameter search in example
@@ -119,7 +119,7 @@ Wandbについては、[object_parameter](https://docs.wandb.ai/guides/sweeps/co
 ...     train_dataset=small_train_dataset,
 ...     eval_dataset=small_eval_dataset,
 ...     compute_metrics=compute_metrics,
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     model_init=model_init,
 ...     data_collator=data_collator,
 ... )
@@ -142,9 +142,3 @@ Wandbについては、[object_parameter](https://docs.wandb.ai/guides/sweeps/co
 
 ## Hyperparameter search For DDP finetune
 現在、DDP（Distributed Data Parallel）のためのハイパーパラメーター検索は、Optuna と SigOpt に対して有効になっています。ランクゼロプロセスのみが検索トライアルを生成し、他のランクに引数を渡します。
-
-
-
-
-
-

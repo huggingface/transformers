@@ -106,7 +106,7 @@ as the information relative to the inputs and outputs.
 
 [[autodoc]] TFCamembertModel
 
-## TFCamembertForCasualLM
+## TFCamembertForCausalLM
 
 [[autodoc]] TFCamembertForCausalLM
 

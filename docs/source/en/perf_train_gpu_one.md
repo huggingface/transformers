@@ -186,7 +186,7 @@ If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further 
 
 If you have access to an Ampere or newer hardware you can use bf16 for mixed precision training and evaluation. While 
 bf16 has a worse precision than fp16, it has a much bigger dynamic range. In fp16 the biggest number you can have 
-is `65535` and any number above that will result in an overflow. A bf16 number can be as large as `3.39e+38` (!) which 
+is `65504` and any number above that will result in an overflow. A bf16 number can be as large as `3.39e+38` (!) which 
 is about the same as fp32 - because both have 8-bits used for the numerical range.
 
 You can enable BF16 in the 🤗 Trainer with:
@@ -284,7 +284,7 @@ training_args = TrainingArguments(per_device_train_batch_size=4, optim="adamw_bn
 
 However, we can also use a third-party implementation of the 8-bit optimizer for demonstration purposes to see how that can be integrated.
 
-First, follow the installation guide in the GitHub [repo](https://github.com/TimDettmers/bitsandbytes) to install the `bitsandbytes` library 
+First, follow the installation guide in the GitHub [repo](https://github.com/bitsandbytes-foundation/bitsandbytes) to install the `bitsandbytes` library 
 that implements the 8-bit Adam optimizer.
 
 Next you need to initialize the optimizer. This involves two steps: 
@@ -395,7 +395,7 @@ Choose which backend to use by specifying it via `torch_compile_backend` in the 
 * `dynamo.optimize("aot_cudagraphs")` - cudagraphs with AotAutograd. [Read more](https://github.com/pytorch/torchdynamo/pull/757)
 
 **Inference-only backend**s:
-* `dynamo.optimize("ofi")` -  Uses Torchscript optimize_for_inference.  [Read more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
+* `dynamo.optimize("ofi")` -  Uses TorchScript optimize_for_inference.  [Read more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
 * `dynamo.optimize("fx2trt")` -  Uses NVIDIA TensorRT for inference optimizations.  [Read more](https://pytorch.org/TensorRT/tutorials/getting_started_with_fx_path.html)
 * `dynamo.optimize("onnxrt")` -  Uses ONNXRT for inference on CPU/GPU.  [Read more](https://onnxruntime.ai/)
 * `dynamo.optimize("ipex")` -  Uses IPEX for inference on CPU.  [Read more](https://github.com/intel/intel-extension-for-pytorch)
@@ -413,7 +413,7 @@ For example with a vanilla AdamW, the memory requirement for the optimizer state
 * Momentum: 4 bytes/param
 * Variance: 4 bytes/param
 
-Suppose a model with 7B parameters and 200 millions parameters injected with [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora).
+Suppose a model with 7B parameters and 200 million parameters injected with [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora).
 
 The memory requirement for the optimizer state of the plain model would be 12 * 7 = 84 GB (assuming 7B trainable parameters).
 

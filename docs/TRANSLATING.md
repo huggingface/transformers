@@ -1,57 +1,70 @@
-### Translating the Transformers documentation into your language
+# Translating the Transformers documentation into your language
 
-As part of our mission to democratize machine learning, we'd love to make the Transformers library available in many more languages! Follow the steps below if you want to help translate the documentation into your language 🙏.
+As part of our mission to democratize machine learning, we aim to make the Transformers library available in many more languages! Follow the steps below to help translate the documentation into your language.
 
-**🗞️ Open an issue**
+## Open an Issue
 
-To get started, navigate to the [Issues](https://github.com/huggingface/transformers/issues) page of this repo and check if anyone else has opened an issue for your language. If not, open a new issue by selecting the "Translation template" from the "New issue" button.
+1. Navigate to the Issues page of this repository.
+2. Check if anyone has already opened an issue for your language.
+3. If not, create a new issue by selecting the "Translation template" from the "New issue" button.
+4. Post a comment indicating which chapters you’d like to work on, and we’ll add your name to the list.
 
-Once an issue exists, post a comment to indicate which chapters you'd like to work on, and we'll add your name to the list.
+## Fork the Repository
 
+1. First, fork the Transformers repo by clicking the Fork button in the top-right corner.
+2. Clone your fork to your local machine for editing with the following command:
 
-**🍴 Fork the repository**
+    ```bash
+    git clone https://github.com/YOUR-USERNAME/transformers.git
+    ```
+   
+   Replace `YOUR-USERNAME` with your GitHub username.
 
-First, you'll need to [fork the Transformers repo](https://docs.github.com/en/get-started/quickstart/fork-a-repo). You can do this by clicking on the **Fork** button on the top-right corner of this repo's page.
+## Copy-paste the English version with a new language code
 
-Once you've forked the repo, you'll want to get the files on your local machine for editing. You can do that by cloning the fork with Git as follows:
+The documentation files are organized in the following directory:
 
-```bash
-git clone https://github.com/YOUR-USERNAME/transformers.git
-```
+- **docs/source**: This contains all documentation materials organized by language.
 
-**📋 Copy-paste the English version with a new language code**
+To copy the English version to your new language directory:
 
-The documentation files are in one leading directory:
+1. Navigate to your fork of the repository:
 
-- [`docs/source`](https://github.com/huggingface/transformers/tree/main/docs/source): All the documentation materials are organized here by language.
+    ```bash
+    cd ~/path/to/transformers/docs
+    ```
 
-You'll only need to copy the files in the [`docs/source/en`](https://github.com/huggingface/transformers/tree/main/docs/source/en) directory, so first navigate to your fork of the repo and run the following:
+   Replace `~/path/to` with your actual path.
 
-```bash
-cd ~/path/to/transformers/docs
-cp -r source/en source/LANG-ID
-```
+2. Run the following command:
 
-Here, `LANG-ID` should be one of the ISO 639-1 or ISO 639-2 language codes -- see [here](https://www.loc.gov/standards/iso639-2/php/code_list.php) for a handy table.
+    ```bash
+    cp -r source/en source/LANG-ID
+    ```
 
-**✍️ Start translating**
+   Replace `LANG-ID` with the appropriate ISO 639-1 or ISO 639-2 language code (see [this table](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) for reference).
 
-The fun part comes - translating the text!
+## Start translating
 
-The first thing we recommend is translating the part of the `_toctree.yml` file that corresponds to your doc chapter. This file is used to render the table of contents on the website. 
+Begin translating the text!
 
-> 🙋 If the `_toctree.yml` file doesn't yet exist for your language, you can create one by copy-pasting from the English version and deleting the sections unrelated to your chapter. Just make sure it exists in the `docs/source/LANG-ID/` directory!
+1. Start with the `_toctree.yml` file that corresponds to your documentation chapter. This file is essential for rendering the table of contents on the website.
 
-The fields you should add are `local` (with the name of the file containing the translation; e.g. `autoclass_tutorial`), and `title` (with the title of the doc in your language; e.g. `Load pretrained instances with an AutoClass`) -- as a reference, here is the `_toctree.yml` for [English](https://github.com/huggingface/transformers/blob/main/docs/source/en/_toctree.yml):
+    - If the `_toctree.yml` file doesn’t exist for your language, create one by copying the English version and removing unrelated sections.
+    - Ensure it is placed in the `docs/source/LANG-ID/` directory.
 
-```yaml
-- sections:
-  - local: pipeline_tutorial # Do not change this! Use the same name for your .md file
-    title: Pipelines for inference # Translate this!
-    ...
-  title: Tutorials # Translate this!
-```
+    Here’s an example structure for the `_toctree.yml` file:
 
-Once you have translated the `_toctree.yml` file, you can start translating the [MDX](https://mdxjs.com/) files associated with your docs chapter.
+    ```yaml
+    - sections:
+      - local: pipeline_tutorial # Keep this name for your .md file
+        title: Pipelines for Inference # Translate this
+        ...
+      title: Tutorials # Translate this
+    ```
 
-> 🙋 If you'd like others to help you with the translation, you should [open an issue](https://github.com/huggingface/transformers/issues) and tag @stevhliu and @MKhalusova.
+2. Once you’ve translated the `_toctree.yml`, move on to translating the associated MDX files.
+
+## Collaborate and share
+
+If you'd like assistance with your translation, open an issue and tag `@stevhliu`. Feel free to share resources or glossaries to ensure consistent terminology.
