@@ -21,9 +21,9 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, VideoInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
 
 
@@ -82,11 +82,11 @@ class SamProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         *args,  # to be deprecated
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio=None,
-        video=None,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio: Optional[AudioInput] = None,
+        video: Optional[VideoInput] = None,
         **kwargs,
     ) -> BatchEncoding:
         """
