@@ -662,7 +662,6 @@ class AriaProcessor(ProcessorMixin):
         image_token: str = "<|img|>",
         size_conversion: Optional[Dict] = None,
     ):
-        super().__init__(chat_template=chat_template)
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = size_conversion
@@ -681,6 +680,7 @@ class AriaProcessor(ProcessorMixin):
             self.tokenizer.pad_token = self.tokenizer.unk_token
 
         self.image_token = image_token
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     # Modified from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
@@ -757,6 +757,61 @@ class AriaProcessor(ProcessorMixin):
         )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
+
+    def save_pretrained(self, save_directory, **kwargs):
+        """
+        Save both the image processor and tokenizer.
+        """
+        merged_kwargs = self._merge_kwargs(
+            AriaProcessorKwargs,
+            {},
+            **kwargs,
+        )
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(
+                save_directory,
+                **merged_kwargs["images_kwargs"],
+            )
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(
+                save_directory,
+                **merged_kwargs["text_kwargs"],
+            )
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        tokenizer_path=None,
+        image_processor_path=None,
+        **kwargs,
+    ):
+        """
+        Load both the image processor and tokenizer from a pretrained model path.
+        """
+        tokenizer_path = tokenizer_path if tokenizer_path is not None else pretrained_model_name_or_path
+        image_processor_path = (
+            image_processor_path if image_processor_path is not None else pretrained_model_name_or_path
+        )
+        image_processor = AriaImageProcessor.from_pretrained(
+            image_processor_path,
+            **kwargs,
+        )
+        if "use_fast" in kwargs:
+            logger.warning("use_fast is not supported for AriaProcessor. Ignoring...")
+            kwargs.pop("use_fast")
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_path,
+            use_fast=False,
+            **kwargs,
+        )
+        chat_template = tokenizer.chat_template
+
+        return cls(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            chat_template=chat_template,
+        )
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

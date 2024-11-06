@@ -119,9 +119,9 @@ class AriaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class AriaGeluDense(nn.Module):
+class AriaProjectorMLP(nn.Module):
     """
-    Feed-Forward Network module.
+    Feed-Forward Network module for the Aria Projector.
 
     Args:
         in_features (int): Input embedding dimension.
@@ -159,7 +159,6 @@ class AriaCrossAttention(nn.Module):
         self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
         self.v_proj = nn.Linear(kv_dim, in_features, bias=False)
 
-        # Use batch_first=True to simplify code by removing permutations compared to the original.
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
         self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
         self.linear = nn.Linear(in_features, in_features)
@@ -199,7 +198,7 @@ class AriaCrossAttention(nn.Module):
 
 class AriaProjector(nn.Module):
     """
-    A projection module with one cross-attention layer and one AriaGeluDense layer, which projects ViT's outputs into MoE's inputs.
+    A projection module with one cross-attention layer and one AriaProjectorMLP layer, which projects ViT's outputs into MoE's inputs.
 
     Args:
         config (AriaConfig): the configuration to use.
@@ -224,29 +223,25 @@ class AriaProjector(nn.Module):
 
         self.query = nn.Parameter(torch.zeros(max(self.patch_to_query_dict.values()), self.in_features))
 
-        trunc_normal_(self.query, std=0.02)
+        nn.init.trunc_normal_(self.query, std=0.02)
 
         self.cross_attn = AriaCrossAttention(config)
 
         self.layer_norm = nn.LayerNorm(self.in_features)
-        self.feed_forward = AriaGeluDense(
-            self.in_features, self.hidden_features, self.output_dim
-        )  # TODO: Aria Projector MMLP
-        # Removed weight inits compared to original:
-        # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
+        self.feed_forward = AriaProjectorMLP(self.in_features, self.hidden_features, self.output_dim)
 
-    def forward(self, key_value_state: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
+    def forward(self, key_value_states: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
         """
         Forward pass of the Projector module.
 
         Args:
-            key_value_state (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
+            key_value_states (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
             attn_mask (torch.Tensor, optional): Attention mask. Default is None.
 
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
-        batch_size, num_patches = key_value_state.shape[0], key_value_state.shape[1]
+        batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
         if num_patches not in self.patch_to_query_dict.keys():
             raise KeyError(
@@ -260,7 +255,7 @@ class AriaProjector(nn.Module):
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
             attn_mask = attn_mask.unsqueeze(1).expand(-1, queries.size(1), -1)
 
-        attention_out = self.cross_attn(key_value_state, queries, attn_mask=attn_mask)
+        attention_out = self.cross_attn(key_value_states, queries, attn_mask=attn_mask)
 
         out = self.feed_forward(self.layer_norm(attention_out))
 
@@ -345,9 +340,9 @@ class AriaTopKRouter(nn.Module):
     # Simplify code a lot compared to original, since we do not need training.
     # Original: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/moe_lm.py#L170
     def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        logits = F.linear(hidden_states, self.weight)
+        logits = nn.functional.linear(hidden_states, self.weight)
         top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = F.softmax(top_logits, dim=-1)
+        scores = nn.functional.softmax(top_logits, dim=-1)
 
         original_dtype = top_indices.dtype
 
@@ -476,14 +471,14 @@ class AriaGroupedMLP(nn.Module):
             torch.Tensor: Output tensor after passing through the MLP.
         """
         fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        x = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = F.silu(x[0]) * x[1]
+        fc1_output = torch.chunk(fc1_output, 2, dim=-1)
+        fc1_output = nn.functional.silu(fc1_output[0]) * fc1_output[1]
         fc2_output = self.fc2(fc1_output, tokens_per_expert)
         return fc2_output
 
 
 # Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
-class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for InstructBLIP, CLIP, etc
+class AriaTextMoELayer(nn.Module):
     """
     Mixture of Experts (MoE) Layer for the Aria model.
 
@@ -2170,9 +2165,9 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, AriaForCausalLMalLM
+        >>> from transformers import AutoTokenizer, AriaForCausalLM
 
-        >>> model = AriaForCausalLMalLM.from_pretrained("meta-aria/Aria-2-7b-hf")
+        >>> model = AriaForCausalLM.from_pretrained("meta-aria/Aria-2-7b-hf")
         >>> tokenizer = AutoTokenizer.from_pretrained("meta-aria/Aria-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -2462,12 +2457,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.text_config.vocab_size,
-                **loss_kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **loss_kwargs
             )
- 
+
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
