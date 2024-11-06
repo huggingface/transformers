@@ -64,8 +64,8 @@ class TimesFMConfig(PretrainedConfig):
             The value used to pad the predictions.
         use_positional_embedding (`bool`, *optional*, defaults to `True`):
             Whether to add positional embeddings.
-        per_core_batch_size (`int`, *optional*, defaults to 32):
-            The batch size per core for data parallelism.
+        batch_size (`int`, *optional*, defaults to 32):
+            The batch size.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
@@ -96,7 +96,7 @@ class TimesFMConfig(PretrainedConfig):
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         use_positional_embedding: bool = True,
-        per_core_batch_size: int = 32,
+        batch_size: int = 32,
         initializer_factor: float = 1.0,
         **kwargs,
     ):
@@ -114,10 +114,11 @@ class TimesFMConfig(PretrainedConfig):
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
         self.use_positional_embedding = use_positional_embedding
-        self.per_core_batch_size = per_core_batch_size
+        self.batch_size = batch_size
         self.initializer_factor = initializer_factor
 
         super().__init__(
+            is_encoder_decoder=self.is_encoder_decoder,
             **kwargs,
         )
 

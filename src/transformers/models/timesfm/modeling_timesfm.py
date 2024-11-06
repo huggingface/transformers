@@ -50,11 +50,14 @@ class TimesFMPreTrainedModel(PreTrainedModel):
     main_input_name = "inputs"
 
     def _init_weights(self, module):
+        print(">>> TimesFMPreTrainedModel _init_weights")
         if isinstance(module, nn.Embedding):
-            nn.init.uniform_(module.weight, a=-0.1, b=0.1)
+            print(">>> TimesFMPreTrainedModel Embedding std", self.config.initializer_factor)
+            module.weight.data.normal_(mean=0, std=self.config.initializer_factor)
 
         elif isinstance(module, nn.Linear):
-            nn.init.xavier_uniform_(module.weight)
+            print(">>> TimesFMPreTrainedModel Linear std", self.config.initializer_factor)
+            module.weight.data.normal_(mean=0, std=self.config.initializer_factor)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 
@@ -316,10 +319,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
         self.model_dims = config.model_dim
         self.quantiles = config.quantiles
         self.num_heads = config.num_heads
-
-        self.num_cores = 1
-        self.per_core_batch_size = config.per_core_batch_size
-        self.global_batch_size = config.per_core_batch_size * self.num_cores
+        self.batch_size = config.batch_size
         self._horizon_start = self.context_len - self.input_patch_len
 
     def _preprocess(
@@ -346,8 +346,8 @@ class TimesFMModel(TimesFMPreTrainedModel):
         input_ts, input_padding, inp_freq = [], [], []
 
         pmap_pad = (
-            (len(inputs) - 1) // self.global_batch_size + 1
-        ) * self.global_batch_size - len(inputs)
+            (len(inputs) - 1) // self.batch_size + 1
+        ) * self.batch_size - len(inputs)
 
         for i, ts in enumerate(inputs):
             input_len = ts.shape[0]
@@ -453,14 +453,14 @@ class TimesFMModel(TimesFMPreTrainedModel):
             full_outputs = []
             all_attentions = []
             all_hidden_states = []
-            assert input_ts.shape[0] % self.global_batch_size == 0
-            for i in range(input_ts.shape[0] // self.global_batch_size):
+            assert input_ts.shape[0] % self.batch_size == 0
+            for i in range(input_ts.shape[0] // self.batch_size):
                 input_ts_in = torch.from_numpy(
                     np.array(
                         input_ts[
                             i
-                            * self.global_batch_size : (i + 1)
-                            * self.global_batch_size
+                            * self.batch_size : (i + 1)
+                            * self.batch_size
                         ],
                         dtype=np.float32,
                     )
@@ -469,8 +469,8 @@ class TimesFMModel(TimesFMPreTrainedModel):
                     np.array(
                         input_padding[
                             i
-                            * self.global_batch_size : (i + 1)
-                            * self.global_batch_size
+                            * self.batch_size : (i + 1)
+                            * self.batch_size
                         ],
                         dtype=np.float32,
                     )
@@ -479,8 +479,8 @@ class TimesFMModel(TimesFMPreTrainedModel):
                     np.array(
                         inp_freq[
                             i
-                            * self.global_batch_size : (i + 1)
-                            * self.global_batch_size,
+                            * self.batch_size : (i + 1)
+                            * self.batch_size,
                             :,
                         ],
                         dtype=np.int32,
