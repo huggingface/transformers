@@ -168,12 +168,12 @@ class AriaCrossAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(in_features)
         self.layer_norm_kv = nn.LayerNorm(kv_dim)
 
-    def forward(self, x, hidden_states, attn_mask=None, add_residual=False):
+    def forward(self, key_value_states, hidden_states, attn_mask=None, add_residual=False):
         """
         Forward pass of the AriaCrossAttention module.
 
         Args:
-            x (torch.Tensor): Input tensor for key and value.
+            key_value_states (torch.Tensor): Input tensor for key and value.
             hidden_states (torch.Tensor): Input tensor for query.
             attn_mask (torch.Tensor, optional): Attention mask. Default is None.
             add_residual (bool): Whether to add residual connection. Default is False.
@@ -183,9 +183,9 @@ class AriaCrossAttention(nn.Module):
         """
         query = self.q_proj(self.layer_norm(hidden_states))
 
-        x = self.layer_norm_kv(x)
-        key = self.k_proj(x)
-        value = self.v_proj(x)
+        key_value_states = self.layer_norm_kv(key_value_states)
+        key = self.k_proj(key_value_states)
+        value = self.v_proj(key_value_states)
 
         attn_output, _ = self.multihead_attn(query, key, value, attn_mask=attn_mask)
 
@@ -235,18 +235,18 @@ class AriaProjector(nn.Module):
         # Removed weight inits compared to original:
         # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
+    def forward(self, key_value_state: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
         """
         Forward pass of the Projector module.
 
         Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
+            key_value_state (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
             attn_mask (torch.Tensor, optional): Attention mask. Default is None.
 
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
-        batch_size, num_patches = x.shape[0], x.shape[1]
+        batch_size, num_patches = key_value_state.shape[0], key_value_state.shape[1]
 
         if num_patches not in self.patch_to_query_dict.keys():
             raise KeyError(
@@ -254,14 +254,13 @@ class AriaProjector(nn.Module):
             )
         query_num = self.patch_to_query_dict[num_patches]
 
-        # Compared to original, simplify definition
         queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, 1, 1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
             attn_mask = attn_mask.unsqueeze(1).expand(-1, queries.size(1), -1)
 
-        attention_out = self.cross_attn(x, queries, attn_mask=attn_mask)
+        attention_out = self.cross_attn(key_value_state, queries, attn_mask=attn_mask)
 
         out = self.feed_forward(self.layer_norm(attention_out))
 

@@ -26,9 +26,6 @@ from .image_processing_aria import AriaImageProcessor
 
 logger = logging.get_logger(__name__)
 
-
-
-
 class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.

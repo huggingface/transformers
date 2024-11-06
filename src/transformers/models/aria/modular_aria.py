@@ -3,10 +3,6 @@ import os
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import torch
-import torch.nn.functional as F
-from torch import nn
-from torch.nn.init import trunc_normal_
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
@@ -38,7 +34,7 @@ from ...tokenization_utils import (
 from ...utils import (
     logging,
 )
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import is_vision_available, is_torch_available
 from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -55,6 +51,9 @@ from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
 
 logger = logging.get_logger(__name__)
 
+if is_torch_available():
+    import torch
+    from torch import nn
 
 if is_vision_available():
     from PIL import Image, ImageOps
@@ -102,7 +101,7 @@ except ImportError as e:
     experts_gemm = sequential_gemm
 
 
-class IdentityOp(torch.nn.Module):
+class IdentityOp(nn.Module):
     """
     An identity operation that returns the input unchanged.
 
@@ -228,9 +227,9 @@ class AriaRMSNorm(LlamaRMSNorm):
     pass
 
 
-class AriaGeluDense(nn.Module):
+class AriaProjectorMLP(nn.Module):
     """
-    Feed-Forward Network module.
+    Feed-Forward Network module for the Aria Projector.
 
     Args:
         in_features (int): Input embedding dimension.
@@ -281,7 +280,7 @@ class AriaCrossAttention(nn.Module):
         Forward pass of the AriaCrossAttention module.
 
         Args:
-            x (torch.Tensor): Input tensor for key and value.
+            key_value_states (torch.Tensor): Input tensor for key and value.
             hidden_states (torch.Tensor): Input tensor for query.
             attn_mask (torch.Tensor, optional): Attention mask. Default is None.
             add_residual (bool): Whether to add residual connection. Default is False.
@@ -307,7 +306,7 @@ class AriaCrossAttention(nn.Module):
 
 class AriaProjector(nn.Module):
     """
-    A projection module with one cross-attention layer and one AriaGeluDense layer, which projects ViT's outputs into MoE's inputs.
+    A projection module with one cross-attention layer and one AriaProjectorMLP layer, which projects ViT's outputs into MoE's inputs.
 
     Args:
         config (AriaConfig): the configuration to use.
@@ -332,40 +331,37 @@ class AriaProjector(nn.Module):
 
         self.query = nn.Parameter(torch.zeros(max(self.patch_to_query_dict.values()), self.in_features))
 
-        trunc_normal_(self.query, std=0.02)
+        nn.init.trunc_normal_(self.query, std=0.02)
 
         self.cross_attn = AriaCrossAttention(config)
 
         self.layer_norm = nn.LayerNorm(self.in_features)
-        self.feed_forward = AriaGeluDense(self.in_features, self.hidden_features, self.output_dim)  # TODO: Aria Projector MMLP
-        # Removed weight inits compared to original:
-        # https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L149
+        self.feed_forward = AriaProjectorMLP(self.in_features, self.hidden_features, self.output_dim)
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor]=None):
+    def forward(self, key_value_states: torch.Tensor, attn_mask: Optional[torch.Tensor]=None):
         """
         Forward pass of the Projector module.
 
         Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
+            key_value_states (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
             attn_mask (torch.Tensor, optional): Attention mask. Default is None.
 
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
         """
-        batch_size, num_patches = x.shape[0], x.shape[1]
+        batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
         if num_patches not in self.patch_to_query_dict.keys():
             raise KeyError(f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}.")
         query_num = self.patch_to_query_dict[num_patches]
 
-        # Compared to original, simplify definition
-        queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, -1, -1)
+        queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, 1, 1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
             attn_mask = attn_mask.unsqueeze(1).expand(-1, queries.size(1), -1)
 
-        attention_out = self.cross_attn(x, queries, attn_mask=attn_mask)
+        attention_out = self.cross_attn(key_value_states, queries, attn_mask=attn_mask)
 
         out = self.feed_forward(self.layer_norm(attention_out))
 
@@ -495,6 +491,7 @@ class AriaImageProcessor(BaseImageProcessor):
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
+        resample: PILImageResampling = Image.Resampling.BICUBIC,
     ):
         """
         Process a list of images.
@@ -507,6 +504,7 @@ class AriaImageProcessor(BaseImageProcessor):
             split_image (bool, optional): Whether to split the image. Defaults to False.
             do_convert_rgb (bool, optional): Whether to convert the image to RGB. Defaults to True.
             do_normalize (bool, optional): Whether to normalize the image. Defaults to True.
+            resample (PILImageResampling, optional): The resampling filter to use if resizing the image. Defaults to BICUBIC.
 
         Returns:
             BatchFeature: A BatchFeature object containing:
@@ -549,7 +547,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 else:
                     new_size = (max_size, max(int(w * scale), min_size))  # h, w
 
-                crop_image_resized = resize(crop_image, new_size, resample=Image.Resampling.BICUBIC)
+                crop_image_resized = resize(crop_image, new_size, resample=resample)
 
                 padding_bottom, padding_right = max_size - new_size[0], max_size - new_size[1]
                 crop_image_padded = pad(crop_image_resized, ((0, padding_bottom), (0, padding_right)))
@@ -560,7 +558,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 pixel_masks.append(pixel_mask)
 
                 if do_normalize:
-                    crop_image_padded = normalize(crop_image_padded, self.image_mean, self.image_std)
+                    crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std)
     
                 # Switch to rgb channel first
                 crop_image_padded = np.transpose(crop_image_padded, (2, 0, 1))
@@ -906,9 +904,9 @@ class AriaTopKRouter(nn.Module):
     # Simplify code a lot compared to original, since we do not need training.
     # Original: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/moe_lm.py#L170
     def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        logits = F.linear(hidden_states, self.weight)
+        logits = nn.functional.linear(hidden_states, self.weight)
         top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = F.softmax(top_logits, dim=-1)
+        scores = nn.functional.softmax(top_logits, dim=-1)
 
         original_dtype = top_indices.dtype
 
@@ -1015,14 +1013,14 @@ class AriaGroupedMLP(nn.Module):
             torch.Tensor: Output tensor after passing through the MLP.
         """
         fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        x = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = F.silu(x[0]) * x[1]
+        fc1_output = torch.chunk(fc1_output, 2, dim=-1)
+        fc1_output = nn.functional.silu(fc1_output[0]) * fc1_output[1]
         fc2_output = self.fc2(fc1_output, tokens_per_expert)
         return fc2_output
 
 
 # Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
-class AriaTextMoELayer(nn.Module):  # TODO: check naming convenstion for InstructBLIP, CLIP, etc
+class AriaTextMoELayer(nn.Module):
     """
     Mixture of Experts (MoE) Layer for the Aria model.
 

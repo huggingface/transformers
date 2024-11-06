@@ -7,16 +7,14 @@
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, select_best_resolution
 from ...image_transforms import (
     convert_to_rgb,
+    pad,
     resize,
     to_channel_dimension_format,
-    pad,
-    normalize,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -28,11 +26,15 @@ from ...image_utils import (
 from ...tokenization_utils import (
     TensorType,
 )
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import is_vision_available, is_torch_available
 
 
 if is_vision_available():
     from PIL import Image, ImageOps
+
+if is_torch_available():
+    import torch
+
 
 # Copied from models.llava_next.image_processing_llava_next.py
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
@@ -61,46 +63,6 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
             patches.append(patch)
 
     return patches
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image size and the desired output size.
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
 
 
 class AriaImageProcessor(BaseImageProcessor):
@@ -138,19 +100,30 @@ class AriaImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean
         self.image_std = image_std
         if split_ratio is None:
-           self.split_ratio = [
-               (1, 2), (1, 3), (1, 4), (1, 5), (1, 6),
-               (1, 7), (1, 8), (2, 4), (2, 3), (2, 2),
-               (2, 1), (3, 1), (3, 2), (4, 1), (4, 2),
-               (5, 1), (6, 1), (7, 1), (8, 1),
-           ]
+            self.split_ratio = [
+                (1, 2),
+                (1, 3),
+                (1, 4),
+                (1, 5),
+                (1, 6),
+                (1, 7),
+                (1, 8),
+                (2, 4),
+                (2, 3),
+                (2, 2),
+                (2, 1),
+                (3, 1),
+                (3, 2),
+                (4, 1),
+                (4, 2),
+                (5, 1),
+                (6, 1),
+                (7, 1),
+                (8, 1),
+            ]
         else:
             self.split_ratio = split_ratio
 
-        # we make the transform a property so that it is lazily initialized,
-        # this could avoid the error "TypeError: Object of type Normalize is not JSON serializable"
-        # when we used save_pretrained or from_pretrained.
-        self._transform = None
         self._set_processor_class("AriaProcessor")
 
     def preprocess(
@@ -162,6 +135,7 @@ class AriaImageProcessor(BaseImageProcessor):
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
+        resample: PILImageResampling = Image.Resampling.BICUBIC,
     ):
         """
         Process a list of images.
@@ -174,6 +148,7 @@ class AriaImageProcessor(BaseImageProcessor):
             split_image (bool, optional): Whether to split the image. Defaults to False.
             do_convert_rgb (bool, optional): Whether to convert the image to RGB. Defaults to True.
             do_normalize (bool, optional): Whether to normalize the image. Defaults to True.
+            resample (PILImageResampling, optional): The resampling filter to use if resizing the image. Defaults to BICUBIC.
 
         Returns:
             BatchFeature: A BatchFeature object containing:
@@ -202,7 +177,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 image = convert_to_rgb(image)
             image = to_numpy_array(image)
             if split_image:
-                crop_images = self.get_image_patches(image, self.split_ratio, max_size, max_size)
+                crop_images = self.get_image_patches(image, self.split_ratio, max_size)
             else:
                 crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
@@ -216,7 +191,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 else:
                     new_size = (max_size, max(int(w * scale), min_size))  # h, w
 
-                crop_image_resized = resize(crop_image, new_size, resample=Image.Resampling.BICUBIC)
+                crop_image_resized = resize(crop_image, new_size, resample=resample)
 
                 padding_bottom, padding_right = max_size - new_size[0], max_size - new_size[1]
                 crop_image_padded = pad(crop_image_resized, ((0, padding_bottom), (0, padding_right)))
@@ -227,7 +202,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 pixel_masks.append(pixel_mask)
 
                 if do_normalize:
-                    crop_image_padded = normalize(crop_image_padded, self.image_mean, self.image_std)
+                    crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std)
 
                 # Switch to rgb channel first
                 crop_image_padded = np.transpose(crop_image_padded, (2, 0, 1))
@@ -245,8 +220,7 @@ class AriaImageProcessor(BaseImageProcessor):
     def get_image_patches(
         self,
         image: np.array,
-        grid_pinpoints,
-        size: tuple,
+        grid_pinpoints: List[Tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
         data_format: ChannelDimension,
@@ -258,10 +232,8 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (np.array):
                 The input image to be processed.
-            grid_pinpoints (List):
-                A string representation of a list of possible resolutions.
-            size (`tuple`):
-                Size to resize the original image to.
+            grid_pinpoints (List[Tuple[int, int]]):
+                A list of possible resolutions as tuples.
             patch_size (`int`):
                 Size of the patches to divide the image into.
             resample (`PILImageResampling`):
