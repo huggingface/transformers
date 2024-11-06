@@ -352,3 +352,23 @@ class Gemma2IntegrationTest(unittest.TestCase):
         )
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+    @require_read_token
+    def test_model_9b_bf16_flex_attention(self):
+        model_id = "google/gemma-2-9b"
+        EXPECTED_TEXTS = [
+            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
