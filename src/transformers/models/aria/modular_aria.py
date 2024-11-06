@@ -268,7 +268,6 @@ class AriaCrossAttention(nn.Module):
         self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
         self.v_proj = nn.Linear(kv_dim, in_features, bias=False)
 
-        # Use batch_first=True to simplify code by removing permutations compared to the original.
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
         self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
         self.linear = nn.Linear(in_features, in_features)
@@ -277,7 +276,7 @@ class AriaCrossAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(in_features)
         self.layer_norm_kv = nn.LayerNorm(kv_dim)
 
-    def forward(self, x, hidden_states, attn_mask=None, add_residual=False):
+    def forward(self, key_value_states, hidden_states, attn_mask=None, add_residual=False):
         """
         Forward pass of the AriaCrossAttention module.
 
@@ -292,9 +291,9 @@ class AriaCrossAttention(nn.Module):
         """
         query = self.q_proj(self.layer_norm(hidden_states))
 
-        x = self.layer_norm_kv(x)
-        key = self.k_proj(x)
-        value = self.v_proj(x)
+        key_value_states = self.layer_norm_kv(key_value_states)
+        key = self.k_proj(key_value_states)
+        value = self.v_proj(key_value_states)
 
         attn_output, _ = self.multihead_attn(query, key, value, attn_mask=attn_mask)
 
@@ -485,10 +484,6 @@ class AriaImageProcessor(BaseImageProcessor):
         else:
             self.split_ratio = split_ratio
 
-        # we make the transform a property so that it is lazily initialized,
-        # this could avoid the error "TypeError: Object of type Normalize is not JSON serializable"
-        # when we used save_pretrained or from_pretrained.
-        self._transform = None
         self._set_processor_class("AriaProcessor")
 
     def preprocess(
@@ -540,7 +535,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 image = convert_to_rgb(image)
             image = to_numpy_array(image)
             if split_image:
-                crop_images = self.get_image_patches(image, self.split_ratio, max_size, max_size)
+                crop_images = self.get_image_patches(image, self.split_ratio, max_size)
             else:
                 crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
@@ -583,8 +578,7 @@ class AriaImageProcessor(BaseImageProcessor):
     def get_image_patches(
         self,
         image: np.array,
-        grid_pinpoints,
-        size: tuple,
+        grid_pinpoints: List[Tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
         data_format: ChannelDimension,
@@ -596,10 +590,8 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (np.array):
                 The input image to be processed.
-            grid_pinpoints (List):
-                A string representation of a list of possible resolutions.
-            size (`tuple`):
-                Size to resize the original image to.
+            grid_pinpoints (List[Tuple[int, int]]):
+                A list of possible resolutions as tuples.
             patch_size (`int`):
                 Size of the patches to divide the image into.
             resample (`PILImageResampling`):
@@ -1142,7 +1134,7 @@ class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
         self.post_init()
 
 
-class AriaForCausalLM(AriaPreTrainedModel, LlamaForCausalLM):
+class AriaTextForCausalLM(AriaPreTrainedModel, LlamaForCausalLM):
     """
     Aria model for causal language modeling tasks.
 

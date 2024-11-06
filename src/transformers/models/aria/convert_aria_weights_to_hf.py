@@ -28,22 +28,22 @@ from transformers import (
 
 
 EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/aria/convert_aria_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/aria-v1.5-7b-conv --old_state_dict_id liuhaotian/aria-v1.5-7b
+    python transformers/src/transformers/models/aria/convert_aria_weights_to_hf.py --text_model_id rhymes-ai/Aria --vision_model_id rhymes-ai/Aria --output_hub_path m-ric/Aria_hf_2 --old_state_dict_id rhymes-ai/Aria
 
 Example for creating the old state dict file with Python:
 
     import torch
-    from aria.model.language_model.aria_llama import AriaLlamaForCausalLM
+    from aria.model.language_model.aria_llama import AriaTextForCausalLM
 
     # load model
     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = AriaLlamaForCausalLM.from_pretrained("liuhaotian/aria-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
+    model = AriaTextForCausalLM.from_pretrained("rhymes-ai/Aria", low_cpu_mem_usage=True, **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()
 
     # Save state dict
-    torch.save(model.state_dict(), "tmp/hf_models/aria-v1.5-7b/model_state_dict.bin")
+    torch.save(model.state_dict(), "tmp/hf_models/aria/model_state_dict.bin")
 """
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -67,8 +67,6 @@ def load_original_state_dict(model_id):
     return original_state_dict
 
 
-# used only for aria-interlave
-# for ex: Qwen/Qwen1.5-0.5B-Chat google/siglip-so400m-patch14-384 lmms-lab/aria-next-interleave-qwen-0.5b
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
     for key, value in state_dict.items():
@@ -90,8 +88,7 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    if "Qwen" not in text_model_id:  # qwen already has a pad token
-        tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     processor = AriaProcessor.from_pretrained(
         text_model_id,
@@ -108,15 +105,8 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
         "AutoModelForCausalLM": "modeling_aria.AriaForConditionalGeneration"
     }
 
-    # llms-lab interleeave models do not use any selection startegy except for last hidden state
-    if "Qwen" in text_model_id:
-        config.image_token_index = 151646
-        if "siglip" in vision_model_id:
-            config.vision_feature_select_strategy = "full"
-            config.vision_feature_layer = -1
-    else:
-        config.pad_token_id = 32001
-        config.image_token_index = 32000
+    config.pad_token_id = 32001
+    config.image_token_index = 32000
 
     with torch.device("meta"):
         model = AriaForConditionalGeneration(config)

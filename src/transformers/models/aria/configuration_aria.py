@@ -7,6 +7,7 @@
 
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING
 
 

@@ -27,7 +27,7 @@ The original code can be found [here](https://github.com/rhymes-ai/Aria).
 
 ## Usage tips
 
-Here's hwo to use the model for vision tasks:
+Here's how to use the model for vision tasks:
 ```python
 import requests
 import torch
