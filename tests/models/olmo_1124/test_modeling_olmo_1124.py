@@ -24,10 +24,8 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 from transformers.testing_utils import (
-    is_flaky,
     require_tokenizers,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -347,14 +345,6 @@ class Olmo1124ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    # Copied from tests.models.mllama.test_modeling_mllama.MllamaForConditionalGenerationModelTest.test_eager_matches_sdpa_inference_1_bfloat16
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        # A workaround to override parametrized test with flaky decorator
-        super().test_eager_matches_sdpa_inference_1_bfloat16()
 
 
 @require_torch
