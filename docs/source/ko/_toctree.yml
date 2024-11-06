@@ -675,13 +675,12 @@
       - local: in_translation
         title: (번역중) XLSR-Wav2Vec2
       title: (번역중) 오디오 모델
-      - isExpanded: false
-      sections:
-      - local: model_doc/timesformer
-        title: TimeSFormer
-      title: (번역중) 비디오 모델
     - isExpanded: false
       sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: in_translation
+        title: (번역중) VideoMAE
       - local: model_doc/vivit
         title: ViViT
       title: (번역중) 비디오 모델
