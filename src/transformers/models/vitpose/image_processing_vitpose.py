@@ -147,7 +147,7 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarr
     return preds, scores
 
 
-def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3):
+def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
     """DARK post-pocessing. Implemented by unbiased_data_processing.
 
     Paper references:
