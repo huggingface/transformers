@@ -78,8 +78,11 @@ class InstructBlipProcessor(ProcessorMixin):
     qformer_tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
-        self.image_token = AddedToken("<image>", normalized=False, special=True)
-        tokenizer.add_tokens([self.image_token], special_tokens=True)
+        if not hasattr(tokenizer, "image_token"):
+            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            tokenizer.add_tokens([self.image_token], special_tokens=True)
+        else:
+            self.image_token = tokenizer.image_token
         self.num_query_tokens = num_query_tokens
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
@@ -131,7 +134,9 @@ class InstructBlipProcessor(ProcessorMixin):
             if self.num_query_tokens is not None and images is not None:
                 text_encoding = {}
                 image_tokens = self.image_token.content * self.num_query_tokens
-                image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
+                image_token_encoding = self.tokenizer(
+                    [image_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding

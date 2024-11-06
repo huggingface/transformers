@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Mllama model."""
 
-import gc
 import unittest
 
 import requests
@@ -30,12 +29,11 @@ from transformers import (
 )
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
-    is_flaky,
+    cleanup,
     require_bitsandbytes,
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -126,25 +124,10 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
-    _torch_compile_test_ckpt = "nltpt/Llama-3.2-11B-Vision"
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
-
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
-
-    @unittest.skip(reason="The outputs don't match, no idea why")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip(reason="Quanto test is borken")
-    def test_generate_with_quant_cache(self):
-        pass
 
 
 class MllamaVisionText2TextModelTester:
@@ -208,6 +191,7 @@ class MllamaVisionText2TextModelTester:
         self.image_size = 224
         self.max_num_images = 1
         self.max_image_tiles = 4
+        self.image_length = 904
 
     def get_config(self):
         return MllamaConfig(
@@ -278,13 +262,20 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_index"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -329,105 +320,49 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        # Mllama has cross attention layers and those have a different shape than normal attention layers
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
 
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        # A workaround to override parametrized test with flaky decorator
-        super().test_eager_matches_sdpa_inference_1_bfloat16()
+        cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
 
-    @unittest.skip(reason="Static cache not supported")
-    def test_static_cache_matches_dynamic(self):
-        # TypeError: list indices must be integers or slices, not tuple
-        # TODO: @raushan, please look into this for new cache format
-        pass
+        for idx, iter_attentions in enumerate(attentions):
+            tgt_len = min_length + idx if not use_cache else 1
+            src_len = min_length + idx
 
-    @unittest.skip(reason="Mllama has dynamic control flow which is not yet supported by compile")
-    def test_generate_compile_fullgraph(self):
-        pass
+            expected_shape = (
+                batch_size * num_beam_groups,
+                config.num_attention_heads,
+                tgt_len,
+                src_len,
+            )
 
-    @unittest.skip(reason="The outputs don't match, no idea why")
-    def test_beam_search_low_memory(self):
-        pass
+            expected_shape_cross = (
+                batch_size * num_beam_groups,
+                config.num_attention_heads,
+                tgt_len,
+                self.model_tester.image_length,
+            )
 
-    @unittest.skip(reason="Mllama is not yet supported by compile")
+            expected_shapes = [
+                expected_shape if layer_idx not in cross_attention_layers else expected_shape_cross
+                for layer_idx in range(len(iter_attentions))
+            ]
+
+            self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
+
+    @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
     def test_sdpa_can_compile_dynamic(self):
-        # TODO: look into this, AttributeError("'tensor' object has no attribute '__pow__'")
-        # relevant issue: https://github.com/pytorch/pytorch/issues/133166
-        pass
-
-    @unittest.skip(reason="The test itself is broken")  # TODO @zucchini-nlp
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(reason="AssertionError: Items in the second set but not the first: might be a setting issue")
     def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_compile_cuda_graph_time(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_torch_compile_fullgraph(self):
-        pass
-
-    @unittest.skip(reason="Device side assert triggered")
-    def test_assisted_decoding_with_num_logits_to_keep(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_beam_sample_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_generate_methods_with_num_logits_to_keep(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_greedy_generate_dict_outputs(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_model_parallel_beam_search(self):
-        pass
-
-    @is_flaky()  # TODO (joao, raushan) - investigate why this test is flaky (probably depends on the model initialization)
-    def test_new_cache_format_0(self):
-        super().test_new_cache_format_0()
-
-    @is_flaky()  # TODO (joao, raushan) - investigate why this test is flaky (probably depends on the model initialization)
-    def test_new_cache_format_1(self):
-        super().test_new_cache_format_1()
-
-    @is_flaky()  # TODO (joao, raushan) - investigate why this test is flaky (probably depends on the model initialization)
-    def test_new_cache_format_2(self):
-        super().test_new_cache_format_2()
-
-    @unittest.skip(reason="Failing test, need to fix")
-    def test_sample_generate_dict_output(self):
         pass
 
     def test_generate_text_only_with_cache(self):
@@ -458,8 +393,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.instruct_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_gpu
