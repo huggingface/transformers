@@ -327,7 +327,7 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
 
 
 GEMMA2_ATTENTION_FUNCTION = {
-    "flash_attention": flash_attention_forward,
+    "flash_attention_2": flash_attention_forward,
     "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
@@ -427,9 +427,9 @@ class Gemma2Attention(nn.Module):
 class Gemma2FlashAttention2(Gemma2Attention):
     def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.config._attn_implementation = GEMMA2_ATTENTION_FUNCTION["flash_attention"]
+        self.config._attn_implementation = "flash_attention_2"
         logger.warning_once(
-            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modify the `attention_function`"
+            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
             "attribute of the `GemmaAttention` class! It will be removed in v4.48"
         )
 
@@ -437,9 +437,9 @@ class Gemma2FlashAttention2(Gemma2Attention):
 class Gemma2SdpaAttention(Gemma2Attention):
     def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.config._attn_implementation = GEMMA2_ATTENTION_FUNCTION["sdpa"]
+        self.config._attn_implementation = "sdpa"
         logger.warning_once(
-            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modify the `attention_function`"
+            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
             "attribute of the `GemmaAttention` class! It will be removed in v4.48"
         )
 
