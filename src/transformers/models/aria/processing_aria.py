@@ -11,7 +11,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
 )
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...tokenization_utils import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -25,6 +25,20 @@ from .image_processing_aria import AriaImageProcessor
 
 
 logger = logging.get_logger(__name__)
+
+class AriaProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding":  False,  
+            "truncation":  None,
+            "max_length":  None,
+        },
+        "images_kwargs": {
+            "max_image_size":  980,
+            "split_image":  False,
+        },
+        "return_tensors":  TensorType.PYTORCH,
+    }
 
 class AriaProcessor(ProcessorMixin):
     """
@@ -75,13 +89,10 @@ class AriaProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        max_image_size: Optional[int] = 980,
-        split_image: Optional[bool] = False,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        images: Optional[ImageInput] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). Please refer to the doctsring
@@ -130,6 +141,11 @@ class AriaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **pixel_mask** -- Pixel mask to be fed to a model. Returned when `images` is not `None`.
         """
+        output_kwargs = self._merge_kwargs(
+            AriaProcessorKwargs,
+            {},
+            **kwargs,
+        )
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
@@ -137,9 +153,9 @@ class AriaProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(
                 images,
-                return_tensors=return_tensors,
-                max_image_size=max_image_size,
-                split_image=split_image,
+                return_tensors=output_kwargs["images_kwargs"]["return_tensors"],
+                max_image_size=output_kwargs["images_kwargs"]["max_image_size"],
+                split_image=output_kwargs["images_kwargs"]["split_image"],
             )
             # expand the image_token according to the num_crops and tokens per image
             tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
@@ -156,10 +172,10 @@ class AriaProcessor(ProcessorMixin):
 
         text_inputs = self.tokenizer(
             prompt_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
+            return_tensors=output_kwargs["text_kwargs"]["return_tensors"],
+            padding=output_kwargs["text_kwargs"]["padding"],
+            truncation=output_kwargs["text_kwargs"]["truncation"],
+            max_length=output_kwargs["text_kwargs"]["max_length"],
         )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
