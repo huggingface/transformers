@@ -6309,7 +6309,7 @@ if TYPE_CHECKING:
             AltCLIPVisionModel,
         )
         from .models.aria import (
-            AriaForCausalLM,
+            AriaTextForCausalLM,
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
             AriaTextModel,

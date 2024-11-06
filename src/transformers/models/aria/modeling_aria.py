@@ -2071,7 +2071,7 @@ ARIA_INPUTS_DOCSTRING = r"""
 """
 
 
-class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
+class AriaTextForCausalLM(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for causal language modeling tasks.
 
@@ -2148,9 +2148,9 @@ class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, AriaForCausalLM
+        >>> from transformers import AutoTokenizer, AriaTextForCausalLM
 
-        >>> model = AriaForCausalLM.from_pretrained("meta-aria/Aria-2-7b-hf")
+        >>> model = AriaTextForCausalLM.from_pretrained("meta-aria/Aria-2-7b-hf")
         >>> tokenizer = AutoTokenizer.from_pretrained("meta-aria/Aria-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"

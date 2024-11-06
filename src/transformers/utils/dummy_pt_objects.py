@@ -650,7 +650,7 @@ class AltCLIPVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class AriaForCausalLM(metaclass=DummyObject):
+class AriaTextForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
