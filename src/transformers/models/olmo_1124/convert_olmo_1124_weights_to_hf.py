@@ -131,8 +131,10 @@ def write_model(
             f"model.layers.{layer_i}.mlp.gate_proj.weight": gate_proj_weight,
             f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"transformer.blocks.{layer_i}.ff_out.weight"],
             f"model.layers.{layer_i}.mlp.up_proj.weight": up_proj_weight,
-            f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"transformer.blocks.{layer_i}.attn_norm.weight"],
             f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                f"transformer.blocks.{layer_i}.attn_norm.weight"
+            ],
+            f"model.layers.{layer_i}.post_feedforward_layernorm.weight": loaded[
                 f"transformer.blocks.{layer_i}.ff_norm.weight"
             ],
         }

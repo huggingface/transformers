@@ -509,8 +509,8 @@ class Olmo1124DecoderLayer(nn.Module):
         self.self_attn = OLMO_1124_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = Olmo1124MLP(config)
-        self.input_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     # TODO(joao): add me back asap :)
@@ -557,13 +557,13 @@ class Olmo1124DecoderLayer(nn.Module):
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)

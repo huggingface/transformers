@@ -413,8 +413,9 @@ class Olmo1124SdpaAttention(OlmoSdpaAttention, Olmo1124Attention):
 class Olmo1124DecoderLayer(OlmoDecoderLayer):
     def __init__(self, config: Olmo1124Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
-        self.input_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Olmo1124RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        del self.input_layernorm
 
     def forward(
         self,
@@ -440,13 +441,13 @@ class Olmo1124DecoderLayer(OlmoDecoderLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
