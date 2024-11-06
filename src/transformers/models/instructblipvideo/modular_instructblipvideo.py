@@ -32,7 +32,7 @@ from transformers.models.instructblip.modeling_instructblip import (
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -103,6 +103,11 @@ class InstructBlipVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "qformer_config": InstructBlipVideoQFormerConfig,
+        "vision_config": InstructBlipVideoVisionConfig,
+    }
 
     def __init__(
         self,
