@@ -95,15 +95,48 @@ class Zamba2Config(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Zamba2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Zamba2Model`]
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model might ever be used with.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
         hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
-        ffn_hidden_size (`int`, *optional*, defaults to 4 * hidden_size):
-            Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 54):
             Number of hidden layers in the model.
+        mamba_d_state (`int`, *optional*, defaults to 64): shape of the state space latents.
+        mamba_d_conv (`int`, *optional*, defaults to 4): Size of the convolution kernel.
+        mamba_expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
+        mamba_headdim (`int`, *optional*, defaults to 64):
+            Dimension of each mamba head.
+        mamba_ngroups (`int`, *optional*, defaults to 8):
+            Number of groups for the evolution matrices of mamba 2.
+        time_step_min (`float`, *optional*, defaults to 0.001):
+            Minimum `time_step` used to bound `dt_proj.bias`.
+        time_step_max (`float`, *optional*, defaults to 0.1):
+            Maximum `time_step` used to bound `dt_proj.bias`.
+        time_step_floor (`float`, *optional*, defaults to 0.0001):
+            Minimum clamping value of the `dt_proj.bias` layer initialization.
+        time_step_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
+            Accepted range of time step values.
+        mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
+            Rank of the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+        n_mamba_heads (`int`, *optional*, defaults to 1):
+            Number of heads for the evolution matrices of mamba 2.
+        use_conv_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not to use bias in the convolution layer of the mixer block.
+        mamba_proj_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
+        hidden_mamba_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) adjacent to the mamba conv.
+        chunk_size (`int`, *optional*, defaults to 256):
+            Size of the chunks that will comprise the sequence.
+        add_bias_linear (`bool`, *optional*, defaults to `False`):
+            Flag indicating whether or not to use bias in various layers
+        intermediate_size (`int`, *optional*, defaults to 4 * hidden_size):
+            Dimension of the MLP representations.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the MLP.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
@@ -113,11 +146,23 @@ class Zamba2Config(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf).
-        mamba_headdim (`<fill_type>`, *optional*, defaults to 64):
-            dimension of each Mamba2 heads (number of heads is set to 1 in this implementation).
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        num_mem_blocks (`int`, *optional*, defaults to 1):
+            Number of unshared transformer blocks.
+        use_shared_block_lora (`bool`, *optional*, defaults to `True`):
+            If True, unshared LoRA's will be added to the shared MLP's.
+        use_shared_attention_lora (`bool`, *optional*, defaults to `False`):
+            If True, unshared LoRA's will be added to the q, k, v projectors in the shared attention layers.
+        lora_rank (`int`, *optional*, defaults to 128):
+            Rank of the LoRA in the shared MLP and shared attention layers.
+        use_mem_rope (`bool`, *optional*, defaults to `False`):
+            If True, includes RoPE in the shared attention layers.
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -134,29 +179,6 @@ class Zamba2Config(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
-        sliding_window (`int`, *optional*):
-            Sliding window attention window size. If not specified, will default to `None`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-            Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
-            `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
-            `True` and kernels are not available
-        state_size (`int`, *optional*, defaults to 16):
-            The dimension the mamba state space latents
-        mamba_d_conv (`int`, *optional*, defaults to 4):
-            The size of the mamba convolution kernel
-        mamba_expand (`int`, *optional*, defaults to 2):
-            Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
-        add_bias_linear (`bool`, *optional*, defaults to `False`):
-            Flag indicating whether or not to use bias in various layers
-        gated_linear_units (`bool`, *optional*, defaults to `False`):
-            Flag indicating whether or not to use gated MLP
-        use_shared_block_lora (`bool`, *optional*, defaults to `False`):
-            Flag indicating whether or not to add (unshared) LoRA modules to the first layer of the MLP
-            inside the shared transformer blocks
-        state_size (`int`, *optional*, defaults to 128):
-            The rank of the LoRA modules inside the MLP of the shared transformer blocks
     """
 
     model_type = "zamba2"
@@ -182,31 +204,24 @@ class Zamba2Config(PretrainedConfig):
         
         mamba_dt_rank="auto",
         n_mamba_heads=1,
-        mamba_conv_bias=True,
         mamba_proj_bias=False,
         hidden_mamba_act="silu",
-        use_mamba_kernels=True,
         use_conv_bias=True,
         chunk_size=256,
 
         add_bias_linear=False,       
         intermediate_size=None,
-        gated_linear_unit=True,
         hidden_act="gelu",
         num_attention_heads=32,
         num_key_value_heads=None,
-        sliding_window=None,
         attention_dropout=0.0,
         
         num_mem_blocks=1,
         use_shared_block_lora=True,
         use_shared_attention_lora=False,
         lora_rank=128,
-        use_mem_eff_path=True,
         use_mem_rope=False,
         rope_theta=10000,
-        attention_hidden_size=None,
-        attention_head_dim=None,
         
         initializer_range=0.02,
         rms_norm_eps=1e-5,
@@ -238,18 +253,11 @@ class Zamba2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
         self.num_mem_blocks = num_mem_blocks
         self.use_mem_rope = use_mem_rope
         self.rope_theta = rope_theta
-        if attention_hidden_size is None:
-            self.attention_hidden_size = 2 * hidden_size
-        else:
-            self.attention_hidden_size = attention_hidden_size
-        if attention_head_dim is None:
-            self.attention_head_dim = 2 * self.hidden_size // self.num_attention_heads
-        else:
-            self.attention_head_dim = attention_head_dim
+        self.attention_hidden_size = 2 * hidden_size
+        self.attention_head_dim = 2 * self.hidden_size // self.num_attention_heads
         self.attention_dropout = attention_dropout
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
@@ -262,12 +270,10 @@ class Zamba2Config(PretrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
         self.hidden_mamba_act = hidden_mamba_act
-        self.use_mamba_kernels = use_mamba_kernels
         self.use_conv_bias = use_conv_bias
         self.chunk_size = chunk_size
         self.time_step_limit = time_step_limit
         
-        self.gated_linear_unit = gated_linear_unit
         self.use_shared_block_lora = use_shared_block_lora
         self.use_shared_attention_lora = use_shared_attention_lora
         self.lora_rank = lora_rank
@@ -294,7 +300,6 @@ class Zamba2Config(PretrainedConfig):
 
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
-        self.use_mem_eff_path = use_mem_eff_path
 
 
         # Below, "mamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
