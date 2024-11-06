@@ -28,7 +28,7 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import lru_cache, partial, wraps
+from functools import partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
@@ -136,6 +136,7 @@ logger = logging.get_logger(__name__)
 
 
 _init_weights = True
+_is_quantized = False
 
 
 def is_fsdp_enabled():
@@ -211,6 +212,16 @@ def no_init_weights(_enable=True):
             # # Restore the original initialization functions
             for name, init_func in TORCH_INIT_FUNCTIONS.items():
                 setattr(torch.nn.init, name, init_func)
+
+
+@contextmanager
+def set_quantized_state():
+    global _is_quantized
+    _is_quantized = True
+    try:
+        yield
+    finally:
+        _is_quantized = False
 
 
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
@@ -1531,7 +1542,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch_dtype=torch_dtype,
             )
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and not _is_quantized:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -1597,15 +1608,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Below we check if a config is composite and manually prepare a dict of attn impl if not already passed as a dict.
         # Later each sub-module will dispatch with its own attn impl, by calling `XXXModel._from_config(config.text_config)`
         # If any of sub-modules doesn't support requested attn, an error will be raised. See https://github.com/huggingface/transformers/pull/32238
-        for key in config:
-            if isinstance(getattr(config, key), PretrainedConfig):
-                sub_config = getattr(config, key)
-                curr_attn_implementation = (
-                    requested_attn_implementation
-                    if not isinstance(requested_attn_implementation, dict)
-                    else requested_attn_implementation.get(key, None)
-                )
-                sub_config._attn_implementation_internal = curr_attn_implementation
+        for key in config.sub_configs.keys():
+            sub_config = getattr(config, key)
+            curr_attn_implementation = (
+                requested_attn_implementation
+                if not isinstance(requested_attn_implementation, dict)
+                else requested_attn_implementation.get(key, None)
+            )
+            sub_config._attn_implementation_internal = curr_attn_implementation
 
         if use_flash_attention_2:
             logger.warning_once(
@@ -4086,6 +4096,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             init_contexts.append(init_empty_weights())
 
+        if is_deepspeed_zero3_enabled() and is_quantized:
+            init_contexts.append(set_quantized_state())
+
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
@@ -5014,7 +5027,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.hf_quantizer.is_trainable
 
     @property
-    @lru_cache
     def loss_function(self):
         if getattr(self.config, "loss_type", None) is not None:
             loss_type = self.config.loss_type
