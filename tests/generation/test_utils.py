@@ -2472,18 +2472,8 @@ class UtilsFunctionsTest(unittest.TestCase):
                 [
                     [-inf, 10.0, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],  # accepts 1
                     [-inf, -inf, -inf, -inf, 10.0, -inf, -inf, -inf, -inf, -inf],  # accepts 4
-                    [
-                        -inf,
-                        2.0,
-                        -inf,
-                        1.0,
-                        -inf,
-                        -inf,
-                        -inf,
-                        -0.01,
-                        2.0,
-                        -inf,
-                    ],  # most likely to be 1 or 8, less likely to be 3, then 7, and should never be any other value
+                    # most likely to be 1 or 8, less likely to be 3, then 7, and should never be any other value
+                    [-inf, 2.0, -inf, 1.0, -inf, -inf, -inf, -0.01, 2.0, -inf],
                     [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],  # N/A
                 ]
             ]
