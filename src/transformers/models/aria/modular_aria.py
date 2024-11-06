@@ -56,36 +56,36 @@ if is_torch_available():
     from torch import nn
 
 if is_vision_available():
-    from PIL import Image, ImageOps
+    from PIL import Image
 
 
-def sequential_gemm(input, weight, tokens_per_expert):
+def sequential_gemm(token_states, expert_weights, tokens_per_expert):
     """
     Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
 
     Args:
-        input (torch.Tensor): Input tensor of shape (num_tokens, in_features).
-        weight (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
         tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
 
     Returns:
         torch.Tensor: Output tensor of shape (num_tokens, out_features).
     """
-    num_tokens = input.shape[0]
-    out_features = weight.shape[-1]
-    output = torch.zeros(num_tokens, out_features, dtype=input.dtype, device=input.device)
+    num_tokens = token_states.shape[0]
+    out_features = expert_weights.shape[-1]
+    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
 
     cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
     # Insert zero at the begining for offset index's convenience
     zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
     cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
 
-    for expert_num in range(weight.shape[0]):
+    for expert_num in range(expert_weights.shape[0]):
         start = cumsum_num_tokens[expert_num]
         end = cumsum_num_tokens[expert_num + 1]
-        tokens = input[start:end]
+        tokens = token_states[start:end]
 
-        out = torch.matmul(tokens, weight[expert_num])
+        out = torch.matmul(tokens, expert_weights[expert_num])
         output[start:end] = out
     return output
 
@@ -99,21 +99,6 @@ try:
 except ImportError as e:
     logger.warning("`grouped_gemm` is not installed, using sequential GEMM, which is slower.")
     experts_gemm = sequential_gemm
-
-
-class IdentityOp(nn.Module):
-    """
-    An identity operation that returns the input unchanged.
-
-    This can be used as a placeholder or to maintain architectural consistency
-    when a specific operation is not needed.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-
-    def forward(self, x, *args, **kwargs):
-        return x
 
 
 class AriaTextConfig(LlamaConfig):
