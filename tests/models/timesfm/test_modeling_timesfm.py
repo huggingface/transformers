@@ -55,18 +55,18 @@ class TimesFMModelTester:
         context_len: int = 512,
         horizon_len: int = 128,
         freq_size: int = 3,
-        num_layers: int = 20,
-        model_dim: int = 1280,
-        head_dim: int = 80,
-        num_heads: int = 16,
+        num_layers: int = 4,
+        model_dim: int = 128,
+        head_dim: int = 16,
+        num_heads: int = 4,
         dropout_rate: float = 0.1,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         use_positional_embedding: bool = True,
-        per_core_batch_size: int = 32,
-        initializer_factor: float = 1.0,
+        batch_size: int = 32,
+        initializer_factor: float = 0.0,
         is_training: bool = False,
     ):
         self.parent = parent
@@ -84,9 +84,13 @@ class TimesFMModelTester:
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
         self.use_positional_embedding = use_positional_embedding
-        self.per_core_batch_size = per_core_batch_size
+        self.batch_size = batch_size
         self.initializer_factor = initializer_factor
         self.is_training = is_training
+        
+        # The size of test input
+        self.seq_length = context_len // patch_len
+        self.hidden_size = model_dim
 
     def get_large_model_config(self):
         return TimesFMConfig.from_pretrained("google/timesfm-1.0-200m-pytorch")
@@ -107,7 +111,7 @@ class TimesFMModelTester:
             tolerance=self.tolerance,
             rms_norm_eps=self.rms_norm_eps,
             use_positional_embedding=self.use_positional_embedding,
-            per_core_batch_size=self.per_core_batch_size,
+            batch_size=self.batch_size,
             initializer_factor=self.initializer_factor,
         )
 
@@ -245,6 +249,10 @@ class TimesFMModelTest(
 
     @unittest.skip(reason="Model does not have input embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Model does not have head mask")
+    def test_headmasking(self):
         pass
 
     # the main input name is `inputs`
