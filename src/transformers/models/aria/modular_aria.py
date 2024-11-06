@@ -219,6 +219,7 @@ class AriaConfig(PretrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
+        self.vocab_size = self.text_config.vocab_size
 
         super().__init__(**kwargs)
 
