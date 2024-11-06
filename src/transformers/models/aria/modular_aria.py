@@ -219,7 +219,6 @@ class AriaConfig(PretrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
-        self.vocab_size = self.text_config.vocab_size
 
         super().__init__(**kwargs)
 
@@ -649,9 +648,9 @@ class AriaProcessor(ProcessorMixin):
         image_token(str): The image token to use for the tokenizer.
     """
 
-    attributes = []
+    attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "patch_size", "image_token"]
-    image_processor_class = None
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
@@ -758,63 +757,6 @@ class AriaProcessor(ProcessorMixin):
         )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
-
-    @staticmethod
-    def _extract_kwargs(func: callable, **kwargs) -> dict:
-        """
-        Extract the kwargs that are valid for the given function.
-        """
-        return {k: v for k, v in kwargs.items() if k in inspect.signature(func).parameters}
-
-    def save_pretrained(self, save_directory, **kwargs):
-        """
-        Save both the image processor and tokenizer.
-        """
-        if self.image_processor is not None:
-            self.image_processor.save_pretrained(
-                save_directory,
-                **self._extract_kwargs(self.image_processor.save_pretrained, **kwargs),
-            )
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(
-                save_directory,
-                **self._extract_kwargs(self.tokenizer.save_pretrained, **kwargs),
-            )
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path,
-        tokenizer_path=None,
-        image_processor_path=None,
-        **kwargs,
-    ):
-        """
-        Load both the image processor and tokenizer from a pretrained model path.
-        """
-        tokenizer_path = tokenizer_path if tokenizer_path is not None else pretrained_model_name_or_path
-        image_processor_path = (
-            image_processor_path if image_processor_path is not None else pretrained_model_name_or_path
-        )
-        image_processor = AriaImageProcessor.from_pretrained(
-            image_processor_path,
-            **cls._extract_kwargs(AriaImageProcessor.from_pretrained, **kwargs),
-        )
-        if "use_fast" in kwargs:
-            logger.warning("use_fast is not supported for AriaProcessor. Ignoring...")
-            kwargs.pop("use_fast")
-        tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_path,
-            use_fast=False,
-            **cls._extract_kwargs(AutoTokenizer.from_pretrained, **kwargs),
-        )
-        chat_template = tokenizer.chat_template
-
-        return cls(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            chat_template=chat_template,
-        )
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
@@ -1242,6 +1184,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
         Forward pass of the AriaForConditionalGeneration model.
@@ -1350,7 +1293,12 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, config=self.config)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                **loss_kwargs
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]

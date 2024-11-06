@@ -2352,6 +2352,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
         cache_position: Optional[torch.LongTensor] = None,
+        **loss_kwargs,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
         Forward pass of the AriaForConditionalGeneration model.
@@ -2460,8 +2461,13 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, config=self.config)
-
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                **loss_kwargs
+            )
+ 
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output

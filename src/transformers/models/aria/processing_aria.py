@@ -51,9 +51,9 @@ class AriaProcessor(ProcessorMixin):
         image_token(str): The image token to use for the tokenizer.
     """
 
-    attributes = []
+    attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "patch_size", "image_token"]
-    image_processor_class = None
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
@@ -65,7 +65,6 @@ class AriaProcessor(ProcessorMixin):
         image_token: str = "<|img|>",
         size_conversion: Optional[Dict] = None,
     ):
-        super().__init__(chat_template=chat_template)
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = size_conversion
@@ -84,6 +83,7 @@ class AriaProcessor(ProcessorMixin):
             self.tokenizer.pad_token = self.tokenizer.unk_token
 
         self.image_token = image_token
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     # Modified from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
@@ -180,26 +180,24 @@ class AriaProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
-    @staticmethod
-    def _extract_kwargs(func: callable, **kwargs) -> dict:
-        """
-        Extract the kwargs that are valid for the given function.
-        """
-        return {k: v for k, v in kwargs.items() if k in inspect.signature(func).parameters}
-
     def save_pretrained(self, save_directory, **kwargs):
         """
         Save both the image processor and tokenizer.
         """
+        merged_kwargs = self._merge_kwargs(
+            AriaProcessorKwargs,
+            {},
+            **kwargs,
+        )
         if self.image_processor is not None:
             self.image_processor.save_pretrained(
                 save_directory,
-                **self._extract_kwargs(self.image_processor.save_pretrained, **kwargs),
+                **merged_kwargs["images_kwargs"],
             )
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(
                 save_directory,
-                **self._extract_kwargs(self.tokenizer.save_pretrained, **kwargs),
+                **merged_kwargs["text_kwargs"],
             )
 
     @classmethod
@@ -219,7 +217,7 @@ class AriaProcessor(ProcessorMixin):
         )
         image_processor = AriaImageProcessor.from_pretrained(
             image_processor_path,
-            **cls._extract_kwargs(AriaImageProcessor.from_pretrained, **kwargs),
+            **kwargs,
         )
         if "use_fast" in kwargs:
             logger.warning("use_fast is not supported for AriaProcessor. Ignoring...")
@@ -227,7 +225,7 @@ class AriaProcessor(ProcessorMixin):
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_path,
             use_fast=False,
-            **cls._extract_kwargs(AutoTokenizer.from_pretrained, **kwargs),
+            **kwargs,
         )
         chat_template = tokenizer.chat_template
 
