@@ -29,9 +29,9 @@ rendered properly in your Markdown viewer.
 
 BERT 모델은 Jacob Devlin. Ming-Wei Chang, Kenton Lee, Kristina Touranova가 제안한 논문 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805)에서 소개되었습니다. BERT는 사전 학습된 양방향 트랜스포머로,  Toronto Book Corpus와 Wikipedia로 구성된 대규모 코퍼스에서 마스킹된 언어 모델링과 다음 문장 예측(Next Sentence Prediction) 목표를 결합해 학습되었습니다.
 
-해당 논문의 초록입니다.
+해당 논문의 초록입니다:
 
-*우리는 BERT(Bidirectional Encoder Representations from Transformers)라는 새로운 언어 표현 모델을 소개합니다. 최근의 다른 언어 표현 모델들과 달리, BERT는 모든 계층에서 양방향으로 양쪽 문맥을 조건으로 사용하여 비지도 학습된 텍스트에서 깊이 있는 양방향 표현을 사전 학습하도록 설계되었습니다. 그 결과, 사전 학습된 BERT 모델은 추가적인 출력 계층 하나만으로 질문 응답, 언어 추론과 같은 다양한 작업에서 (fine-tuned)될 수 있으므로, 특정 작업을 위해 아키텍쳐를 수정할 필요가 없습니다.*
+*우리는 BERT(Bidirectional Encoder Representations from Transformers)라는 새로운 언어 표현 모델을 소개합니다. 최근의 다른 언어 표현 모델들과 달리, BERT는 모든 계층에서 양방향으로 양쪽 문맥을 조건으로 사용하여 비지도 학습된 텍스트에서 깊이 있는 양방향 표현을 사전 학습하도록 설계되었습니다. 그 결과, 사전 학습된 BERT 모델은 추가적인 출력 계층 하나만으로 질문 응답, 언어 추론과 같은 다양한 작업에서 미세 조정될 수 있으므로, 특정 작업을 위해 아키텍쳐를 수정할 필요가 없습니다.*
 
 *BERT는 개념적으로 단순하면서도 실증적으로 강력한 모델입니다. BERT는 11개의 자연어 처리 과제에서 새로운 최고 성능을 달성했으며, GLUE 점수를 80.5% (7.7% 포인트 절대 개선)로, MultiNLI 정확도를 86.7% (4.6% 포인트 절대 개선), SQuAD v1.1 질문 응답 테스트에서 F1 점수를 93.2(1.5% 포인트 절대 개선)로, SQuAD v2.0에서 F1 점수를 83.1(5.1% 포인트 절대 개선)로 향상시켰습니다.*
 
