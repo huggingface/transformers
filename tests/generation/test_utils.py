@@ -2470,11 +2470,14 @@ class UtilsFunctionsTest(unittest.TestCase):
         new_logits = torch.tensor(
             [
                 [
-                    [-inf, 10.0, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],  # accepts 1
-                    [-inf, -inf, -inf, -inf, 10.0, -inf, -inf, -inf, -inf, -inf],  # accepts 4
-                    # most likely to be 1 or 8, less likely to be 3, then 7, and should never be any other value
+                    # accepts 1:
+                    [-inf, 10.0, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],
+                    # accepts 4:
+                    [-inf, -inf, -inf, -inf, 10.0, -inf, -inf, -inf, -inf, -inf],
+                    # most likely to be 1 or 8, less likely to be 3, then 7, and should never be any other value:
                     [-inf, 2.0, -inf, 1.0, -inf, -inf, -inf, -0.01, 2.0, -inf],
-                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],  # N/A
+                    # N/A:
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],
                 ]
             ]
         )
