@@ -86,195 +86,20 @@ def verify_model_outputs(model, model_name):
     assert predicted_number_of_matches == expected_number_of_matches
 
 
-def convert_conv_to_linear_state_dict(conv_state_dict):
-    conv_weight = conv_state_dict.pop("weight")
-    conv_weight = conv_weight.squeeze(-1)
-    conv_bias = conv_state_dict.pop("bias")
-    return {"weight": conv_weight, "bias": conv_bias}
-
-
-class SuperGlueOldMLPConversionModel:
-    def __init__(self, channels: List[int]) -> None:
-        self.channels = channels
-
-    def convert_state_dict(self, state_dict):
-        new_state_dict = {}
-        for i in range(1, len(self.channels)):
-            old_conv_index = (i - 1) * 3
-            conv_weight = state_dict.pop(f"mlp_layers.{old_conv_index}.weight")
-            conv_weight = conv_weight.squeeze(-1)
-            conv_bias = state_dict.pop(f"mlp_layers.{old_conv_index}.bias")
-            new_conv_index = i - 1
-            if i < len(self.channels) - 1:
-                new_state_dict[f"{new_conv_index}.linear.weight"] = conv_weight
-                new_state_dict[f"{new_conv_index}.linear.bias"] = conv_bias
-            else:
-                new_state_dict[f"{new_conv_index}.weight"] = conv_weight
-                new_state_dict[f"{new_conv_index}.bias"] = conv_bias
-
-            old_batch_norm_index = (i - 1) * 3 + 1
-            if i < len(self.channels) - 1:
-                batch_norm_weight = state_dict.pop(f"mlp_layers.{old_batch_norm_index}.weight")
-                batch_norm_bias = state_dict.pop(f"mlp_layers.{old_batch_norm_index}.bias")
-                batch_norm_running_mean = state_dict.pop(f"mlp_layers.{old_batch_norm_index}.running_mean")
-                batch_norm_running_var = state_dict.pop(f"mlp_layers.{old_batch_norm_index}.running_var")
-                batch_norm_num_batches_tracked = state_dict.pop(
-                    f"mlp_layers.{old_batch_norm_index}.num_batches_tracked"
-                )
-                new_batch_norm_index = i - 1
-                new_state_dict[f"{new_batch_norm_index}.batch_norm.weight"] = batch_norm_weight
-                new_state_dict[f"{new_batch_norm_index}.batch_norm.bias"] = batch_norm_bias
-                new_state_dict[f"{new_batch_norm_index}.batch_norm.running_mean"] = batch_norm_running_mean
-                new_state_dict[f"{new_batch_norm_index}.batch_norm.running_var"] = batch_norm_running_var
-                new_state_dict[f"{new_batch_norm_index}.batch_norm.num_batches_tracked"] = (
-                    batch_norm_num_batches_tracked
-                )
-
-        return new_state_dict
-
-
-class SuperGlueKeypointEncoderConversionModel:
-    def __init__(self, config: SuperGlueConfig) -> None:
-        layer_sizes = config.keypoint_encoder_sizes
-        feature_dim = config.descriptor_dim
-        self.encoder_channels = [3] + layer_sizes + [feature_dim]
-        self.encoder = SuperGlueOldMLPConversionModel(channels=self.encoder_channels)
-
-    def convert_state_dict(self, state_dict):
-        encoder_state_dict = {
-            key.replace("encoder.", ""): value for key, value in state_dict.items() if key.startswith("encoder.")
-        }
-        encoder_state_dict = self.encoder.convert_state_dict(encoder_state_dict)
-        encoder_state_dict = {f"encoder.{key}": value for key, value in encoder_state_dict.items()}
-        return encoder_state_dict
-
-
-class SuperGlueMultiHeadAttentionConversionModel:
-    def __init__(self) -> None:
-        pass
-
-    @staticmethod
-    def convert_state_dict(state_dict):
-        state_dict["self.query.weight"] = state_dict["self.query.weight"].squeeze(-1)
-        state_dict["self.key.weight"] = state_dict["self.key.weight"].squeeze(-1)
-        state_dict["self.value.weight"] = state_dict["self.value.weight"].squeeze(-1)
-        state_dict["output.dense.weight"] = state_dict["output.dense.weight"].squeeze(-1)
-        return state_dict
-
-
-class SuperGlueAttentionalPropagationConversionModel:
-    def __init__(self, config: SuperGlueConfig) -> None:
-        descriptor_dim = config.descriptor_dim
-        self.attention = SuperGlueMultiHeadAttentionConversionModel()
-        self.mlp_channels = [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim]
-        self.mlp = SuperGlueOldMLPConversionModel(channels=self.mlp_channels)
-
-    def convert_state_dict(self, state_dict):
-        attention_state_dict = {
-            key.replace("attention.", ""): value for key, value in state_dict.items() if key.startswith("attention.")
-        }
-        attention_state_dict = self.attention.convert_state_dict(attention_state_dict)
-        attention_state_dict = {f"attention.{key}": value for key, value in attention_state_dict.items()}
-
-        mlp_state_dict = {
-            key.replace("mlp.", ""): value for key, value in state_dict.items() if key.startswith("mlp.")
-        }
-        mlp_state_dict = self.mlp.convert_state_dict(mlp_state_dict)
-        mlp_state_dict = {f"mlp.{key}": value for key, value in mlp_state_dict.items()}
-        return {**attention_state_dict, **mlp_state_dict}
-
-
-class SuperGlueAttentionalGNNConversionModel:
-    def __init__(self, config: SuperGlueConfig) -> None:
-        self.descriptor_dim = config.descriptor_dim
-        self.layers_types = config.gnn_layers_types
-        self.layers = [SuperGlueAttentionalPropagationConversionModel(config) for _ in range(len(self.layers_types))]
-
-    def convert_state_dict(self, state_dict):
-        new_state_dict = {}
-        for i, layer in enumerate(self.layers):
-            layer_state_dict = {
-                key.replace(f"gnn_layers.{i}.", "", 1): value
-                for key, value in state_dict.items()
-                if key.startswith(f"gnn_layers.{i}.")
-            }
-            layer_state_dict = layer.convert_state_dict(layer_state_dict)
-            layer_state_dict = {f"layers.{i}.{key}": value for key, value in layer_state_dict.items()}
-            new_state_dict.update(layer_state_dict)
-        return new_state_dict
-
-
-class SuperGlueFinalProjectionConversionModel:
-    def __init__(self) -> None:
-        pass
-
-    @staticmethod
-    def convert_state_dict(state_dict):
-        state_dict["final_proj.weight"] = state_dict["final_proj.weight"].squeeze(-1)
-        return state_dict
-
-
-class SuperGlueConversionModel:
-    def __init__(self, config: SuperGlueConfig):
-        self.keypoint_encoder = SuperGlueKeypointEncoderConversionModel(config)
-        self.gnn = SuperGlueAttentionalGNNConversionModel(config)
-        self.final_projection = SuperGlueFinalProjectionConversionModel()
-
-    def convert_state_dict(self, state_dict):
-        keypoint_encoder_state_dict = {
-            key.replace("keypoint_encoder.", ""): state_dict.pop(key)
-            for key in list(state_dict.keys())
-            if key.startswith("keypoint_encoder.")
-        }
-        keypoint_encoder_state_dict = self.keypoint_encoder.convert_state_dict(keypoint_encoder_state_dict)
-        keypoint_encoder_state_dict = {
-            f"keypoint_encoder.{key}": value for key, value in keypoint_encoder_state_dict.items()
-        }
-        state_dict.update(keypoint_encoder_state_dict)
-        gnn_state_dict = {
-            key.replace("gnn.", ""): state_dict.pop(key) for key in list(state_dict.keys()) if key.startswith("gnn.")
-        }
-        gnn_state_dict = self.gnn.convert_state_dict(gnn_state_dict)
-        gnn_state_dict = {f"gnn.{key}": value for key, value in gnn_state_dict.items()}
-        state_dict.update(gnn_state_dict)
-        final_projection_state_dict = {
-            key.replace("final_projection.", ""): state_dict.pop(key)
-            for key in list(state_dict.keys())
-            if key.startswith("final_projection.")
-        }
-        final_projection_state_dict = self.final_projection.convert_state_dict(final_projection_state_dict)
-        final_projection_state_dict = {
-            f"final_projection.{key}": value for key, value in final_projection_state_dict.items()
-        }
-        state_dict.update(final_projection_state_dict)
-        return state_dict
-
-
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"kenc.encoder.(\d+).weight": r"keypoint_encoder.encoder.mlp_layers.\1.weight",
-    r"kenc.encoder.(\d+).bias": r"keypoint_encoder.encoder.mlp_layers.\1.bias",
-    r"kenc.encoder.(\d+).running_mean": r"keypoint_encoder.encoder.mlp_layers.\1.running_mean",
-    r"kenc.encoder.(\d+).running_var": r"keypoint_encoder.encoder.mlp_layers.\1.running_var",
-    r"kenc.encoder.(\d+).num_batches_tracked": r"keypoint_encoder.encoder.mlp_layers.\1.num_batches_tracked",
-    r"gnn.layers.(\d+).attn.proj.0.weight": r"gnn.gnn_layers.\1.attention.self.query.weight",
-    r"gnn.layers.(\d+).attn.proj.0.bias": r"gnn.gnn_layers.\1.attention.self.query.bias",
-    r"gnn.layers.(\d+).attn.proj.1.weight": r"gnn.gnn_layers.\1.attention.self.key.weight",
-    r"gnn.layers.(\d+).attn.proj.1.bias": r"gnn.gnn_layers.\1.attention.self.key.bias",
-    r"gnn.layers.(\d+).attn.proj.2.weight": r"gnn.gnn_layers.\1.attention.self.value.weight",
-    r"gnn.layers.(\d+).attn.proj.2.bias": r"gnn.gnn_layers.\1.attention.self.value.bias",
-    r"gnn.layers.(\d+).attn.merge.weight": r"gnn.gnn_layers.\1.attention.output.dense.weight",
-    r"gnn.layers.(\d+).attn.merge.bias": r"gnn.gnn_layers.\1.attention.output.dense.bias",
-    r"gnn.layers.(\d+).mlp.(\d+).weight": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.weight",
-    r"gnn.layers.(\d+).mlp.(\d+).bias": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.bias",
-    r"gnn.layers.(\d+).mlp.(\d+).running_mean": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.running_mean",
-    r"gnn.layers.(\d+).mlp.(\d+).running_var": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.running_var",
-    r"gnn.layers.(\d+).mlp.(\d+).num_batches_tracked": r"gnn.gnn_layers.\1.mlp.mlp_layers.\2.num_batches_tracked",
-    r"final_proj.weight": r"final_projection.final_proj.weight",
-    r"final_proj.bias": r"final_projection.final_proj.bias",
+    r"kenc.encoder.(\d+)": r"keypoint_encoder.encoder.\1.old",
+    r"gnn.layers.(\d+).attn.proj.0": r"gnn.layers.\1.attention.self.query",
+    r"gnn.layers.(\d+).attn.proj.1": r"gnn.layers.\1.attention.self.key",
+    r"gnn.layers.(\d+).attn.proj.2": r"gnn.layers.\1.attention.self.value",
+    r"gnn.layers.(\d+).attn.merge": r"gnn.layers.\1.attention.output.dense",
+    r"gnn.layers.(\d+).mlp.0": r"gnn.layers.\1.mlp.0.linear",
+    r"gnn.layers.(\d+).mlp.1": r"gnn.layers.\1.mlp.0.batch_norm",
+    r"gnn.layers.(\d+).mlp.3": r"gnn.layers.\1.mlp.1",
+    r"final_proj": r"final_projection.final_proj",
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: List[str]):
+def convert_old_keys_to_new_keys(state_dict_keys: List[str], conversion_mapping=ORIGINAL_TO_CONVERTED_KEY_MAPPING):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -283,13 +108,72 @@ def convert_old_keys_to_new_keys(state_dict_keys: List[str]):
     if state_dict_keys is not None:
         old_text = "\n".join(state_dict_keys)
         new_text = old_text
-        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+        for pattern, replacement in conversion_mapping.items():
             if replacement is None:
                 new_text = re.sub(pattern, "", new_text)  # an empty line
                 continue
             new_text = re.sub(pattern, replacement, new_text)
         output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
     return output_dict
+
+
+def replace_state_dict_keys(all_keys, new_keys, original_state_dict):
+    state_dict = {}
+    for key in all_keys:
+        new_key = new_keys[key]
+        state_dict[new_key] = original_state_dict.pop(key).contiguous().clone()
+    return state_dict
+
+
+def convert_state_dict(state_dict, config):
+    converted_to_final_key_mapping = {}
+
+    def convert_conv_to_linear(keys):
+        for key in keys:
+            state_dict[key] = state_dict[key].squeeze(-1)
+
+    conv_keys = []
+    # Keypoint Encoder
+    keypoint_encoder_key = "keypoint_encoder.encoder"
+    for i in range(1, len(config.keypoint_encoder_sizes) + 2):
+        old_conv_key = f"{keypoint_encoder_key}.{(i - 1) * 3}.old"
+        new_index = i - 1
+        new_conv_key = f"{keypoint_encoder_key}.{new_index}."
+        if i < len(config.keypoint_encoder_sizes) + 1:
+            new_conv_key = f"{new_conv_key}linear."
+        converted_to_final_key_mapping[rf"{old_conv_key}\."] = new_conv_key
+        if i < len(config.keypoint_encoder_sizes) + 1:
+            old_batch_norm_key = f"{keypoint_encoder_key}.{(i - 1) * 3 + 1}.old"
+            new_batch_norm_key = f"{keypoint_encoder_key}.{new_index}.batch_norm."
+            converted_to_final_key_mapping[rf"{old_batch_norm_key}\."] = new_batch_norm_key
+
+        conv_keys.append(f"{old_conv_key}.weight")
+
+    # Attentional GNN
+    for i in range(len(config.gnn_layers_types)):
+        gnn_layer_key = f"gnn.layers.{i}"
+        ## Attention
+        attention_key = f"{gnn_layer_key}.attention"
+        conv_keys.extend(
+            [
+                f"{attention_key}.self.query.weight",
+                f"{attention_key}.self.key.weight",
+                f"{attention_key}.self.value.weight",
+                f"{attention_key}.output.dense.weight",
+            ]
+        )
+
+        ## MLP
+        conv_keys.extend([f"{gnn_layer_key}.mlp.0.linear.weight", f"{gnn_layer_key}.mlp.1.weight"])
+
+    # Final Projection
+    conv_keys.append("final_projection.final_proj.weight")
+
+    convert_conv_to_linear(conv_keys)
+    all_keys = list(state_dict.keys())
+    new_keys = convert_old_keys_to_new_keys(all_keys, converted_to_final_key_mapping)
+    state_dict = replace_state_dict_keys(all_keys, new_keys, state_dict)
+    return state_dict
 
 
 def add_keypoint_detector_state_dict(superglue_state_dict):
@@ -335,17 +219,12 @@ def write_model(
     all_keys = list(original_state_dict.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
-    state_dict = {}
-    for key in all_keys:
-        new_key = new_keys[key]
-        state_dict[new_key] = original_state_dict.pop(key).contiguous().clone()
+    state_dict = replace_state_dict_keys(all_keys, new_keys, original_state_dict)
+    state_dict = convert_state_dict(state_dict, config)
 
     del original_state_dict
     gc.collect()
     state_dict = add_keypoint_detector_state_dict(state_dict)
-
-    conversion_model = SuperGlueConversionModel(config)
-    state_dict = conversion_model.convert_state_dict(state_dict)
 
     print("Loading the checkpoint in a SuperGlue model...")
     with torch.device("cuda"):
