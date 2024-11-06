@@ -255,7 +255,7 @@ class AriaProjector(nn.Module):
         query_num = self.patch_to_query_dict[num_patches]
 
         # Compared to original, simplify definition
-        queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, -1, -1)
+        queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, 1, 1)
 
         if attn_mask is not None:
             attn_mask = attn_mask.repeat_interleave(self.num_heads, 0)
@@ -2094,7 +2094,7 @@ ARIA_INPUTS_DOCSTRING = r"""
 """
 
 
-class AriaTextForCausalLM(AriaPreTrainedModel, GenerationMixin):
+class AriaForCausalLM(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for causal language modeling tasks.
 
@@ -2171,9 +2171,9 @@ class AriaTextForCausalLM(AriaPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, AriaTextForCausalLM
+        >>> from transformers import AutoTokenizer, AriaForCausalLMalLM
 
-        >>> model = AriaTextForCausalLM.from_pretrained("meta-aria/Aria-2-7b-hf")
+        >>> model = AriaForCausalLMalLM.from_pretrained("meta-aria/Aria-2-7b-hf")
         >>> tokenizer = AutoTokenizer.from_pretrained("meta-aria/Aria-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -2352,6 +2352,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
         Forward pass of the AriaForConditionalGeneration model.

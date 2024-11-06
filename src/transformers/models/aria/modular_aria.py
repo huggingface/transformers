@@ -1134,7 +1134,7 @@ class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
         self.post_init()
 
 
-class AriaTextForCausalLM(AriaPreTrainedModel, LlamaForCausalLM):
+class AriaForCausalLM(AriaPreTrainedModel, LlamaForCausalLM):
     """
     Aria model for causal language modeling tasks.
 

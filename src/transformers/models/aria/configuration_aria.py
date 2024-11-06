@@ -154,7 +154,7 @@ class AriaConfig(PretrainedConfig):
                 1225: 128,
                 4900: 256,
             }
-        self.projector_patch_to_query_dict = projector_patch_to_query_dict.copy()
+        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"
