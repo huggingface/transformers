@@ -114,7 +114,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple:
+def get_keypoint_predictions(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Get keypoint predictions from score maps.
 
     Args:
