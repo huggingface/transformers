@@ -126,7 +126,7 @@ class AriaVisionText2TextModelTester:
         self.batch_size = 10
         self.num_channels = 3
         self.image_size = 358
-        self.num_image_tokens = 128  # fix pour attention size
+        self.num_image_tokens = 128
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):

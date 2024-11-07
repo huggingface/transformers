@@ -1,4 +1,4 @@
-import inspect
+import importlib
 import os
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -89,17 +89,15 @@ def sequential_gemm(token_states, expert_weights, tokens_per_expert):
         output[start:end] = out
     return output
 
-
-try:
-    from grouped_gemm.ops import gmm as experts_gemm
-
-    if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
-        logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM instead.")
-        experts_gemm = sequential_gemm
-except ImportError as e:
-    logger.warning("`grouped_gemm` is not installed, using sequential GEMM, which is slower.")
+if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
+    logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM")
     experts_gemm = sequential_gemm
-
+else:
+    if importlib.util.find_spec("grouped_gemm") is None:
+        logger.warning("grouped_gemm is not installed, using sequential GEMM, which is slower.")
+        experts_gemm = sequential_gemm
+    else:
+        from grouped_gemm.ops import gmm as experts_gemm
 
 class AriaTextConfig(LlamaConfig):
     """
@@ -833,16 +831,8 @@ class AriaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _supports_sdpa = True
+    _supports_sdpa = False
     _supports_cache_class = True
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1152,8 +1142,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         config (AriaConfig): Configuration object for the model.
     """
 
-    _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_sdpa = False
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
