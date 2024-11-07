@@ -82,8 +82,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     ):
         self.patch_size = patch_size
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = image_token
-        self.video_token = video_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
