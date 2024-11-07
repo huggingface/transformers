@@ -1,7 +1,7 @@
 # coding=utf-8
 # Copyright 2024 weak-kajuma and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on Llama implementations in this library and Microsoft's 
+# This code is based on Llama implementations in this library and Microsoft's
 # Differential Transformer implementations.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
