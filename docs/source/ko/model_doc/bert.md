@@ -77,7 +77,7 @@ model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16
 |16        |256    |0.030                     |0.024                    |25.583     |2874.426           |2134.262          |34.680        |
 |16        |512    |0.064                     |0.044                    |46.223     |6964.659           |3961.013          |75.830        |
 
-#### 추론
+#### 추론 [[Inference]]
 
 |batch_size|seq_len|Per token latency eager (ms)|Per token latency SDPA (ms)|Speedup (%)|Mem eager (MB)|Mem BT (MB)|Mem saved (%)|
 |----------|-------|----------------------------|---------------------------|-----------|--------------|-----------|-------------|
