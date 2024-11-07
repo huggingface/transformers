@@ -306,7 +306,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         Decide how best to divide an image of size {"width": width, "height": height}] 
         in up to max_num_crops of size crop_size
         """
-        original_size = np.array([image.shape[0], image.shape[1]], dtype=np.float32)
+        original_size = np.array([image.shape[0] - self.total_margin_pixels, image.shape[1]- self.total_margin_pixels], dtype=np.float32)
         crop_grid = [(i, j) for i in range(1, self.max_num_crops + 1) for j in range(1, (self.max_num_crops // i) + 1)]
         
         # sort so argmin and argmax favour smaller crop_grid in the event of a tie
@@ -367,7 +367,6 @@ class MolmoImageProcessor(BaseImageProcessor):
                 )
 
         patch_index = 0  # Track the index for patch ordering
-
         for row in range(crop_grid[0]):  # Loop over rows of crops
             crop_y_start = row * self.crop_window_size
 
@@ -419,16 +418,16 @@ class MolmoImageProcessor(BaseImageProcessor):
                 patch_index += pooled_height * pooled_width
 
         # Stack the crops, patch orderings, and masks into arrays
+        # crops does not match patches 
         crops = np.stack(crops)
         patch_orderings = np.stack(patch_orderings)
         cropped_masks = np.stack(cropped_masks)
-
         # rearrange patches
         leading_crops_dim, channels = crops.shape[0], crops.shape[-1]
+
         crops = crops.reshape(leading_crops_dim, self.patches_per_image_height, self.image_patch_size, self.patches_per_image_height, self.image_patch_size, channels)
         crops = crops.transpose(0, 1, 3, 2, 4, 5)
         crops = crops.reshape(leading_crops_dim, self.patches_per_image_width * self.patches_per_image_height, self.image_patch_size * self.image_patch_size * channels)
-
         leading_mask_dim = cropped_masks.shape[0]
         cropped_masks = cropped_masks.reshape(leading_mask_dim, self.patches_per_image_height, self.image_patch_size, self.patches_per_image_height, self.image_patch_size)
         cropped_masks = cropped_masks.transpose(0, 1, 3, 2, 4)
@@ -458,19 +457,18 @@ class MolmoImageProcessor(BaseImageProcessor):
         number of crops. Pads as well the patch orderings and so on.
         """
         crops = data['pixel_values']
-        max_num_crops = max(image.shape[1] for image in crops)
-        max_num_patches = max(image.shape[2] for image in crops)
-        flattened_patch_size = crops[0].shape[0]
+        max_num_crops = max(image.shape[0] for image in crops)
         batch_size = len(crops)
+        crop_shape = crops[0].shape[1:]  # Should be (576, 588)
 
         batched_crops = np.zeros(
-            (batch_size, flattened_patch_size, max_num_crops, max_num_patches), dtype=crops[0].dtype
+            (batch_size, max_num_crops) + crop_shape, dtype=crops[0].dtype
         )
-
+        crop_masks = np.zeros((batch_size, max_num_crops), dtype=np.bool_)
         for idx, image in enumerate(crops):
-            num_crops = image.shape[1]
-            num_patches = image.shape[2]
-            batched_crops[idx, :, :num_crops, :num_patches] = image
+            num_crops = image.shape[0]
+            batched_crops[idx, :num_crops, ...] = image
+            crop_masks[idx, :num_crops] = True
 
         data['pixel_values'] = batched_crops
         return data
@@ -488,8 +486,8 @@ class MolmoImageProcessor(BaseImageProcessor):
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = OPENAI_CLIP_MEAN,
+        image_std: Optional[Union[float, List[float]]] = OPENAI_CLIP_STD,
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -586,11 +584,10 @@ class MolmoImageProcessor(BaseImageProcessor):
             # TODO do_pad and do_split_into_crops should not be optional. Removing them will break the processing.
             if do_pad:
                 # 2.1 after padding, we also get the image mask
-                image, image_mask = self.pad(image=image, size=new_crop_size, input_data_format=input_data_format)
+                image, image_mask = self.pad(image=image, size=new_crop_size, input_data_format=input_data_format, constant_values=0)
                 # 2.2 (from original code) the image mask padding is increased by 1 dim
                 image_mask = np.pad(image_mask, [[0, 1], [0, 0]], constant_values=-1)
-                global_image, _ = self.pad(image=global_image, size=size, input_data_format=input_data_format)
-
+                global_image, _ = self.pad(image=global_image, size=size, input_data_format=input_data_format, constant_values=0)
             if do_normalize:
                 image = normalize(image=image, mean=image_mean, std=image_std)
                 global_image = normalize(image=global_image, mean=image_mean, std=image_std)
@@ -598,7 +595,6 @@ class MolmoImageProcessor(BaseImageProcessor):
             # 3. Then split the padded and rescaled image into crops. Don't touch the global image.
             if do_split_into_crops:
                 crops, patch_orderings, cropped_masks = self.split_image_into_crops(image=image, image_mask=image_mask, crop_grid=crop_grid)
-
                 # 4. Reorder patches left-to-right instead of crop-by-crop.
                 patch_orderings = self.transpose_patch_orderings(crop_grid, patch_orderings)
             global_image = self.reshape_into_patches(global_image)
@@ -621,19 +617,14 @@ class MolmoImageProcessor(BaseImageProcessor):
             all_crop_grids.append(crop_grid)
             all_cropped_masks.append(cropped_masks)
             all_patch_orderings.append(patch_orderings)
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for image in all_images
-        ]
-
         data = {
-            "pixel_values": images,
+            "pixel_values": all_images,
             "cropped_masks": all_cropped_masks,
             "crop_grids": all_crop_grids,
             "patch_orderings": all_patch_orderings,
             }
         if do_pad:
             data = self._pad_for_batching(data)
-        breakpoint()
+
         return BatchFeature(data=data, tensor_type=return_tensors)
 
