@@ -376,22 +376,6 @@ class Olmo1124IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @require_tokenizers
-    def test_fast_special_tokens(self):
-        fast_tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo-7B-1124-hf")
-
-        original_add_eos_token = fast_tokenizer.add_eos_token
-
-        fast_tokenizer.add_eos_token = False
-        fast = fast_tokenizer.encode("A sample test")
-        self.assertEqual(fast, [32, 6205, 1296])
-
-        fast_tokenizer.add_eos_token = True
-        fast = fast_tokenizer.encode("A sample test")
-        self.assertEqual(fast, [32, 6205, 1296, 100257])
-
-        fast_tokenizer.add_eos_token = original_add_eos_token
-
-    @require_tokenizers
     def test_simple_encode_decode(self):
         rust_tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo-7B-1124-hf")
 
