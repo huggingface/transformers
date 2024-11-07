@@ -722,7 +722,6 @@ class GemmaModel(GemmaPreTrainedModel):
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
-        self._tp_plan = config.base_model_tp_plan
         if getattr(config, "pretraining_tp", 1) != 1:
             logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
 

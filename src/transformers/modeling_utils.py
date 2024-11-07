@@ -1399,6 +1399,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # Has support for a `QuantoQuantizedCache` instance as `past_key_values`
     _supports_quantized_cache = False
 
+    # A tensor parallel plan to be applied to the model when TP is enabled. For
+    # top-level models, this attribute is currently defined in respective model
+    # code. For base models, this attribute comes from
+    # `config.base_model_tp_plan` during `post_init`.
+    _tp_plan = None
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
@@ -1443,6 +1449,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+        # If current model is a base model, attach `base_model_tp_plan` from config
+        if self.base_model is self:
+            self._tp_plan = self.config.base_model_tp_plan
 
     def dequantize(self):
         """
@@ -3475,9 +3484,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         tp_plan = kwargs.pop("tp_plan", None)
         if tp_plan is not None and tp_plan != "auto":
-            raise ValueError(
-                f"tp_plan supports 'auto' only for now but got {tp_plan}."
-            )
+            # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
+            raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
 
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
@@ -4095,9 +4103,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts.append(init_empty_weights())
         elif tp_plan is not None:
             if not torch.distributed.is_initialized():
-                raise ValueError(
-                    "Tensor Parallel requires torch.distributed to be initialized first."
-                )
+                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
 
             # Get device type (e.g. "cuda")
             device_type = torch.distributed.distributed_c10d._device_capability()[0]
@@ -5063,21 +5069,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # parallelize a model.
         def tplize(mod: torch.nn.Module) -> None:
             tp_plan = getattr(mod, "_tp_plan", None)
-            if tp_plan:
-                logger.debug(f"Applying tensor parallel to {mod.__class__.__name__}: {tp_plan}")
-                # In model configs, we use a neutral type (string) to specify
-                # parallel styles, here we translate them into torch TP types.
-                # Using tree_map because `tp_plan` is a dict.
-                tp_plan = torch.utils._pytree.tree_map(
-                    translate_to_torch_parallel_style,
-                    tp_plan,
-                )
-                # Apply TP to current module.
-                torch.distributed.tensor.parallel.parallelize_module(
-                    mod,
-                    device_mesh=device_mesh,
-                    parallelize_plan=tp_plan,
-                )
+            if tp_plan is None:
+                return
+            logger.debug(f"Applying tensor parallel to {mod.__class__.__name__}: {tp_plan}")
+            # In model configs, we use a neutral type (string) to specify
+            # parallel styles, here we translate them into torch TP types.
+            # Using tree_map because `tp_plan` is a dict.
+            tp_plan = torch.utils._pytree.tree_map(
+                translate_to_torch_parallel_style,
+                tp_plan,
+            )
+            # Apply TP to current module.
+            torch.distributed.tensor.parallel.parallelize_module(
+                mod,
+                device_mesh=device_mesh,
+                parallelize_plan=tp_plan,
+            )
 
         # `apply` is a native method of `nn.Module` that recursively applies a
         # function to every submodule.

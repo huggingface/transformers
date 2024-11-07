@@ -708,7 +708,6 @@ class GlmModel(GlmPreTrainedModel):
             dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
         )
         self.gradient_checkpointing = False
-        self._tp_plan = config.base_model_tp_plan
         if getattr(config, "pretraining_tp", 1) != 1:
             logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
 
