@@ -431,6 +431,7 @@ class Zamba2Attention(nn.Module):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.use_shared_attention_lora:
+            layer_idx = self.layer_dic[layer_idx]
             lora_layer_idx = self.layer_dic[layer_idx]
             linear_q_lora_A = self.linear_q_lora_A_list[lora_layer_idx]
             linear_q_lora_B = self.linear_q_lora_B_list[lora_layer_idx]
@@ -533,6 +534,7 @@ class Zamba2FlashAttention2(Zamba2Attention):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.use_shared_attention_lora:
+            layer_idx = self.layer_dic[layer_idx]
             linear_q_lora_A = self.linear_q_lora_A_list[layer_idx]
             linear_q_lora_B = self.linear_q_lora_B_list[layer_idx]
             q_lora_output = linear_q_lora_A(hidden_states)
@@ -959,11 +961,12 @@ class Zamba2MambaMixer(nn.Module):
                 )
 
                 # 1D Convolution
-                hidden_states_B_C_t = hidden_states_B_C.transpose(1, 2)
-                conv_state = nn.functional.pad(
-                    hidden_states_B_C_t, (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
-                )
-                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+                if cache_params is not None:
+                    hidden_states_B_C_t = hidden_states_B_C.transpose(1, 2)
+                    conv_state = nn.functional.pad(
+                        hidden_states_B_C_t, (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
+                    )
+                    cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
                     hidden_states_B_C = self.act(
                         self.conv1d(hidden_states_B_C.transpose(1, 2)).transpose(1, 2)[:, :seq_len]

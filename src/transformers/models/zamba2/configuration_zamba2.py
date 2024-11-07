@@ -93,7 +93,7 @@ class Zamba2Config(PretrainedConfig):
             Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
         add_bias_linear (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in various layers
-        gated_linear_units (`bool`, *optional*, defaults to `False`):
+        gated_linear_unit (`bool`, *optional*, defaults to `True`):
             Flag indicating whether or not to use gated MLP
         use_shared_block_lora (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to add (unshared) LoRA modules to the first layer of the MLP
@@ -112,6 +112,7 @@ class Zamba2Config(PretrainedConfig):
         tie_word_embeddings=True,
         hidden_size=2560,
         num_hidden_layers=54,
+        layers_block_type=None,
         mamba_d_state=64,
         mamba_d_conv=4,
         mamba_expand=2,
@@ -234,12 +235,15 @@ class Zamba2Config(PretrainedConfig):
         self.use_mem_eff_path = use_mem_eff_path
 
         # Below, "mamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
-        self.layers_block_type = (
-            ["mamba"]
-            + (["mamba"] * 5 + ["hybrid"]) * 7
-            + ["mamba"] * 4
-            + ["hybrid"]
-            + ["mamba"] * 3
-            + ["hybrid"]
-            + ["mamba"] * 2
-        )
+        if layers_block_type is None:
+            self.layers_block_type = (
+                ["mamba"]
+                + (["mamba"] * 5 + ["hybrid"]) * 7
+                + ["mamba"] * 4
+                + ["hybrid"]
+                + ["mamba"] * 3
+                + ["hybrid"]
+                + ["mamba"] * 2
+            )
+        else:
+            self.layers_block_type = layers_block_type

@@ -104,6 +104,8 @@ class Zamba2Config(PretrainedConfig):
             Dimension of the hidden representations.
         num_hidden_layers (`int`, *optional*, defaults to 54):
             Number of hidden layers in the model.
+        layers_block_type (`list`, *optional*):
+            List of layer types, which can be either "mamba" or "hybrid".
         mamba_d_state (`int`, *optional*, defaults to 64): shape of the state space latents.
         mamba_d_conv (`int`, *optional*, defaults to 4): Size of the convolution kernel.
         mamba_expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
@@ -150,7 +152,7 @@ class Zamba2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         num_mem_blocks (`int`, *optional*, defaults to 1):
             Number of unshared transformer blocks.
-        use_shared_block_lora (`bool`, *optional*, defaults to `True`):
+        use_shared_block_lora (`bool`, *optional*, defaults to `False`):
             If True, unshared LoRA's will be added to the shared MLP's.
         use_shared_attention_lora (`bool`, *optional*, defaults to `False`):
             If True, unshared LoRA's will be added to the q, k, v projectors in the shared attention layers.
@@ -191,6 +193,7 @@ class Zamba2Config(PretrainedConfig):
         tie_word_embeddings=True,
         hidden_size=2560,
         num_hidden_layers=54,
+        layers_block_type=None,
         
         mamba_d_state=64,
         mamba_d_conv=4,
@@ -217,7 +220,7 @@ class Zamba2Config(PretrainedConfig):
         attention_dropout=0.0,
         
         num_mem_blocks=1,
-        use_shared_block_lora=True,
+        use_shared_block_lora=False,
         use_shared_attention_lora=False,
         lora_rank=128,
         use_mem_rope=False,
@@ -295,15 +298,23 @@ class Zamba2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
 
-        if intermediate_size is None:
-            self.ffn_hidden_size = 4 * self.hidden_size
-
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
 
 
         # Below, "mamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
-        self.layers_block_type = ['mamba'] + (['mamba'] * 5 + ['hybrid']) * 7 + ['mamba'] * 4 + ['hybrid'] + ['mamba'] * 3 + ['hybrid'] + ['mamba'] * 2
+        if layers_block_type is None:
+            self.layers_block_type = (
+                ["mamba"]
+                + (["mamba"] * 5 + ["hybrid"]) * 7
+                + ["mamba"] * 4
+                + ["hybrid"]
+                + ["mamba"] * 3
+                + ["hybrid"]
+                + ["mamba"] * 2
+            )
+        else:
+            self.layers_block_type = layers_block_type
 
 
 def count_mem_blocks_in_config(config: Zamba2Config):
@@ -674,6 +685,7 @@ class Zamba2Attention(ZambaAttention):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.use_shared_attention_lora:
+            layer_idx = self.layer_dic[layer_idx]
             lora_layer_idx = self.layer_dic[layer_idx]
             linear_q_lora_A = self.linear_q_lora_A_list[lora_layer_idx]
             linear_q_lora_B = self.linear_q_lora_B_list[lora_layer_idx]
@@ -775,6 +787,7 @@ class Zamba2FlashAttention2(Zamba2Attention):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.use_shared_attention_lora:
+            layer_idx = self.layer_dic[layer_idx]
             linear_q_lora_A = self.linear_q_lora_A_list[layer_idx]
             linear_q_lora_B = self.linear_q_lora_B_list[layer_idx]
             q_lora_output = linear_q_lora_A(hidden_states)
@@ -1152,12 +1165,13 @@ class Zamba2MambaMixer(nn.Module):
                 )
 
                 # 1D Convolution
-                hidden_states_B_C_t = hidden_states_B_C.transpose(1,2)
-                conv_state = nn.functional.pad(
-                    hidden_states_B_C_t,
-                    (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
-                )
-                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+                if cache_params is not None:
+                    hidden_states_B_C_t = hidden_states_B_C.transpose(1,2)
+                    conv_state = nn.functional.pad(
+                        hidden_states_B_C_t,
+                        (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
+                    )
+                    cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
                     hidden_states_B_C = self.act(
                         self.conv1d(hidden_states_B_C.transpose(1, 2)).transpose(1, 2)[:, :seq_len]
