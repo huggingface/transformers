@@ -1,11 +1,9 @@
 # coding=utf-8
-# Copyright 2024 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 weak-kajuma and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
+# This code is based on Llama implementations in this library and Microsoft's 
+# Differential Transformer implementations.
+
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -70,11 +68,6 @@ class DiffLlamaConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
-            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
-            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -120,6 +113,8 @@ class DiffLlamaConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        lambda_std_dev (`float`, *optional*, defaults to 0.1):
+            The standard deviation for initialization of parameter lambda in attention layer.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
 
@@ -155,12 +150,12 @@ class DiffLlamaConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
+        lambda_std_dev=0.1,
         head_dim=None,
         **kwargs,
     ):
@@ -179,12 +174,12 @@ class DiffLlamaConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.lambda_std_dev = lambda_std_dev
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.

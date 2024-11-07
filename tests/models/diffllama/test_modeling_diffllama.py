@@ -317,9 +317,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "meta-diffllama/DiffLlama-2-7b-hf"
-
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DiffLlamaForCausalLM if is_torch_available() else None
 

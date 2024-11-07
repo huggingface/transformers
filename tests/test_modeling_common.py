@@ -706,7 +706,6 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
-        configs_no_init.zero_init = True
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
@@ -3441,7 +3440,6 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
-        configs_no_init.zero_init = True
 
         for model_class in self.all_model_classes:
             mappings = [
