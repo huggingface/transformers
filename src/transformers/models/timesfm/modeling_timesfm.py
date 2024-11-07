@@ -558,15 +558,12 @@ class TimesFMModel(TimesFMPreTrainedModel):
             full_outputs = np.maximum(full_outputs, 0.0)
 
         if return_dict:
-            result = TimesFMOutput()
-            result.mean_predictions = mean_outputs
-            result.full_predictions = full_outputs
-            if output_attentions:
-                result.attentions = all_attentions
-            if output_hidden_states:
-                result.hidden_states = all_hidden_states
-
-            return result
+            return TimesFMOutput(
+                mean_predictions=mean_outputs,
+                full_predictions=full_outputs,
+                attentions=all_attentions if output_attentions else None,
+                hidden_states=all_hidden_states if output_hidden_states else None,
+            )
         else:
             return_tuple = [mean_outputs, full_outputs]
             if output_attentions:
