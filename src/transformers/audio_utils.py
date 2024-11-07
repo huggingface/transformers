@@ -390,6 +390,7 @@ def spectrogram(
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
+    dither: float = 0.0,
     preemphasis: Optional[float] = None,
     mel_filters: Optional[np.ndarray] = None,
     mel_floor: float = 1e-10,
@@ -460,6 +461,9 @@ def spectrogram(
         onesided (`bool`, *optional*, defaults to `True`):
             If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
             frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
+        dither (`float`):
+            Add dithering (add small Gaussian noise to each frame).
+            E.g. use 4 to add dithering, 0.0 means no dithering.
         preemphasis (`float`, *optional*)
             Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
         mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`, *optional*):
@@ -540,6 +544,9 @@ def spectrogram(
     for frame_idx in range(num_frames):
         buffer[:frame_length] = waveform[timestep : timestep + frame_length]
 
+        if dither != 0.0:
+            buffer[:frame_length] += dither * np.random.randn(*buffer[:frame_length].shape)
+
         if remove_dc_offset:
             buffer[:frame_length] = buffer[:frame_length] - buffer[:frame_length].mean()
 
@@ -591,6 +598,7 @@ def spectrogram_batch(
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
+    dither: float = 0.0,
     preemphasis: Optional[float] = None,
     mel_filters: Optional[np.ndarray] = None,
     mel_floor: float = 1e-10,
@@ -653,6 +661,9 @@ def spectrogram_batch(
             The padding strategy when `center` is `True`.
         onesided (`bool`, *optional*, defaults to `True`):
             If True, returns a one-sided spectrogram for real input signals.
+        dither (`float`):
+            Add dithering (add small Gaussian noise to each frame).
+            E.g. use 4 to add dithering, 0.0 means no dithering.
         preemphasis (`float`, *optional*):
             Applies a pre-emphasis filter to each frame.
         mel_filters (`np.ndarray`, *optional*):
@@ -744,6 +755,9 @@ def spectrogram_batch(
     for frame_idx in range(num_frames):
         timestep = frame_idx * hop_length
         buffer[:, :frame_length] = padded_waveform_batch[:, timestep : timestep + frame_length]
+
+        if dither != 0.0:
+            buffer[:, :frame_length] += dither * np.random.randn(*buffer[:, :frame_length].shape)
 
         if remove_dc_offset:
             buffer[:, :frame_length] -= buffer[:, :frame_length].mean(axis=1, keepdims=True)
