@@ -5495,6 +5495,7 @@ if TYPE_CHECKING:
         MolmoConfig,
         MolmoProcessor,
         MolmoImageProcessor,
+    )
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
