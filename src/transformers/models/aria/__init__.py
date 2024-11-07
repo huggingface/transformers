@@ -13,14 +13,19 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {
-    "configuration_aria": ["AriaConfig", "AriaTextForCausalLM", "AriaTextConfig"],
-    "modeling_aria": ["AriaForConditionalGeneration", "AriaPreTrainedModel"],
-    "processing_aria": ["AriaProcessor"],
-}
+_import_structure = {"configuration_aria": ["AriaConfig", "AriaTextConfig"]}
+
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_aria"] = ["AriaImageProcessor"]
 
 
 try:
@@ -29,23 +34,24 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
+    _import_structure["processing_aria"] = ["AriaProcessor"]
     _import_structure["modeling_aria"] = [
         "AriaForConditionalGeneration",
         "AriaPreTrainedModel",
         "AriaTextModel",
         "AriaTextForCausalLM",
     ]
-    _import_structure["processing_aria"] = [
-        "AriaProcessor",
-    ]
-    _import_structure["configuration_aria"] = [
-        "AriaConfig",
-        "AriaTextConfig",
-    ]
-
 
 if TYPE_CHECKING:
     from .configuration_aria import AriaConfig, AriaTextConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_aria import AriaImageProcessor
 
     try:
         if not is_torch_available():
@@ -53,13 +59,13 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .processing_aria import AriaProcessor
         from .modeling_aria import (
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
             AriaTextForCausalLM,
             AriaTextModel,
         )
-        from .processing_aria import AriaProcessor
 
 else:
     import sys

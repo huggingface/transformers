@@ -90,6 +90,7 @@ class AriaVisionText2TextModelTester:
             num_key_value_heads=20,
             rope_theta=5000000,
             vocab_size=99,
+            eos_token_id=2,
         ),
         is_training=True,
         vision_config=Idefics3VisionConfig(
@@ -116,7 +117,7 @@ class AriaVisionText2TextModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.pad_token_id = text_config.pad_token_id
-
+        self.eos_token_id = text_config.eos_token_id
         self.num_hidden_layers = text_config.num_hidden_layers
         self.vocab_size = text_config.vocab_size
         self.hidden_size = text_config.hidden_size
@@ -138,6 +139,7 @@ class AriaVisionText2TextModelTester:
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
+            eos_token_id=self.eos_token_id,
         )
 
     def prepare_config_and_inputs(self):
