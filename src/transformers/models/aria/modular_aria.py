@@ -18,8 +18,8 @@ from ...image_transforms import (
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     get_image_size,
+    PILImageResampling,
     to_numpy_array,
 )
 from ...modeling_utils import PreTrainedModel
@@ -492,7 +492,7 @@ class AriaImageProcessor(BaseImageProcessor):
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
-        resample: PILImageResampling = Image.Resampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
     ):
         """
         Process a list of images.
@@ -864,7 +864,7 @@ class AriaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedGEMM):
+        elif isinstance(module, AriaGroupedExpertsGEMM):
             module.weight.data.normal_(mean=0.0, std=std)
         elif isinstance(module, nn.Conv2d):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -889,7 +889,6 @@ class AriaTopKRouter(nn.Module):
         self.config = config
 
         self.weight = nn.Parameter(torch.empty((self.config.moe_num_experts, self.config.hidden_size)))
-        # FIXME: initialize the weight
 
     # Simplify code a lot compared to original, since we do not need training.
     # Original: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/moe_lm.py#L170
@@ -932,7 +931,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
         self.act_fn = ACT2FN[config.hidden_act]
 
 
-class AriaGroupedGEMM(nn.Module):
+class AriaGroupedExpertsGEMM(nn.Module):
     """
     Grouped GEMM (General Matrix Multiplication) module for efficient expert computation.
     This module utilizes the grouped_gemm library (https://github.com/fanshiqing/grouped_gemm)
@@ -988,8 +987,8 @@ class AriaGroupedMLP(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
-        self.fc1 = AriaGroupedGEMM(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedGEMM(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
+        self.fc1 = AriaGroupedExpertsGEMM(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
+        self.fc2 = AriaGroupedExpertsGEMM(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
 
     def forward(self, permuted_tokens, tokens_per_expert):
         """
@@ -1108,7 +1107,7 @@ class AriaTextPreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedGEMM):
+        elif isinstance(module, AriaGroupedExpertsGEMM):
             module.weight.data.normal_(mean=0.0, std=std)
 
 

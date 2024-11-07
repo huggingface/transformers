@@ -19,8 +19,8 @@ from ...image_transforms import (
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     get_image_size,
+    PILImageResampling,
     to_numpy_array,
 )
 from ...tokenization_utils import (
@@ -31,6 +31,7 @@ from ...utils.import_utils import is_torch_available, is_vision_available
 
 if is_vision_available():
     from PIL import Image
+
 
 if is_torch_available():
     import torch
@@ -135,7 +136,7 @@ class AriaImageProcessor(BaseImageProcessor):
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
-        resample: PILImageResampling = Image.Resampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
     ):
         """
         Process a list of images.
