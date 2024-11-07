@@ -57,8 +57,11 @@ from .configuration_zamba2 import Zamba2Config
 
 if is_mamba_ssm_available():
     #### from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined #### added
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+    from mamba_ssm.ops.triton.ssd_combined import (  #### added
+        mamba_chunk_scan_combined,
+        mamba_split_conv1d_scan_combined,
+    )
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
@@ -66,8 +69,8 @@ if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
-    
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update)) #### added
+
+is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))  #### added
 
 
 class Zamba2DynamicCache(DynamicCache):
@@ -136,7 +139,7 @@ class Zamba2DynamicCache(DynamicCache):
         self.conv_states.zero_()
         self.ssm_states.zero_()
 
-    # Copied from transformers.models.jamba.modeling_jamba.Zamba2DynamicCache.update
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.update
     def update(
         self,
         key_states: torch.Tensor,
@@ -154,7 +157,7 @@ class Zamba2DynamicCache(DynamicCache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    # Copied from transformers.models.jamba.modeling_jamba.Zamba2DynamicCache.reorder_cache
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.reorder_cache
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
@@ -168,7 +171,7 @@ class Zamba2DynamicCache(DynamicCache):
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
-    # Copied from transformers.models.jamba.modeling_jamba.Zamba2DynamicCache.get_seq_length
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
@@ -177,12 +180,10 @@ class Zamba2DynamicCache(DynamicCache):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    # Copied from transformers.models.jamba.modeling_jamba.Zamba2DynamicCache.to_legacy_cache
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         raise NotImplementedError("Zamba2DynamicCache does not have a legacy cache equivalent.")
 
     @classmethod
-    # Copied from transformers.models.jamba.modeling_jamba.Zamba2DynamicCache.from_legacy_cache
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         raise NotImplementedError("Zamba2DynamicCache does not have a legacy cache equivalent.")
 
@@ -241,7 +242,6 @@ class Zamba2RotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
     def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
@@ -509,7 +509,6 @@ class Zamba2FlashAttention2(Zamba2Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -612,7 +611,7 @@ class Zamba2FlashAttention2(Zamba2Attention):
             value_states,
             attention_mask,
             q_len,
-            is_causal = self.is_causal,
+            is_causal=self.is_causal,
             dropout=dropout_rate,
             softmax_scale=softmax_scale,
         )
