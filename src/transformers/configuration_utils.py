@@ -838,6 +838,9 @@ class PretrainedConfig(PushToHubMixin):
 
         if "_attn_implementation_internal" in serializable_config_dict:
             del serializable_config_dict["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_tp_plan"]
 
         return serializable_config_dict
 
@@ -857,6 +860,9 @@ class PretrainedConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_attn_implementation_internal" in output:
             del output["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in output:
+            del output["base_model_tp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
