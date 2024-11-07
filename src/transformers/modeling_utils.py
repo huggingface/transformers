@@ -3473,6 +3473,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Cache path to the GGUF file
         gguf_path = None
 
+        tp_plan = kwargs.pop("tp_plan", None)
+        if tp_plan is not None and tp_plan != "auto":
+            raise ValueError(
+                f"tp_plan supports 'auto' only for now but got {tp_plan}."
+            )
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -4074,6 +4080,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
+        tp_device = None
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
@@ -4086,6 +4093,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
             init_contexts.append(init_empty_weights())
+        elif tp_plan is not None:
+            if not torch.distributed.is_initialized():
+                raise ValueError(
+                    "Tensor Parallel requires torch.distributed to be initialized first."
+                )
+
+            # Get device type (e.g. "cuda")
+            device_type = torch.distributed.distributed_c10d._device_capability()[0]
+            # Get torch device module (e.g. torch.cuda) based on device type
+            device_module = torch.get_device_module(device_type)
+            # Get device with index assuming equal number of devices per host
+            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            init_contexts.append(tp_device)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
@@ -4324,6 +4344,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "error_msgs": error_msgs,
                 }
             return model, loading_info
+
+        if tp_plan is not None:
+            assert tp_device is not None, "tp_device not set!"
+            # Assuming sharding the model onto the world
+            world_size = torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
+            # Apply Tensor Parallelism
+            model.tensor_parallel(device_mesh)
 
         return model
 
