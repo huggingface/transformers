@@ -21,11 +21,11 @@ with extra methods beings exposed
 from array import array
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
-from tokenizers.models import BPE
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import BPE, Unigram
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter
+from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -148,6 +148,106 @@ GGUF_TENSOR_MAPPING = {
         ".output.": ".lm_head.",
         "output_norm": "ln_f",
     },
+    "t5": {
+        "token_embd": "shared",
+        "dec.blk.{bid}.attn_q": "decoder.block.{bid}.layer.0.SelfAttention.q",
+        "dec.blk.{bid}.attn_k": "decoder.block.{bid}.layer.0.SelfAttention.k",
+        "dec.blk.{bid}.attn_v": "decoder.block.{bid}.layer.0.SelfAttention.v",
+        "dec.blk.{bid}.attn_o": "decoder.block.{bid}.layer.0.SelfAttention.o",
+        "dec.blk.{bid}.attn_rel_b": "decoder.block.{bid}.layer.0.SelfAttention.relative_attention_bias",
+        "dec.blk.{bid}.attn_norm": "decoder.block.{bid}.layer.0.layer_norm",
+        "dec.blk.{bid}.cross_attn_q": "decoder.block.{bid}.layer.1.EncDecAttention.q",
+        "dec.blk.{bid}.cross_attn_k": "decoder.block.{bid}.layer.1.EncDecAttention.k",
+        "dec.blk.{bid}.cross_attn_v": "decoder.block.{bid}.layer.1.EncDecAttention.v",
+        "dec.blk.{bid}.cross_attn_o": "decoder.block.{bid}.layer.1.EncDecAttention.o",
+        "dec.blk.{bid}.cross_attn_norm": "decoder.block.{bid}.layer.1.layer_norm",
+        "dec.blk.{bid}.ffn_gate": "decoder.block.{bid}.layer.2.DenseReluDense.wi_0",
+        "dec.blk.{bid}.ffn_up": "decoder.block.{bid}.layer.2.DenseReluDense.wi_1",
+        "dec.blk.{bid}.ffn_down": "decoder.block.{bid}.layer.2.DenseReluDense.wo",
+        "dec.blk.{bid}.ffn_norm": "decoder.block.{bid}.layer.2.layer_norm",
+        "dec.output_norm": "decoder.final_layer_norm",
+        "enc.blk.{bid}.attn_q": "encoder.block.{bid}.layer.0.SelfAttention.q",
+        "enc.blk.{bid}.attn_k": "encoder.block.{bid}.layer.0.SelfAttention.k",
+        "enc.blk.{bid}.attn_v": "encoder.block.{bid}.layer.0.SelfAttention.v",
+        "enc.blk.{bid}.attn_o": "encoder.block.{bid}.layer.0.SelfAttention.o",
+        "enc.blk.{bid}.attn_rel_b": "encoder.block.{bid}.layer.0.SelfAttention.relative_attention_bias",
+        "enc.blk.{bid}.attn_norm": "encoder.block.{bid}.layer.0.layer_norm",
+        "enc.blk.{bid}.ffn_gate": "encoder.block.{bid}.layer.1.DenseReluDense.wi_0",
+        "enc.blk.{bid}.ffn_up": "encoder.block.{bid}.layer.1.DenseReluDense.wi_1",
+        "enc.blk.{bid}.ffn_down": "encoder.block.{bid}.layer.1.DenseReluDense.wo",
+        "enc.blk.{bid}.ffn_norm": "encoder.block.{bid}.layer.1.layer_norm",
+        "enc.output_norm": "encoder.final_layer_norm",
+        "output.weight": "lm_head.weight",
+    },
+    "t5encoder": {
+        "token_embd": "shared",
+        "enc.blk.{bid}.attn_q": "encoder.block.{bid}.layer.0.SelfAttention.q",
+        "enc.blk.{bid}.attn_k": "encoder.block.{bid}.layer.0.SelfAttention.k",
+        "enc.blk.{bid}.attn_v": "encoder.block.{bid}.layer.0.SelfAttention.v",
+        "enc.blk.{bid}.attn_o": "encoder.block.{bid}.layer.0.SelfAttention.o",
+        "enc.blk.{bid}.attn_rel_b": "encoder.block.{bid}.layer.0.SelfAttention.relative_attention_bias",
+        "enc.blk.{bid}.attn_norm": "encoder.block.{bid}.layer.0.layer_norm",
+        "enc.blk.{bid}.ffn_gate": "encoder.block.{bid}.layer.1.DenseReluDense.wi_0",
+        "enc.blk.{bid}.ffn_up": "encoder.block.{bid}.layer.1.DenseReluDense.wi_1",
+        "enc.blk.{bid}.ffn_down": "encoder.block.{bid}.layer.1.DenseReluDense.wo",
+        "enc.blk.{bid}.ffn_norm": "encoder.block.{bid}.layer.1.layer_norm",
+        "enc.output_norm": "encoder.final_layer_norm",
+    },
+    "stablelm": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
+    "gpt2": {
+        "token_embd": "transformer.wte",
+        "blk": "transformer.h",
+        "position_embd": "transformer.wpe",
+        "output_norm": "transformer.ln_f",
+        "attn_norm": "ln_1",
+        "attn_qkv": "attn.c_attn",
+        "attn_output.weight": "attn.c_proj.weight",
+        "attn_output.bias": "attn.c_proj.bias",
+        "ffn_norm": "ln_2",
+        "ffn_up": "mlp.c_fc",
+        "ffn_down": "mlp.c_proj",
+    },
+    "starcoder2": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.c_fc",
+        "ffn_down": "mlp.c_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
+    "mamba": {
+        "token_embd": "backbone.embeddings",
+        "blk": "backbone.layers",
+        "ssm_a": "mixer.A_log",
+        "ssm_conv1d": "mixer.conv1d",
+        "ssm_in": "mixer.in_proj",
+        "ssm_out": "mixer.out_proj",
+        "ssm_x": "mixer.x_proj",
+        "ssm_dt": "mixer.dt_proj",
+        "attn_norm": "norm",
+        "output_norm": "backbone.norm_f",
+        "output.weight": "lm_head.weight",
+    },
 }
 
 
@@ -244,6 +344,58 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count": "n_head",
         "vocab_size": "vocab_size",
         "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "t5": {
+        "context_length": "n_positions",
+        "block_count": "num_layers",
+        "feed_forward_length": "d_ff",
+        "embedding_length": "d_model",
+        "attention.key_length": "d_kv",
+        "attention.head_count": "num_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+        "attention.relative_buckets_count": "relative_attention_num_buckets",
+        "decoder_start_token_id": "decoder_start_token_id",
+        "vocab_size": "vocab_size",
+    },
+    "stablelm": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "gpt2": {
+        "block_count": "n_layer",
+        "context_length": "n_ctx",
+        "embedding_length": "n_embd",
+        "feed_forward_length": "feed_forward_length",
+        "attention.head_count": "n_head",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "starcoder2": {
+        "block_count": "num_hidden_layers",
+        "context_length": "max_position_embeddings",
+        "embedding_length": "hidden_size",
+        "feed_forward_length": "intermediate_size",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "norm_epsilon",
+    },
+    "mamba": {
+        "vocab_size": "vocab_size",
+        "context_length": "max_position_embeddings",
+        "embedding_length": "hidden_size",
+        "attention.layer_norm_rms_epsilon": "layer_norm_epsilon",
+        "block_count": "num_hidden_layers",
+        "ssm.conv_kernel": "conv_kernel",
+        "ssm.state_size": "state_size",
+        "ssm.time_step_rank": "time_step_rank",
+        "ssm.inner_size": "intermediate_size",
     },
 }
 
@@ -554,7 +706,7 @@ class GGUFPhi3Converter(LlamaConverter):
         return tokenizer
 
 
-class GGUFBloomConverter(GPT2Converter):
+class GGUFGPTConverter(GPT2Converter):
     def __init__(self, tokenizer_dict):
         self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
         self.additional_kwargs = {}
@@ -566,13 +718,81 @@ class GGUFBloomConverter(GPT2Converter):
         return tokenizer
 
 
+class GGUFT5Converter(T5Converter):
+    def __init__(self, tokenizer_dict):
+        # set dummy data to avoid unnecessary merges calculation
+        tokenizer_dict["merges"] = ["dummy text"]
+
+        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.token2id = {k: v for v, k in enumerate(self.proto.tokens)}
+        self.original_tokenizer = self.proto
+        self.additional_kwargs = {}
+
+    def vocab(self, proto):
+        return list(zip(proto.tokens, proto.scores))
+
+    def normalizer(self, proto):
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.token2id["</s>"]),
+            ],
+        )
+
+    def converted(self) -> Tokenizer:
+        vocab_scores = self.vocab(self.proto)
+        tokenizer = Tokenizer(
+            Unigram(
+                vocab_scores,
+                unk_id=self.proto.unk_token_id,
+                byte_fallback=False,
+            )
+        )
+
+        # Tokenizer assemble
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+        post_processor = self.post_processor()
+        if post_processor:
+            tokenizer.post_processor = post_processor
+
+        return tokenizer
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
-    "bloom": GGUFBloomConverter,
-    "falcon": GGUFBloomConverter,
+    "bloom": GGUFGPTConverter,
+    "falcon": GGUFGPTConverter,
+    "stablelm": GGUFGPTConverter,
+    "gpt2": GGUFGPTConverter,
+    "starcoder2": GGUFGPTConverter,
+    "t5": GGUFT5Converter,
+    "mamba": GGUFGPTConverter,
 }
 
 
