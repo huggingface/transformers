@@ -833,6 +833,7 @@ class AriaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
 
     @property
@@ -1151,7 +1152,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         config (AriaConfig): Configuration object for the model.
     """
 
-    _supports_sdpa = False
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)

@@ -273,15 +273,8 @@ class AriaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA (Scaled Dot Product Attention) or not.
-        """
-        return self.language_model._supports_sdpa
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -2258,7 +2251,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         config (AriaConfig): Configuration object for the model.
     """
 
-    _supports_sdpa = False
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
