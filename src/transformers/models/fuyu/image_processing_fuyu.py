@@ -99,13 +99,25 @@ class FuyuBatchFeature(BatchFeature):
         def _safe_convert_tensor(elem):
             try:
                 return _convert_tensor(elem)
-            except:  # noqa E722
+            except RuntimeError as e:
+                logger.error(f"A RuntimeError has occurred: {e}")
+                raise RuntimeError(f"""
+                A runtime error has occurred: {e}
+                This could be due to numpy version mismatches, check your version
+                against the transformers accepted numpy verions.
+                """)
+            except ValueError as e:   # noqa E722
+                logger.error(f"A ValueError has occurred: {e}")
                 if key == "overflowing_values":
                     raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
                 raise ValueError(
                     "Unable to create tensor, you should probably activate padding "
                     "with 'padding=True' to have batched tensors with the same length."
                 )
+            except Exception as e:
+                raise Exception(f"""
+                Something went wrong with converting elements to tensors that was not a runtime or value error: {e}
+                """) from e
 
         # Do the tensor conversion in batch
         for key, value in self.items():
