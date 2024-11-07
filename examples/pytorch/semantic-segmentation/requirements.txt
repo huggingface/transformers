@@ -3,4 +3,4 @@ torch >= 1.3
 accelerate
 evaluate
 Pillow
-albumentations
+albumentations >= 1.4.16

@@ -889,3 +889,72 @@ used by hundreds and possibly even thousands of developers and researchers. You 
 your achievements with the community.
 
 **You have made another model that is super easy to access for everyone in the community! 🤯**
+
+## Model additions and their timeline: when is a model added to transformers?
+
+We aim for `transformers` to have support for new model architectures and checkpoints as early as possible:
+availability can range from day-0 (and hour-0) releases for some models, to a few days/weeks for others.
+
+The availability of this is usually up to the model contributors, as well as how excited the community is for the
+architecture.
+
+We can split the model architecture possibilities in four sections:
+- Day-0 integration
+- Same-week integration
+- Post-release integration
+- Hub-first release
+
+Let's dive into each of these and see how we (the transformers team) can help you contribute your architecture and get
+your architecture to be very easily used by all members of the community.
+
+### Day-0 integration
+
+For a day-0 integration to work, we'll usually want to work hand-in-hand with you directly. In order to keep your
+architecture private until your checkpoints and release are ready, we'll work together in a private fork of
+transformers.
+
+If you plan on having a transformers-first release, this is a great option: we run CI ahead of time, ensure the
+documentation is clear, and we aim to optimize your model as much as possible (providing quantization, optimizing it
+with Flash-Attention/SDPA, optimizing the KV cache, etc). 
+
+We can also lend you a hand in adding the model, reviewing it early, and help you make sure the `transformers` 
+API works as expected!
+
+If this is the path you wish to go with, we ask for you to reach out in advance, especially if the architecture is 
+particularly novel (at least a few days, but a few weeks will enable the absolute best integration). In order to reach
+out, please contact transformers@huggingface.co 🤗.
+
+### Same-week integration
+
+A same-week integration usually happens when model authors do not reach out; but we see significant community
+requests.
+
+In order to specify you'd like for us to integrate a specific model, we'll redirect you to our
+[issue tracker](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&projects=&template=new-model-addition.yml)
+where you can request a specific model.
+
+The more activity on the issue, the faster/more likely we are to integrate the model!
+
+### Post-release integration
+
+A post-release integration usually happens when there has not been sufficient activity/requests to warrant a same-week
+integration, or that we lack the sufficient bandwidth to integrate it.
+
+We very gladly welcome community contributions in those instances; more than half of the library was contributed
+by contributors external to Hugging Face. If this is something that is interesting to you, we recommend that you look
+at our [open issues tagged with "New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22).
+
+We recommend you try your hand at a heavily requested model as this will multiply the impact of your contribution.
+We'll be there to help you in case that's your first contribution 🤗.
+
+### Code-on-Hub release
+
+Finally, transformers has a "remote-code" possibility, in which contributions are not made within the toolkit, but on
+the Hub. This can be particularly interesting for groups that are using `transformers` as a backbone for their project,
+but don't have the bandwidth to contribute the model to transformers directly.
+
+In case the model is very successful, then we'll very likely end up integrating it in `transformers` at the end - as this
+provides better documentation, CI, maintenance, and optimizations - but this remains a great way to make your model
+accessible day-0 with minimal friction.
+
+This guide is a great starting point for a Hub-first release: [Custom models](./custom_models)

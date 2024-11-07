@@ -15,21 +15,22 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoProcessor, Blip2Processor, BlipImageProcessor, GPT2Tokenizer, PreTrainedTokenizerFast
 
 
 @require_vision
-class Blip2ProcessorTest(unittest.TestCase):
+class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Blip2Processor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -48,17 +49,6 @@ class Blip2ProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     def test_save_load_pretrained_additional_features(self):
         processor = Blip2Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
@@ -104,7 +94,7 @@ class Blip2ProcessorTest(unittest.TestCase):
         encoded_tok = tokenizer(input_str, return_token_type_ids=False)
 
         for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
+            self.assertListEqual(encoded_tok[key], encoded_processor[key][0])
 
     def test_processor(self):
         image_processor = self.get_image_processor()
@@ -117,7 +107,7 @@ class Blip2ProcessorTest(unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -148,4 +138,4 @@ class Blip2ProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])

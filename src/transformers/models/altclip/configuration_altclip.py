@@ -14,9 +14,6 @@
 # limitations under the License.
 """AltCLIP model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -199,6 +196,7 @@ class AltCLIPVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "altclip_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -232,24 +230,6 @@ class AltCLIPVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from AltCLIPConfig
-        if config_dict.get("model_type") == "altclip":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class AltCLIPConfig(PretrainedConfig):
@@ -298,6 +278,7 @@ class AltCLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "altclip"
+    sub_configs = {"text_config": AltCLIPTextConfig, "vision_config": AltCLIPVisionConfig}
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=768, logit_scale_init_value=2.6592, **kwargs
@@ -398,3 +379,6 @@ class AltCLIPConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+
+__all__ = ["AltCLIPTextConfig", "AltCLIPVisionConfig", "AltCLIPConfig"]

@@ -36,5 +36,4 @@ Please inspect the code of the tools before passing them to the Agent to protect
 
 ## Reporting a Vulnerability
 
-🤗 Please feel free to submit vulnerability reports to our private bug bounty program at https://hackerone.com/hugging_face. You'll need to request access to the program by emailing security@huggingface.co.
-Note that you'll need to be invited to our program, so send us a quick email at security@huggingface.co if you've found a vulnerability.
+Feel free to submit vulnerability reports to [security@huggingface.co](mailto:security@huggingface.co), where someone from the HF security team will review and recommend next steps. If reporting a vulnerability specific to open source, please note [Huntr](https://huntr.com) is a vulnerability disclosure program for open source software.

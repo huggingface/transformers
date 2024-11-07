@@ -20,6 +20,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
@@ -145,7 +146,7 @@ FUYU_INPUTS_DOCSTRING = r"""
     "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
     FUYU_START_DOCSTRING,
 )
-class FuyuForCausalLM(FuyuPreTrainedModel):
+class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -182,15 +183,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
     def tie_weights(self):
         return self.language_model.tie_weights()
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        # TODO: config.vocab_size is deprecated and will be removed in v4.43.
-        # `resize_token_embeddings` should work from `modeling_utils.py``
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
 
     def gather_continuous_embeddings(
         self,
@@ -254,8 +246,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+                config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
 
         Returns:
 
@@ -273,7 +265,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = "Generate a coco-style caption.\n"
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
@@ -352,6 +344,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         image_patches_indices=None,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         if past_key_values:
             input_ids = input_ids[:, -1:]
 

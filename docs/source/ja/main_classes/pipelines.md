@@ -481,6 +481,12 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
+### ImageTextToTextPipeline
+
+[[autodoc]] ImageTextToTextPipeline
+    - __call__
+    - all
+
 ### VisualQuestionAnsweringPipeline
 
 [[autodoc]] VisualQuestionAnsweringPipeline

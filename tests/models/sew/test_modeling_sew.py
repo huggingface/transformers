@@ -420,6 +420,7 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 uniform_init_parms = [
+                    "conv.parametrizations.weight",
                     "conv.weight",
                     "masked_spec_embed",
                     "quantizer.weight_proj.weight",

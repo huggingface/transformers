@@ -9,6 +9,8 @@ jobs:
     name: Close Stale Issues
     if: github.repository == 'huggingface/transformers'
     runs-on: ubuntu-22.04
+    permissions:
+      issues: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
