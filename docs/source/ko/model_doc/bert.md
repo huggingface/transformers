@@ -66,7 +66,7 @@ model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16
 
 로컬 벤치마크 (A100-80GB, CPUx12, RAM 96.6GB, PyTorch 2.2.0, OS Ubuntu 22.04)에서 `float16`을 사용해 학습 및 추론을 수행한 결과, 다음과 같은 속도 향상이 관찰되었습니다.
 
-#### 학습
+#### 학습 [[Training]]
 
 |batch_size|seq_len|Time per batch (eager - s)|Time per batch (sdpa - s)|Speedup (%)|Eager peak mem (MB)|sdpa peak mem (MB)|Mem saving (%)|
 |----------|-------|--------------------------|-------------------------|-----------|-------------------|------------------|--------------|
