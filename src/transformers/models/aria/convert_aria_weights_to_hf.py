@@ -97,12 +97,12 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
 
     config = AutoConfig.from_pretrained(text_model_id)
     config.vision_config.hidden_size = 1152
-    config.vision_config.attention_heads=16
+    config.vision_config.attention_heads = 16
     config.pad_token_id = 2
     config.image_token_index = 9
     config.auto_map = {
         "AutoConfig": "modeling_aria.AriaConfig",
-        "AutoModelForCausalLM": "modeling_aria.AriaForConditionalGeneration"
+        "AutoModelForCausalLM": "modeling_aria.AriaForConditionalGeneration",
     }
 
     config.pad_token_id = 32001

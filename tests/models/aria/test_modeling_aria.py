@@ -403,9 +403,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "rhymes-ai/Aria"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = AriaForConditionalGeneration.from_pretrained(
-            model_id, load_in_4bit=True, attn_implementation="eager"
-        )
+        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True, attn_implementation="eager")
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
         prompts = [

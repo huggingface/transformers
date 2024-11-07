@@ -4,14 +4,13 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import inspect
 from typing import Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
 )
-from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import (
     PreTokenizedInput,
     TensorType,
@@ -24,19 +23,21 @@ from .image_processing_aria import AriaImageProcessor
 
 logger = logging.get_logger(__name__)
 
+
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding":  False,  
-            "truncation":  None,
-            "max_length":  None,
+            "padding": False,
+            "truncation": None,
+            "max_length": None,
         },
         "images_kwargs": {
-            "max_image_size":  980,
-            "split_image":  False,
+            "max_image_size": 980,
+            "split_image": False,
         },
-        "return_tensors":  TensorType.PYTORCH,
+        "return_tensors": TensorType.PYTORCH,
     }
+
 
 class AriaProcessor(ProcessorMixin):
     """

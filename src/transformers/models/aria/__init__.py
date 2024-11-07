@@ -54,9 +54,9 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_aria import (
-            AriaTextForCausalLM,
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
+            AriaTextForCausalLM,
             AriaTextModel,
         )
         from .processing_aria import AriaProcessor

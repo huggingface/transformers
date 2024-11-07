@@ -11,9 +11,9 @@ from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, select_best_resolution
 from ...image_transforms import (
     convert_to_rgb,
+    pad,
     resize,
     to_channel_dimension_format,
-    pad,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -23,18 +23,16 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import (
-    PaddingStrategy,
     PreTokenizedInput,
     TensorType,
     TextInput,
-    TruncationStrategy,
 )
 from ...utils import (
     logging,
 )
-from ...utils.import_utils import is_vision_available, is_torch_available
+from ...utils.import_utils import is_torch_available, is_vision_available
 from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -89,6 +87,7 @@ def sequential_gemm(token_states, expert_weights, tokens_per_expert):
         output[start:end] = out
     return output
 
+
 if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
     logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM")
     experts_gemm = sequential_gemm
@@ -98,6 +97,7 @@ else:
         experts_gemm = sequential_gemm
     else:
         from grouped_gemm.ops import gmm as experts_gemm
+
 
 class AriaTextConfig(LlamaConfig):
     """
@@ -321,7 +321,7 @@ class AriaProjector(nn.Module):
         self.layer_norm = nn.LayerNorm(self.in_features)
         self.feed_forward = AriaProjectorMLP(self.in_features, self.hidden_features, self.output_dim)
 
-    def forward(self, key_value_states: torch.Tensor, attn_mask: Optional[torch.Tensor]=None):
+    def forward(self, key_value_states: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
         """
         Forward pass of the Projector module.
 
@@ -335,7 +335,9 @@ class AriaProjector(nn.Module):
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
         if num_patches not in self.patch_to_query_dict.keys():
-            raise KeyError(f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}.")
+            raise KeyError(
+                f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
+            )
         query_num = self.patch_to_query_dict[num_patches]
 
         queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, 1, 1)
@@ -349,6 +351,7 @@ class AriaProjector(nn.Module):
         out = self.feed_forward(self.layer_norm(attention_out))
 
         return out
+
 
 # Copied from models.llava_next.image_processing_llava_next.py
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
@@ -454,12 +457,27 @@ class AriaImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean
         self.image_std = image_std
         if split_ratio is None:
-           self.split_ratio = [
-               (1, 2), (1, 3), (1, 4), (1, 5), (1, 6),
-               (1, 7), (1, 8), (2, 4), (2, 3), (2, 2),
-               (2, 1), (3, 1), (3, 2), (4, 1), (4, 2),
-               (5, 1), (6, 1), (7, 1), (8, 1),
-           ]
+            self.split_ratio = [
+                (1, 2),
+                (1, 3),
+                (1, 4),
+                (1, 5),
+                (1, 6),
+                (1, 7),
+                (1, 8),
+                (2, 4),
+                (2, 3),
+                (2, 2),
+                (2, 1),
+                (3, 1),
+                (3, 2),
+                (4, 1),
+                (4, 2),
+                (5, 1),
+                (6, 1),
+                (7, 1),
+                (8, 1),
+            ]
         else:
             self.split_ratio = split_ratio
 
@@ -542,7 +560,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
                 if do_normalize:
                     crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std)
-    
+
                 # Switch to rgb channel first
                 crop_image_padded = np.transpose(crop_image_padded, (2, 0, 1))
                 pixel_values.append(crop_image_padded)
@@ -606,19 +624,21 @@ class AriaImageProcessor(BaseImageProcessor):
         ]
         return patches
 
+
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding":  False,  
-            "truncation":  None,
-            "max_length":  None,
+            "padding": False,
+            "truncation": None,
+            "max_length": None,
         },
         "images_kwargs": {
-            "max_image_size":  980,
-            "split_image":  False,
+            "max_image_size": 980,
+            "split_image": False,
         },
-        "return_tensors":  TensorType.PYTORCH,
+        "return_tensors": TensorType.PYTORCH,
     }
+
 
 class AriaProcessor(ProcessorMixin):
     """
@@ -1151,9 +1171,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self.vision_tower = AutoModel.from_config(
             config.vision_config, attn_implementation=config._attn_implementation
         )
-        self.multi_modal_projector = AriaProjector(
-            config
-        )
+        self.multi_modal_projector = AriaProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
@@ -1326,10 +1344,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.text_config.vocab_size,
-                **loss_kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **loss_kwargs
             )
 
         if not return_dict:

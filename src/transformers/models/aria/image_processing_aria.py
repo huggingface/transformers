@@ -26,11 +26,11 @@ from ...image_utils import (
 from ...tokenization_utils import (
     TensorType,
 )
-from ...utils.import_utils import is_vision_available, is_torch_available
+from ...utils.import_utils import is_torch_available, is_vision_available
 
 
 if is_vision_available():
-    from PIL import Image, ImageOps
+    from PIL import Image
 
 if is_torch_available():
     import torch

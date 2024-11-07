@@ -6309,9 +6309,9 @@ if TYPE_CHECKING:
             AltCLIPVisionModel,
         )
         from .models.aria import (
-            AriaTextForCausalLM,
             AriaForConditionalGeneration,
             AriaPreTrainedModel,
+            AriaTextForCausalLM,
             AriaTextModel,
         )
         from .models.audio_spectrogram_transformer import (
