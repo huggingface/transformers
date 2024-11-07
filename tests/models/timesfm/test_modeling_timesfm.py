@@ -87,7 +87,7 @@ class TimesFMModelTester:
         self.batch_size = batch_size
         self.initializer_factor = initializer_factor
         self.is_training = is_training
-        
+
         # The size of test input
         self.seq_length = context_len // patch_len
         self.hidden_size = model_dim

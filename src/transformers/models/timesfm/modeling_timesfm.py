@@ -33,7 +33,15 @@ import torch.nn as nn
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from .configuration_timesfm import TimesFMConfig
-from .timesfm_layers import *
+from .timesfm_layers import (
+    PositionalEmbedding,
+    ResidualBlock,
+    RMSNorm,
+    StackedDecoder,
+    masked_mean_std,
+    moving_average,
+    shift_padded_seq,
+)
 
 
 @dataclass
@@ -105,6 +113,9 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
             self.position_emb = PositionalEmbedding(
                 embedding_dims=self.config.model_dim,
             )
+        
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def _forward_transform(
         self, inputs: torch.Tensor, patched_pads: torch.Tensor
@@ -321,6 +332,9 @@ class TimesFMModel(TimesFMPreTrainedModel):
         self.num_heads = config.num_heads
         self.batch_size = config.batch_size
         self._horizon_start = self.context_len - self.input_patch_len
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def _preprocess(
         self, inputs: Sequence[np.array], freq: Sequence[int]
