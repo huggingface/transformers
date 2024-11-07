@@ -1090,6 +1090,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
+        version (`Optional`, *optional*): <fill_docstring>
     """
 
     QUANTIZATION_NAME = "compressed-tensors"
