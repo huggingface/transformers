@@ -24,7 +24,7 @@ import yaml
 from tokenizers import Tokenizer
 
 from transformers import Olmo1124Config, Olmo1124ForCausalLM
-from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
+from transformers.models.gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
 
 
 """
@@ -220,7 +220,7 @@ def _write_tokenizer(
     checkpoint_dir: str,
     input_tokenizer_path: Path | None,
 ) -> None:
-    print(f"Saving a {GPTNeoXTokenizerFast.__name__} to {output_path}.")
+    print(f"Saving a {GPT2TokenizerFast.__name__} to {output_path}.")
 
     if input_tokenizer_path is not None:
         base_tokenizer = Tokenizer.from_file(str(input_tokenizer_path))
@@ -237,12 +237,10 @@ def _write_tokenizer(
     eos_token_id = config.eos_token_id if config.eos_token_id is not None else base_tokenizer.get_vocab_size() - 1
     pad_token_id = config.pad_token_id if config.pad_token_id is not None else eos_token_id
 
-    tokenizer = GPTNeoXTokenizerFast(
+    tokenizer = GPT2TokenizerFast(
         tokenizer_object=base_tokenizer,
         eos_token=base_tokenizer.decode([eos_token_id], skip_special_tokens=False),
         pad_token=base_tokenizer.decode([pad_token_id], skip_special_tokens=False),
-        unk_token=None,
-        bos_token=None,
     )
 
     tokenizer.save_pretrained(output_path)
