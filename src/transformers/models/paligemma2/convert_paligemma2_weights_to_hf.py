@@ -71,7 +71,7 @@ VARIANT_CONFIGS = {
         "num_key_value_heads": 16,
         "num_attention_heads": 32,
         "head_dim": 128,
-        "query_pre_attention_scalar": 4608 // 32 # scaling is different for the 28b
+        "query_pre_attn_scalar": 4608 // 32 # scaling is different for the 28b
     },
 }
 
