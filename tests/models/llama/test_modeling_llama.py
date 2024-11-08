@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch LLaMA model."""
 
-import gc
 import tempfile
 import unittest
 
@@ -25,7 +24,7 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    backend_empty_cache,
+    cleanup,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -891,8 +890,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 @require_torch_accelerator
 class Mask4DTestHard(unittest.TestCase):
     def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"

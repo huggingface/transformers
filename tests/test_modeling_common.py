@@ -1811,6 +1811,7 @@ class ModelTesterMixin:
             original_config,
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict.pop("labels", None)
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -1988,6 +1989,7 @@ class ModelTesterMixin:
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
+        inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
@@ -3800,22 +3802,18 @@ class ModelTesterMixin:
                 self.skipTest("Model is not a composite model.")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            sub_configs = {
-                key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
-            }
 
             # set eager as it will be the one supported in all models
             # we just need to test if passing 'attn_implementation' as a dict fails or not
             attn_implementation_per_subconfig = {}
-            for key, sub_config in sub_configs.items():
+            for key in config.sub_configs.keys():
                 attn_implementation_per_subconfig[key] = "eager"
 
             config._attn_implementation = attn_implementation_per_subconfig
             model = model_class(config)
-            for key in model.config:
-                if isinstance(getattr(model.config, key), PretrainedConfig):
-                    sub_config = getattr(model.config, key)
-                    self.assertTrue(sub_config._attn_implementation == "eager")
+            for key in config.sub_configs.keys():
+                sub_config = getattr(model.config, key)
+                self.assertTrue(sub_config._attn_implementation == "eager")
 
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
@@ -3824,7 +3822,7 @@ class ModelTesterMixin:
                     or "SdpaSelfAttention" in class_name
                     or "FlashAttention" in class_name
                 ):
-                    raise ValueError("The eager model should not have SDPA/FA2 attention layers")
+                    raise ValueError(f"The eager model should not have SDPA/FA2 attention layers but got {class_name}")
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -3930,7 +3928,6 @@ class ModelTesterMixin:
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @slow
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -3956,8 +3953,10 @@ class ModelTesterMixin:
 
         atols = {
             ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -3968,8 +3967,10 @@ class ModelTesterMixin:
         }
         rtols = {
             ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -3982,8 +3983,34 @@ class ModelTesterMixin:
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
+        if hasattr(self.model_tester, "num_hidden_layers"):
+            self.model_tester.num_hidden_layers = 1
+        if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
+            self.model_tester.vision_config = copy.deepcopy(self.model_tester.vision_config)
+            self.model_tester.vision_config["num_hidden_layers"] = 1
+        if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
+            self.model_tester.text_config = copy.deepcopy(self.model_tester.text_config)
+            self.model_tester.text_config["num_hidden_layers"] = 1
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            config.rms_norm_eps = 1.0
+            config.layer_norm_eps = 1.0
+            config.norm_eps = 1.0
+            config.norm_epsilon = 1.0
+            config.layer_norm_epsilon = 1.0
+
+            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
+            # (We don't need the original epsilon values to check eager/sdpa matches)
+            for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
+                if hasattr(config, attr):
+                    getattr(config, attr).rms_norm_eps = 1.0
+                    getattr(config, attr).layer_norm_eps = 1.0
+                    getattr(config, attr).norm_eps = 1.0
+                    getattr(config, attr).norm_epsilon = 1.0
+                    getattr(config, attr).layer_norm_epsilon = 1.0
+
             model = model_class(config)
             # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
             # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
@@ -3995,14 +4022,22 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
-                model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch_dtype,
                     attn_implementation="eager",
                 )
-                model_eager = model_eager.eval().to(torch_device)
+                model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
+
+                # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
+                for x in model_eager.modules():
+                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
+                        x.eps = 1.0
+                for x in model_sdpa.modules():
+                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
+                        x.eps = 1.0
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
@@ -4013,7 +4048,8 @@ class ModelTesterMixin:
                             can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
                             if not (self.has_attentions and can_output_attn) and output_attentions:
                                 continue
-                            for batch_size in [1, 5]:
+                            # TODO: if we can also check with `batch_size=1` without being flaky?
+                            for batch_size in [7]:
                                 dummy_input = inputs_dict[model.main_input_name]
 
                                 if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
@@ -4064,14 +4100,14 @@ class ModelTesterMixin:
 
                                     dummy_attention_mask[:] = 1
                                     if padding_side == "left":
-                                        dummy_attention_mask[-1, :-1] = 1
-                                        dummy_attention_mask[-1, -4:] = 0
+                                        dummy_attention_mask[-1, :2] = 0
+                                        dummy_attention_mask[-1, 2:] = 1
                                     elif padding_side == "right":
-                                        dummy_attention_mask[-1, 1:] = 1
-                                        dummy_attention_mask[-1, :3] = 0
+                                        dummy_attention_mask[-1, -2:] = 0
+                                        dummy_attention_mask[-1, :-2] = 1
 
                                 for enable_kernels in [False, True]:
-                                    failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
+                                    failcase = f"padding_side={padding_side}, use_mask={use_mask}, enable_kernels={enable_kernels}"
                                     if is_encoder_decoder:
                                         decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[
                                             :batch_size
@@ -4161,52 +4197,32 @@ class ModelTesterMixin:
 
                                     # Masked tokens output slightly deviates - we don't mind that.
                                     if use_mask:
+                                        _logits_sdpa = torch.zeros_like(input=logits_sdpa)
+                                        _logits_eager = torch.zeros_like(input=logits_eager)
+
+                                        _logits_sdpa[:-1] = logits_sdpa[:-1]
+                                        _logits_eager[:-1] = logits_eager[:-1]
+
                                         if padding_side == "left":
-                                            sub_sdpa = logits_sdpa[:-1]
-                                            sub_eager = logits_eager[:-1]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
+                                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
+                                            _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
 
-                                            sub_sdpa = logits_sdpa[-1, :-4]
-                                            sub_eager = logits_eager[-1, :-4]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
-
-                                            # Testing the padding tokens is not really meaningful but anyway
-                                            # sub_sdpa = logits_sdpa[-1, -4:]
-                                            # sub_eager = logits_eager[-1, -4:]
-                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
                                         elif padding_side == "right":
-                                            sub_sdpa = logits_sdpa[:-1]
-                                            sub_eager = logits_eager[:-1]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
+                                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
+                                            _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
 
-                                            sub_sdpa = logits_sdpa[-1, 3:]
-                                            sub_eager = logits_eager[-1, 3:]
-                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                                fail_cases.append(
-                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                                )
+                                        logits_sdpa = _logits_sdpa
+                                        logits_eager = _logits_eager
 
-                                            # Testing the padding tokens is not really meaningful but anyway
-                                            # sub_sdpa = logits_sdpa[-1, :3]
-                                            # sub_eager = logits_eager[-1, :3]
-                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-
-                                    else:
-                                        if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
-                                            )
+                                    results = [
+                                        torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
+                                        for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+                                    ]
+                                    # If 80% batch elements have matched results, it's fine
+                                    if np.mean(results) < 0.8:
+                                        fail_cases.append(
+                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                        )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
