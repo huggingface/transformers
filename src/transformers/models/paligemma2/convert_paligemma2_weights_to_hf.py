@@ -17,24 +17,23 @@
 import argparse
 import collections
 
+import jax.numpy as jnp
+import ml_dtypes
+import numpy as np
 import torch
-from numpy import load
 
 from transformers import (
     AutoTokenizer,
+    Gemma2Config,
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     PaliGemmaProcessor,
     SiglipImageProcessor,
-    Gemma2Config
 )
 from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
-import numpy as np
-from numpy import load
-import jax.numpy as jnp
-import numpy as np
-import ml_dtypes
+
+
 device = "cuda"  # "cpu"
 
 logging.set_verbosity_info()
@@ -56,7 +55,7 @@ VARIANT_CONFIGS = {
     "9b": {
         "num_positions": 1024,
         "hidden_size": 3584,
-        "num_hidden_layers": 28,
+        "num_hidden_layers": 42,
         "intermediate_size": 14336,
         "num_key_value_heads": 8,
         "num_attention_heads": 16,
@@ -92,7 +91,8 @@ def get_paligemma2_config(variant: str, precision: str):
         num_image_tokens = (image_size**2) // (patch_size**2)
         config["projection_dim"] = variant_config["hidden_size"]
         config["image_token_index"] = 257152
-        text_config = Gemma2Config.from_pretrained('google/gemma-2-2b-it').to_dict()
+        config["num_hidden_layers"] = variant_config["num_hidden_layers"]  # For generate
+        text_config = Gemma2Config.from_pretrained("google/gemma-2-2b-it").to_dict()
         sup_text_config = {
             "model_type": "gemma2",
             "vocab_size": 257152,
@@ -109,7 +109,7 @@ def get_paligemma2_config(variant: str, precision: str):
         text_config.update(sup_text_config)
 
         vision_config = {
-            "num_positions": variant_config['num_positions'], # not useful, to remove
+            "num_positions": variant_config["num_positions"],  # not useful, to remove
             "torch_dtype": precision,
             "image_size": image_size,
             "patch_size": patch_size,
@@ -210,7 +210,7 @@ def slice_state_dict(state_dict, config):
     for i in range(config.text_config.num_hidden_layers):
         # llm_attention_q_einsum[i].shape = (8, 2048, 256)
         # q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        
+
         """
         q shape (8, 2304, 256)
         k shape (4, 2304, 256)
@@ -271,11 +271,11 @@ def slice_state_dict(state_dict, config):
                 else:
                     state_dict[key] = torch.from_numpy(value)
             except:
-                raise ValueError(f"Conversion failed from jax weights. Check your inputs.")
+                raise ValueError("Conversion failed from jax weights. Check your inputs.")
     return state_dict
 
 
-def flatten_nested_dict(params, parent_key="", sep="/", precision:int="float32"):
+def flatten_nested_dict(params, parent_key="", sep="/", precision: int = "float32"):
     items = []
 
     for k, v in params.items():
@@ -285,11 +285,11 @@ def flatten_nested_dict(params, parent_key="", sep="/", precision:int="float32")
         if isinstance(v, collections.abc.MutableMapping):
             items.extend(flatten_nested_dict(v, parent_key=new_key, sep=sep, precision=precision).items())
         else:
-            if precision == 'bfloat16':
+            if precision == "bfloat16":
                 try:
                     v = v.view(ml_dtypes.bfloat16)
                 except:
-                    raise ValueError(f"Conversion failed from bfloat16, check your inputs.")
+                    raise ValueError("Conversion failed from bfloat16, check your inputs.")
             items.append((new_key, v))
     return dict(items)
 
@@ -306,7 +306,7 @@ def convert_paligemma2_checkpoint(
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
     config = get_paligemma2_config(variant, precision=precision)
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     if do_convert_weights:
         tokenizer_id = "google/paligemma-3b-pt-224"  # same tokenizer as paligemma 1
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
@@ -326,7 +326,7 @@ def convert_paligemma2_checkpoint(
         del data
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
-        del config.hidden_size # this key is unused
+        del config.hidden_size  # this key is unused
         model = PaliGemmaForConditionalGeneration(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
@@ -343,7 +343,9 @@ def convert_paligemma2_checkpoint(
         # We add an image token so we resize the model
         model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
         model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))),
+            tuple(
+                (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))
+            ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[257152:] = torch.stack(
@@ -363,6 +365,7 @@ def convert_paligemma2_checkpoint(
             .to(device)
             .eval()
         )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
