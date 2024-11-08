@@ -422,7 +422,7 @@ trainer.train()
 
 لاحظ أن تحسين الطبقة تجريبي إلى حد ما ولا يدعم DDP (Distributed Data Parallel)، وبالتالي يمكنك تشغيل التعليمات البرمجية  للتدريب على وحدة معالجة الرسومات (GPU) واحدة فقط. يرجى الاطلاع على [هذا القسم المناسب](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory) لمزيد من التفاصيل. قد لا تدعم الميزات الأخرى مثل تقليم التدرجات أو DeepSpeed، إلخ. من الصندوق. يرجى [تقديم تقرير عن المشكلة على GitHub](https://github.com/huggingface/transformers/issues) إذا واجهتك مثل هذه المشكلة.
 
-## محسنات LOMO
+### محسنات LOMO
 
 تم تقديم مُحسِّنات LOMO في [التدريب على المعلمات الكاملة لنماذج اللغة الكبيرة باستخدام موارد محدودة](https://hf.co/papers/2306.09782) و [AdaLomo: تحسين ذاكرة منخفضة بمعدل تعلم متكيف](https://hf.co/papers/2310.10195).
 يتكون كلاهما من طريقة فعالة لضبط المعلمات الكاملة. تدمج محسنات LOMO حساب الاشتقاق وتحديث المعلمات في خطوة واحدة لتقليل استخدام الذاكرة. محسنات LOMO المدعومة هي `"lomo"` و `"adalomo"`. أولاً قم بتثبيت LOMO من pypi `pip install lomo-optim` أو قم بتثبيته من المصدر باستخدام `pip install git+https://github.com/OpenLMLab/LOMO.git`.
