@@ -11,9 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import inspect
 import warnings
 from typing import Any, Dict, List, Optional, Union
+from peft.tuners.tuners_utils import BaseTunerLayer
+
+from packaging import version
 
 from ..utils import (
     check_peft_version,
@@ -77,6 +81,7 @@ class PeftAdapterMixin:
         offload_index: Optional[int] = None,
         peft_config: Dict[str, Any] = None,
         adapter_state_dict: Optional[Dict[str, "torch.Tensor"]] = None,
+        low_cpu_mem_usage: bool = False,
         adapter_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
@@ -98,7 +103,7 @@ class PeftAdapterMixin:
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 
@@ -129,11 +134,26 @@ class PeftAdapterMixin:
             adapter_state_dict (`Dict[str, torch.Tensor]`, *optional*):
                 The state dict of the adapter to load. This argument is used in case users directly pass PEFT state
                 dicts
+            low_cpu_mem_usage (`bool`, *optional*, defaults to `False`):
+                Reduce memory usage while loading the PEFT adapter. This should also speed up the loading process.
+                Requires PEFT version 0.13.0 or higher.
             adapter_kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to the `from_pretrained` method of the adapter config and
                 `find_adapter_config_file` method.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
+
+        # peft only supports low_cpu_mem_usage starting from v0.13.0
+        peft_load_kwargs = {}
+        if low_cpu_mem_usage:
+            min_version_lcmu = "0.13.0"
+            if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
+                peft_load_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
+            else:
+                raise ValueError(
+                    "The version of PEFT you are using does not support `low_cpu_mem_usage` yet, "
+                    f"please install PEFT >= {min_version_lcmu}."
+                )
 
         adapter_name = adapter_name if adapter_name is not None else "default"
         if adapter_kwargs is None:
@@ -192,7 +212,7 @@ class PeftAdapterMixin:
             )
 
         # Create and add fresh new adapters into the model.
-        inject_adapter_in_model(peft_config, self, adapter_name)
+        inject_adapter_in_model(peft_config, self, adapter_name, **peft_load_kwargs)
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
@@ -211,15 +231,33 @@ class PeftAdapterMixin:
             processed_adapter_state_dict[new_key] = value
 
         # Load state dict
-        incompatible_keys = set_peft_model_state_dict(self, processed_adapter_state_dict, adapter_name)
+        incompatible_keys = set_peft_model_state_dict(
+            self, processed_adapter_state_dict, adapter_name, **peft_load_kwargs
+        )
 
         if incompatible_keys is not None:
-            # check only for unexpected keys
+            err_msg = ""
+            origin_name = peft_model_id if peft_model_id is not None else "state_dict"
+            # Check for unexpected keys.
             if hasattr(incompatible_keys, "unexpected_keys") and len(incompatible_keys.unexpected_keys) > 0:
-                logger.warning(
-                    f"Loading adapter weights from {peft_model_id} led to unexpected keys not found in the model: "
-                    f" {incompatible_keys.unexpected_keys}. "
+                err_msg = (
+                    f"Loading adapter weights from {origin_name} led to unexpected keys not found in the model: "
+                    f"{', '.join(incompatible_keys.unexpected_keys)}. "
                 )
+
+            # Check for missing keys.
+            missing_keys = getattr(incompatible_keys, "missing_keys", None)
+            if missing_keys:
+                # Filter missing keys specific to the current adapter, as missing base model keys are expected.
+                lora_missing_keys = [k for k in missing_keys if "lora_" in k and adapter_name in k]
+                if lora_missing_keys:
+                    err_msg += (
+                        f"Loading adapter weights from {origin_name} led to missing keys in the model: "
+                        f"{', '.join(lora_missing_keys)}"
+                    )
+
+            if err_msg:
+                logger.warning(err_msg)
 
         # Re-dispatch model and hooks in case the model is offloaded to CPU / Disk.
         if (
@@ -481,41 +519,20 @@ class PeftAdapterMixin:
             **dispatch_model_kwargs,
         )
 
-    def delete_adapter_layers(model, adapter_name):
-        from peft.tuners.tuners_utils import BaseTunerLayer
-
-        for module in model.modules():
-            if isinstance(module, BaseTunerLayer):
-                if hasattr(module, "delete_adapter"):
-                    module.delete_adapter(adapter_name)
-                else:
-                    raise ValueError(
-                        "The version of PEFT you are using is not compatible, please use a version that is greater than 0.6.1"
-                    )
-
-        # For transformers integration - we need to pop the adapter from the config
-        if getattr(model, "_hf_peft_config_loaded", False) and hasattr(model, "peft_config"):
-            model.peft_config.pop(adapter_name, None)
-            # In case all adapters are deleted, we need to delete the config
-            # and make sure to set the flag to False
-            if len(model.peft_config) == 0:
-                del model.peft_config
-                model._hf_peft_config_loaded = None
-
     def delete_adapters(self, adapter_names: Union[List[str], str]):
         """
         Delete an adapter's LoRA layers from the underlying model.
-
+    
         Args:
             adapter_names (`Union[List[str], str]`):
                 The names (single string or list of strings) of the adapter to delete.
-
+    
         Example:
-
+    
         ```py
         from diffusers import AutoPipelineForText2Image
         import torch
-
+    
         pipeline = AutoPipelineForText2Image.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
         ).to("cuda")
@@ -525,13 +542,26 @@ class PeftAdapterMixin:
         pipeline.delete_adapters("cinematic")
         ```
         """
-
+    
         if isinstance(adapter_names, str):
             adapter_names = [adapter_names]
-
+    
         for adapter_name in adapter_names:
-            self.delete_adapter_layers(adapter_name)
-
-            # Pop also the corresponding adapter from the config
+            # Delete the adapter's LoRA layers
+            for module in self.model.modules():
+                if isinstance(module, BaseTunerLayer):
+                    if hasattr(module, "delete_adapter"):
+                        module.delete_adapter(adapter_name)
+                    else:
+                        raise ValueError(
+                            "The version of PEFT you are using is not compatible, please use a version that is greater than 0.6.1"
+                        )
+    
+            # Pop the corresponding adapter from the config
             if hasattr(self, "peft_config"):
                 self.peft_config.pop(adapter_name, None)
+    
+                # If all adapters are deleted, remove the config and reset the flag
+                if len(self.peft_config) == 0:
+                    del self.peft_config
+                    self._hf_peft_config_loaded = None
