@@ -380,16 +380,22 @@ class ColPaliProcessor(ProcessorMixin):
         query embeddings (`qs`) and passage embeddings (`ps`). For ColPali, a passage is the
         image of a document page.
 
+        Because the embedding tensors are multi-vector and can thus have different shapes, they
+        should be fed as:
+        (1) a list of tensors, where the i-th tensor is of shape (sequence_length_i, embedding_dim)
+        (2) a single tensor of shape (n_passages, max_sequence_length, embedding_dim) -> usually
+            obtained by padding the list of tensors.
+
         Args:
-            query_embeddings (`List[torch.Tensor]`): List of query embeddings.
-            passage_embeddings (`List[torch.Tensor]`): List of passage embeddings.
+            query_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Query embeddings.
+            passage_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Passage embeddings.
             batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
             output_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): The dtype of the output tensor.
                 If `None`, the dtype of the input embeddings is used.
             output_device (`torch.device` or `str`, *optional*, defaults to "cpu"): The device of the output tensor.
 
         Returns:
-            `torch.Tensor`: A tensor of shape `(len(qs), len(ps))` containing the scores. The score
+            `torch.Tensor`: A tensor of shape `(n_queries, n_passages)` containing the scores. The score
             tensor is saved on the "cpu" device.
         """
 
