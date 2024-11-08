@@ -811,14 +811,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["unk_token"] = unk_token
         if (
             tokenizer_json["pre_tokenizer"] is not None
-            and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
-            or tokenizer_json["pre_tokenizer"]["type"] == "Sequence"
+            and ((tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
+            or tokenizer_json["pre_tokenizer"]["type"] == "Sequence")
             and "pretokenizers" in tokenizer_json["pre_tokenizer"]
             and any(
                 pretokenizer["type"] == "ByteLevel"
                 for pretokenizer in tokenizer_json["pre_tokenizer"]["pretokenizers"]
             )
-        ):
+        )):
             kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
