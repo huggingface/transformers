@@ -2225,6 +2225,13 @@ class Trainer:
 
         use_accelerator_prepare = False
         # prepare using `accelerator` prepare
+        if args.torch_compile and args.torch_compile_backend == "rdu_backend":
+            from torch_rdu.utils.rdu_backend import rdu_backend
+            from torch._dynamo.backends.common import aot_autograd
+
+            # model = torch.compile(model, backend=aot_autograd(fw_compiler=rdu_backend))
+            model = torch.compile(model, backend=rdu_backend, dynamic=False)
+        
         if use_accelerator_prepare:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
@@ -3569,7 +3576,7 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-            
+        # breakpoint()
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
