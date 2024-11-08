@@ -326,8 +326,8 @@
         title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
-      - local: in_translation
-        title: (번역중) BERT
+      - local: model_doc/bert
+        title: BERT
       - local: in_translation
         title: (번역중) BertGeneration
       - local: model_doc/bert-japanese
