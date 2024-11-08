@@ -547,8 +547,7 @@ class PeftAdapterMixin:
             adapter_names = [adapter_names]
     
         for adapter_name in adapter_names:
-            # Delete the adapter's LoRA layers
-            for module in self.model.modules():
+            for module in self.modules():
                 if isinstance(module, BaseTunerLayer):
                     if hasattr(module, "delete_adapter"):
                         module.delete_adapter(adapter_name)
@@ -557,11 +556,11 @@ class PeftAdapterMixin:
                             "The version of PEFT you are using is not compatible, please use a version that is greater than 0.6.1"
                         )
     
-            # Pop the corresponding adapter from the config
-            if hasattr(self, "peft_config"):
+            # For transformers integration - we need to pop the adapter from the config
+            if getattr(self, "_hf_peft_config_loaded", False) and hasattr(self, "peft_config"):
                 self.peft_config.pop(adapter_name, None)
-    
-                # If all adapters are deleted, remove the config and reset the flag
+                # In case all adapters are deleted, we need to delete the config
+                # and make sure to set the flag to False
                 if len(self.peft_config) == 0:
                     del self.peft_config
                     self._hf_peft_config_loaded = None
