@@ -580,9 +580,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     # The small T5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "google-t5/t5-small"
-
     def setUp(self):
         self.model_tester = T5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)

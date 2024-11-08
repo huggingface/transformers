@@ -472,10 +472,17 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = CLIPSegModelTester(self)
+        common_properties = ["projection_dim", "logit_scale_init_value"]
+        self.config_tester = ConfigTester(
+            self, config_class=CLIPSegConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_model_for_image_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -796,7 +803,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs, interpolate_pos_encoding=True)
+            outputs = model(**inputs)
 
         # verify the predicted masks
         self.assertEqual(
@@ -804,7 +811,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
             torch.Size((3, 352, 352)),
         )
         expected_masks_slice = torch.tensor(
-            [[-7.4613, -7.4785, -7.3627], [-7.3268, -7.0898, -7.1333], [-6.9838, -6.7900, -6.8913]]
+            [[-7.4613, -7.4785, -7.3628], [-7.3268, -7.0899, -7.1333], [-6.9838, -6.7900, -6.8913]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3))
