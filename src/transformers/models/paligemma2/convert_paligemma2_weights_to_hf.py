@@ -51,6 +51,7 @@ VARIANT_CONFIGS = {
         "num_key_value_heads": 4,
         "num_attention_heads": 8,
         "head_dim": 256,
+        "query_pre_attn_scalar": 256,
     },
     "9b": {
         "num_positions": 1024,
@@ -60,6 +61,7 @@ VARIANT_CONFIGS = {
         "num_key_value_heads": 8,
         "num_attention_heads": 16,
         "head_dim": 256,
+        "query_pre_attn_scalar": 256,
     },
     "27b": {
         "num_positions": 4096,
@@ -69,6 +71,7 @@ VARIANT_CONFIGS = {
         "num_key_value_heads": 16,
         "num_attention_heads": 32,
         "head_dim": 128,
+        "query_pre_attention_scalar": 4608 // 32 # scaling is different for the 28b
     },
 }
 
@@ -105,6 +108,7 @@ def get_paligemma2_config(variant: str, precision: str):
             "num_attention_heads": variant_config["num_attention_heads"],
             "intermediate_size": variant_config["intermediate_size"],
             "is_encoder_decoder": False,
+            "query_pre_attn_scalar": variant_config["query_pre_attn_scalar"]
         }
         text_config.update(sup_text_config)
 
