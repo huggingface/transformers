@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch SAM model."""
 
-import gc
 import tempfile
 import unittest
 
