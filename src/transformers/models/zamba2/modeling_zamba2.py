@@ -1248,7 +1248,7 @@ class Zamba2MLP(nn.Module):
         self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.ffn_intermediate_size, bias=config.add_bias_linear)
         self.down_proj = nn.Linear(self.ffn_intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
-        if self.config.use_shared_block_lora:
+        if self.config.use_shared_mlp_lora:
             self.gate_up_proj_lora_A_list = nn.ModuleList([])
             self.gate_up_proj_lora_B_list = nn.ModuleList([])
             for i in range(self.num_fwd_mem_blocks):
@@ -1265,7 +1265,7 @@ class Zamba2MLP(nn.Module):
         self.layer_dic = {value: index for index, value in enumerate(layer_block_map)}
 
     def forward(self, hidden_state, layer_idx=None):
-        if self.config.use_shared_block_lora:
+        if self.config.use_shared_mlp_lora:
             layer_idx = self.layer_dic[layer_idx]
             gate_up_proj_lora_A = self.gate_up_proj_lora_A_list[layer_idx]
             gate_up_proj_lora_B = self.gate_up_proj_lora_B_list[layer_idx]
@@ -1687,7 +1687,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                         "shared_transf.pre_ff_layernorm.weight",
                     ]
                     self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
-                    if config.use_shared_block_lora:
+                    if config.use_shared_mlp_lora:
                         tied_keys_lora = []
                         lora_id = 0
                         for _layer_type in self.layers_block_type:

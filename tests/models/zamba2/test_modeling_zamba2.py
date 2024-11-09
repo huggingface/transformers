@@ -68,7 +68,7 @@ class Zamba2ModelTester:
         num_attention_heads=2,
         n_mamba_heads=8,
         mamba_ngroups=8,
-        intermediate_size=32,
+        intermediate_size=16,
         hidden_act="gelu",
         hidden_mamba_act="silu",
         hidden_dropout_prob=0.1,

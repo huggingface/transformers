@@ -93,7 +93,7 @@ class Zamba2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         num_mem_blocks (`int`, *optional*, defaults to 1):
             Number of unshared transformer blocks.
-        use_shared_block_lora (`bool`, *optional*, defaults to `False`):
+        use_shared_mlp_lora (`bool`, *optional*, defaults to `False`):
             If True, unshared LoRA's will be added to the shared MLP's.
         use_shared_attention_lora (`bool`, *optional*, defaults to `False`):
             If True, unshared LoRA's will be added to the q, k, v projectors in the shared attention layers.
@@ -156,7 +156,7 @@ class Zamba2Config(PretrainedConfig):
         num_key_value_heads=None,
         attention_dropout=0.0,
         num_mem_blocks=1,
-        use_shared_block_lora=False,
+        use_shared_mlp_lora=False,
         use_shared_attention_lora=False,
         lora_rank=128,
         use_mem_rope=False,
@@ -210,7 +210,7 @@ class Zamba2Config(PretrainedConfig):
         self.chunk_size = chunk_size
         self.time_step_limit = time_step_limit
 
-        self.use_shared_block_lora = use_shared_block_lora
+        self.use_shared_mlp_lora = use_shared_mlp_lora
         self.use_shared_attention_lora = use_shared_attention_lora
         self.lora_rank = lora_rank
         self.use_long_context = use_long_context

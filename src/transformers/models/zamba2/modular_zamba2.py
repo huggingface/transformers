@@ -325,7 +325,6 @@ def pad_tensor_by_size(input_tensor: torch.Tensor, pad_size: int):
 
     Assumes that we only have tensors of either size 4 or 3
     """
-    # pad_shape = (0, 0, 0, 0, 0, pad_size, 0, 0) if len(input_tensor.shape) == 4 else (0, 0, 0, pad_size, 0, 0)
     pad_shape = (0, 0, 0, 0, 0, pad_size, 0, 0) if input_tensor.ndim == 4 else (0, 0, 0, pad_size, 0, 0)
 
     return torch.nn.functional.pad(input_tensor, pad_shape, mode="constant", value=0)
@@ -341,7 +340,6 @@ def reshape_into_chunks(input_tensor, pad_size, chunk_size):
     # [bsz, seq_len, ...] -> [bsz, seq_len multiple of chunk_size, ...]
     input_tensor = pad_tensor_by_size(input_tensor, pad_size)
 
-    # if len(input_tensor.shape) == 3:
     if input_tensor.ndim == 3:
         # [bsz, seq_len multiple of chunk_size, num_heads] -> [bsz, -1, chunk_size, num_heads]
         return input_tensor.reshape(input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2])
@@ -1117,7 +1115,7 @@ class Zamba2MambaMixer(nn.Module):
                     A,
                     D=self.D,
                     chunk_size=self.chunk_size,
-                    seq_idx=None,  # was seq_idx
+                    seq_idx=None,
                     activation=self.activation,
                     rmsnorm_weight=self.norm.weight,
                     rmsnorm_eps=self.norm.variance_epsilon,
