@@ -2397,23 +2397,7 @@ class GenerationMixin:
                 should_convert_cache = True
             if should_convert_cache:
                 result.past_key_values = result.past_key_values.to_legacy_cache()
-
-	# check for low memory and clear unused memory if running on CUDA
-	    
-	check_and_clear_cache()
-        
-	return result
-
-
-    # If memory is low, attempt to clear unused GPU memory 
-
-    def check_and_clear_cache(threshold_gb=1):
-	if torch.cuda.is_available():
-	    total_memory = torch.cuda.get_device_properties(0).total_memory
-	    used_memory = torch.cuda.memory_reserved(0)
-	    available_memory_gb = (total_memory - used_memory) / (1024 ** 3)
-	    if available_memory_gb < threshold_gb:
-		torch.cuda.empty_cache()
+        return result
 
     def _has_unfinished_sequences(
         self,
