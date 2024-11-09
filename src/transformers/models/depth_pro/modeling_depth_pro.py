@@ -568,104 +568,111 @@ class DepthProViT(nn.Module):
         )
 
 
-class DepthProEncoder(nn.Module):
-    def __init__(self, config: DepthProConfig) -> None:
+class DepthProUpsampleBlock(nn.Module):
+    def __init__(
+            self,
+            input_dims,
+            intermediate_dims,
+            output_dims,
+            n_upsample_layers,
+            use_proj=True,
+            bias=False,
+        ) -> None:
         super().__init__()
-        self.config = config
 
-        self.out_size = 24 # TODO: image_size // patch_size
+        # create first projection block
+        if use_proj:
+            self.proj = nn.Conv2d(
+                in_channels=input_dims,
+                out_channels=intermediate_dims,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=bias,
+            )
+        else:
+            self.proj = nn.Identity()
 
-        # patch encoder
-        self.patch_encoder = DepthProViT(config)
-        self.patch_encoder.encoder.layer[config.patch_encoder_hook_ids[0]].register_forward_hook(
-            self._intermediate0_hook
-        )
-        self.patch_encoder.encoder.layer[config.patch_encoder_hook_ids[1]].register_forward_hook(
-            self._intermediate1_hook
-        )
-
-        # image encoder
-        self.image_encoder = DepthProViT(config)
-
-        # upsampling features (1-2)
-        self.upsample_intermediate0 = self._create_project_upsample_block(
-            input_dims=config.hidden_size,
-            intermediate_dims=config.patch_encoder_feature_dims[0],
-            output_dims=config.decoder_hidden_size,
-            n_upsample_layers=3,
-        )
-        self.upsample_intermediate1 = self._create_project_upsample_block(
-            input_dims=config.hidden_size,
-            output_dims=config.patch_encoder_feature_dims[0],
-            n_upsample_layers=2,
-        )
-
-        # upsampling features (3-5)
-        self.upsample_high_res = self._create_project_upsample_block(
-            input_dims=config.hidden_size,
-            output_dims=config.patch_encoder_feature_dims[1],
-            n_upsample_layers=1,
-        )
-        self.upsample_med_res = self._create_project_upsample_block(
-            input_dims=config.hidden_size,
-            output_dims=config.patch_encoder_feature_dims[2],
-            n_upsample_layers=1,
-        )
-        self.upsample_low_res = self._create_project_upsample_block(
-            input_dims=config.hidden_size,
-            output_dims=config.patch_encoder_feature_dims[3],
-            n_upsample_layers=1,
-        )
-
-        # upsampling features (6)
-        self.upsample_image = nn.ConvTranspose2d(
-            in_channels=config.hidden_size,
-            out_channels=config.patch_encoder_feature_dims[3],
-            kernel_size=2,
-            stride=2,
-            padding=0,
-            bias=True,
-        )
-        self.fuse_image_with_low_res = nn.Conv2d(
-            in_channels=(config.patch_encoder_feature_dims[3] + config.patch_encoder_feature_dims[3]),
-            out_channels=config.patch_encoder_feature_dims[3],
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=True,
-        )
-
-    def _intermediate0_hook(self, model, input, output):
-        self.intermediate0_hidden_states = output[0]
-
-    def _intermediate1_hook(self, model, input, output):
-        self.intermediate1_hidden_states = output[0]
-
-    def _create_project_upsample_block(
-        self,
-        input_dims: int,
-        output_dims: int,
-        n_upsample_layers: int,
-        intermediate_dims: Optional[int] = None,
-    ) -> nn.Module:
-        
-        intermediate_dims = intermediate_dims or output_dims
-
-        # Projection block followed by upsampling blocks.
-        blocks = [
-            nn.Conv2d(input_dims, intermediate_dims, kernel_size=1, stride=1, padding=0, bias=False)
-        ] + [
-            nn.ConvTranspose2d(
-                in_channels=(intermediate_dims if i == 0 else output_dims),
+        # create following upsample blocks
+        self.upsample_blocks = nn.Sequential()
+        for i in range(n_upsample_layers):
+            in_channels = intermediate_dims if i == 0 else output_dims
+            layer = nn.ConvTranspose2d(
+                in_channels=in_channels,
                 out_channels=output_dims,
                 kernel_size=2,
                 stride=2,
                 padding=0,
-                bias=False
-            ) for i in range(n_upsample_layers)
-        ]
+                bias=bias,
+            )
+            self.upsample_blocks.append(layer)
 
-        return nn.Sequential(*blocks)
+    def forward(self, features):
+        projected = self.proj(features)
+        return self.upsample_blocks(projected)
+
+class DepthProEncoder(nn.Module):
+    def __init__(self, config: DepthProConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.decoder_hidden_size = config.decoder_hidden_size
+        self.patch_encoder_hook_ids = config.patch_encoder_hook_ids
+        self.intermediate_feature_dims = config.intermediate_feature_dims
+        self.intermediate_upsample_layers = config.intermediate_upsample_layers
+ 
+        self.out_size = 24 # TODO: image_size // patch_size
+
+        # patch encoder
+        self.patch_encoder = DepthProViT(config)
+
+        # image encoder
+        self.image_encoder = DepthProViT(config)
+
+        # upsampling intermediate features - (1-2) in diagram
+        self.upsample_intermediate = nn.ModuleList()
+        for i, (feature_dims, upsample_layers) in enumerate(zip(
+            self.intermediate_feature_dims,
+            self.intermediate_upsample_layers,
+        )):
+            intermediate_dims = self.decoder_hidden_size if i == 0 else feature_dims
+            upsample_block = DepthProUpsampleBlock(
+                input_dims=config.hidden_size,
+                intermediate_dims=intermediate_dims,
+                output_dims=feature_dims,
+                n_upsample_layers=upsample_layers,
+            )
+            self.upsample_intermediate.append(upsample_block)
+
+        # upsampling patch features (high_res, med_res, low_res) - (3-5) in diagram
+        self.upsample_high_res = DepthProUpsampleBlock(
+            input_dims=config.hidden_size,
+            intermediate_dims=config.high_res_feature_dims,
+            output_dims=config.high_res_feature_dims,
+            n_upsample_layers=1,
+        )
+        self.upsample_med_res = DepthProUpsampleBlock(
+            input_dims=config.hidden_size,
+            intermediate_dims=config.med_res_feature_dims,
+            output_dims=config.med_res_feature_dims,
+            n_upsample_layers=1,
+        )
+        self.upsample_low_res = DepthProUpsampleBlock(
+            input_dims=config.hidden_size,
+            intermediate_dims=config.low_res_feature_dims,
+            output_dims=config.low_res_feature_dims,
+            n_upsample_layers=1,
+        )
+
+        # upsampling image features - (6) in diagram
+        self.upsample_image = DepthProUpsampleBlock(
+            input_dims=config.hidden_size,
+            intermediate_dims=config.hidden_size,
+            output_dims=config.image_feature_dims,
+            n_upsample_layers=1,
+            use_proj=False,
+            bias=True,
+        )
 
     def _interpolate(self, pixel_values, scale_factor):
         return nn.functional.interpolate(
@@ -771,53 +778,15 @@ class DepthProEncoder(nn.Module):
             dim=0,
         )
 
-        # STEP 3: apply patch encoder
+        # STEP 3: apply patch and image encoder
 
         patch_encodings = self.patch_encoder(
             patches,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=True, # required for intermediate features
             return_dict=True,
         )
-        patch_features = patch_encodings[0]
-        patch_features = self._reshape_feature(
-            patch_features, self.out_size, self.out_size
-        )
-
-        # STEP 4: Get Intermediate Features (features 1 and 2)
-
-        intermediate0_features = self._reshape_feature(
-            self.intermediate0_hidden_states,
-            self.out_size,
-            self.out_size,
-        )
-        intermediate1_features = self._reshape_feature(
-            self.intermediate1_hidden_states,
-            self.out_size,
-            self.out_size,
-        )
-        intermediate0_features = self._merge(
-            intermediate0_features[: batch_size * 5 * 5], batch_size=batch_size, padding=3
-        )
-        intermediate1_features = self._merge(
-            intermediate1_features[: batch_size * 5 * 5], batch_size=batch_size, padding=3
-        )
-
-        # STEP 5: Get Patch Encoder Features (features 3-5)
-
-        high_res_features, med_res_features, low_res_features = torch.split(
-            patch_features,
-            [len(high_res_patches), len(med_res_patches), len(low_res_patches)],
-            dim=0,
-        )
-
-        high_res_features = self._merge(high_res_features, batch_size=batch_size, padding=3)
-        med_res_features = self._merge(med_res_features, batch_size=batch_size, padding=6)
-        low_res_features = low_res_features
-
-        # STEP 6: Get Image Encoder Features (features 6)
-
         image_encodings = self.image_encoder(
             pixel_values=low_res_patches,
             head_mask=head_mask,
@@ -825,43 +794,84 @@ class DepthProEncoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
-        image_features = image_encodings[0]
-        image_features = self._reshape_feature(
-            image_features, self.out_size, self.out_size
+
+        # STEP 4: get patch features (high_res, med_res, low_res) - (3-5) in diagram
+
+        # a. extract hidden_state
+        hidden_state = patch_encodings.last_hidden_state
+
+        # b. reshape back to image like
+        features = self._reshape_feature(
+            hidden_state, self.out_size, self.out_size
+        )
+        high_res_features, med_res_features, low_res_features = torch.split(
+            features,
+            [len(high_res_patches), len(med_res_patches), len(low_res_patches)],
+            dim=0,
         )
 
-        # STEP 7: Upsample All Features (feature 1-6)
+        # c. merge patches back together
+        high_res_features = self._merge(high_res_features, batch_size=batch_size, padding=3)
+        med_res_features = self._merge(med_res_features, batch_size=batch_size, padding=6)
+        low_res_features = low_res_features # no merge required with low res image
 
-        # feature (1-2)
-        intermediate0_features = self.upsample_intermediate0(
-            intermediate0_features
-        )
-        intermediate1_features = self.upsample_intermediate1(
-            intermediate1_features
-        )
-
-        # feature (3-5)
+        # d. upsample
         high_res_features = self.upsample_high_res(high_res_features)
         med_res_features = self.upsample_med_res(med_res_features)
         low_res_features = self.upsample_low_res(low_res_features)
 
-        # feature (6)
-        image_features = self.upsample_image(image_features)
-        image_features = self.fuse_image_with_low_res(
-            torch.cat((low_res_features, image_features), dim=1)
+        # STEP 5: get intermediate features - (1-2) in diagram
+
+        intermediate_features = []
+        for layer_id in self.patch_encoder_hook_ids:
+            
+            # a. extract hidden_state
+            hidden_state = patch_encodings.hidden_states[layer_id+1] # +1 to correct index position as hidden_states contain embedding output as well
+
+            # b. reshape back to image like
+            features = self._reshape_feature(
+                hidden_state,
+                self.out_size,
+                self.out_size,
+            )
+
+            # c. merge patches back together
+            features = self._merge(
+                features[: batch_size * 5 * 5], batch_size=batch_size, padding=3
+            )
+
+            # d. upsample
+            features = self.upsample_intermediate[layer_id](features)
+
+            intermediate_features.append(features)
+
+        # STEP 6: get image features - (6) in diagram
+
+        # a. extract hidden_state
+        hidden_state = image_encodings.last_hidden_state
+
+        # b. reshape back to image like
+        image_features = self._reshape_feature(
+            hidden_state, self.out_size, self.out_size
         )
 
+        # c. merge patches back together
+        # skipped, no merge required with low res image
+
+        # d. upsample
+        image_features = self.upsample_image(image_features)
+
+        # STEP 7: return these features
         last_hidden_state =  [
-            intermediate0_features,
-            intermediate1_features,
+            *intermediate_features,
             high_res_features,
             med_res_features,
-            # low_res_features,
-            image_features, # fused with low_res_features
+            low_res_features,
+            image_features,
         ]
 
-        hidden_states = patch_encodings.hidden_states + image_encodings.hidden_states if output_attentions else None
-        attentions = patch_encodings.attentions + image_encodings.attentions if output_hidden_states else None
+        hidden_states = patch_encodings.hidden_states + image_encodings.hidden_states if output_hidden_states else None
+        attentions = patch_encodings.attentions + image_encodings.attentions if output_attentions else None
 
         if not return_dict:
             return tuple(v for v in [last_hidden_state, hidden_states, attentions] if v is not None)
@@ -882,7 +892,7 @@ class DepthProFOVModel(nn.Module):
 
         self.encoder = DepthProViT(config)
         self.encoder_neck = nn.Linear(self.hidden_size, self.decoder_hidden_size // 2)
-        self.low_res_neck = nn.Sequential(
+        self.global_neck = nn.Sequential(
             nn.Conv2d(self.decoder_hidden_size, self.decoder_hidden_size // 2, kernel_size=3, stride=2, padding=1),
             nn.ReLU(True)
         )
@@ -897,7 +907,7 @@ class DepthProFOVModel(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        low_res_features: torch.Tensor,
+        global_features: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -923,19 +933,19 @@ class DepthProFOVModel(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        image_features = encoder_outputs[0]
+        last_hidden_state = encoder_outputs[0]
 
-        image_features = self.encoder_neck(image_features)
+        last_hidden_state = self.encoder_neck(last_hidden_state)
 
         # TODO: add some comments
-        image_features = image_features[:, 1:]
-        image_features = image_features.permute(0, 2, 1)
+        last_hidden_state = last_hidden_state[:, 1:]
+        last_hidden_state = last_hidden_state.permute(0, 2, 1)
 
-        low_res_features = self.low_res_neck(low_res_features)
+        global_features = self.global_neck(global_features)
 
-        image_features = image_features.reshape_as(low_res_features)
-        image_features = image_features + low_res_features
-        fov_output = self.head(image_features)
+        last_hidden_state = last_hidden_state.reshape_as(global_features)
+        last_hidden_state = last_hidden_state + global_features
+        fov_output = self.head(last_hidden_state)
         fov_output = fov_output.reshape(1)
 
         if not return_dict:
@@ -1040,65 +1050,126 @@ class DepthProDecoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.hidden_size = config.decoder_hidden_size
-        self.decoder_feature_dims = [config.decoder_hidden_size] + config.patch_encoder_feature_dims
+        # for STEP 2: fuse low_res and image features
+        self.fuse_image_with_low_res = nn.Conv2d(
+            in_channels=config.low_res_feature_dims+config.image_feature_dims,
+            out_channels=config.global_feature_dims,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=True,
+        )
 
-        self.projections = nn.ModuleList()
-        self.fusions = nn.ModuleList()
-        for i, dim in enumerate(self.decoder_feature_dims):
+        # for STEP 3: apply decoder block for global features
+        self.global_proj = nn.Conv2d(
+            in_channels=config.global_feature_dims,
+            out_channels=config.decoder_hidden_size,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        self.global_fusion = DepthProFeatureFusionLayer(config)
 
-            # Projection
-            if i != 0:
-                # conv for hidden_states[1:]
-                projection = nn.Conv2d(
-                    in_channels=dim,
-                    out_channels=self.hidden_size,
+        # for STEP 4: apply decoder block for med features
+        self.med_res_proj = nn.Conv2d(
+            in_channels=config.med_res_feature_dims,
+            out_channels=config.decoder_hidden_size,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        self.med_res_fusion = DepthProFeatureFusionLayer(config)
+
+        # for STEP 5: apply decoder block for high features
+        self.high_res_proj = nn.Conv2d(
+            in_channels=config.high_res_feature_dims,
+            out_channels=config.decoder_hidden_size,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        self.high_res_fusion = DepthProFeatureFusionLayer(config)
+
+        # for STEP 6: apply decoder block for intermediate features
+        self.intermediate_proj = nn.Sequential()
+        self.intermediate_fusion = nn.Sequential()
+        for i, feature_dim in enumerate(config.intermediate_feature_dims):
+            if i == 0:
+                # no projection for final intermediate layer
+                proj = nn.Identity()
+                fusion = DepthProFeatureFusionLayer(config, use_deconv=False)
+            else:
+                proj = nn.Conv2d(
+                    in_channels=feature_dim,
+                    out_channels=config.decoder_hidden_size,
                     kernel_size=3,
                     stride=1,
                     padding=1,
                     bias=False,
                 )
-            elif self.hidden_size != dim:
-                # first hidden_state with dim differnet from hidden_size
-                projection = nn.Conv2d(
-                    in_channels=dim,
-                    out_channels=self.hidden_size,
-                    kernel_size=1,
-                    bias=False,
-                )
-            else:
-                # first hidden_state with dim same as hidden_size
-                projection = nn.Identity()
-            self.projections.append(projection)
+                fusion = DepthProFeatureFusionLayer(config)
 
-            # Fusion
-            fusion = DepthProFeatureFusionLayer(config, use_deconv=(i!=0))
-            self.fusions.append(fusion)
+            self.intermediate_proj.append(proj)
+            self.intermediate_fusion.append(fusion)
 
     def forward(self, hidden_states):
 
-        if len(hidden_states) != len(self.decoder_feature_dims):
-            raise ValueError(
-                f"Got number of hidden_states = {len(hidden_states)},"
-                f"expected number of hidden_states = {len(self.decoder_feature_dims)}."
-            )
+        # STEP 1: extract features
 
-        # first extract the low_res_features
-        last_features = hidden_states[-1]
-        last_features = self.projections[-1](last_features)
-        low_res_features = last_features # required later for fov_encoder
-        last_features = self.fusions[-1](last_features)
+        intermediate_features = hidden_states[:-4]
+        # intermediate_features_i.shape: [batch_size, config.intermediate_feature_dims_i, 768, 768], [1, 256, 384, 384]
+        high_res_features = hidden_states[-4]
+        # high_res_features.shape: [batch_size, config.high_res_feature_dims, 192, 192]
+        med_res_features = hidden_states[-3]
+        # med_res_features.shape: [batch_size, config.med_res_feature_dims, 96, 96]
+        low_res_features = hidden_states[-2]
+        # low_res_features.shape: [batch_size, config.low_res_feature_dims, 48, 48]
+        image_features = hidden_states[-1]
+        # image_features.shape: [batch_size, config.image_feature_dims, 48, 48]
 
-        # now get features through each layer
-        for i in range(len(hidden_states) - 2, -1, -1):
-            hidden_state = hidden_states[i]
-            projection = self.projections[i]
-            fusion = self.fusions[i]
+        # STEP 2: fuse low_res and image features
 
-            projected = projection(hidden_state)
-            last_features = fusion(last_features, projected)
+        global_features = torch.cat((low_res_features, image_features), dim=1)
+        global_features = self.fuse_image_with_low_res(global_features)
+        # global_features.shape: [batch_size, config.global_feature_dims, 48, 48]
 
-        return last_features, low_res_features
+        # STEP 3: apply decoder block for global features
+
+        # apply projection: used by fusion now and then fov later
+        global_projected = self.global_proj(global_features)
+        # apply fusion: used by next projections and fusions
+        last_features = self.global_fusion(global_projected)
+        # last_features.shape: [batch_size, config.decoder_hidden_size, 96, 96]
+
+        # STEP 4: apply decoder block for med features
+
+        projected = self.med_res_proj(med_res_features)
+        last_features = self.med_res_fusion(last_features, projected)
+        # last_features.shape: [batch_size, config.decoder_hidden_size, 192, 192]
+
+        # STEP 5: apply decoder block for high features
+
+        projected = self.high_res_proj(high_res_features)
+        last_features = self.high_res_fusion(last_features, projected)
+        # last_features.shape: [batch_size, config.decoder_hidden_size, 384, 384]
+
+        # STEP 6: apply decoder block for intermediate features
+
+        for (features, proj_layer, fusion_layer) in zip(
+            # reversed becuase decoding is applied from last features to first features
+            intermediate_features[::-1],
+            self.intermediate_proj[::-1],
+            self.intermediate_fusion[::-1],
+        ):
+            projected = proj_layer(features)
+            last_features = fusion_layer(last_features, projected)
+            # last_features.shape: [batch_size, config.decoder_hidden_size, 768, 768]
+            # last_features.shape: [batch_size, config.decoder_hidden_size, 768, 768]
+
+        return last_features, global_projected
 
 
 class DepthProPreTrainedModel(PreTrainedModel):
@@ -1233,26 +1304,18 @@ class DepthProModel(DepthProPreTrainedModel):
         encodings = self.encoder(
             pixel_values,
             head_mask,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        encodings_last_hidden_state = encodings.last_hidden_state
-
-        for i in range(len(encodings_last_hidden_state)):
-            ic(encodings_last_hidden_state[i].shape)
-
-        features, low_res_features = self.decoder(encodings_last_hidden_state)
-
-        ic(features.shape)
-        ic(low_res_features.shape)
-        # ic(features); exit()
+        last_hidden_state = encodings[0]
+        last_hidden_state, global_features = self.decoder(last_hidden_state)
 
         if self.use_fov:
             fov_out = self.fov_model(
                 pixel_values=pixel_values,
-                low_res_features=low_res_features.detach(),
+                global_features=global_features.detach(),
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1261,7 +1324,8 @@ class DepthProModel(DepthProPreTrainedModel):
         else:
             fov_out = None
 
-        return features, fov_out
+        # TODO: return all hidden_states
+        return last_hidden_state, fov_out
 
 
 class DepthProDepthEstimationHead(nn.Module):
@@ -1375,18 +1439,16 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
 
         outputs = [None] * 4
 
-        hidden_states, fov_out = self.depth_pro(
+        last_hidden_state, fov_out = self.depth_pro(
             pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        predicted_depth = self.head(hidden_states)
-        ic(predicted_depth.shape)
-        ic(fov_out.shape)
+        predicted_depth = self.head(last_hidden_state)
 
-        # ic(predicted_depth); exit()
+        ic(predicted_depth)
         ic(fov_out); exit()
 
         if not return_dict:

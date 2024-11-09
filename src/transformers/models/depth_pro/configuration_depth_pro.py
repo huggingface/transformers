@@ -129,9 +129,18 @@ class DepthProConfig(PretrainedConfig):
         out_indices=None,
         apply_layernorm=True,
         reshape_hidden_states=True,
+        patch_encoder_feature_dims = [256, 512, 1024, 1024],
+
         patch_encoder_hook_ids = [5, 11],
         # patch_encoder_hook_ids = [5, 11, 17, 23],
-        patch_encoder_feature_dims = [256, 512, 1024, 1024],
+        intermediate_feature_dims = [256, 256],
+        intermediate_upsample_layers = [3, 2],
+        high_res_feature_dims = 512,
+        med_res_feature_dims = 1024,
+        low_res_feature_dims = 1024,
+        image_feature_dims = 1024,
+        global_feature_dims = 1024,
+
         use_batch_norm_in_decoder=False,
         use_fov=False,
         **kwargs,
@@ -165,3 +174,11 @@ class DepthProConfig(PretrainedConfig):
         self.patch_encoder_feature_dims = patch_encoder_feature_dims
         self.use_batch_norm_in_decoder = use_batch_norm_in_decoder
         self.use_fov = use_fov
+
+        self.intermediate_feature_dims = intermediate_feature_dims
+        self.intermediate_upsample_layers = intermediate_upsample_layers
+        self.high_res_feature_dims = high_res_feature_dims
+        self.med_res_feature_dims = med_res_feature_dims
+        self.low_res_feature_dims = low_res_feature_dims
+        self.image_feature_dims = image_feature_dims
+        self.global_feature_dims = global_feature_dims
