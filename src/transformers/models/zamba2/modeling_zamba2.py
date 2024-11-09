@@ -92,6 +92,9 @@ class Zamba2DynamicCache(DynamicCache):
     ):
         self.layers_block_type = config.layers_block_type
         self.transformer_layers = []
+        self._modules = {}
+        self._parameters = {}
+        self._buffers = {}
 
         self.has_previous_state = False
         self.dtype = dtype
@@ -431,7 +434,6 @@ class Zamba2Attention(nn.Module):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.use_shared_attention_lora:
-            layer_idx = self.layer_dic[layer_idx]
             lora_layer_idx = self.layer_dic[layer_idx]
             linear_q_lora_A = self.linear_q_lora_A_list[lora_layer_idx]
             linear_q_lora_B = self.linear_q_lora_B_list[lora_layer_idx]
@@ -810,7 +812,7 @@ class Zamba2MambaMixer(nn.Module):
 
         self.n_groups = config.mamba_ngroups
         self.head_dim = config.mamba_headdim
-        self.num_heads = self.intermediate_size // self.head_dim
+        self.num_heads = self.config.n_mamba_heads
         self.chunk_size = config.chunk_size
 
         self.time_step_limit = config.time_step_limit  # add this with default (0.0, float("inf"))
@@ -924,7 +926,7 @@ class Zamba2MambaMixer(nn.Module):
             # 1. Gated MLP's linear projection
             projected_states = self.in_proj(hidden_states)
             A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
-            dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+            dt_limit_kwargs = {} if self.time_step_limit == None else {"dt_limit": self.time_step_limit}
             if attention_mask is not None:
                 input_not_masked = torch.all(attention_mask == 1)
             else:
@@ -1551,9 +1553,9 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             module.A_log._no_weight_decay = True
             module.D._no_weight_decay = True
 
-            num_heads = int(self.config.mamba_expand * self.config.hidden_size) // self.config.mamba_headdim
+            # num_heads = int(self.config.mamba_expand * self.config.hidden_size) // self.config.mamba_headdim
             dt = torch.exp(
-                torch.rand(num_heads) * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                torch.rand(self.config.n_mamba_heads) * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
@@ -1671,19 +1673,42 @@ class Zamba2Model(Zamba2PreTrainedModel):
         self._tied_weights_keys = []
         for layer_id, layer_type in enumerate(self.layers_block_type):
             if layer_type == "hybrid":
-                prefix_name = f"layers.{layer_id}."
-                tied_keys = [
-                    "shared_transf.self_attn.q_proj.weight",
-                    "shared_transf.self_attn.k_proj.weight",
-                    "shared_transf.self_attn.v_proj.weight",
-                    "shared_transf.self_attn.o_proj.weight",
-                    "shared_transf.feed_forward.gate_proj.weight",
-                    "shared_transf.feed_forward.up_proj.weight",
-                    "shared_transf.feed_forward.down_proj.weight",
-                    "shared_transf.input_layernorm.weight",
-                    "shared_transf.pre_ff_layernorm.weight",
-                ]
-                self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
+                block = next(blocks)
+                if config.num_mem_blocks * len(layer_type_list(config)) > 1:
+                    prefix_name = f"layers.{layer_id}."
+                    tied_keys = [
+                        "shared_transf.self_attn.q_proj.weight",
+                        "shared_transf.self_attn.k_proj.weight",
+                        "shared_transf.self_attn.v_proj.weight",
+                        "shared_transf.self_attn.o_proj.weight",
+                        "shared_transf.feed_forward.gate_up_proj.weight",
+                        "shared_transf.feed_forward.down_proj.weight",
+                        "shared_transf.input_layernorm.weight",
+                        "shared_transf.pre_ff_layernorm.weight",
+                    ]
+                    self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
+                    if config.use_shared_block_lora:
+                        tied_keys_lora = []
+                        lora_id = 0
+                        for _layer_type in self.layers_block_type:
+                            if _layer_type == "hybrid" and lora_id % config.num_mem_blocks == block.block_id:
+                                tied_keys_lora.append('shared_transf.feed_forward.gate_up_proj_lora_A_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append('shared_transf.feed_forward.gate_up_proj_lora_B_list.' + str(lora_id) + '.weight')
+                            lora_id += 1
+                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_lora]
+                    if config.use_shared_attention_lora:
+                        tied_keys_lora = []
+                        lora_id = 0
+                        for _layer_type in self.layers_block_type:
+                            if _layer_type == "hybrid" and lora_id % config.num_mem_blocks == block.block_id:
+                                tied_keys_lora.append('shared_transf.self_attn.linear_q_lora_A_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append('shared_transf.self_attn.linear_k_lora_A_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append('shared_transf.self_attn.linear_v_lora_A_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append('shared_transf.self_attn.linear_q_lora_B_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append('shared_transf.self_attn.linear_k_lora_B_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append('shared_transf.self_attn.linear_v_lora_B_list.' + str(lora_id) + '.weight')
+                            lora_id += 1
+                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_lora]
                 layers.append(Zamba2HybridLayer(next(blocks), next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))
