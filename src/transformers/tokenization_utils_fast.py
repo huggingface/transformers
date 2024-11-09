@@ -648,6 +648,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if isinstance(token_ids, int):
             token_ids = [token_ids]
+        if token_ids and isinstance(token_ids[0], float):
+            token_ids = [int(_id) for _id in token_ids]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
         clean_up_tokenization_spaces = (
