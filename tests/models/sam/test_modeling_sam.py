@@ -21,7 +21,7 @@ import unittest
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device, require_torch_sdpa
+from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
