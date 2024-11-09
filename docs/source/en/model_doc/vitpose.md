@@ -40,7 +40,7 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 >>> outputs = model(pixel_values, dataset_index)
 ```
 
-- ViTPose is a so-called top-down keypoint detection model. This means that one first uses an object detector, like [RT-DETR](rt-detr), to detect people (or other instances) in an image. Next, ViTPose takes the cropped images as input and predicts the keypoints.
+- ViTPose is a so-called top-down keypoint detection model. This means that one first uses an object detector, like [RT-DETR](rt_detr.md), to detect people (or other instances) in an image. Next, ViTPose takes the cropped images as input and predicts the keypoints.
 
 ```py
 import math
@@ -116,20 +116,6 @@ for pose_result in pose_results:
     for keypoint in pose_result["keypoints"]:
         x, y, score = keypoint
         print(f"coordinate : [{x}, {y}], score : {score}")
-
-def draw_points(image, keypoints, keypoint_colors, keypoint_score_threshold, radius, show_keypoint_weight):
-    if keypoint_colors is not None:
-        assert len(keypoint_colors) == len(keypoints)
-    for id, keypoint in enumerate(keypoints):
-        x_coord, y_coord, keypoint_score = int(keypoint[0]), int(keypoint[1]), keypoint[2]
-        if keypoint_score > keypoint_score_threshold:
-            color = tuple(int(c) for c in keypoint_colors[id])
-            if show_keypoint_weight:
-                cv2.circle(image, (x_coord, y_coord), radius, color, -1)
-                transparency = max(0, min(1, keypoint_score))
-                cv2.addWeighted(image, transparency, image, 1 - transparency, 0, dst=image)
-            else:
-                cv2.circle(image, (x_coord, y_coord), radius, color, -1)
 
 def draw_links(image, keypoints, keypoint_edges, link_colors, keypoint_score_threshold, thickness, show_keypoint_weight, stick_width = 2):
     height, width, _ = image.shape
@@ -216,7 +202,7 @@ def visualize_keypoints(
     return image
 
 # Note: keypoint_edges and color palette are dataset-specific
-keypoint_edges = config.keypoint_edges
+keypoint_edges = config.edges
 
 palette = np.array(
     [
