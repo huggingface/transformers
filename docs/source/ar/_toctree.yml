@@ -119,12 +119,12 @@
     title: مشاركة نموذج مخصص
   - local: chat_templating
     title: قوالب لنماذج الدردشة
-#   - local: trainer
-#     title: المدرب
-#   - local: sagemaker
-#     title: تشغيل التدريب على Amazon SageMaker
-#   - local: serialization
-#     title: التصدير إلى ONNX
+  - local: trainer
+    title: المدرب
+  - local: sagemaker
+    title: تشغيل التدريب على Amazon SageMaker
+  - local: serialization
+    title: التصدير إلى ONNX
   - local: tflite
     title: التصدير إلى TFLite
 #   - local: torchscript
