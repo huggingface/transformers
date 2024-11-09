@@ -4176,8 +4176,8 @@ class ModelTesterMixin:
                                             prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
                                             outputs_eager = model_eager(**prepared_inputs)
                                             outputs_sdpa = model_sdpa(**prepared_inputs)
-                                    
-                                    if hasattr(outputs_eager, 'vision_hidden_states'):
+
+                                    if hasattr(outputs_eager, "vision_hidden_states"):
                                         logits_eager = outputs_eager.vision_hidden_states[-1]
                                         logits_sdpa = outputs_sdpa.vision_hidden_states[-1]
                                     else:
@@ -4260,6 +4260,8 @@ class ModelTesterMixin:
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+            if config.model_type in ["sam"]:
+                self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
