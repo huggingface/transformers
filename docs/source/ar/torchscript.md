@@ -111,7 +111,7 @@ loaded_model.eval()
 all_encoder_layers, pooled_output = loaded_model(*dummy_input)
 ```
 
-### استخدام نموذج تم تتبعه للاستدلال
+### استخدام نموذج مُتتبع للاستدلال
 
 استخدم النموذج الذي تم تتبعه للاستدلال باستخدام أسلوب `__call__` الخاص به:
 
