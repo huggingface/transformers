@@ -121,7 +121,7 @@ traced_model(tokens_tensor, segments_tensors)
 
 ## نشر نماذج Hugging Face TorchScript على AWS باستخدام Neuron SDK
 
-قدمت AWS عائلة [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/) من مثيلات لخفض التكلفة وأداء التعلم الآلي عالي الأداء في السحابة. تعمل مثيلات Inf1 بواسطة شريحة Inferentia من AWS، وهي مسرع أجهزة مخصص، متخصص في أعباء عمل الاستدلال للتعلم العميق. [AWS Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#) هي SDK لـ Inferentia التي تدعم تتبع نماذج المحولات وتحسينها للنشر على Inf1. توفر Neuron SDK ما يلي:
+قدمت AWS عائلة [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/) من اﻷجهزة لخفض التكلفة وأداء التعلم الآلي عالي الأداء في البيئة السحابية. تعمل أجهزة Inf1 بواسطة شريحة Inferentia من AWS، وهي مُسرّع أجهزة مُخصص، متخصص في أعباء عمل الاستدلال للتعلم العميق. [AWS Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#) هي SDK لـ Inferentia التي تدعم تتبع نماذج المحولات وتحسينها للنشر على Inf1. توفر Neuron SDK ما يلي:
 
 1. واجهة برمجة تطبيقات سهلة الاستخدام مع تغيير سطر واحد من التعليمات البرمجية لتتبع نموذج TorchScript وتحسينه للاستدلال في السحابة.
 2. تحسينات الأداء الجاهزة للاستخدام [تحسين التكلفة والأداء](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/benchmark/>).
