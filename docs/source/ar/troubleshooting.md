@@ -23,7 +23,7 @@ ValueError: Connection error, and we cannot find the requested files in the cach
 Please try again or make sure your Internet connection is on.
 ```
 
-في هذه الحالة، يجب عليك تشغيل مكتبة Hugging Face Transformers في [وضع عدم الاتصال](installation#offline-mode) لتجنب خطأ الاتصال.
+في هذه الحالة، يجب محاولة تشغيل 🤗 Transformers في [وضع عدم الاتصال](installation#offline-mode) لتجنب خطأ الاتصال.
 
 ## CUDA نفاد الذاكرة
 
