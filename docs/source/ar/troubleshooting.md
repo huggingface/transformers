@@ -59,7 +59,7 @@ CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacit
 
 - احفظ النموذج باستخدام [`~TFPretrainedModel.save_pretrained`] وقم بتحميله مرة أخرى باستخدام [`~TFPreTrainedModel.from_pretrained`]:
 
-```بايثون
+```python
 >>> from transformers import TFPreTrainedModel
 
 >>> model.save_pretrained("path_to/model")
