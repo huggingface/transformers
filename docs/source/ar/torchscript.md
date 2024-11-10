@@ -52,7 +52,7 @@
 
 ### حفظ نموذج
 
-لتصدير `BertModel` مع TorchScript، قم بإنشاء مثيل لـ `BertModel` من فئة `BertConfig` ثم احفظه على القرص تحت اسم الملف `traced_bert.pt`:
+لتصدير `BertModel` باستخدام TorchScript، قم بتهيئة ـ `BertModel` من فئة `BertConfig` ثم احفظه على القرص تحت اسم الملف `traced_bert.pt`:
 
 ```python
 from transformers import BertModel, BertTokenizer, BertConfig
