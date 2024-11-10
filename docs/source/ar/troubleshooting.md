@@ -106,7 +106,7 @@ RuntimeError: CUDA error: device-side assert triggered
 
 ## إخراج غير صحيح عند عدم إخفاء رموز الحشو
 
-في بعض الحالات، قد يكون الإخراج `hidden_state` غير صحيح إذا تضمنت `input_ids` رموز حشو. ولإثبات ذلك، قم بتحميل نموذج ومصنف الرموز. يمكنك الوصول إلى `pad_token_id` للنموذج لمعرفة قيمته. قد تكون `pad_token_id` `None` لبعض النماذج، ولكن يمكنك دائمًا تعيينها يدويًا.
+في بعض الحالات، قد يكون `hidden_state` غير صحيحة إذا تضمنت `input_ids` رموز حشو. ولإثبات ذلك، قم بتحميل نموذج ومجزىء لغوى. يمكنك الوصول إلى `pad_token_id` للنموذج لمعرفة قيمته. قد تكون `pad_token_id` `None` لبعض النماذج، ولكن يمكنك دائمًا تعيينها يدويًا.
 
 ```بايثون
 >>> from transformers import AutoModelForSequenceClassification
