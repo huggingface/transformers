@@ -142,7 +142,7 @@ tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 يقوم المصنف الرموز افتراضيًا بإنشاء `attention_mask` لك بناءً على إعدادات المصنف الرموز الافتراضية.
 </Tip>
 
-```بايثون
+```python
 >>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])
 >>> output = model(input_ids, attention_mask=attention_mask)
 >>> print(output.logits)
