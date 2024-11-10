@@ -119,7 +119,7 @@ RuntimeError: CUDA error: device-side assert triggered
 
 يوضح المثال التالي المُخرجات بدون إخفاء رموز الحشو:
 
-```بايثون
+```python
 >>> input_ids = torch.tensor([[7592, 2057, 2097, 2393, 9611, 2115], [7592, 0, 0, 0, 0, 0]])
 >>> output = model(input_ids)
 >>> print(output.logits)
