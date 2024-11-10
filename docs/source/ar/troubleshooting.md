@@ -49,7 +49,7 @@ CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacit
 
 - احفظ أوزان النموذج كملف `h5` باستخدام [`model.save_weights`](https://www.tensorflow.org/tutorials/keras/save_and_load#save_the_entire_model) ثم أعد تحميل النموذج باستخدام [`~TFPreTrainedModel.from_pretrained`]:
 
-```بايثون
+```python
 >>> from transformers import TFPreTrainedModel
 >>> from tensorflow import keras
 
