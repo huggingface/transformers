@@ -113,7 +113,7 @@ all_encoder_layers, pooled_output = loaded_model(*dummy_input)
 
 ### استخدام نموذج مُتتبع للاستدلال
 
-استخدم النموذج الذي تم تتبعه للاستدلال باستخدام أسلوب `__call__` الخاص به:
+استخدم النموذج المُتتبع للاستدلال باستخدام أسلوب `__call__` الخاص به:
 
 ```python
 traced_model(tokens_tensor, segments_tensors)
