@@ -152,7 +152,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = int(math.sqrt(len(posemb_grid)))
+        old_grid_size = torch_int(len(posemb_grid) ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
@@ -626,7 +626,7 @@ class DPTReassembleStage(nn.Module):
                 if patch_height is not None and patch_width is not None:
                     hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
                 else:
-                    size = int(math.sqrt(sequence_length))
+                    size = torch_int(sequence_length**0.5)
                     hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
                 hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
@@ -1121,20 +1121,18 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        ...     predicted_depth = outputs.predicted_depth
 
         >>> # interpolate to original size
-        >>> prediction = torch.nn.functional.interpolate(
-        ...     predicted_depth.unsqueeze(1),
-        ...     size=image.size[::-1],
-        ...     mode="bicubic",
-        ...     align_corners=False,
+        >>> post_processed_output = image_processor.post_process_depth_estimation(
+        ...     outputs,
+        ...     target_sizes=[(image.height, image.width)],
         ... )
 
         >>> # visualize the prediction
-        >>> output = prediction.squeeze().cpu().numpy()
-        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
-        >>> depth = Image.fromarray(formatted)
+        >>> predicted_depth = post_processed_output[0]["predicted_depth"]
+        >>> depth = predicted_depth * 255 / predicted_depth.max()
+        >>> depth = depth.detach().cpu().numpy()
+        >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
         loss = None
         if labels is not None:

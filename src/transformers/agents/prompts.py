@@ -199,7 +199,7 @@ Thought: I will now generate an image showcasing the oldest person.
 Action:
 {
   "action": "image_generator",
-  "action_input": {"text": ""A portrait of John Doe, a 55-year-old man living in Canada.""}
+  "action_input": {"prompt": "A portrait of John Doe, a 55-year-old man living in Canada."}
 }<end_action>
 Observation: "image.png"
 
@@ -332,10 +332,10 @@ final_answer("Shanghai")
 ---
 Task: "What is the current age of the pope, raised to the power 0.36?"
 
-Thought: I will use the tool `search` to get the age of the pope, then raise it to the power 0.36.
+Thought: I will use the tool `wiki` to get the age of the pope, then raise it to the power 0.36.
 Code:
 ```py
-pope_age = search(query="current pope age")
+pope_age = wiki(query="current pope age")
 print("Pope age:", pope_age)
 ```<end_action>
 Observation:
@@ -348,16 +348,16 @@ pope_current_age = 85 ** 0.36
 final_answer(pope_current_age)
 ```<end_action>
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. On top of performing computations in the Python code snippets that you create, you have acces to those tools (and no other tool):
 
 <<tool_descriptions>>
 
-You also can perform computations in the Python code that you generate.
+<<managed_agents_descriptions>>
 
 Here are the rules you should always follow to solve your task:
 1. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will fail.
 2. Use only variables that you have defined!
-3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
+3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = wiki({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = wiki(query="What is the place where James Bond lives?")'.
 4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
 5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
 6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
@@ -410,6 +410,8 @@ Task:
 Your plan can leverage any of these tools:
 {tool_descriptions}
 
+{managed_agents_descriptions}
+
 List of facts that you know:
 ```
 {answer_facts}
@@ -453,8 +455,10 @@ USER_PROMPT_PLAN_UPDATE = """You're still working towards solving this task:
 {task}
 ```
 
-You have access to these tools:
+You have access to these tools and only these:
 {tool_descriptions}
+
+{managed_agents_descriptions}
 
 Here is the up to date list of facts that you know:
 ```

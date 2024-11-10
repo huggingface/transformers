@@ -504,6 +504,27 @@ def convert_feature_extractor(feature_extractor, tiny_config):
     if to_convert:
         feature_extractor = feature_extractor.__class__(**kwargs)
 
+    # Sanity check: on tiny image feature extractors, a large image size results in slow CI -- up to the point where it
+    # can result in timeout issues.
+    if (
+        isinstance(feature_extractor, BaseImageProcessor)
+        and hasattr(feature_extractor, "size")
+        and isinstance(feature_extractor.size, dict)
+    ):
+        largest_image_size = max(feature_extractor.size.values())
+        if largest_image_size > 64:
+            # hardcoded exceptions
+            models_with_large_image_size = ("deformable_detr", "flava", "grounding_dino", "mgp_str", "swiftformer")
+            if any(model_name in tiny_config.model_type for model_name in models_with_large_image_size):
+                pass
+            else:
+                raise ValueError(
+                    f"Image size of {tiny_config.model_type} is too large ({feature_extractor.size}). "
+                    "Please reduce it to 64 or less on each dimension. The following steps are usually the "
+                    "easiest solution: 1) confirm that you're setting `image_size` in your ModelTester class; "
+                    "2) ensure that it gets passed to the tester config init, `get_config()`."
+                )
+
     return feature_extractor
 
 
@@ -526,14 +547,14 @@ def convert_processors(processors, tiny_config, output_folder, result):
         # sanity check 1: fast and slow tokenizers should be compatible (vocab_size)
         if fast_tokenizer is not None and slow_tokenizer is not None:
             if fast_tokenizer.vocab_size != slow_tokenizer.vocab_size:
-                warning_messagae = (
+                warning_message = (
                     "The fast/slow tokenizers "
                     f"({fast_tokenizer.__class__.__name__}/{slow_tokenizer.__class__.__name__}) have different "
                     "vocabulary size: "
                     f"fast_tokenizer.vocab_size = {fast_tokenizer.vocab_size} and "
                     f"slow_tokenizer.vocab_size = {slow_tokenizer.vocab_size}."
                 )
-                result["warnings"].append(warning_messagae)
+                result["warnings"].append(warning_message)
                 if not keep_fast_tokenizer:
                     fast_tokenizer = None
                 slow_tokenizer = None
@@ -541,12 +562,12 @@ def convert_processors(processors, tiny_config, output_folder, result):
         # sanity check 2: fast and slow tokenizers should be compatible (length)
         if fast_tokenizer is not None and slow_tokenizer is not None:
             if len(fast_tokenizer) != len(slow_tokenizer):
-                warning_messagae = (
+                warning_message = (
                     f"The fast/slow tokenizers () have different length: "
                     f"len(fast_tokenizer) = {len(fast_tokenizer)} and "
                     f"len(slow_tokenizer) = {len(slow_tokenizer)}."
                 )
-                result["warnings"].append(warning_messagae)
+                result["warnings"].append(warning_message)
                 if not keep_fast_tokenizer:
                     fast_tokenizer = None
                 slow_tokenizer = None
@@ -1395,7 +1416,7 @@ def create_tiny_models(
         raise ValueError(f"This script should be run from the root of the clone of `transformers` {clone_path}")
 
     report_path = os.path.join(output_path, "reports")
-    os.makedirs(report_path)
+    os.makedirs(report_path, exist_ok=True)
 
     _pytorch_arch_mappings = [
         x

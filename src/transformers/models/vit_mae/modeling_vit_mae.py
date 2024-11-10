@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_vit_mae import ViTMAEConfig
 
@@ -206,6 +207,7 @@ class ViTMAEEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.zeros(1, self.num_patches + 1, config.hidden_size), requires_grad=False
         )
+        self.patch_size = config.patch_size
         self.config = config
         self.initialize_weights()
 
@@ -223,40 +225,46 @@ class ViTMAEEmbeddings(nn.Module):
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
         torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
+
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
 
-        if num_patches == num_positions and height == width:
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
 
-        class_pos_embed = self.position_embeddings[:, 0, :]
-        patch_pos_embed = self.position_embeddings[:, 1:, :]
+        class_pos_embed = self.position_embeddings[:, :1]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+
         dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         )
-        if int(h0) != patch_pos_embed.shape[-2] or int(w0) != patch_pos_embed.shape[-1]:
-            raise ValueError("Width or height does not match with the interpolated position embeddings")
+
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def random_masking(self, sequence, noise=None):
         """
@@ -416,8 +424,24 @@ class ViTMAESdpaSelfAttention(ViTMAESelfAttention):
         self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self,
+        hidden_states: torch.FloatTensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        if output_attentions or head_mask is not None:
+            logger.warning_once(
+                "`ViTMAESdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but "
+                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+            )
+
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -833,21 +857,20 @@ class ViTMAEDecoder(nn.Module):
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
-        This method is a modified version of the interpolation function for ViT-mae model at the deocder, that
+        This method is a modified version of the interpolation function for ViT-mae model at the decoder, that
         allows to interpolate the pre-trained decoder position encodings, to be able to use the model on higher
         resolution images.
 
-        Source:
+        Adapted from:
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
         # -1 removes the class dimension since we later append it without interpolation
         embeddings_positions = embeddings.shape[1] - 1
-        num_positions = self.decoder_pos_embed.shape[1] - 1
 
         # Separation of class token and patch tokens
-        class_pos_embed = self.decoder_pos_embed[:, 0, :]
-        patch_pos_embed = self.decoder_pos_embed[:, 1:, :]
+        class_pos_embed = self.decoder_pos_embed[:, :1]
+        patch_pos_embed = self.decoder_pos_embed[:, 1:]
 
         # To retain the final 3d tensor with the required dimensions
         dim = self.decoder_pos_embed.shape[-1]
@@ -859,10 +882,10 @@ class ViTMAEDecoder(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         # Interpolating the decoder position embeddings shape wrt embeddings shape i.e (x).
-        # 1 keeps the other dimension constant
+        # we keep the second last dimension constant
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(1, embeddings_positions / num_positions),
+            size=(patch_pos_embed.shape[-2], embeddings_positions),
             mode="bicubic",
             align_corners=False,
         )
@@ -870,7 +893,7 @@ class ViTMAEDecoder(nn.Module):
         # Converting back to the original shape
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         # Adding the class token back
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def initialize_weights(self, num_patches):
         # initialize (and freeze) position embeddings by sin-cos embedding

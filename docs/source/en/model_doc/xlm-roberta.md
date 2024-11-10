@@ -43,7 +43,7 @@ low-resource languages, improving 11.8% in XNLI accuracy for Swahili and 9.2% fo
 also present a detailed empirical evaluation of the key factors that are required to achieve these gains, including the
 trade-offs between (1) positive transfer and capacity dilution and (2) the performance of high and low resource
 languages at scale. Finally, we show, for the first time, the possibility of multilingual modeling without sacrificing
-per-language performance; XLM-Ris very competitive with strong monolingual models on the GLUE and XNLI benchmarks. We
+per-language performance; XLM-R is very competitive with strong monolingual models on the GLUE and XNLI benchmarks. We
 will make XLM-R code, data, and models publicly available.*
 
 This model was contributed by [stefan-it](https://huggingface.co/stefan-it). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/xlmr).

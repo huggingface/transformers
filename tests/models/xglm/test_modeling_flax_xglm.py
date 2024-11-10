@@ -22,7 +22,7 @@ from transformers import XGLMConfig, XGLMTokenizer, is_flax_available, is_torch_
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_sentencepiece, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
-from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
@@ -115,20 +115,6 @@ class FlaxXGLMModelTester:
         config, input_ids, attention_mask = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
-
-    def prepare_config_and_inputs_for_decoder(self):
-        config, input_ids, attention_mask = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
