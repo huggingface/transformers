@@ -1613,8 +1613,8 @@ class TokenizerTesterMixin:
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
                 else:
-                    truncated_sequence = information["input_ids"]
-                    overflowing_tokens = information["overflowing_tokens"]
+                    truncated_sequence = information["input_ids"][0]
+                    overflowing_tokens = information["input_ids"][1]
 
                     self.assertEqual(len(truncated_sequence), total_length - 2)
                     self.assertEqual(truncated_sequence, sequence[:-2])
@@ -1847,14 +1847,14 @@ class TokenizerTesterMixin:
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens))
                     self.assertEqual(overflowing_tokens, overflow_first_sequence)
                 else:
-                    truncated_sequence = information_first_truncated["input_ids"]
-                    overflowing_tokens = information_first_truncated["overflowing_tokens"]
+                    truncated_sequence = information_first_truncated["input_ids"][0]
+                    overflowing_tokens = information_first_truncated["input_ids"][1]
 
                     self.assertEqual(len(truncated_sequence), len(sequence) - 2)
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, seq0_tokens[-(2 + stride) :])
+                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens))
+                    self.assertEqual(overflowing_tokens, overflow_first_sequence)
 
                 information_second_truncated = tokenizer(
                     seq_0,
@@ -1878,14 +1878,14 @@ class TokenizerTesterMixin:
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens))
                     self.assertEqual(overflowing_tokens, overflow_second_sequence)
                 else:
-                    truncated_sequence = information_second_truncated["input_ids"]
-                    overflowing_tokens = information_second_truncated["overflowing_tokens"]
+                    truncated_sequence = information_second_truncated["input_ids"][0]
+                    overflowing_tokens = information_second_truncated["input_ids"][1]
 
                     self.assertEqual(len(truncated_sequence), len(sequence) - 2)
                     self.assertEqual(truncated_sequence, truncated_second_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, seq1_tokens[-(2 + stride) :])
+                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens))
+                    self.assertEqual(overflowing_tokens, overflow_second_sequence)
 
     # TODO: FIXME @ArthurZucker
     @unittest.skip(
