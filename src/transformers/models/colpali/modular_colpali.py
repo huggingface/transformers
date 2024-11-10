@@ -762,3 +762,10 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
+
+    @property
+    def patch_size(self) -> int:
+        """
+        Get the patch size of the backbone Vision Language Model (VLM).
+        """
+        return self.vision_tower.config.patch_size
