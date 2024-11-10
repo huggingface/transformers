@@ -129,7 +129,7 @@ tensor([[ 0.0082, -0.2307],
 
 هنا المُخرجات الفعلية للتسلسل الثاني:
 
-```بايثون
+```python
 >>> input_ids = torch.tensor([[7592]])
 >>> output = model(input_ids)
 >>> print(output.logits)
