@@ -3527,7 +3527,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             if return_length:
                 encoded_inputs["length"] = len(encoded_inputs["input_ids"])
-            return encoded_inputs, num_tokens_to_remove
+            return encoded_inputs, overflowing_tokens
 
         def _add_to_encoding_dict(encoding_dict, e):
             encoding_dict["input_ids"].append(e["input_ids"])
@@ -3542,14 +3542,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if return_length:
                 encoding_dict["length"].append(len(e["input_ids"]))
 
-        encoded_inputs, num_tokens_to_remove = _calc(ids, pair_ids)
+        encoded_inputs, overflowing_tokens = _calc(ids, pair_ids)
 
-        if return_overflowing_tokens and num_tokens_to_remove:
+        if return_overflowing_tokens and overflowing_tokens:
             encoding_dict = defaultdict(list)
             _add_to_encoding_dict(encoding_dict, encoded_inputs)
-            while num_tokens_to_remove > 0:
-                encoded_inputs, num_tokens_to_remove = _calc(
-                    ids[-num_tokens_to_remove:], pair_ids[-num_tokens_to_remove:] if pair_ids is not None else None
+            while overflowing_tokens:
+                encoded_inputs, overflowing_tokens = _calc(
+                    overflowing_tokens, pair_ids if pair_ids is not None else None
                 )
                 _add_to_encoding_dict(encoding_dict, encoded_inputs)
             batch_outputs = BatchEncoding(
