@@ -102,7 +102,7 @@ torch.jit.save(traced_model, "traced_bert.pt")
 
 ### تحميل نموذج
 
-الآن يمكنك تحميل `BertModel` المحفوظ سابقًا، `traced_bert.pt`، من القرص واستخدامه على `dummy_input` الذي تم تهيئته مسبقًا:
+يمكنك الآن تحميل `BertModel` المُحفظ سابقًا، `traced_bert.pt`، من القرص واستخدامه على `dummy_input` المُهيأ سابقًا:
 
 ```python
 loaded_model = torch.jit.load("traced_bert.pt")
