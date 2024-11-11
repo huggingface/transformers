@@ -183,14 +183,24 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-to-text": LlavaForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True
 
     def setUp(self):
         self.model_tester = LlavaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):

@@ -168,7 +168,12 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Idefics3Config, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Idefics3Config, has_text_modality=False, common_properties=["image_token_id"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
@@ -317,6 +322,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True

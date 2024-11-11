@@ -71,6 +71,7 @@ from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
+from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
@@ -102,6 +103,7 @@ pipeline_test_mapping = {
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-feature-extraction": {"test": ImageFeatureExtractionPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
+    "image-text-to-text": {"test": ImageTextToTextPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
@@ -585,6 +587,18 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_image_segmentation_fp16(self):
         self.run_task_tests(task="image-segmentation", torch_dtype="float16")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text(self):
+        self.run_task_tests(task="image-text-to-text")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text_fp16(self):
+        self.run_task_tests(task="image-text-to-text", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision
