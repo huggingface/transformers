@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The LG AI Research EXAONE Lab
+# Copyright 2021 The LG AI Research EXAONE Lab.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -1189,8 +1189,6 @@ class ExaoneForCausalLM(ExaonePreTrainedModel, GenerationMixin):
     EXAONE_START_DOCSTRING,
 )
 class ExaoneForSequenceClassification(ExaonePreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
