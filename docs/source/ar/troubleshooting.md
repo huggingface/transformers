@@ -90,7 +90,7 @@ RuntimeError: CUDA error: device-side assert triggered
 
 يجب عليك محاولة تشغيل الكود على وحدة المعالجة المركزية (CPU) أولاً للحصول على رسالة خطأ أكثر دقة. أضف متغير البيئة التالي في بداية كودك للتبديل إلى وحدة المعالجة المركزية:
 
-```بايثون
+```python
 >>> import os
 
 >>> os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -98,7 +98,7 @@ RuntimeError: CUDA error: device-side assert triggered
 
 الخيار الآخر هو الحصول على تتبع مكدس أفضل من GPU. أضف متغير البيئة التالي في بداية كودك للحصول على تتبع المكدس للإشارة إلى مصدر الخطأ:
 
-```بايثون
+```python
 >>> import os
 
 >>> os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -108,7 +108,7 @@ RuntimeError: CUDA error: device-side assert triggered
 
 في بعض الحالات، قد يكون `hidden_state` غير صحيحة إذا تضمنت `input_ids` رموز حشو. ولإثبات ذلك، قم بتحميل نموذج ومجزىء لغوى. يمكنك الوصول إلى `pad_token_id` للنموذج لمعرفة قيمته. قد تكون `pad_token_id` `None` لبعض النماذج، ولكن يمكنك دائمًا تعيينها يدويًا.
 
-```بايثون
+```python
 >>> from transformers import AutoModelForSequenceClassification
 >>> import torch
 
