@@ -150,10 +150,9 @@ class HfApiEngine(HfEngine):
     Parameters:
         model (`str`, *optional*, defaults to `"meta-llama/Meta-Llama-3.1-8B-Instruct"`):
             The Hugging Face model ID to be used for inference. This can be a path or model identifier from the Hugging Face model hub.
-
-         (`str`, *optional*):
-            The Hugging Face API
-             for authentication. If not provided, the class will use the token stored in the Hugging Face CLI configuration.
+        token (`str`, *optional*):
+            Token used by the Hugging Face API for authentication.
+            If not provided, the class will use the token stored in the Hugging Face CLI configuration.
         max_tokens (`int`, *optional*, defaults to 1500):
             The maximum number of tokens allowed in the output.
         timeout (`int`, *optional*, defaults to 120):
