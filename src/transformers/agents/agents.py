@@ -1203,11 +1203,10 @@ class ReactCodeAgent(ReactAgent):
             )
             self.logger.warning("Print outputs:")
             self.logger.log(32, self.state["print_outputs"])
+            observation = "Print outputs:\n" + self.state["print_outputs"]
             if result is not None:
                 self.logger.warning("Last output from code snippet:")
                 self.logger.log(32, str(result))
-            observation = "Print outputs:\n" + self.state["print_outputs"]
-            if result is not None:
                 observation += "Last output from code snippet:\n" + str(result)[:100000]
             log_entry["observation"] = observation
         except Exception as e:
