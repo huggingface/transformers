@@ -14,6 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import ast
 import base64
 import importlib
 import inspect
@@ -135,15 +136,19 @@ class Tool:
         required_attributes = {
             "description": str,
             "name": str,
-            "inputs": Dict,
+            "inputs": dict,
             "output_type": str,
         }
         authorized_types = ["string", "integer", "number", "image", "audio", "any", "boolean"]
 
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
+            if attr_value is None:
+                raise TypeError(f"You must set an attribute {attr}.")
             if not isinstance(attr_value, expected_type):
-                raise TypeError(f"You must set an attribute {attr} of type {expected_type.__name__}.")
+                raise TypeError(
+                    f"Attribute {attr} should have type {expected_type.__name__}, got {type(attr_value)} instead."
+                )
         for input_name, input_content in self.inputs.items():
             assert "type" in input_content, f"Input '{input_name}' should specify a type."
             if input_content["type"] not in authorized_types:
@@ -240,7 +245,6 @@ class Tool:
     def from_hub(
         cls,
         repo_id: str,
-        model_repo_id: Optional[str] = None,
         token: Optional[str] = None,
         **kwargs,
     ):
@@ -258,9 +262,6 @@ class Tool:
         Args:
             repo_id (`str`):
                 The name of the repo on the Hub where your tool is defined.
-            model_repo_id (`str`, *optional*):
-                If your tool uses a model and you want to use a different model than the default, you can pass a second
-                repo ID or an endpoint url to this argument.
             token (`str`, *optional*):
                 The token to identify you on hf.co. If unset, will use the token generated when running
                 `huggingface-cli login` (stored in `~/.huggingface`).
@@ -345,6 +346,9 @@ class Tool:
             tool_class.inputs = custom_tool["inputs"]
         if tool_class.output_type != custom_tool["output_type"]:
             tool_class.output_type = custom_tool["output_type"]
+
+        if not isinstance(tool_class.inputs, dict):
+            tool_class.inputs = ast.literal_eval(tool_class.inputs)
 
         return tool_class(**kwargs)
 

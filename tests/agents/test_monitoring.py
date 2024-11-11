@@ -22,7 +22,6 @@ from transformers.agents.monitoring import stream_to_gradio
 
 class MonitoringTester(unittest.TestCase):
     def test_streaming_agent_text_output(self):
-        # Create a dummy LLM engine that returns a final answer
         def dummy_llm_engine(prompt, **kwargs):
             return """
 Code:
@@ -39,14 +38,12 @@ final_answer('This is the final answer.')
         # Use stream_to_gradio to capture the output
         outputs = list(stream_to_gradio(agent, task="Test task", test_mode=True))
 
-        # Check that the final output is a ChatMessage with the expected content
         self.assertEqual(len(outputs), 3)
         final_message = outputs[-1]
         self.assertEqual(final_message.role, "assistant")
         self.assertIn("This is the final answer.", final_message.content)
 
     def test_streaming_agent_image_output(self):
-        # Create a dummy LLM engine that returns an image as final answer
         def dummy_llm_engine(prompt, **kwargs):
             return 'Action:{"action": "final_answer", "action_input": {"answer": "image"}}'
 
@@ -59,7 +56,6 @@ final_answer('This is the final answer.')
         # Use stream_to_gradio to capture the output
         outputs = list(stream_to_gradio(agent, task="Test task", image=AgentImage(value="path.png"), test_mode=True))
 
-        # Check that the final output is a ChatMessage with the expected content
         self.assertEqual(len(outputs), 2)
         final_message = outputs[-1]
         self.assertEqual(final_message.role, "assistant")
@@ -68,7 +64,6 @@ final_answer('This is the final answer.')
         self.assertEqual(final_message.content["mime_type"], "image/png")
 
     def test_streaming_with_agent_error(self):
-        # Create a dummy LLM engine that raises an error
         def dummy_llm_engine(prompt, **kwargs):
             raise AgentError("Simulated agent error")
 
@@ -81,7 +76,6 @@ final_answer('This is the final answer.')
         # Use stream_to_gradio to capture the output
         outputs = list(stream_to_gradio(agent, task="Test task", test_mode=True))
 
-        # Check that the error message is yielded
         self.assertEqual(len(outputs), 3)
         final_message = outputs[-1]
         self.assertEqual(final_message.role, "assistant")
