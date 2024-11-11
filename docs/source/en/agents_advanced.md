@@ -216,15 +216,28 @@ You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_
 ```py
 import gradio as gr
 from transformers import (
-    load_tool,
     ReactCodeAgent,
     HfApiEngine,
     stream_to_gradio,
 )
+from transformers.agents.tools import Tool
+from huggingface_hub import InferenceClient
 
-# Import tool from Hub
-image_generation_tool = load_tool("m-ric/text-to-image")
 
+class TextToImageTool(Tool):
+    description = "This is a tool that creates an image according to a prompt, which is a text description."
+    name = "image_generator"
+    inputs = {"prompt": {"type": "string", "description": "The image generator prompt. Don't hesitate to add details in the prompt to make the image look better, like 'high-res, photorealistic', etc."}}
+    output_type = "image"
+    model_sdxl = "stabilityai/stable-diffusion-xl-base-1.0"
+    client = InferenceClient(model_sdxl)
+
+
+    def forward(self, prompt):
+        return self.client.text_to_image(prompt)
+
+
+image_generation_tool = TextToImageTool()
 llm_engine = HfApiEngine("meta-llama/Meta-Llama-3-70B-Instruct")
 
 # Initialize the agent with the image generation tool
