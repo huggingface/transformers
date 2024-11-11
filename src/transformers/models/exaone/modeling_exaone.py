@@ -120,7 +120,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -695,58 +694,58 @@ EXAONE_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config (:class:`~transformers.ExaoneConfig`): Model configuration class with all the parameters of the model.
+        config ([`ExaoneConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            configuration. Check out the `PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 EXAONE_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
-            :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
-            ``past_key_values.get_seq_length()`` (``sequence_length`` of input past key value states). Indices of input
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If :obj:`past_key_values` is used, only ``input_ids`` that do not have their past calculated should be
-            passed as ``input_ids``.
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be
+            passed as `input_ids`.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        past_key_values (:obj:`Cache`, `optional`):
+        past_key_values (`Cache`, *optional*):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
-            :obj:`past_key_values` output below). Can be used to speed up sequential decoding. This typically consists
+            `past_key_values` output below). Can be used to speed up sequential decoding. This typically consists
             in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or
             `config.use_cache=True`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
 
-            If :obj:`past_key_values` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
-            :obj:`past_key_values`).
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
-        output_attentions (:obj:`bool`, `optional`):
+            If `past_key_values` is used, optionally only the last `inputs_embeds` have to be input (see
+            `past_key_values`).
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
+            decoding (see `past_key_values`).
+        output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
+        output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        cache_position (:obj:`torch.LongTensor` of shape :obj:`(sequence_length)`, `optional`):
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
             Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
@@ -907,7 +906,6 @@ class ExaoneModel(ExaonePreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1176,13 +1174,13 @@ class ExaoneForCausalLM(ExaonePreTrainedModel):
     """
     The EXAONE Model transformer with a sequence classification head on top (linear layer).
 
-    :class:`~transformers.ExaoneForSequenceClassification` uses the last token in order to do the classification, as
+    [`ExaoneForSequenceClassification`] uses the last token in order to do the classification, as
     other causal models (e.g. GPT-1) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
-    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
-    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
-    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
+    row. If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take
     the last value in each row of the batch).
     """,
     EXAONE_START_DOCSTRING,
@@ -1337,13 +1335,13 @@ class ExaoneForQuestionAnswering(ExaonePreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
