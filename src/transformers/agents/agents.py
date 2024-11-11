@@ -834,6 +834,7 @@ class ReactAgent(Agent):
             self.logger.error(error_message, exc_info=1)
             final_answer = self.provide_final_answer(task)
             final_step_log["final_answer"] = final_answer
+            final_step_log["step_duration"] = 0
             for callback in self.step_callbacks:
                 callback(final_step_log)
             yield final_step_log
@@ -874,6 +875,7 @@ class ReactAgent(Agent):
             self.logger.error(error_message, exc_info=1)
             final_answer = self.provide_final_answer(task)
             final_step_log["final_answer"] = final_answer
+            final_step_log["step_duration"] = 0
             for callback in self.step_callbacks:
                 callback(final_step_log)
 

@@ -87,7 +87,7 @@ class Monitor:
             self.total_output_token_count = 0
 
     def update_metrics(self, step_log):
-        step_duration = step_log.get("step_duration", None)
+        step_duration = step_log["step_duration"]
         self.step_durations.append(step_duration)
         logger.info(f"Step {len(self.step_durations)}:")
         logger.info(f"- Time taken: {step_duration:.2f} seconds (valid only if step succeeded)")
