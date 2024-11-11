@@ -31,6 +31,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
@@ -985,7 +986,9 @@ class ExaoneModel(ExaonePreTrainedModel):
     """,
     EXAONE_START_DOCSTRING,
 )
-class ExaoneForCausalLM(ExaonePreTrainedModel):
+class ExaoneForCausalLM(ExaonePreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = ExaoneModel(config)
@@ -1138,7 +1141,7 @@ class ExaoneForCausalLM(ExaonePreTrainedModel):
 
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
             if inputs_embeds is not None:
-                batch_size, sequence_length = inputs_embeds.shape
+                batch_size, sequence_length, _ = inputs_embeds.shape
                 device = inputs_embeds.device
             else:
                 batch_size, sequence_length = input_ids.shape

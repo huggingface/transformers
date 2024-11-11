@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
     require_torch,
+    require_torch_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -73,6 +74,7 @@ class ExaoneModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        pad_token_id=0,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -96,6 +98,7 @@ class ExaoneModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
+        self.pad_token_id = pad_token_id
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -135,6 +138,7 @@ class ExaoneModelTester:
             use_cache=True,
             tie_word_embeddings=False,
             torch_dtype=self.dtype,
+            pad_token_id=self.pad_token_id,
         )
 
     def create_and_check_model(
@@ -444,6 +448,7 @@ class ExaoneIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
+    @require_torch_gpu
     @require_flash_attn
     def test_exaone_v3_0_generation_long_flash(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [433, 9055]
