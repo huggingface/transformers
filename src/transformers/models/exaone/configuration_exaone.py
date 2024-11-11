@@ -12,15 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" EXAONE model configuration """
+"""EXAONE model configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-EXAONE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-}
+EXAONE_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class ExaoneConfig(PretrainedConfig):
@@ -132,6 +132,7 @@ class ExaoneConfig(PretrainedConfig):
             >>> # Accessing the model configuration
             >>> configuration = model.config
     """
+
     model_type = "exaone"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_hidden_layers": "num_layers"}
@@ -156,7 +157,7 @@ class ExaoneConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         tie_word_embeddings=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -182,5 +183,7 @@ class ExaoneConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )

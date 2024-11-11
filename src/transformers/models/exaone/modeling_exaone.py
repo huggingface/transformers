@@ -18,33 +18,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LG AI Research EXAONE Lab"""
+"""LG AI Research EXAONE Lab"""
+
 import math
-from typing import List, Optional, Tuple, Union
-from packaging import version
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
     QuestionAnsweringModelOutput,
+    SequenceClassifierOutputWithPast,
 )
-from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -58,11 +56,12 @@ from .configuration_exaone import ExaoneConfig
 if is_flash_attn_2_available():
     try:
         import flash_attn
-        if version.parse(flash_attn.__version__) > version.parse('2.4.2'):
+
+        if version.parse(flash_attn.__version__) > version.parse("2.4.2"):
             from flash_attn.ops.triton.layer_norm import rms_norm_fn
         else:
             from flash_attn.ops.triton.layernorm import rms_norm_fn
-    except:
+    except ImportError:
         pass
 
 
@@ -115,7 +114,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 def rotate_half(x):
-    """ Rotates half the hidden dims of the input. """
+    """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
@@ -252,8 +251,8 @@ class ExaoneRotaryEmbedding(nn.Module):
             inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)
             self.max_seq_len = seq_len
-        
-        if seq_len < self.original_max_seq_len and self.max_seq_len > self.original_max_seq_len:    # reset to original
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len > self.original_max_seq_len:  # reset to original
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len = self.original_max_seq_len
 
@@ -264,14 +263,14 @@ class ExaoneRotaryEmbedding(nn.Module):
 
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        
+
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos, sin = emb.cos(), emb.sin()
-        
+
         cos, sin = cos * self.attention_scaling, sin * self.attention_scaling
         return cos.to(x.dtype), sin.to(x.dtype)
 
@@ -294,7 +293,7 @@ class ExaoneSelfAttention(nn.Module):
             )
 
         self.rotary = ExaoneRotaryEmbedding(config)
-        
+
         self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
@@ -312,7 +311,6 @@ class ExaoneSelfAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         bsz, q_len, _ = hidden_states.size()
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -339,7 +337,7 @@ class ExaoneSelfAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, :key_states.shape[-2]]
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -458,7 +456,7 @@ class ExaoneFlashAttention(ExaoneSelfAttention):
 class ExaoneSdpaAttention(ExaoneSelfAttention):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-    
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -471,7 +469,6 @@ class ExaoneSdpaAttention(ExaoneSelfAttention):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         if output_attentions:
             logger.warning_once(
                 "ExaoneModel is using ExaoneSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
@@ -515,7 +512,7 @@ class ExaoneSdpaAttention(ExaoneSelfAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, :key_states.shape[-2]]        
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -549,9 +546,9 @@ class ExaoneAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.layer_id = layer_id
-        if 'flash' in config._attn_implementation:
+        if "flash" in config._attn_implementation:
             self.attention = ExaoneFlashAttention(config, self.layer_id)
-        elif 'sdpa' in config._attn_implementation:
+        elif "sdpa" in config._attn_implementation:
             self.attention = ExaoneSdpaAttention(config, self.layer_id)
         else:
             self.attention = ExaoneSelfAttention(config, self.layer_id)
@@ -568,7 +565,6 @@ class ExaoneAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         return self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -603,9 +599,9 @@ class ExaoneBlock(nn.Module):
         self.config = config
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
-        self.ln_1 = ExaoneRMSNorm(hidden_size = hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_1 = ExaoneRMSNorm(hidden_size=hidden_size, eps=config.layer_norm_epsilon)
         self.attn = ExaoneAttention(config, layer_id)
-        self.ln_2 = ExaoneRMSNorm(hidden_size = hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_2 = ExaoneRMSNorm(hidden_size=hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = ExaoneGatedMLP(inner_dim, config)
 
     def forward(
@@ -620,7 +616,6 @@ class ExaoneBlock(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
 
@@ -730,8 +725,8 @@ EXAONE_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`_
         past_key_values (:obj:`Cache`, `optional`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
-            :obj:`past_key_values` output below). Can be used to speed up sequential decoding. This typically consists 
-            in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or 
+            :obj:`past_key_values` output below). Can be used to speed up sequential decoding. This typically consists
+            in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or
             `config.use_cache=True`.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
@@ -911,7 +906,7 @@ class ExaoneModel(ExaonePreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-    
+
     # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
@@ -993,7 +988,6 @@ class ExaoneModel(ExaonePreTrainedModel):
     EXAONE_START_DOCSTRING,
 )
 class ExaoneForCausalLM(ExaonePreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = ExaoneModel(config)
@@ -1063,7 +1057,9 @@ class ExaoneForCausalLM(ExaonePreTrainedModel):
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         transformer_outputs = self.transformer(
             input_ids,
@@ -1193,6 +1189,7 @@ class ExaoneForCausalLM(ExaonePreTrainedModel):
 )
 class ExaoneForSequenceClassification(ExaonePreTrainedModel):
     _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

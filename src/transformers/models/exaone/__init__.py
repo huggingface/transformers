@@ -31,7 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_exaone"] = [
-        "ExaonePreTrainedModel",        
+        "ExaonePreTrainedModel",
         "ExaoneModel",
         "ExaoneForCausalLM",
         "ExaoneForSequenceClassification",
@@ -49,11 +49,11 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_exaone import (
-            ExaonePreTrainedModel,
-            ExaoneModel,
             ExaoneForCausalLM,
-            ExaoneForSequenceClassification,
             ExaoneForQuestionAnswering,
+            ExaoneForSequenceClassification,
+            ExaoneModel,
+            ExaonePreTrainedModel,
         )
 
 
