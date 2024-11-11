@@ -25,8 +25,10 @@ def pull_message(step_log: dict, test_mode: bool = True):
         if test_mode:
 
             class ChatMessage:
-                role: str
-                content: dict
+                def __init__(self, role, content, metadata=None):
+                    self.role = role
+                    self.content = content
+                    self.metadata = metadata
         else:
             raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
@@ -61,8 +63,10 @@ def stream_to_gradio(agent: ReactAgent, task: str, test_mode: bool = False, **kw
         if test_mode:
 
             class ChatMessage:
-                role: str
-                content: dict
+                def __init__(self, role, content, metadata=None):
+                    self.role = role
+                    self.content = content
+                    self.metadata = metadata
         else:
             raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
