@@ -14,10 +14,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .agent_types import AgentAudio, AgentImage, AgentText
 from ..utils import logging
+from .agent_types import AgentAudio, AgentImage, AgentText
+
 
 logger = logging.get_logger(__name__)
+
 
 def pull_message(step_log: dict):
     try:
@@ -85,14 +87,13 @@ class Monitor:
             self.total_output_token_count = 0
 
     def update_metrics(self, step_log):
-        step_duration = step_log.get('step_duration', None)
+        step_duration = step_log.get("step_duration", None)
         self.step_durations.append(step_duration)
+        logger.info(f"Step {len(self.step_durations)}:")
+        logger.info(f"- Time taken: {step_duration:.2f} seconds (valid only if step succeeded)")
 
         if getattr(self.tracked_llm_engine, "last_input_token_count", None) is not None:
             self.total_input_token_count += self.tracked_llm_engine.last_input_token_count
             self.total_output_token_count += self.tracked_llm_engine.last_output_token_count
-
-        logger.info(f"Step {len(self.step_durations)}:")
-        logger.info(f"  Time taken: {step_duration:.2f} seconds (valid only if step succeeded)")
-        logger.info(f"  Input tokens: {self.total_input_token_count}")
-        logger.info(f"  Output tokens: {self.total_output_token_count}")
+            logger.info(f"- Input tokens: {self.total_input_token_count}")
+            logger.info(f"- Output tokens: {self.total_output_token_count}")

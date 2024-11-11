@@ -20,11 +20,13 @@ from typing import Dict, List, Optional
 
 from huggingface_hub import InferenceClient
 
-from ..pipelines.base import Pipeline
 from .. import AutoTokenizer
+from ..pipelines.base import Pipeline
 from ..utils import logging
 
+
 logger = logging.get_logger(__name__)
+
 
 class MessageRole(str, Enum):
     USER = "user"
@@ -69,6 +71,7 @@ llama_role_conversions = {
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
+
 class HfEngine:
     def __init__(self, model_id: Optional[str] = None):
         self.last_input_token_count = None
@@ -84,13 +87,15 @@ class HfEngine:
 
     def get_token_counts(self):
         return {
-            'input_token_count': self.last_input_token_count,
-            'output_token_count': self.last_output_token_count,
+            "input_token_count": self.last_input_token_count,
+            "output_token_count": self.last_output_token_count,
         }
-    
-    def generate(self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None):
+
+    def generate(
+        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
+    ):
         raise NotImplementedError
-    
+
     def __call__(
         self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
     ) -> str:
@@ -108,19 +113,15 @@ class HfEngine:
                 response = response[: -len(stop_seq)]
         return response
 
+
 class HfApiEngine(HfEngine):
     """This engine leverages Hugging Face's Inference API service, either serverless or with a dedicated endpoint."""
 
-    def __init__(
-            self, 
-            model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
-            timeout: int = 120
-        ):
+    def __init__(self, model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct", timeout: int = 120):
         super().__init__(model_id=model)
         self.model = model
         self.timeout = timeout
         self.client = InferenceClient(self.model, timeout=self.timeout)
-
 
     def generate(
         self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
@@ -152,7 +153,7 @@ class TransformersEngine(HfEngine):
         messages: List[Dict[str, str]],
         stop_sequences: Optional[List[str]] = None,
         grammar: Optional[str] = None,
-        max_length: int = 1500
+        max_length: int = 1500,
     ) -> str:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)

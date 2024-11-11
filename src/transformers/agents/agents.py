@@ -18,7 +18,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
@@ -26,6 +26,7 @@ from ..utils.import_utils import is_pygments_available
 from .agent_types import AgentAudio, AgentImage
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfApiEngine, MessageRole
+from .monitoring import Monitor
 from .prompts import (
     DEFAULT_CODE_SYSTEM_PROMPT,
     DEFAULT_REACT_CODE_SYSTEM_PROMPT,
@@ -45,7 +46,7 @@ from .tools import (
     get_tool_description_with_args,
     load_tool,
 )
-from .monitoring import Monitor
+
 
 if is_pygments_available():
     from pygments import highlight
@@ -355,7 +356,7 @@ class Agent:
         self,
         tools: Union[List[Tool], Toolbox],
         llm_engine: Callable = None,
-        system_prompt:Optional[str] = None,
+        system_prompt: Optional[str] = None,
         tool_description_template: Optional[str] = None,
         additional_args: Dict = {},
         max_iterations: int = 6,
@@ -810,7 +811,7 @@ class ReactAgent(Agent):
             step_start_time = time.time()
             step_log_entry = {"iteration": iteration, "start_time": step_start_time}
             try:
-                output = self.step(step_log_entry)
+                self.step(step_log_entry)
                 if "final_answer" in step_log_entry:
                     final_answer = step_log_entry["final_answer"]
             except AgentError as e:
@@ -851,7 +852,7 @@ class ReactAgent(Agent):
             try:
                 if self.planning_interval is not None and iteration % self.planning_interval == 0:
                     self.planning_step(task, is_first_step=(iteration == 0), iteration=iteration)
-                output = self.step(step_log_entry)
+                self.step(step_log_entry)
                 if "final_answer" in step_log_entry:
                     final_answer = step_log_entry["final_answer"]
             except AgentError as e:
@@ -1218,7 +1219,9 @@ class ReactCodeAgent(ReactAgent):
                 log_entry["final_answer"] = result
         return result
 
+
 LENGTH_TRUNCATE_REPORTS = 1000
+
 
 class ManagedAgent:
     def __init__(self, agent, name, description, additional_prompting=None, provide_run_summary=False):
@@ -1263,7 +1266,11 @@ And even if your task resolution is not successful, please return as much contex
                 if len(str(content)) < LENGTH_TRUNCATE_REPORTS or "[FACTS LIST]" in str(content):
                     answer += "\n" + str(content) + "\n---"
                 else:
-                    answer += "\n" + str(content)[:LENGTH_TRUNCATE_REPORTS] + "\n(...Step was truncated because too long)...\n---"
+                    answer += (
+                        "\n"
+                        + str(content)[:LENGTH_TRUNCATE_REPORTS]
+                        + "\n(...Step was truncated because too long)...\n---"
+                    )
             answer += f"\nEND OF SUMMARY OF WORK FROM AGENT '{self.name}'."
             return answer
         else:
