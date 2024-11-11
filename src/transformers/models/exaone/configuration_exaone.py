@@ -114,8 +114,6 @@ class ExaoneConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
 
     Example:
 
@@ -155,7 +153,6 @@ class ExaoneConfig(PretrainedConfig):
         use_cache=True,
         bos_token_id=0,
         eos_token_id=2,
-        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -183,6 +180,4 @@ class ExaoneConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

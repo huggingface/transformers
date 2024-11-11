@@ -228,6 +228,7 @@ class ExaoneRotaryEmbedding(nn.Module):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
+        self.rope_theta = config.rope_theta
         self.max_seq_len = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -1307,8 +1308,6 @@ class ExaoneForSequenceClassification(ExaonePreTrainedModel):
     EXAONE_START_DOCSTRING,
 )
 class ExaoneForQuestionAnswering(ExaonePreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
