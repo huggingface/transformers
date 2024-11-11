@@ -118,7 +118,6 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
 
 def parse_code_blob(code_blob: str) -> str:
     try:
-        print("BLOBBB", code_blob)
         pattern = r"```(?:py|python)?\n(.*?)\n```"
         match = re.search(pattern, code_blob, re.DOTALL)
         return match.group(1).strip()
