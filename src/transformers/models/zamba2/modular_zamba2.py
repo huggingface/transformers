@@ -73,19 +73,16 @@ class Zamba2Config(PretrainedConfig):
     Zamba2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Zamba2 model.
 
+    [Zyphra/Zamba2-2.7B](https://huggingface.co/Zyphra/Zamba2-2.7B)
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
-
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Zamba2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Zamba2Model`]
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
-            model has a output word embedding layer.
         hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
         num_hidden_layers (`int`, *optional*, defaults to 54):
@@ -95,7 +92,7 @@ class Zamba2Config(PretrainedConfig):
         mamba_d_state (`int`, *optional*, defaults to 64): shape of the state space latents.
         mamba_d_conv (`int`, *optional*, defaults to 4): Size of the convolution kernel.
         mamba_expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
-        mamba_ngroups (`int`, *optional*, defaults to 8):
+        mamba_ngroups (`int`, *optional*, defaults to 1):
             Number of groups for the evolution matrices of mamba 2.
         time_step_min (`float`, *optional*, defaults to 0.001):
             Minimum `time_step` used to bound `dt_proj.bias`.
@@ -105,16 +102,10 @@ class Zamba2Config(PretrainedConfig):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
         time_step_limit (`tuple`, *optional*):
             Accepted range of time step values.
-        mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-            Rank of the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         n_mamba_heads (`int`, *optional*, defaults to 1):
             Number of heads for the evolution matrices of mamba 2.
         use_conv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to use bias in the convolution layer of the mixer block.
-        mamba_proj_bias (`bool`, *optional*, defaults to `False`):
-            Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
-        hidden_mamba_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) adjacent to the mamba conv.
         chunk_size (`int`, *optional*, defaults to 256):
             Size of the chunks that will comprise the sequence.
         add_bias_linear (`bool`, *optional*, defaults to `False`):
@@ -144,11 +135,11 @@ class Zamba2Config(PretrainedConfig):
             Rank of the LoRA in the shared MLP and shared attention layers.
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to `10000.0`):
             The base period of the RoPE embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -165,6 +156,16 @@ class Zamba2Config(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
+        use_long_context (`bool`, *optional*, defaults to `False`):
+            Activates the context-extended version of Zamba by modifying RoPE.
+    ```python
+    >>> from transformers import Zamba2Model, Zamba2Config
+    >>> # Initializing a Zamba2-2.7B style configuration
+    >>> configuration = Zamba2Config()
+    >>> # Initializing a model from the Zamba2-2.7B style configuration
+    >>> model = Zamba2Model(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     """
 
     model_type = "zamba2"
@@ -174,7 +175,6 @@ class Zamba2Config(PretrainedConfig):
         self,
         vocab_size=32000,
         max_position_embeddings=4096,
-        tie_word_embeddings=True,
         hidden_size=2560,
         num_hidden_layers=54,
         layers_block_type=None,
@@ -186,10 +186,7 @@ class Zamba2Config(PretrainedConfig):
         time_step_max=0.1,
         time_step_floor=1e-4,
         time_step_limit=None,
-        mamba_dt_rank="auto",
         n_mamba_heads=1,
-        mamba_proj_bias=False,
-        hidden_mamba_act="silu",
         use_conv_bias=True,
         chunk_size=256,
         add_bias_linear=False,
@@ -218,13 +215,10 @@ class Zamba2Config(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.tie_word_embeddings = tie_word_embeddings
         self.hidden_size = hidden_size
         if intermediate_size is None:
             self.intermediate_size = 4 * hidden_size
@@ -242,17 +236,13 @@ class Zamba2Config(PretrainedConfig):
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
-        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
         self.add_bias_linear = add_bias_linear
         self.mamba_ngroups = mamba_ngroups
         self.n_mamba_heads = n_mamba_heads
         self.mamba_headdim = int(mamba_expand * hidden_size) // n_mamba_heads
-        self.mamba_proj_bias = mamba_proj_bias
-        self.hidden_mamba_act = hidden_mamba_act
         self.use_conv_bias = use_conv_bias
         self.chunk_size = chunk_size
         self.time_step_limit = time_step_limit
-
         self.use_shared_mlp_lora = use_shared_mlp_lora
         self.use_shared_attention_lora = use_shared_attention_lora
         self.lora_rank = lora_rank
@@ -262,21 +252,12 @@ class Zamba2Config(PretrainedConfig):
         self.time_step_floor = time_step_floor
         if use_long_context:
             self.max_position_embeddings = 16384
-
-        # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
-
         self.num_attention_heads = num_attention_heads
         self.kv_channels = self.hidden_size // self.num_attention_heads
         self.num_query_groups = self.num_attention_heads
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-
-        self.use_cache = use_cache
-        self.num_logits_to_keep = num_logits_to_keep
-
         # Below, "mamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
         if layers_block_type is None:
             self.layers_block_type = (
@@ -290,6 +271,14 @@ class Zamba2Config(PretrainedConfig):
             )
         else:
             self.layers_block_type = layers_block_type
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.num_logits_to_keep = num_logits_to_keep
+
+
+class Zamba2RMSNorm(ZambaRMSNorm):
+    pass
 
 
 def count_mem_blocks_in_config(config: Zamba2Config):
@@ -486,10 +475,6 @@ class Zamba2DynamicCache(DynamicCache):
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         raise NotImplementedError("Zamba2DynamicCache does not have a legacy cache equivalent.")
-
-
-class Zamba2RMSNorm(ZambaRMSNorm):
-    pass
 
 
 class MambaRMSNormGated(torch.nn.Module):
@@ -1649,7 +1634,8 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             module.D._no_weight_decay = True
 
             dt = torch.exp(
-                torch.rand(self.config.n_mamba_heads) * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                torch.rand(self.config.n_mamba_heads)
+                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
@@ -1783,8 +1769,12 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         lora_id = 0
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and lora_id % config.num_mem_blocks == block.block_id:
-                                tied_keys_lora.append('shared_transf.feed_forward.gate_up_proj_lora_A_list.' + str(lora_id) + '.weight')
-                                tied_keys_lora.append('shared_transf.feed_forward.gate_up_proj_lora_B_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append(
+                                    "shared_transf.feed_forward.gate_up_proj_lora_A_list." + str(lora_id) + ".weight"
+                                )
+                                tied_keys_lora.append(
+                                    "shared_transf.feed_forward.gate_up_proj_lora_B_list." + str(lora_id) + ".weight"
+                                )
                             lora_id += 1
                         self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_lora]
                     if config.use_shared_attention_lora:
@@ -1792,12 +1782,24 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         lora_id = 0
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and lora_id % config.num_mem_blocks == block.block_id:
-                                tied_keys_lora.append('shared_transf.self_attn.linear_q_lora_A_list.' + str(lora_id) + '.weight')
-                                tied_keys_lora.append('shared_transf.self_attn.linear_k_lora_A_list.' + str(lora_id) + '.weight')
-                                tied_keys_lora.append('shared_transf.self_attn.linear_v_lora_A_list.' + str(lora_id) + '.weight')
-                                tied_keys_lora.append('shared_transf.self_attn.linear_q_lora_B_list.' + str(lora_id) + '.weight')
-                                tied_keys_lora.append('shared_transf.self_attn.linear_k_lora_B_list.' + str(lora_id) + '.weight')
-                                tied_keys_lora.append('shared_transf.self_attn.linear_v_lora_B_list.' + str(lora_id) + '.weight')
+                                tied_keys_lora.append(
+                                    "shared_transf.self_attn.linear_q_lora_A_list." + str(lora_id) + ".weight"
+                                )
+                                tied_keys_lora.append(
+                                    "shared_transf.self_attn.linear_k_lora_A_list." + str(lora_id) + ".weight"
+                                )
+                                tied_keys_lora.append(
+                                    "shared_transf.self_attn.linear_v_lora_A_list." + str(lora_id) + ".weight"
+                                )
+                                tied_keys_lora.append(
+                                    "shared_transf.self_attn.linear_q_lora_B_list." + str(lora_id) + ".weight"
+                                )
+                                tied_keys_lora.append(
+                                    "shared_transf.self_attn.linear_k_lora_B_list." + str(lora_id) + ".weight"
+                                )
+                                tied_keys_lora.append(
+                                    "shared_transf.self_attn.linear_v_lora_B_list." + str(lora_id) + ".weight"
+                                )
                             lora_id += 1
                         self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_lora]
                 layers.append(Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers)))

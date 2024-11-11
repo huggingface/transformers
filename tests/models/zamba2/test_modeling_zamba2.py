@@ -80,7 +80,7 @@ class Zamba2ModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        layers_block_type = ['mamba', 'hybrid'],
+        layers_block_type=["mamba", "hybrid"],
         num_mem_blocks=1,
     ):
         self.parent = parent
@@ -137,7 +137,7 @@ class Zamba2ModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             mamba_dt_rank=self.mamba_dt_rank,
-            mamba_d_state = self.mamba_d_state,
+            mamba_d_state=self.mamba_d_state,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             n_mamba_heads=self.n_mamba_heads,
@@ -221,9 +221,7 @@ class Zamba2ModelTester:
 
         # first forward pass
         # Attention: Zamba2 needs the cache to be initialized to return a cache!
-        past_key_values = Zamba2DynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
+        past_key_values = Zamba2DynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
@@ -600,7 +598,9 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
         self.model.to(torch_device)
 
         inputs = self.tokenizer(
-            ["Hey how are you doing on this lovely evening?", "When did the Roman empire "], padding=True, return_tensors="pt"
+            ["Hey how are you doing on this lovely evening?", "When did the Roman empire "],
+            padding=True,
+            return_tensors="pt",
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
@@ -608,14 +608,16 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             output_sentences[0],
             "<s> Hey how are you doing on this lovely evening?\n\nI'm doing well, thanks for",
         )
-        
+
         self.assertEqual(
             output_sentences[1],
             "[PAD][PAD][PAD][PAD]<s> When did the Roman empire 1st fall?\nThe Roman Empire fell in",
         )
 
         with torch.no_grad():
-            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits.to(dtype=torch.float32)
+            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits.to(
+                dtype=torch.float32
+            )
 
         EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
             [
