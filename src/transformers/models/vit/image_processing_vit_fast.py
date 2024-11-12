@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Union
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
-from ...image_transforms import FusedRescaleNormalize, NumpyToTensor, Rescale
+from ...image_transforms import FusedRescaleNormalize, NumpyToTensor, Rescale, convert_to_rgb
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -278,6 +278,9 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             data_format=data_format,
             image_type=image_type,
         )
+
+        if do_convert_rgb:
+            images = [convert_to_rgb(image) for image in images]
 
         transforms = self.get_transforms(
             do_resize=do_resize,
