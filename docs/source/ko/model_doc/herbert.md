@@ -39,7 +39,7 @@ applications. Additionally, we release HerBERT, a Transformer-based model traine
 which has the best average performance and obtains the best results for three out of nine tasks. Finally, we provide an
 extensive evaluation, including several standard baselines and recently proposed, multilingual Transformer-based
 models.*
-*최근 몇 년간, Transformer 기반 모델들은 일반적인 자연어 이해(NLU) 작업에서 큰 발전을 이루어냈습니다. 이렇게 연구가 빠르게 발전할 수 있었던 것은  공정한 비교를 가능하게 하는 일반 NLU 벤치마크 없이는 불가능했을 것입니다. 그러나, 이러한 벤치마크는 소수의 언어에만 제공됩니다. 이 문제를 해결하기 위해 우리는 폴란드어 이해를 위한 종합적인 다중 작업 벤치마크를 소개하며, 온라인 리더보드를 제공합니다. 이 벤치마크는 기존 데이터셋에서 가져온 개체명 인식, 질문 응답, 텍스트 함의 등의 다양한 다양한 작업으로 구성되어 있습니다. 또한, 전자상거래 도메인에 대한 새로운 감정 분석 작업인 Allegro Reviews(AR)를 같이 소개합니다. 다양한 NLU 작업에 대한 공통된 평가 기준을 제공하고, 일반화 능력을 가진 모델을 지원하기 위해, 이 벤치마크는 여러 도메인과 응용 분야에서의 데이터셋을 포함합니다. 더해서, 우리는 폴란드어에 특하된 Transformer 기반 모델인 HerBERT를 공개했습니다. 이 모델은 가장 우수한 평균 성능을 보였고, 9개 작업 중 3개 작업에서 최고의 결과를 달성했습니다. 최종적으로, 우리는 여러 표준 기준선 및 최근 제안된 다중 언어 Transformer 모델들을 포함한 폭넓은 평가를 제공합니다.
+*최근 몇 년간, Transformer 기반 모델들은 일반적인 자연어 이해(NLU) 작업에서 큰 발전을 이루어냈습니다. 이렇게 연구가 빠르게 발전할 수 있었던 것은  공정한 비교를 가능하게 하는 일반 NLU 벤치마크 없이는 불가능했을 것입니다. 그러나, 이러한 벤치마크는 소수의 언어에만 제공됩니다. 이 문제를 해결하기 위해 우리는 폴란드어 이해를 위한 종합적인 다중 작업 벤치마크를 소개하며, 온라인 리더보드를 제공합니다. 이 벤치마크는 기존 데이터셋에서 가져온 개체명 인식, 질문 응답, 텍스트 함의 등의 다양한 다양한 작업으로 구성되어 있습니다. 또한 전자상거래 도메인에 대한 새로운 감정 분석 작업인 Allegro Reviews(AR)도 포함하고 있습니다. 다양한 NLU 작업에 대한 공통된 평가 기준을 제공하고, 일반화 능력을 가진 모델을 지원하기 위해, 이 벤치마크는 여러 도메인과 응용 분야에서의 데이터셋을 포함하고 있습니다. 더해서, 우리는 폴란드어에 특화된 Transformer 기반 모델인 HerBERT를 공개하였으며, 이 모델은 가장 우수한 평균 성능을 보였고, 9개 작업 중 3개 작업에서 최고의 결과를 달성했습니다. 마지막으로, 여러 표준 기준선 및 최근 제안된 다중 언어 Transformer 모델들을 포함한 폭넓은 평가를 제공합니다.
 
 이 모델은 [rmroczkowski](https://huggingface.co/rmroczkowski)에 의해 제공되었습니다. 원본 코드는[here](https://github.com/allegro/HerBERT)에서 확인할 수 있습니다.
 
