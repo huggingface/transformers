@@ -32,7 +32,7 @@ BART와 동일한 모델을 사용하는 번역 모델 프레임워크입니다.
 
 ## 구현 노트[[Implementation Notes]]
 
-- 각 모델은 약 298MB를 차지하며, 1,000개 이상의 모델이 제공됩니다.
+- 각 모델은 약 298 MB를 차지하며, 1,000개 이상의 모델이 제공됩니다.
 - 지원되는 언어 쌍 목록은 [여기](https://huggingface.co/Helsinki-NLP)에서 확인할 수 있습니다.
 - 모델들은 [Jörg Tiedemann](https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann)에 의해 [Marian](https://marian-nmt.github.io/) C++ 라이브러리를 이용하여 학습되었습니다. 이 라이브러리는 빠른 학습과 번역을 지원합니다.
 - 모든 모델은 6개 레이어로 이루어진 Transformer 기반의 인코더-디코더 구조입니다. 각 모델의 성능은 모델 카드에 기입되어 있습니다.
@@ -214,4 +214,4 @@ GROUP_MEMBERS = {
     - __call__
 
 </jax>
-<
+</frameworkcontent>
