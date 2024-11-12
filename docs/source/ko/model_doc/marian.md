@@ -27,25 +27,16 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[Overview]]
 
-A framework for translation models, using the same models as BART. Translations should be similar, but not identical to output in the test set linked to in each model card.
-This model was contributed by [sshleifer](https://huggingface.co/sshleifer).
 BART와 동일한 모델을 사용하는 번역 모델 프레임워크입니다. 번역 결과는 각 모델 카드의 테스트 세트와 유사하지만, 정확히 일치하지는 않을 수 있습니다. 이 모델은 [sshleifer](https://huggingface.co/sshleifer)가 제공했습니다.
 
 
 ## 구현 노트[[Implementation Notes]]
 
-- Each model is about 298 MB on disk, there are more than 1,000 models.
 - 각 모델은 약 298MB를 차지하며, 1,000개 이상의 모델이 제공됩니다.
-- The list of supported language pairs can be found [here](https://huggingface.co/Helsinki-NLP).
 - 지원되는 언어 쌍 목록은 [여기](https://huggingface.co/Helsinki-NLP)에서 확인할 수 있습니다.
-- Models were originally trained by [Jörg Tiedemann](https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann) using the [Marian](https://marian-nmt.github.io/) C++ library, which supports fast training and translation.
 - 모델들은 [Jörg Tiedemann](https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann)에 의해 [Marian](https://marian-nmt.github.io/) C++ 라이브러리를 이용하여 학습되었습니다. 이 라이브러리는 빠른 학습과 번역을 지원합니다.
-- All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented
-  in a model card.
 - 모든 모델은 6개 레이어로 이루어진 Transformer 기반의 인코더-디코더 구조입니다. 각 모델의 성능은 모델 카드에 기입되어 있습니다.
-- The 80 opus models that require BPE preprocessing are not supported.
 - BPE 전처리가 필요한 80개의 OPUS 모델은 지원되지 않습니다.
-- The modeling code is the same as [`BartForConditionalGeneration`] with a few minor modifications:
 - 모델링 코드는 [`BartForConditionalGeneration`]을 기반으로 하며, 일부 수정사항이 반영되어 있습니다:
 
   - 정적 (사인 함수 기반) 위치 임베딩 사용 (`MarianConfig.static_position_embeddings=True`)
@@ -57,41 +48,24 @@ BART와 동일한 모델을 사용하는 번역 모델 프레임워크입니다.
 
 ## 모델 이름 규칙[[Naming]]
 
-- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`
 - 모든 모델 이름은 `Helsinki-NLP/opus-mt-{src}-{tgt}` 형식을 따릅니다.
-
-- The language codes used to name models are inconsistent. Two digit codes can usually be found [here](https://developers.google.com/admin-sdk/directory/v1/languages), three digit codes require googling "language
-  code {code}".
 - 모델의 언어 코드 표기는 일관되지 않습니다. 두 자리 코드는 일반적으로 [여기](https://developers.google.com/admin-sdk/directory/v1/languages)에서 찾을 수 있으며, 세 자리 코드는 "언어 코드 {code}"로 구글 검색을 통해 찾습니다. 
-- Codes formatted like `es_AR` are usually `code_{region}`. That one is Spanish from Argentina.
 - `es_AR`과 같은 형태의 코드는 `code_{region}` 형식을 의미합니다. 여기서의 예시는 아르헨티나의 스페인어를 의미합니다.
-- The models were converted in two stages. The first 1000 models use ISO-639-2 codes to identify languages, the second
-  group use a combination of ISO-639-5 codes and ISO-639-2 codes.
 - 모델 변환은 두 단계로 이루어졌습니다. 처음 1,000개 모델은 ISO-639-2 코드를 사용하고, 두 번째 그룹은 ISO-639-5와 ISO-639-2 코드를 조합하여 언어를 식별합니다.
 
 
 ## 예시[[Examples]]
 
-- Since Marian models are smaller than many other translation models available in the library, they can be useful for
-  fine-tuning experiments and integration tests.
 - Marian 모델은 라이브러리의 다른 번역 모델들보다 크기가 작아 파인튜닝 실험과 통합 테스트에 유용합니다.
 - [GPU에서 파인튜닝하기](https://github.com/huggingface/transformers/blob/master/examples/legacy/seq2seq/train_distil_marian_enro.sh)
 
 ## 다국어 모델 사용법[[Multilingual Models]]
 
-- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`:
 - 모든 모델 이름은`Helsinki-NLP/opus-mt-{src}-{tgt}` 형식을 따릅니다.
-- If a model can output multiple languages, and you should specify a language code by prepending the desired output
-  language to the `src_text`.
 - 다중 언어 출력을 지원하는 모델의 경우, 출력을 원하는 언어의 언어 코드를 `src_text`의 시작 부분에 추가하여 지정해야 합니다.
-- You can see a models's supported language codes in its model card, under target constituents, like in [opus-mt-en-roa](https://huggingface.co/Helsinki-NLP/opus-mt-en-roa).
 - 모델 카드에서 지원되는 언어 코드의 목록을 확인할 수 있습니다! 예를 들어 [opus-mt-en-roa](https://huggingface.co/Helsinki-NLP/opus-mt-en-roa)에서 확인할 수 있습니다.
-- Note that if a model is only multilingual on the source side, like `Helsinki-NLP/opus-mt-roa-en`, no language
-  codes are required.
-- `Helsinki-NLP/opus-mt-roa-en`처럼 소스 측에서만 다국어를 지원하는 모델의 경우 별도의 언어 코드 지정이 필요하지 않습니다.
+- `Helsinki-NLP/opus-mt-roa-en`처럼 소스 측에서만 다국어를 지원하는 모델의 경우, 별도의 언어 코드 지정이 필요하지 않습니다.
 
-New multi-lingual models from the [Tatoeba-Challenge repo](https://github.com/Helsinki-NLP/Tatoeba-Challenge)
-require 3 character language codes:
 [Tatoeba-Challenge 리포지토리](https://github.com/Helsinki-NLP/Tatoeba-Challenge)의 새로운 다국적 모델은 3자리 언어 코드를 사용합니다:
 
 
@@ -117,7 +91,6 @@ require 3 character language codes:
  'Y esto al español']
 ```
 
-Here is the code to see all available pretrained models on the hub:
 허브에 있는 모든 사전 학습된 모델을 확인하는 코드입니다:
 
 ```python
@@ -132,8 +105,6 @@ old_style_multi_models = [f"{org}/{s}" for s in suffix if s != s.lower()]
 
 ## 구형 다국어 모델[[Old Style Multi-Lingual Models]]
 
-These are the old style multi-lingual models ported from the OPUS-MT-Train repo: and the members of each language
-group:
 이 모델들은 OPUS-MT-Train 리포지토리의 구형 다국어 모델들입니다. 각 언어 그룹에 포함된 언어들은 다음과 같습니다:
 
 ```python no-style
