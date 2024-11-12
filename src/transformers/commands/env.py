@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import importlib.util
+import contextlib
+import io
 import os
 import platform
 from argparse import ArgumentParser
@@ -105,9 +107,12 @@ class EnvironmentCommand(BaseTransformersCLICommand):
                 # returns list of devices, convert to bool
                 tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
 
-        deepspeed_verson = "not installed"
+        deepspeed_version = "not installed"
         if is_deepspeed_available():
-            import deepspeed
+
+            # Redirect command line output to silence deepspeed import output.
+            with contextlib.redirect_stdout(io.StringIO()):
+                import deepspeed
             deepspeed_version = deepspeed.__version__
 
         flax_version = "not installed"
