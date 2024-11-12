@@ -2,10 +2,13 @@ import copy
 import importlib.metadata
 import json
 import os
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
+from torch.nn import functional as F
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
@@ -2182,8 +2185,8 @@ class SnapKVCluster():
             key_states = torch.cat([k_past_compress, k_cur], dim = 2)
             value_states = torch.cat([v_past_compress, v_cur], dim = 2)
             return key_states, value_states
-        
-#initiate snapkv with window_size, etc if not given      
+
+#initiate snapkv with window_size, etc if not given
 def init_snapkv(self):
     if not hasattr(self, "kv_cluster"):
         if not hasattr(self.config, 'window_size'):
@@ -2194,9 +2197,9 @@ def init_snapkv(self):
             self.config.kernel_size = 5
         if not hasattr(self.config, 'pooling'):
             self.config.pooling = 'avgpool'
-    self.kv_cluster = SnapKVCluster( 
-        window_size = self.config.window_size, 
-        max_capacity_prompt = self.config.max_capacity_prompt, 
+    self.kv_cluster = SnapKVCluster(
+        window_size = self.config.window_size,
+        max_capacity_prompt = self.config.max_capacity_prompt,
         kernel_size = self.config.kernel_size,
         pooling = self.config.pooling
         )
