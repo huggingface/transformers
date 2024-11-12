@@ -422,8 +422,8 @@
         title: (번역중) GPTSAN Japanese
       - local: in_translation
         title: (번역중) GPTSw3
-      - local: in_translation
-        title: (번역중) HerBERT
+      - local: model_doc/herbert
+        title: HerBERT
       - local: in_translation
         title: (번역중) I-BERT
       - local: in_translation
