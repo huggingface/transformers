@@ -1,4 +1,4 @@
-<!--Copyright 2024 The LG AI Research EXAONE Lab and The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The LG AI Research and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,13 +14,15 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# EXAONE
+# EXAONE v3.0
 
 _EXAONE stands for **EX**pert **A**I for Every**ONE**_
 
 ## Overview
-
-We introduce EXAONE-3.0-7.8B-Instruct, a pre-trained and instruction-tuned bilingual (English and Korean) generative model with 7.8 billion parameters. The model was pre-trained with 8T curated tokens and post-trained with supervised fine-tuning and direct preference optimization. It demonstrates highly competitive benchmark performance against other state-of-the-art open models of similar size.
+EXAONE is the family of Large Language Models (LLMs) and Large Multimodal Models (LMMs) developed by LG AI Research. EXAONE stands for EXpert AI for EveryONE, a vision that LG is committed to realizing.
+ 
+## Model Details
+`EXAONE-3.0-7.8B-Instruct` is a pre-trained and instruction-tuned bilingual (English and Korean) generative model with 7.8 billion parameters. The model was pre-trained with 8T curated tokens and post-trained with supervised fine-tuning and direct preference optimization. It demonstrates highly competitive benchmark performance against other state-of-the-art open models of similar size.
 
 ## Usage tips
 

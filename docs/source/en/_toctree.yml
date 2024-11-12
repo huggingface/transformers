@@ -390,8 +390,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
-      - local: model_doc/exaone
-        title: EXAONE
+      - local: model_doc/exaone3
+        title: EXAONEv3.0
       - local: model_doc/falcon
         title: Falcon
       - local: model_doc/falcon_mamba
