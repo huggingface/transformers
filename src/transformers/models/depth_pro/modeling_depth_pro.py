@@ -24,9 +24,10 @@ import torch
 from torch import nn
 from dataclasses import dataclass
 
+from ...utils import ModelOutput
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutput,
+    BaseModelOutput, DepthEstimatorOutput
 )
 from ...utils import (
     add_code_sample_docstrings,
@@ -1232,6 +1233,18 @@ DEPTH_PRO_INPUTS_DOCSTRING = r"""
 """
 
 
+@dataclass
+class DepthProModelOutput(BaseModelOutput):
+    """
+    Base class for model's outputs, with potential fov, hidden states and attentions.
+
+    Args:
+        fov (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `use_fov` is provided):
+            Field of View Scaler.
+    """
+    fov: Optional[torch.FloatTensor] = None
+
+
 @add_start_docstrings(
     "The bare DepthPro Model transformer outputting raw hidden-states without any specific head on top.",
     DEPTH_PRO_START_DOCSTRING,
@@ -1306,14 +1319,14 @@ class DepthProModel(DepthProPreTrainedModel):
             head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        last_hidden_state = encodings[0]
+        last_hidden_state = encodings.last_hidden_state
         last_hidden_state, global_features = self.decoder(last_hidden_state)
 
         if self.use_fov:
-            fov_out = self.fov_model(
+            fov_encodings = self.fov_model(
                 pixel_values=pixel_values,
                 global_features=global_features.detach(),
                 head_mask=head_mask,
@@ -1321,11 +1334,24 @@ class DepthProModel(DepthProPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+            fov = fov_encodings.last_hidden_state
         else:
-            fov_out = None
+            fov = None
 
-        # TODO: return all hidden_states
-        return last_hidden_state, fov_out
+        attentions = encodings.attentions + fov_encodings.attentions if output_attentions else None
+        hidden_states = encodings.hidden_states + fov_encodings.hidden_states if output_hidden_states else None
+
+        if not return_dict:
+            outputs = (last_hidden_state, fov, hidden_states, attentions)
+            outputs = (i for i in outputs if i is not None)
+            return outputs
+
+        return DepthProModelOutput(
+            last_hidden_state=last_hidden_state,
+            fov=fov,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
 
 
 class DepthProDepthEstimationHead(nn.Module):
@@ -1358,6 +1384,18 @@ class DepthProDepthEstimationHead(nn.Module):
         predicted_depth = self.head(hidden_states)
         predicted_depth = predicted_depth.squeeze(dim=1)
         return predicted_depth
+
+
+@dataclass
+class DepthProDepthEstimatorOutput(DepthEstimatorOutput):
+    """
+    Base class for outputs of DepthProDepthEstimator.
+
+    Args:
+        fov (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `use_fov` is provided):
+            Field of View Scaler.
+    """
+    fov: Optional[torch.FloatTensor] = None
 
 
 @add_start_docstrings(
@@ -1436,31 +1474,28 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        # use_fov = use_fov if use_fov is not None else self.config.use_fov
 
-        outputs = [None] * 4
-
-        last_hidden_state, fov_out = self.depth_pro(
+        depth_pro_outputs = self.depth_pro(
             pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
+        last_hidden_state = depth_pro_outputs[0]
         predicted_depth = self.head(last_hidden_state)
 
-        ic(predicted_depth)
-        ic(fov_out); exit()
-
         if not return_dict:
-            if output_hidden_states:
-                output = (predicted_depth,) + outputs[1:]
+            if loss is None:
+                return (predicted_depth,) + depth_pro_outputs[1:]
             else:
-                output = (predicted_depth,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+                return (loss, predicted_depth) + depth_pro_outputs[1:]
 
-        return DepthEstimatorOutput(
+        return DepthProDepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            # hidden_states=outputs.hidden_states,
-            # attentions=outputs.attentions,
+            fov=depth_pro_outputs.fov,
+            hidden_states=depth_pro_outputs.hidden_states,
+            attentions=depth_pro_outputs.attentions,
         )
