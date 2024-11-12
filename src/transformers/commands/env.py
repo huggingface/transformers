@@ -23,6 +23,7 @@ from .. import __version__ as version
 from ..utils import (
     is_accelerate_available,
     is_flax_available,
+    is_deepspeed_available,
     is_safetensors_available,
     is_tf_available,
     is_torch_available,
@@ -104,6 +105,11 @@ class EnvironmentCommand(BaseTransformersCLICommand):
                 # returns list of devices, convert to bool
                 tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
 
+        deepspeed_verson = "not installed"
+        if is_deepspeed_available():
+            import deepspeed
+            deepspeed_version = deepspeed.__version__
+
         flax_version = "not installed"
         jax_version = "not installed"
         jaxlib_version = "not installed"
@@ -126,6 +132,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Safetensors version": f"{safetensors_version}",
             "Accelerate version": f"{accelerate_version}",
             "Accelerate config": f"{accelerate_config_str}",
+            "DeepSpeed version": f"{deepspeed_version}",
             "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
             "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
             "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
