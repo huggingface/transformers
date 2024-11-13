@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The Meta AI Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2024 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,6 +70,22 @@ def load_cuda_kernels():
             "-D__CUDA_NO_HALF2_OPERATORS__",
         ],
     )
+
+
+def get_connected_components(mask):
+    """
+    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
+    Inputs:
+    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
+            background.
+    Outputs:
+    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
+              for foreground pixels and 0 for background pixels.
+    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
+              components for foreground pixels and 0 for background pixels.
+    """
+
+    return CUDA_KERNELS.get_connected_components(mask.to(torch.uint8).contiguous())
 
 
 def get_sdpa_settings():
@@ -293,8 +309,8 @@ class Sam2VisionNeck(nn.Module):
 
             prev_position_encoding = self.position_encoding(prev_features).to(prev_features.dtype)
 
-            fpn_hidden_states += (prev_features, )
-            fpn_position_encoding += (prev_position_encoding, )
+            fpn_hidden_states += (prev_features,)
+            fpn_position_encoding += (prev_position_encoding,)
 
         return fpn_hidden_states, fpn_position_encoding
 
@@ -567,22 +583,16 @@ class Sam2PromptEncoder(nn.Module):
         input_boxes: Optional[torch.Tensor],
         input_masks: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        r"""
-        Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
+        """
+        Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
-                Optional input points for the prompt encoder. The padding of the point is automatically done by the
-                processor. `point_batch_size` refers to the number of masks that we want the model to predict per
-                point. The model will output `point_batch_size` times 3 masks in total.
-            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
-                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
-                processor, or can be fed by the user.
-            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
-                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
-                processor. users can also pass manually the input boxes.
-            input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
-                Optional input masks for the prompt encoder.
+            points (`torch.Tensor`, *optional*):
+                point coordinates and labels to embed.
+            boxes (`torch.Tensor`, *optional*):
+                boxes to embed
+            masks (`torch.Tensor`, *optional*):
+                masks to embed
         """
         sparse_embeddings = None
         batch_size = 1
@@ -648,7 +658,9 @@ class Sam2TwoWayAttentionBlock(nn.Module):
 
         self.skip_first_layer_pe = skip_first_layer_pe
 
-    def forward(self, queries: Tensor, keys: Tensor, query_point_embedding: Tensor, key_point_embedding: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward(
+        self, queries: Tensor, keys: Tensor, query_point_embedding: Tensor, key_point_embedding: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         # Self attention block
         if self.skip_first_layer_pe:
             queries = self.self_attn(query=queries, key=queries, value=queries)
@@ -1057,73 +1069,6 @@ class Sam2PositionEmbeddingSine(nn.Module):
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         self.cache[cache_key] = pos[0]
         return pos
-
-
-def select_closest_cond_frames(frame_idx, cond_frame_outputs, max_cond_frame_num):
-    """
-    Select up to `max_cond_frame_num` conditioning frames from `cond_frame_outputs`
-    that are temporally closest to the current frame at `frame_idx`. Here, we take
-    - a) the closest conditioning frame before `frame_idx` (if any);
-    - b) the closest conditioning frame after `frame_idx` (if any);
-    - c) any other temporally closest conditioning frames until reaching a total
-         of `max_cond_frame_num` conditioning frames.
-
-    Outputs:
-    - selected_outputs: selected items (keys & values) from `cond_frame_outputs`.
-    - unselected_outputs: items (keys & values) not selected in `cond_frame_outputs`.
-    """
-    if max_cond_frame_num == -1 or len(cond_frame_outputs) <= max_cond_frame_num:
-        selected_outputs = cond_frame_outputs
-        unselected_outputs = {}
-    else:
-        assert max_cond_frame_num >= 2, "we should allow using 2+ conditioning frames"
-        selected_outputs = {}
-
-        # the closest conditioning frame before `frame_idx` (if any)
-        idx_before = max((t for t in cond_frame_outputs if t < frame_idx), default=None)
-        if idx_before is not None:
-            selected_outputs[idx_before] = cond_frame_outputs[idx_before]
-
-        # the closest conditioning frame after `frame_idx` (if any)
-        idx_after = min((t for t in cond_frame_outputs if t >= frame_idx), default=None)
-        if idx_after is not None:
-            selected_outputs[idx_after] = cond_frame_outputs[idx_after]
-
-        # add other temporally closest conditioning frames until reaching a total
-        # of `max_cond_frame_num` conditioning frames.
-        num_remain = max_cond_frame_num - len(selected_outputs)
-        inds_remain = sorted(
-            (t for t in cond_frame_outputs if t not in selected_outputs),
-            key=lambda x: abs(x - frame_idx),
-        )[:num_remain]
-        selected_outputs.update((t, cond_frame_outputs[t]) for t in inds_remain)
-        unselected_outputs = {t: v for t, v in cond_frame_outputs.items() if t not in selected_outputs}
-
-    return selected_outputs, unselected_outputs
-
-
-def get_1d_sine_pe(pos_inds, dim, temperature=10000):
-    """
-    Get 1D sine positional embedding as in the original Transformer paper.
-    """
-    pe_dim = dim // 2
-    dim_t = torch.arange(pe_dim, dtype=torch.float32, device=pos_inds.device)
-    dim_t = temperature ** (2 * (dim_t // 2) / pe_dim)
-
-    pos_embed = pos_inds.unsqueeze(-1) / dim_t
-    pos_embed = torch.cat([pos_embed.sin(), pos_embed.cos()], dim=-1)
-    return pos_embed
-
-
-def get_activation_fn(activation):
-    """Return an activation function given a string"""
-    if activation == "relu":
-        return F.relu
-    if activation == "gelu":
-        return F.gelu
-    if activation == "glu":
-        return F.glu
-    raise RuntimeError(f"activation should be relu/gelu, not {activation}.")
 
 
 def get_clones(module, N):
@@ -1625,98 +1570,84 @@ class Sam2RoPEAttention(Sam2Attention):
 class Sam2MemoryAttentionLayer(nn.Module):
     def __init__(
         self,
-        activation: str = "relu",
-        d_model: int = 256,
-        dim_feedforward: int = 2048,
-        dropout: float = 0.1,
-        pos_enc_at_attn: bool = False,
-        pos_enc_at_cross_attn_keys: bool = True,
-        pos_enc_at_cross_attn_queries: bool = False,
+        config,
     ):
         super().__init__()
-        self.d_model = d_model
-        self.dim_feedforward = dim_feedforward
-        self.dropout_value = dropout
+        self.dim_feedforward = config.dim_feedforward
         self.self_attn = Sam2RoPEAttention(
-            rope_theta=10000.0,
-            feat_sizes=[32, 32],
-            embedding_dim=256,
-            num_heads=1,
-            downsample_rate=1,
-            dropout=0.1,
+            rope_theta=config.rope_theta,
+            feat_sizes=config.rope_feat_sizes,
+            embedding_dim=config.rope_embedding_dim,
+            num_heads=config.rope_num_heads,
+            downsample_rate=config.rope_downsample_rate,
+            dropout=config.rope_dropout,
         )
         self.cross_attn_image = Sam2RoPEAttention(
-            rope_theta=10000.0,
-            feat_sizes=[32, 32],
+            rope_theta=config.rope_theta,
+            feat_sizes=config.rope_feat_sizes,
+            embedding_dim=config.rope_embedding_dim,
+            num_heads=config.rope_num_heads,
+            downsample_rate=config.rope_downsample_rate,
+            dropout=config.rope_dropout,
             rope_k_repeat=True,
-            embedding_dim=256,
-            num_heads=1,
-            downsample_rate=1,
-            dropout=0.1,
             kv_in_dim=64,
         )
 
         # Implementation of Feedforward model
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.dropout = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
+        self.linear1 = nn.Linear(config.hidden_size, config.dim_feedforward)
+        self.dropout = nn.Dropout(config.dropout)
+        self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_size)
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
-        self.dropout3 = nn.Dropout(dropout)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
+        self.dropout1 = nn.Dropout(config.dropout)
+        self.dropout2 = nn.Dropout(config.dropout)
+        self.dropout3 = nn.Dropout(config.dropout)
 
-        self.activation_str = activation
-        self.activation = get_activation_fn(activation)
+        self.activation = ACT2FN[config.hidden_act]
 
         # Where to add pos enc
-        self.pos_enc_at_attn = pos_enc_at_attn
-        self.pos_enc_at_cross_attn_queries = pos_enc_at_cross_attn_queries
-        self.pos_enc_at_cross_attn_keys = pos_enc_at_cross_attn_keys
+        self.apply_pe_at_self_attn = config.apply_pe_at_self_attn
+        self.apply_pe_at_cross_attn_queries = config.apply_pe_at_cross_attn_queries
+        self.apply_pe_at_cross_attn_keys = config.apply_pe_at_cross_attn_keys
 
-    def _forward_sa(self, tgt, query_pos):
+    def forward(
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Optional[Tensor] = None,
+        key_point_embedding: Optional[Tensor] = None,
+        num_k_exclude_rope: int = 0,
+    ) -> torch.Tensor:
         # Self-Attention
-        tgt2 = self.norm1(tgt)
-        q = k = tgt2 + query_pos if self.pos_enc_at_attn else tgt2
-        tgt2 = self.self_attn(q, k, v=tgt2)
-        tgt = tgt + self.dropout1(tgt2)
-        return tgt
+        query = self.layer_norm1(queries)
+        if self.apply_pe_at_self_attn:
+            query = self.self_attn(query + query_point_embedding, query + query_point_embedding, v=query)
+        else:
+            query = self.self_attn(query, query, v=query)
+        queries = queries + self.dropout1(query)
 
-    def _forward_ca(self, tgt, memory, query_pos, pos, num_k_exclude_rope=0):
+        # Cross-Attention
         kwds = {}
         if num_k_exclude_rope > 0:
             assert isinstance(self.cross_attn_image, Sam2RoPEAttention)
             kwds = {"num_k_exclude_rope": num_k_exclude_rope}
 
-        # Cross-Attention
-        tgt2 = self.norm2(tgt)
-        tgt2 = self.cross_attn_image(
-            q=tgt2 + query_pos if self.pos_enc_at_cross_attn_queries else tgt2,
-            k=memory + pos if self.pos_enc_at_cross_attn_keys else memory,
-            v=memory,
+        query = self.layer_norm2(queries)
+        query = self.cross_attn_image(
+            q=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
+            k=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
+            v=keys,
             **kwds,
         )
-        tgt = tgt + self.dropout2(tgt2)
-        return tgt
+        queries = queries + self.dropout2(query)
 
-    def forward(
-        self,
-        tgt,
-        memory,
-        pos: Optional[Tensor] = None,
-        query_pos: Optional[Tensor] = None,
-        num_k_exclude_rope: int = 0,
-    ) -> torch.Tensor:
-        # Self-Attn, Cross-Attn
-        tgt = self._forward_sa(tgt, query_pos)
-        tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
         # MLP
-        tgt2 = self.norm3(tgt)
-        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))
-        tgt = tgt + self.dropout3(tgt2)
-        return tgt
+        query = self.layer_norm3(queries)
+        query = self.linear2(self.dropout(self.activation(self.linear1(query))))
+        queries = queries + self.dropout3(query)
+        return queries
 
 
 class Sam2MemoryAttention(nn.Module):
@@ -1725,42 +1656,55 @@ class Sam2MemoryAttention(nn.Module):
         config,
     ):
         super().__init__()
-        self.d_model = config.d_model
-        layer = Sam2MemoryAttentionLayer(activation="relu", dim_feedforward=2048, dropout=0.1, pos_enc_at_attn=False)
-        self.num_layers = config.num_layers
-        self.layers = get_clones(layer, self.num_layers)
-        self.norm = nn.LayerNorm(self.d_model)
-        self.pos_enc_at_input = config.pos_enc_at_input
+        layer = Sam2MemoryAttentionLayer(config)
+        self.layers = get_clones(layer, config.num_layers)
+
+        self.hidden_size = config.hidden_size
+        self.layer_norm = nn.LayerNorm(self.hidden_size)
+        self.apply_pe_at_input = config.apply_pe_at_input
         self.batch_first = config.batch_first
 
     def forward(
         self,
-        curr: torch.Tensor,  # self-attention inputs
-        memory: torch.Tensor,  # cross-attention inputs
-        curr_pos: Optional[Tensor] = None,  # pos_enc for self-attention inputs
-        memory_pos: Optional[Tensor] = None,  # pos_enc for cross-attention inputs
-        num_obj_ptr_tokens: int = 0,  # number of object pointer *tokens*
+        current_vision_features: torch.Tensor,
+        memory: torch.Tensor,
+        current_vision_poisition_embeddings: Optional[Tensor] = None,
+        memory_posision_embeddings: Optional[Tensor] = None,
+        num_obj_ptr_tokens: int = 0,
     ):
-        if isinstance(curr, list):
-            assert isinstance(curr_pos, list)
-            assert len(curr) == len(curr_pos) == 1
-            curr, curr_pos = (
-                curr[0],
-                curr_pos[0],
+        """
+        Args:
+            current_vision_features (`torch.FloatTensor`):
+                The current vision features used for self-attention.
+            memory (`torch.FloatTensor`):
+                The memory features used for cross-attention.
+            current_vision_poisition_embeddings (`torch.FloatTensor`, *optional*):
+                The position embeddings for the current vision features.
+            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
+                The position embeddings for the memory features.
+            num_obj_ptr_tokens (`int`, *optional*):
+                The number of object pointer tokens.
+        """
+        if isinstance(current_vision_features, list):
+            assert isinstance(current_vision_poisition_embeddings, list)
+            assert len(current_vision_features) == len(current_vision_poisition_embeddings) == 1
+            current_vision_features, current_vision_poisition_embeddings = (
+                current_vision_features[0],
+                current_vision_poisition_embeddings[0],
             )
 
-        assert curr.shape[1] == memory.shape[1], "Batch size must be the same for curr and memory"
+        assert current_vision_features.shape[1] == memory.shape[1], "Batch size must be the same for curr and memory"
 
-        output = curr
-        if self.pos_enc_at_input and curr_pos is not None:
-            output = output + 0.1 * curr_pos
+        output = current_vision_features
+        if self.apply_pe_at_input and current_vision_poisition_embeddings is not None:
+            output = output + 0.1 * current_vision_poisition_embeddings
 
         if self.batch_first:
             # Convert to batch first
             output = output.transpose(0, 1)
-            curr_pos = curr_pos.transpose(0, 1)
+            current_vision_poisition_embeddings = current_vision_poisition_embeddings.transpose(0, 1)
             memory = memory.transpose(0, 1)
-            memory_pos = memory_pos.transpose(0, 1)
+            memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1)
 
         for layer in self.layers:
             kwds = {}
@@ -1768,18 +1712,19 @@ class Sam2MemoryAttention(nn.Module):
                 kwds = {"num_k_exclude_rope": num_obj_ptr_tokens}
 
             output = layer(
-                tgt=output,
-                memory=memory,
-                pos=memory_pos,
-                query_pos=curr_pos,
+                queries=output,
+                keys=memory,
+                query_point_embedding=current_vision_poisition_embeddings,
+                key_point_embedding=memory_posision_embeddings,
                 **kwds,
             )
-        normed_output = self.norm(output)
+
+        normed_output = self.layer_norm(output)
 
         if self.batch_first:
             # Convert back to seq first
             normed_output = normed_output.transpose(0, 1)
-            curr_pos = curr_pos.transpose(0, 1)
+            current_vision_poisition_embeddings = current_vision_poisition_embeddings.transpose(0, 1)
 
         return normed_output
 
@@ -2578,7 +2523,7 @@ class Sam2VideoModel(Sam2Model):
         inference_state["frames_already_tracked"] = {}
         # Warm up the visual backbone and cache the image feature on frame 0
         self._get_image_feature(inference_state, frame_idx=0, batch_size=1)
-        return Sam2VideoPredictorStateOutput(inference_state=inference_state)
+        return Sam2VideoSegmentationOutput(inference_state=inference_state)
 
     def _obj_id_to_idx(self, inference_state, obj_id):
         """Map client-side object id to model-side object index."""
@@ -2724,7 +2669,7 @@ class Sam2VideoModel(Sam2Model):
             consolidate_at_video_res=True,
         )
         _, video_res_masks = self._get_orig_video_res_output(inference_state, consolidated_out["pred_masks_video_res"])
-        return Sam2VideoPredictorMaskOutput(frame_idx=frame_idx, obj_ids=obj_ids, video_res_masks=video_res_masks)
+        return Sam2VideoSegmentationOutput(frame_idx=frame_idx, obj_ids=obj_ids, video_res_masks=video_res_masks)
 
     @torch.inference_mode()
     def add_new_mask(
@@ -2806,7 +2751,7 @@ class Sam2VideoModel(Sam2Model):
             consolidate_at_video_res=True,
         )
         _, video_res_masks = self._get_orig_video_res_output(inference_state, consolidated_out["pred_masks_video_res"])
-        return Sam2VideoPredictorMaskOutput(frame_idx=frame_idx, obj_ids=obj_ids, video_res_masks=video_res_masks)
+        return Sam2VideoSegmentationOutput(frame_idx=frame_idx, obj_ids=obj_ids, video_res_masks=video_res_masks)
 
     def _get_orig_video_res_output(self, inference_state, any_res_masks):
         """
@@ -3126,7 +3071,7 @@ class Sam2VideoModel(Sam2Model):
             # Resize the output mask to the original video resolution (we directly use
             # the mask scores on GPU for output to avoid any CPU conversion in between)
             _, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
-            yield Sam2VideoPredictorMaskOutput(frame_idx=frame_idx, obj_ids=obj_ids, video_res_masks=video_res_masks)
+            yield Sam2VideoSegmentationOutput(frame_idx=frame_idx, obj_ids=obj_ids, video_res_masks=video_res_masks)
 
     def _add_output_per_object(self, inference_state, frame_idx, current_out, storage_key):
         """
