@@ -1090,7 +1090,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        version (`Optional`, *optional*): <fill_docstring>
     """
 
     QUANTIZATION_NAME = "compressed-tensors"
@@ -1105,7 +1104,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
-        version: Optional[str] = None,
         **kwargs,
     ):
         from compressed_tensors import QuantizationConfig
@@ -1125,7 +1123,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
-                    "version": version,
                     **kwargs,
                 }
             )

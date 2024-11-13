@@ -65,7 +65,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ct_quantization_config = self.compressor.quantization_config
         apply_quantization_config(model, ct_quantization_config, run_compressed=True)
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
+    def _process_model_after_weight_loading(self, model, **kwargs) -> None:
         pass
 
     @property
