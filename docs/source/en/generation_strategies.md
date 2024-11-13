@@ -403,7 +403,7 @@ culture, and they allow us to design the'
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
-For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.md).
+For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation).
 
 ### Speculative Decoding
 
@@ -508,10 +508,11 @@ See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 >>> import torch
+>>> from accelerate.test_utils.testing import get_backend
 
 >>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
 >>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
->>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> model.to(device)
 >>> set_seed(42)
 
