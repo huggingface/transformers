@@ -154,9 +154,9 @@ GGUF_TENSOR_MAPPING = {
         "ffn_down": "mlp.down_proj",
         "ffn_up": "mlp.up_proj",
         "attn_norm": "input_layernorm",
-        "attn_post_norm": "post_attention_layernorm", #WIP
-        "ffn_pre_norm": "pre_ffn_layernorm", #WIP
-        "ffn_post_norm": "post_ffn_layernorm", #WIP
+        "attn_post_norm": "post_attention_layernorm",
+        "ffn_pre_norm": "pre_feedforward_layernorm",
+        "ffn_post_norm": "post_feedforward_layernorm",
         "ffn_norm": "post_attention_layernorm",
         "output.weight": "lm_head.weight",
     },
@@ -587,7 +587,7 @@ class GGUFBloomConverter(GPT2Converter):
         tokenizer = super().converted(vocab, merges)
         return tokenizer
 
-class GGUFGemma2Converter(Gemma2Converter):
+class GGUFGemma2Converter(LlamaConverter):
     def __init__(self, tokenizer_dict):
         self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
         self.original_tokenizer = self.proto
