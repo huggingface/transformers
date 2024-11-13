@@ -357,7 +357,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
                 Retrieval](https://arxiv.org/abs/2010.00904).
             synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
             task (`str`, *optional*):
@@ -994,7 +995,10 @@ class WhisperGenerationMixin(GenerationMixin):
                     for v in range(len(values)):
                         layer_past_key_values = []
                         for w in values[v]:
-                            layer_past_key_values.append(w[batch_idx][None].cpu())
+                            if len(w) != 0:
+                                layer_past_key_values.append(w[batch_idx][None].cpu())
+                            else:
+                                layer_past_key_values.append(w)
                         all_past_key_values.append(tuple(layer_past_key_values))
                     return tuple(all_past_key_values)
 

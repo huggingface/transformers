@@ -650,15 +650,15 @@ class GitVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        self.position_embeddings = self.position_embedding.weight.unsqueeze(0)
-        num_positions = self.position_embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding(self.position_ids)
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
@@ -1609,6 +1609,8 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
     ):
+        # Overwritten -- `git` has special cache handling and doesn't support generating from `inputs_embeds` atm
+
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
             past_length = past_key_values.get_seq_length()
