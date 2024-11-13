@@ -403,7 +403,7 @@ culture, and they allow us to design the'
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
-For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.md).
+For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation).
 
 ### Speculative Decoding
 
