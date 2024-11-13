@@ -65,12 +65,12 @@ if is_torch_available():
     class LoRALayer(nn.Module):
         """Wraps a linear layer with LoRA-like adapter - Used for testing purposes only"""
 
-        def __init__(self, module: nn.Module, rank: int):
+        def __init__(self, module: nn.Module, rank: int, dtype: torch.dtype):
             super().__init__()
             self.module = module
             self.adapter = nn.Sequential(
-                nn.Linear(module.in_features, rank, bias=False),
-                nn.Linear(rank, module.out_features, bias=False),
+                nn.Linear(module.in_features, rank, bias=False, dtype=dtype),
+                nn.Linear(rank, module.out_features, bias=False, dtype=dtype),
             )
             small_std = (2.0 / (5 * min(module.in_features, module.out_features))) ** 0.5
             nn.init.normal_(self.adapter[0].weight, std=small_std)
@@ -870,15 +870,20 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         # Step 2: add adapters
         for _, module in model.named_modules():
             if isinstance(module, OPTAttention):
-                module.q_proj = LoRALayer(module.q_proj, rank=16)
-                module.k_proj = LoRALayer(module.k_proj, rank=16)
-                module.v_proj = LoRALayer(module.v_proj, rank=16)
+                module.q_proj = LoRALayer(module.q_proj, rank=16, dtype=model.dtype)
+                module.k_proj = LoRALayer(module.k_proj, rank=16, dtype=model.dtype)
+                module.v_proj = LoRALayer(module.v_proj, rank=16, dtype=model.dtype)
 
         # Step 3: dummy batch
         batch = self.tokenizer("Test batch ", return_tensors="pt").to(torch_device)
 
         # Step 4: Check if the gradient is not None
-        with torch.autocast(torch_device):
+        if torch.cuda.is_available():
+            with torch.autocast(torch_device):
+                out = model.forward(**batch)
+                out.logits.norm().backward()
+        else:
+            # CPU and XPU finetune do not support autocast for now.
             out = model.forward(**batch)
             out.logits.norm().backward()
 
