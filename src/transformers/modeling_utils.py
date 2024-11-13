@@ -3460,7 +3460,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 config.quantization_config = quantization_config
-            hf_quantizer = AutoHfQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
+            breakpoint()
+            hf_quantizer = AutoHfQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized, **kwargs)
         else:
             hf_quantizer = None
 
@@ -3900,6 +3901,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         with ContextManagers(init_contexts):
             # Let's make sure we don't run the init function of buffer modules
+            breakpoint()
             model = cls(config, *model_args, **model_kwargs)
 
         # make sure we use the model's config since the __init__ call might have copied it
