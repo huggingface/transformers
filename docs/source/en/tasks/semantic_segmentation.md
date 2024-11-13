@@ -690,6 +690,7 @@ We will now see how to infer without a pipeline. Process the image with an image
 
 ```py
 >>> from accelerate.test_utils.testing import get_backend
+# automatically detects the underlying device type (GPU, CUDA, CPU, XPU, MPS, etc.)
 >>> device, _, _ = get_backend()
 >>> encoding = image_processor(image, return_tensors="pt")
 >>> pixel_values = encoding.pixel_values.to(device)
