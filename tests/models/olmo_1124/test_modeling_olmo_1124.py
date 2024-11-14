@@ -430,20 +430,21 @@ class Olmo1124IntegrationTest(unittest.TestCase):
         cache_implementation = "static"
         attn_implementation = "sdpa"
         batch_size = 1
+        generation_config = GenerationConfig(
+            use_cache=True,
+            cache_implementation=cache_implementation,
+            max_length=max_generation_length,
+            cache_config={
+                "batch_size": batch_size,
+                "max_cache_len": max_generation_length,
+            },
+        )
         model = Olmo1124ForCausalLM.from_pretrained(
             olmo_1124_model,
             device_map=device,
             torch_dtype=dtype,
             attn_implementation=attn_implementation,
-            generation_config=GenerationConfig(
-                use_cache=True,
-                cache_implementation=cache_implementation,
-                max_length=max_generation_length,
-                cache_config={
-                    "batch_size": batch_size,
-                    "max_cache_len": max_generation_length,
-                },
-            ),
+            generation_config=generation_config,
         )
 
         prompts = ["Simply put, the theory of relativity states that "]
