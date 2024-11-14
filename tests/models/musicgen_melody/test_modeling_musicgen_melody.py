@@ -637,6 +637,12 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
                                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                elif torch_device == "xpu":
+                                    # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                    # which is implemented on PyTorch level using aten operators and is
+                                    # device agnostic with respect to implementation of each aten operator.
+                                    atol = atols["cuda", False, torch_dtype]
+                                    rtol = rtols["cuda", False, torch_dtype]
                                 else:
                                     atol = 1e-7
                                     rtol = 1e-4
@@ -1654,6 +1660,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
                                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                elif torch_device == "xpu":
+                                    # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                    # which is implemented on PyTorch level using aten operators and is
+                                    # device agnostic with respect to implementation of each aten operator.
+                                    atol = atols["cuda", False, torch_dtype]
+                                    rtol = rtols["cuda", False, torch_dtype]
                                 else:
                                     atol = 1e-7
                                     rtol = 1e-4
