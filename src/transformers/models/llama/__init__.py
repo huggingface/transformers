@@ -52,6 +52,8 @@ else:
     _import_structure["modeling_llama"] = [
         "LlamaForCausalLM",
         "LlamaModel",
+        "AdaptiveLlamaModel",
+        "AdaptiveLlamaForCausalLM",
         "LlamaPreTrainedModel",
         "LlamaForSequenceClassification",
         "LlamaForQuestionAnswering",
@@ -93,6 +95,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_llama import (
+            AdaptiveLlamaModel,
+            AdaptiveLlamaForCausalLM,
             LlamaForCausalLM,
             LlamaForQuestionAnswering,
             LlamaForSequenceClassification,
