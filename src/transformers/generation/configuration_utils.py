@@ -587,6 +587,37 @@ class GenerationConfig(PushToHubMixin):
         """
 
         # Validation of individual attributes
+        integer_arguments = ["num_beams", "num_beam_groups", "top_k", "no_repeat_ngram_size"]
+        positive_arguments = [
+            "temperature",
+            "length_penalty",
+            "penalty_alpha",
+            "num_beams",
+            "min_length",
+            "max_length",
+            "num_beam_groups",
+            "no_repeat_ngram_size",
+        ]
+        probability_arguments = ["top_p", "typical_p", "min_p", "epsilon_cutoff", "eta_cutoff"]
+
+        for arg in integer_arguments:
+            value = getattr(self, arg)
+            if value is not None and not isinstance(value, int):
+                raise ValueError(f"`{arg}` must be an integer, but got {value} of type {type(value).__name__}.")
+
+        for arg in positive_arguments:
+            value = getattr(self, arg)
+            if value is not None and value < 0:
+                raise ValueError(f"`{arg}` must be a positive number, but got {value}.")
+
+        for arg in probability_arguments:
+            value = getattr(self, arg)
+            if value is not None and (value > 1 or value < 0.0):
+                raise ValueError(f"`{arg}` must be within the range [0, 1], but got {value}.")
+
+        if not isinstance(self.length_penalty, (int, float)):
+            raise ValueError(f"`length_penalty` can be positive or negative, but is {self.length_penalty}.")
+
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
