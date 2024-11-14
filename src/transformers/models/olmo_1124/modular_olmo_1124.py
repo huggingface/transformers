@@ -15,6 +15,7 @@ from ..olmo.modeling_olmo import (
     OlmoFlashAttention2,
     OlmoForCausalLM,
     OlmoModel,
+    OlmoPreTrainedModel,
     OlmoSdpaAttention,
     apply_rotary_pos_emb,
     repeat_kv,
@@ -458,6 +459,10 @@ class Olmo1124DecoderLayer(OlmoDecoderLayer):
         return outputs
 
 
+class Olmo1124PreTrainedModel(OlmoPreTrainedModel):
+    pass
+
+
 # The OLMo November 2024 model is identical to the OLMo model, except RMSNorm is used instead of
 # standard layer norm for the output norm.
 class Olmo1124Model(OlmoModel):
@@ -474,3 +479,11 @@ class Olmo1124ForCausalLM(OlmoForCausalLM):
     def __init__(self, config: Olmo1124Config):
         super().__init__(config)
         self.model = Olmo1124Model(config)
+
+
+__all__ = [
+    "Olmo1124Config",
+    "Olmo1124ForCausalLM",
+    "Olmo1124Model",
+    "Olmo1124PreTrainedModel",
+]

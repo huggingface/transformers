@@ -1090,3 +1090,6 @@ class Olmo1124ForCausalLM(Olmo1124PreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["Olmo1124ForCausalLM", "Olmo1124Model", "Olmo1124PreTrainedModel"]
