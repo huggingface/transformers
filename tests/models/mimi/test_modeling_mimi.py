@@ -41,7 +41,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, sdpa_kernel
 
 
 if is_torch_available():
@@ -636,7 +636,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                                     # TODO: test gradients as well (& for FA2 as well!)
                                     with torch.no_grad():
-                                        with torch.backends.cuda.sdp_kernel(
+                                        with sdpa_kernel(
                                             enable_flash=enable_kernels,
                                             enable_math=True,
                                             enable_mem_efficient=enable_kernels,
