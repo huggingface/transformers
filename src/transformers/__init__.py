@@ -477,6 +477,11 @@ _import_structure = {
     ],
     "models.glm": ["GlmConfig"],
     "models.glpn": ["GLPNConfig"],
+    "models.got_ocr2": [
+        "GotOcr2Config",
+        "GotOcr2Processor",
+        "GotOcr2VisionConfig",
+    ],
     "models.gpt2": [
         "GPT2Config",
         "GPT2Tokenizer",
@@ -708,11 +713,6 @@ _import_structure = {
     "models.qwen2": [
         "Qwen2Config",
         "Qwen2Tokenizer",
-    ],
-    "models.got_ocr2": [
-        "GotOcr2Config",
-        "GotOcr2Processor",
-        "GotOcr2VisionConfig",
     ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
@@ -2427,6 +2427,13 @@ else:
             "GLPNPreTrainedModel",
         ]
     )
+    _import_structure["models.got_ocr2"].extend(
+        [
+            "GotOcr2ForConditionalGeneration",
+            "GotOcr2Model",
+            "GotOcr2PreTrainedModel",
+        ]
+    )
     _import_structure["models.gpt2"].extend(
         [
             "GPT2DoubleHeadsModel",
@@ -3281,13 +3288,6 @@ else:
             "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
-        ]
-    )
-    _import_structure["models.got_ocr2"].extend(
-        [
-            "GotOcr2ForConditionalGeneration",
-            "GotOcr2Model",
-            "GotOcr2PreTrainedModel",
         ]
     )
     _import_structure["models.qwen2_audio"].extend(
