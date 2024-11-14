@@ -58,13 +58,10 @@ class TimesFMPreTrainedModel(PreTrainedModel):
     main_input_name = "inputs"
 
     def _init_weights(self, module):
-        print(">>> TimesFMPreTrainedModel _init_weights")
         if isinstance(module, nn.Embedding):
-            print(">>> TimesFMPreTrainedModel Embedding std", self.config.initializer_factor)
             module.weight.data.normal_(mean=0, std=self.config.initializer_factor)
 
         elif isinstance(module, nn.Linear):
-            print(">>> TimesFMPreTrainedModel Linear std", self.config.initializer_factor)
             module.weight.data.normal_(mean=0, std=self.config.initializer_factor)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
@@ -462,84 +459,77 @@ class TimesFMModel(TimesFMPreTrainedModel):
 
         input_ts, input_padding, inp_freq, pmap_pad = self._preprocess(inputs, freq)
         print(">>> TimesFMModel input_ts", input_ts.shape)
-        with torch.no_grad():
-            mean_outputs = []
-            full_outputs = []
-            all_attentions = []
-            all_hidden_states = []
-            assert input_ts.shape[0] % self.batch_size == 0
-            for i in range(input_ts.shape[0] // self.batch_size):
-                input_ts_in = torch.from_numpy(
-                    np.array(
-                        input_ts[
-                            i
-                            * self.batch_size : (i + 1)
-                            * self.batch_size
-                        ],
-                        dtype=np.float32,
-                    )
+        mean_outputs = []
+        full_outputs = []
+        all_attentions = []
+        all_hidden_states = []
+        assert input_ts.shape[0] % self.batch_size == 0
+        for i in range(input_ts.shape[0] // self.batch_size):
+            input_ts_in = torch.from_numpy(
+                np.array(
+                    input_ts[
+                        i
+                        * self.batch_size : (i + 1)
+                        * self.batch_size
+                    ],
+                    dtype=np.float32,
                 )
-                input_padding_in = torch.from_numpy(
-                    np.array(
-                        input_padding[
-                            i
-                            * self.batch_size : (i + 1)
-                            * self.batch_size
-                        ],
-                        dtype=np.float32,
-                    )
+            )
+            input_padding_in = torch.from_numpy(
+                np.array(
+                    input_padding[
+                        i
+                        * self.batch_size : (i + 1)
+                        * self.batch_size
+                    ],
+                    dtype=np.float32,
                 )
-                inp_freq_in = torch.from_numpy(
-                    np.array(
-                        inp_freq[
-                            i
-                            * self.batch_size : (i + 1)
-                            * self.batch_size,
-                            :,
-                        ],
-                        dtype=np.int32,
-                    )
-                ).long()
-                mean_output, full_output, attentions, hidden_states = self.decoder.decode(
-                    input_ts=input_ts_in,
-                    paddings=input_padding_in,
-                    freq=inp_freq_in,
-                    horizon_len=self.horizon_len,
-                    return_forecast_on_context=return_forecast_on_context,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
+            )
+            inp_freq_in = torch.from_numpy(
+                np.array(
+                    inp_freq[
+                        i
+                        * self.batch_size : (i + 1)
+                        * self.batch_size,
+                        :,
+                    ],
+                    dtype=np.int32,
                 )
-                mean_output = mean_output.detach().cpu().numpy()
-                full_output = full_output.detach().cpu().numpy()
-                mean_output = np.array(mean_output)
-                full_output = np.array(full_output)
-                mean_outputs.append(mean_output)
-                full_outputs.append(full_output)
+            ).long()
+            mean_output, full_output, attentions, hidden_states = self.decoder.decode(
+                input_ts=input_ts_in,
+                paddings=input_padding_in,
+                freq=inp_freq_in,
+                horizon_len=self.horizon_len,
+                return_forecast_on_context=return_forecast_on_context,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            mean_outputs.append(mean_output)
+            full_outputs.append(full_output)
 
-                if output_attentions:
-                    if not all_attentions:
-                        all_attentions = [[] for _ in range(len(attentions))]
-                    for j in range(len(attentions)):
-                        attentions[j] = attentions[j].detach().cpu().numpy()
-                        attentions[j] = np.array(attentions[j])
-                        all_attentions[j].append(attentions[j])
-                if output_hidden_states:
-                    if not all_hidden_states:
-                        all_hidden_states = [[] for _ in range(len(hidden_states))]
-                    for j in range(len(hidden_states)):
-                        hidden_states[j] = hidden_states[j].detach().cpu().numpy()
-                        hidden_states[j] = np.array(hidden_states[j])
-                        all_hidden_states[j].append(hidden_states[j])
+            if output_attentions:
+                if not all_attentions:
+                    all_attentions = [[] for _ in range(len(attentions))]
+                for j in range(len(attentions)):
+                    attentions[j] = attentions[j]
+                    all_attentions[j].append(attentions[j])
+            if output_hidden_states:
+                if not all_hidden_states:
+                    all_hidden_states = [[] for _ in range(len(hidden_states))]
+                for j in range(len(hidden_states)):
+                    hidden_states[j] = hidden_states[j]
+                    all_hidden_states[j].append(hidden_states[j])
 
-        mean_outputs = np.concatenate(mean_outputs, axis=0)
-        full_outputs = np.concatenate(full_outputs, axis=0)
+        mean_outputs = torch.cat(mean_outputs, axis=0)
+        full_outputs = torch.cat(full_outputs, axis=0)
 
         if output_attentions:
             for j in range(len(all_attentions)):
-                all_attentions[j] = np.concatenate(all_attentions[j], axis=0)
+                all_attentions[j] = torch.cat(all_attentions[j], axis=0)
         if output_hidden_states:
             for j in range(len(all_hidden_states)):
-                all_hidden_states[j] = np.concatenate(all_hidden_states[j], axis=0)
+                all_hidden_states[j] = torch.cat(all_hidden_states[j], axis=0)
 
         if output_attentions:
             print(">> TimesFMModel attentions", len(attentions), attentions[0].shape)
@@ -554,8 +544,8 @@ class TimesFMModel(TimesFMPreTrainedModel):
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
         if inp_min >= 0 and truncate_negative:
-            mean_outputs = np.maximum(mean_outputs, 0.0)
-            full_outputs = np.maximum(full_outputs, 0.0)
+            mean_outputs = torch.maximum(mean_outputs, 0.0)
+            full_outputs = torch.maximum(full_outputs, 0.0)
 
         if return_dict:
             return TimesFMOutput(
@@ -565,9 +555,10 @@ class TimesFMModel(TimesFMPreTrainedModel):
                 hidden_states=all_hidden_states if output_hidden_states else None,
             )
         else:
-            return_tuple = [mean_outputs, full_outputs]
-            if output_attentions:
-                return_tuple.append(all_attentions)
+            return_tuple = []
             if output_hidden_states:
                 return_tuple.append(all_hidden_states)
+            if output_attentions:
+                return_tuple.append(all_attentions)
+            return_tuple += [mean_outputs, full_outputs]
             return tuple(return_tuple)
