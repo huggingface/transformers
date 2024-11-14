@@ -282,8 +282,12 @@ def main():
         dest="tmp_cleanup",
         help="If passed, don't remove temp dir at end of HF conversion.",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
-    # Different OLMo November 2024 versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
+    parser.add_argument(
+        "--no_safe_serialization",
+        action="store_false",
+        dest="safe_serialization",
+        help="Whether or not to save using `safetensors`.",
+    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
