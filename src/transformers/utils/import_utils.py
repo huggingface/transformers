@@ -691,10 +691,6 @@ def is_torch_mlu_available(check_device=False):
     import torch
     import torch_mlu  # noqa: F401
 
-    from ..dependency_versions_table import deps
-
-    deps["deepspeed"] = "deepspeed-mlu>=0.10.1"
-
     if check_device:
         try:
             # Will raise a RuntimeError if no MLU is found
