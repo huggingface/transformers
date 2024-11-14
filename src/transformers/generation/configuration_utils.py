@@ -616,7 +616,7 @@ class GenerationConfig(PushToHubMixin):
                 raise ValueError(f"`{arg}` must be within the range [0, 1], but got {value}.")
 
         if not isinstance(self.length_penalty, (int, float)):
-            raise ValueError(f"`length_penalty` can be positive or negative, but is {self.length_penalty}.")
+            raise ValueError(f"`length_penalty` can be a positive or negative number, but got {self.length_penalty} of type {type(self.length_penalty).__name__}.")
 
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
