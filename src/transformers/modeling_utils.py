@@ -4359,6 +4359,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if tp_plan is not None:
             assert tp_device is not None, "tp_device not set!"
+            if not model.has_tp_plan:
+                raise NotImplementedError("This model does not have a tensor parallel plan.")
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
@@ -5053,6 +5055,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return False
 
         return self.hf_quantizer.is_trainable
+
+    @property
+    def has_tp_plan(self):
+        """
+        Returns whether the model has a tensor parallelism plan.
+        """
+        if self._tp_plan is not None:
+            return True
+        # Check if base model has a TP plan
+        if getattr(self.base_model, "_tp_plan", None) is not None:
+            return True
+        return False
 
     def tensor_parallel(self, device_mesh):
         """
