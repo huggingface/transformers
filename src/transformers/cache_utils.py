@@ -782,7 +782,6 @@ class QuantoQuantizedCache(QuantizedCache):
 
         if is_optimum_quanto_available():
             optimum_quanto_version = version.parse(importlib.metadata.version("optimum-quanto"))
-            print(optimum_quanto_version)
             if optimum_quanto_version <= version.parse("0.2.5"):
                 raise ImportError(
                     f"You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. Detected version {optimum_quanto_version}."
