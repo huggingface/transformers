@@ -37,7 +37,7 @@ from ...utils import (
     logging,
 )
 from ..clip.modeling_clip import CLIPMLP
-from ..gemma.modeling_gemma import GemmaForCausalLM
+from ..gemma.modeling_gemma import GemmaAttention, GemmaForCausalLM
 from ..llama.modeling_llama import (
     LlamaDynamicNTKScalingRotaryEmbedding,
     LlamaForSequenceClassification,
@@ -249,35 +249,16 @@ class PhiMLP(CLIPMLP):
     pass
 
 
-class PhiAttention(nn.Module):
+class PhiAttention(GemmaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: PhiConfig, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        super().__init__(config, layer_idx)
+        del self.o_proj
+        del self.scaling
+        del self.max_position_embeddings
         self.head_dim = self.hidden_size // self.num_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.rope_theta = config.rope_theta
         self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
-        self.is_causal = True
-
-        if (self.head_dim * self.num_heads) != self.hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_heads`: {self.num_heads})."
-            )
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)

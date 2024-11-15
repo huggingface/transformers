@@ -257,10 +257,9 @@ class PhiAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.rope_theta = config.rope_theta
-        self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
         self.is_causal = True
 
-        if (self.head_dim * self.num_heads) != self.hidden_size:
+        if self.hidden_size % self.num_heads != 0:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
@@ -269,6 +268,9 @@ class PhiAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+
+        self.rotary_emb = PhiRotaryEmbedding(config=self.config)
+        self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
         self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
 
         self.qk_layernorm = config.qk_layernorm
@@ -279,8 +281,6 @@ class PhiAttention(nn.Module):
             self.k_layernorm = nn.LayerNorm(
                 config.hidden_size // self.num_heads, eps=config.layer_norm_eps, elementwise_affine=True
             )
-
-        self.rotary_emb = PhiRotaryEmbedding(config=self.config)
 
     def forward(
         self,
