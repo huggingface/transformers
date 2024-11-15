@@ -143,7 +143,7 @@ class LlavaNextProcessor(ProcessorMixin):
                     "Expanding inputs for image tokens in LLaVa-NeXT should be done in processing. "
                     "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
                     "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
                 )
             else:
                 image_sizes = iter(image_inputs["image_sizes"])
