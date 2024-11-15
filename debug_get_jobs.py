@@ -13,8 +13,9 @@ def get_jobs(workflow_run_id, token=None):
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
     result = requests.get(url, headers=headers).json()
+    print("what is result")
+    print(result)
     jobs = []
-
 
     jobs.extend(result["jobs"])
     pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
