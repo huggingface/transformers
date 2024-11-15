@@ -2488,7 +2488,7 @@ class Trainer:
                     # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
                     context = (
                         functools.partial(self.accelerator.no_sync, model=model)
-                        if i == len(batch_samples) - 1
+                        if i != len(batch_samples) - 1
                         else contextlib.nullcontext
                     )
                     with context():
