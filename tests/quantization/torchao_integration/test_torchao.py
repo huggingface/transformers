@@ -74,6 +74,13 @@ class TorchAoConfigTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unexpected keyword arg"):
             _ = TorchAoConfig("int4_weight_only", group_size1=32)
 
+    def test_repr(self):
+        """
+        Check that there is no error in the repr
+        """
+        quantization_config = TorchAoConfig("int4_weight_only", modules_to_not_convert=["conv"], group_size=8)
+        repr(quantization_config)
+
 
 @require_torch_gpu
 @require_torchao

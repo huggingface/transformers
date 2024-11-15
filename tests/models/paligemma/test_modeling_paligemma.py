@@ -17,7 +17,6 @@
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     PaliGemmaConfig,
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     cleanup,
     require_read_token,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -300,14 +298,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_model_parallelism(self):
         pass
-
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(
-            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
-        )
 
     @unittest.skip(
         reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
