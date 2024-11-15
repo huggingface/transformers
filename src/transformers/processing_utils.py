@@ -1136,7 +1136,8 @@ class ProcessorMixin(PushToHubMixin):
             conversation, chat_template=chat_template, tokenize=False, return_dict=False, **kwargs
         )
 
-        def parse_conversation(conversation: Union[List[Dict[str, str]]]):
+        # we will have to return all processed inputs in a dict
+        if tokenize:
             images, videos = [], []
             for message in conversation:
                 visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
@@ -1147,11 +1148,7 @@ class ProcessorMixin(PushToHubMixin):
                         videos.append(
                             load_video(vision_info["video"], num_frames=num_frames, backend=video_load_backend)
                         )
-            return images, videos
 
-        # we will have to return all processed inputs in a dict
-        if tokenize:
-            images, videos = parse_conversation(conversation)
             out = self(
                 text=prompt,
                 images=images if images else None,
