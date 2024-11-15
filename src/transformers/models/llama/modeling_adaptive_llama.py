@@ -74,6 +74,7 @@ class AdaptiveFanInOutput:
     attention_mask: torch.Tensor # [ bs, new_seq_len ]
 
     # mask for bos and eos embeddings that should be never merged
+    # should be used in subsequent adaptive fan in modules
     special_embeddings_mask: torch.Tensor # [ bs, new_seq_len ]
 
     # merged_tokens_counts represents how many embeddings
@@ -122,7 +123,7 @@ class AdaptiveFanIn(nn.Module):
         merged_attention_outputs = torch.zeros_like(hidden_state)
         merged_attention_outputs[:, 0] = hidden_state[:, 0] # copy bos token embeddings
 
-        merged_embeddings_counts = torch.zeros_like(attention_mask)
+        merged_embeddings_counts = torch.zeros_like(attention_mask, dtype=torch.long)
         merged_embeddings_counts[:, 0] = 1 # consider bos token embeddings
 
         merged_special_embeddings_mask = torch.zeros_like(attention_mask)
@@ -236,6 +237,8 @@ class AdaptiveFanOut(nn.Module):
         assert hidden_states.shape[1] == attention_mask.shape[1], 'seq len mismatch'
         assert hidden_states.shape[1] == merged_embeddings_counts.shape[1], 'seq len mismatch'
 
+        assert (merged_embeddings_counts.sum(dim=-1) == residual_attention_mask.sum(dim=-1)).all(), 'merged_embeddings_counts and residual_attention_mask mismatch'
+
         # residual_hidden_states ~ [ batch_size, seq_len, hidden_size ]
         # residual_hidden_states ~ [ batch_size, seq_len ]
         assert residual_hidden_states.shape[1] == residual_attention_mask.shape[1], 'seq len mismatch'
@@ -248,7 +251,7 @@ class AdaptiveFanOut(nn.Module):
         for batch_i in range(attention_mask.shape[0]):
             restored_seq_len = 0
             for seq_len_i in range(new_seq_len):
-                num_repeats = merged_embeddings_counts[batch_i, seq_len_i]
+                num_repeats = merged_embeddings_counts[batch_i, seq_len_i].item()
                 if num_repeats == 0:
                     break
 
@@ -256,6 +259,8 @@ class AdaptiveFanOut(nn.Module):
                 for _ in range(num_repeats):
                     restored_hidden_states[batch_i, restored_seq_len] += current_hidden_state
                     restored_seq_len += 1
+
+        assert restored_hidden_states.shape == residual_hidden_states.shape
 
         return restored_hidden_states
 
