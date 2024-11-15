@@ -92,36 +92,15 @@ class AdaptiveFanOutOutput:
     attention_mask: torch.Tensor # [ bs, restored_seq_len ]
     special_embeddings_mask: torch.Tensor
 
-class AdaptiveFanIn(nn.Module):
-    def __init__(self, config: LlamaConfig):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.fan_in_mlp = nn.Linear(self.hidden_size * 2, 2)
+class AdaptiveFanInFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask, merging_log_probas: torch.Tensor):
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask: torch.Tensor, merging_map: torch.Tensor=None) -> AdaptiveFanInOutput:
-        # TODO attention mask transforms
-        # TODO return mirroring layer merging informarion to restore
+        assert hidden_state.requires_grad
+        assert merging_log_probas.requires_grad is not None
 
-
-        # hidden_state ~ [ bs, seq_len, hidden_size ]
-        assert hidden_state.shape[-1] == self.hidden_size
-
-        # attention_mask ~ [ bs, seq_len ]
-        assert hidden_state.shape[:2] == attention_mask.shape
-        assert special_embeddings_mask.shape == attention_mask.shape
-
-        if merging_map is None:
-            # joined prev and next tokens
-            # each embedding could be explained as: should it be merged with the next one embedding?
-            # [ bs, seq_len - 1, hidden_size * 2 ]
-            attn_output_pairs = torch.cat([ hidden_state[:, :-1], hidden_state[:, 1:] ], dim=-1)
-            # [ bs, seq_len - 1, 2 ] # should be merged or not (probas)?
-            attn_output_pairs_merging_log_probas = self.fan_in_mlp(attn_output_pairs)
-            # [ bs, seq_len - 1 ] # should be merged or not (booleans)?
-            merging_map = attn_output_pairs_merging_log_probas.max(dim=-1).indices
-
-        merged_attention_outputs = torch.zeros_like(hidden_state)
-        merged_attention_outputs[:, 0] = hidden_state[:, 0] # copy bos token embeddings
+        hidden_state_input_clone = hidden_state.detach()
+        merged_attention_outputs = hidden_state
 
         merged_embeddings_counts = torch.zeros_like(attention_mask, dtype=torch.long)
         merged_embeddings_counts[:, 0] = 1 # consider bos token embeddings
@@ -131,6 +110,8 @@ class AdaptiveFanIn(nn.Module):
 
         batch_size = hidden_state.shape[0]
         merged_segments_lengths_in_batch = torch.zeros([batch_size], device=hidden_state.device, dtype=torch.long)
+
+        merging_map = merging_log_probas.max(dim=-1).indices
 
         for batch_i in range(batch_size):
             current_merged_embeddings_index = 1 # consider bos token
@@ -210,12 +191,91 @@ class AdaptiveFanIn(nn.Module):
         merged_attention_mask = torch.arange(max_seq_len_after_merge, device=merged_attention_outputs.device).unsqueeze(0).repeat(batch_size, 1)
         merged_attention_mask = merged_attention_mask < merged_segments_lengths_in_batch.unsqueeze(1)
 
-        return AdaptiveFanInOutput(
+        ctx.save_for_backward(hidden_state_input_clone, merging_log_probas, merging_map, merged_embeddings_counts, special_embeddings_mask)
+
+        return merged_attention_outputs, merged_attention_mask, merged_embeddings_counts, merged_special_embeddings_mask
+
+    @staticmethod
+    def backward(ctx, merged_attention_outputs_grad, merged_attention_mask_grad, merged_embeddings_counts_grad, merged_special_embeddings_mask_grad):
+
+        print("in custom backward merged_attention_outputs", merged_attention_outputs_grad.shape)
+
+        input_hidden_state, input_merging_log_probas, merging_map, merged_embeddings_counts, input_special_embeddings_mask = ctx.saved_tensors
+
+        merging_log_probas_gradients = torch.zeros_like(input_merging_log_probas)
+        input_hidden_state_gradients = torch.zeros_like(input_hidden_state)
+
+        assert merged_attention_outputs_grad.shape[0] == input_hidden_state_gradients.shape[0]
+        assert merged_attention_outputs_grad.shape[2] == input_hidden_state_gradients.shape[2]
+        assert merged_attention_outputs_grad.shape[1] == merged_embeddings_counts.shape[1]
+
+        for batch_i in range(input_hidden_state_gradients.shape[0]):
+            gradients_seq_len_i = 0
+            for seq_len_i in range(merged_embeddings_counts.shape[1]):
+                num_tokens = merged_embeddings_counts[batch_i, seq_len_i].item()
+                if num_tokens == 0:
+                    break
+
+                # [ hidden_size ]
+                normed_gradient_value = merged_attention_outputs_grad[batch_i, seq_len_i] / num_tokens
+                for _ in range(num_tokens):
+                    input_hidden_state_gradients[batch_i, gradients_seq_len_i] = normed_gradient_value
+
+                    if gradients_seq_len_i < merging_log_probas_gradients.shape[1]:
+                        # todo по-хорошему, надо посмотреть градиенты, как было бы, если бы мы не смерджили эти токены
+                        merging_map_desicision_index = merging_map[batch_i, gradients_seq_len_i].item()
+                        merging_log_probas_gradients[batch_i, gradients_seq_len_i, merging_map_desicision_index] = normed_gradient_value.sum()
+                    elif gradients_seq_len_i == merging_log_probas_gradients.shape[1]:
+                        # merging_log_probas_gradients has minus one length
+                        pass
+                    else:
+                        raise ValueError("merging_log_probas_gradients seq_len mismatch")
+
+                    gradients_seq_len_i += 1
+
+        input_hidden_state_gradients[input_special_embeddings_mask.bool()] = 0
+
+        return input_hidden_state_gradients, None, None, merging_log_probas_gradients
+
+
+class AdaptiveFanIn(nn.Module):
+    def __init__(self, config: LlamaConfig):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.fan_in_mlp = nn.Linear(self.hidden_size * 2, 2)
+
+    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask: torch.Tensor, merging_log_probas: torch.Tensor=None) -> AdaptiveFanInOutput:
+        # TODO attention mask transforms
+        # TODO return mirroring layer merging informarion to restore
+
+
+        # hidden_state ~ [ bs, seq_len, hidden_size ]
+        assert hidden_state.shape[-1] == self.hidden_size
+
+        # attention_mask ~ [ bs, seq_len ]
+        assert hidden_state.shape[:2] == attention_mask.shape
+        assert special_embeddings_mask.shape == attention_mask.shape
+
+        if merging_log_probas is None:
+            # joined prev and next tokens
+            # each embedding could be explained as: should it be merged with the next one embedding?
+            # [ bs, seq_len - 1, hidden_size * 2 ]
+            attn_output_pairs = torch.cat([ hidden_state[:, :-1], hidden_state[:, 1:] ], dim=-1)
+            # [ bs, seq_len - 1, 2 ] # should be merged or not (probas)?
+            merging_log_probas = self.fan_in_mlp(attn_output_pairs)
+
+        # merging_log_probas[special_embeddings_mask[:, :-1]] = 0
+
+        merged_attention_outputs, merged_attention_mask, merged_embeddings_counts, merged_special_embeddings_mask = AdaptiveFanInFunction.apply(hidden_state, attention_mask, special_embeddings_mask, merging_log_probas)
+
+        res = AdaptiveFanInOutput(
             hidden_state=merged_attention_outputs,
             attention_mask=merged_attention_mask,
             merged_embeddings_counts=merged_embeddings_counts,
             special_embeddings_mask=merged_special_embeddings_mask,
         )
+
+        return res
 
 
 class AdaptiveFanOut(nn.Module):
@@ -247,7 +307,7 @@ class AdaptiveFanOut(nn.Module):
         seq_len = residual_attention_mask.shape[1]
         assert seq_len >= new_seq_len, 'residual seq len cant be less then input_embeddings seq_len'
 
-        restored_hidden_states = residual_hidden_states
+        restored_hidden_states = torch.zeros_like(residual_hidden_states)
         for batch_i in range(attention_mask.shape[0]):
             restored_seq_len = 0
             for seq_len_i in range(new_seq_len):
