@@ -448,8 +448,8 @@
         title: Mamba
       - local: model_doc/mamba2
         title: Mamba2
-      - local: in_translation
-        title: (번역중) MarianMT
+      - local: model_doc/marian
+        title: MarianMT
       - local: in_translation
         title: (번역중) MarkupLM
       - local: in_translation
