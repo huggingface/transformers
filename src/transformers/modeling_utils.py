@@ -4116,7 +4116,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
 
             # Get device type (e.g. "cuda")
-            device_type = torch.distributed.distributed_c10d._device_capability()[0]
+            try:
+                # torch 2.6 API
+                device_type = torch.distributed.distributed_c10d._device_capability()[0]
+            except AttributeError:
+                if torch.cuda.is_available():
+                    device_type = "cuda"
+                else:
+                    raise RuntimeError(
+                        "Device type unknown. Please run model.tensor_parallel with an explicit DeviceMesh."
+                    )
             # Get torch device module (e.g. torch.cuda) based on device type
             device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
