@@ -1211,6 +1211,7 @@ if __name__ == "__main__":
 
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
     is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
+    is_scheduled_ci_run = True
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
