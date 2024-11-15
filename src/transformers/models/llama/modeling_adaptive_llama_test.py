@@ -17,7 +17,10 @@ def test_adaptive_fan_in_no_merge():
     special_embeddings_mask[:, 0] = 1
     special_embeddings_mask[:, -1] = 1
 
-    merging_log_probas = (torch.zeros([batch_size, seq_len - 1]) + 1e-4).log()
+    merging_log_probas = torch.ones([batch_size, seq_len - 1, 2])
+    merging_log_probas[:, :, 1] = 0
+    merging_log_probas += 1e-4
+    merging_log_probas = merging_log_probas.log()
 
     afin_output = afin.forward(hidden_states, attention_mask, special_embeddings_mask, merging_log_probas=merging_log_probas)
 
@@ -38,7 +41,10 @@ def test_adaptive_fan_in_all_merge():
     special_embeddings_mask[:, 0] = 1
     special_embeddings_mask[:, -1] = 1
 
-    merging_log_probas = torch.ones([batch_size, seq_len - 1])
+    merging_log_probas = torch.ones([batch_size, seq_len - 1, 2])
+    merging_log_probas[:, :, 0] = 0
+    merging_log_probas += 1e-4
+    merging_log_probas = merging_log_probas.log()
 
     afin_output = afin.forward(hidden_states, attention_mask, special_embeddings_mask, merging_log_probas=merging_log_probas)
 
@@ -61,8 +67,9 @@ def test_adaptive_fan_in_all_but_first_merge():
     special_embeddings_mask[:, 0] = 1
     special_embeddings_mask[:, -1] = 1
 
-    merging_log_probas = torch.ones([batch_size, seq_len - 1])
-    merging_log_probas[:, 1] = 0
+    merging_log_probas = torch.ones([batch_size, seq_len - 1, 2])
+    merging_log_probas[:, :, 0] = 0
+    merging_log_probas[:, 1] = torch.tensor([1, 0])
     merging_log_probas += 1e-4
     merging_log_probas = merging_log_probas.log()
 

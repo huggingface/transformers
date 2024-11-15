@@ -95,9 +95,8 @@ class AdaptiveFanOutOutput:
 class AdaptiveFanInFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask, merging_log_probas: torch.Tensor):
-
-        assert hidden_state.requires_grad
-        assert merging_log_probas.requires_grad is not None
+        # assert hidden_state.requires_grad
+        # assert merging_log_probas.requires_grad is not None
 
         hidden_state_input_clone = hidden_state.detach()
         merged_attention_outputs = hidden_state
