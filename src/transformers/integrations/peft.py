@@ -524,7 +524,7 @@ class PeftAdapterMixin:
     
         Args:
             adapter_names (`Union[List[str], str]`):
-                The names (single string or list of strings) of the adapter to delete.
+                The name(s) of the adapter(s) to delete.
     
         Example:
     
@@ -572,4 +572,4 @@ class PeftAdapterMixin:
                 # and make sure to set the flag to False
                 if len(self.peft_config) == 0:
                     del self.peft_config
-                    self._hf_peft_config_loaded = None
+                    self._hf_peft_config_loaded = False
