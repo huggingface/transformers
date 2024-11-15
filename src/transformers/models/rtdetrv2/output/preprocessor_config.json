@@ -1,0 +1,26 @@
+{
+  "do_convert_annotations": true,
+  "do_normalize": false,
+  "do_pad": false,
+  "do_rescale": true,
+  "do_resize": true,
+  "format": "coco_detection",
+  "image_mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "image_processor_type": "RTDetrImageProcessor",
+  "image_std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "pad_size": null,
+  "resample": 2,
+  "rescale_factor": 0.00392156862745098,
+  "size": {
+    "height": 640,
+    "width": 640
+  }
+}
