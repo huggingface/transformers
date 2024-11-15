@@ -1726,7 +1726,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             if start_token is None:
                                 # start_token is out of bounds maybe due to truncation.
                                 break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids)):
+                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks if is_batched else assistant_masks[0]

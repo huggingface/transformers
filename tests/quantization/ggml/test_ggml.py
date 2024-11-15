@@ -673,10 +673,6 @@ class GgufIntegrationTests(unittest.TestCase):
             self.stablelm2_model_id,
             gguf_file=self.fp16_stablelm2_model_id,
             torch_dtype=torch.float16,
-            # for precise comparison it is required to use the original model config
-            # as quantized one is different in parameters: use_parallel_residual and use_qkv_bias
-            # and it highly influences on the output results
-            config=original_model.config,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.stablelm2_model_id, gguf_file=self.fp16_stablelm2_model_id)
@@ -703,10 +699,6 @@ class GgufIntegrationTests(unittest.TestCase):
             gguf_file=self.fp16_stablelm2_model_id,
             device_map="auto",
             torch_dtype=torch.float16,
-            # for precise comparison it is required to use the original model config
-            # as quantized one is different in parameters: use_parallel_residual and use_qkv_bias
-            # and it highly influences on the output results
-            config=original_model.config,
         )
 
         converted_state_dict = converted_model.state_dict()
