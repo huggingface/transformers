@@ -1841,6 +1841,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
 )
 class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config_class = MllamaTextConfig
+    _supports_static_cache = True  # only the LLM without cross attn can do compile
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
 

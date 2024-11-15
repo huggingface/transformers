@@ -1438,7 +1438,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
@@ -1479,10 +1478,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to pass an embedded representation. This will be used to
-                infer the correct batch size and sequence length of inputs in case when `input_ids` is not provided. Note,
-                padding will not be ignored in this case.
 
         Returns:
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
@@ -1569,19 +1564,19 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids.masked_fill_(attention_mask == 0, 1)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(inputs_embeds.device)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(input_ids.device)
                 max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
-                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+                    torch.arange(input_ids.shape[1], device=input_ids.device)
                     .view(1, 1, -1)
-                    .expand(3, inputs_embeds.shape[0], -1)
+                    .expand(3, input_ids.shape[0], -1)
                 )
                 mrope_position_deltas = torch.zeros(
-                    [inputs_embeds.shape[0], 1],
-                    device=inputs_embeds.device,
-                    dtype=inputs_embeds.dtype,
+                    [input_ids.shape[0], 1],
+                    device=input_ids.device,
+                    dtype=input_ids.dtype,
                 )
 
             return position_ids, mrope_position_deltas
