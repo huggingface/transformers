@@ -85,10 +85,10 @@ LLaVa also supports batched inference. Here is how you can do it:
 import requests
 from PIL import Image
 import torch
-from transformers import AutoProcessor, LLavaForConditionalGeneration
+from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 # Load the model in half-precision
-model = LLavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
 # Get two different images
