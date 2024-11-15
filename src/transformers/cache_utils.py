@@ -781,6 +781,12 @@ class QuantoQuantizedCache(QuantizedCache):
         super().__init__(cache_config)
 
         if is_optimum_quanto_available():
+            optimum_quanto_version = version.parse(importlib.metadata.version("optimum-quanto"))
+            print(optimum_quanto_version)
+            if optimum_quanto_version <= version.parse("0.2.5"):
+                raise ImportError(
+                    f"You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. Detected version {optimum_quanto_version}."
+                )
             from optimum.quanto import MaxOptimizer, qint2, qint4
         elif is_quanto_available():
             logger.warning_once(
@@ -813,7 +819,8 @@ class QuantoQuantizedCache(QuantizedCache):
         if is_optimum_quanto_available():
             from optimum.quanto import quantize_weight
 
-            qtensor = quantize_weight(tensor, self.qtype, axis, self.q_group_size)
+            scale, zeropoint = self.optimizer(tensor, self.qtype, axis, self.q_group_size)
+            qtensor = quantize_weight(tensor, self.qtype, axis, scale, zeropoint, self.q_group_size)
             return qtensor
         elif is_quanto_available():
             logger.warning_once(
