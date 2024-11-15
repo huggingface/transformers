@@ -783,9 +783,7 @@ class NemotronModel(NemotronPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
             if past_key_values is None:
                 past_key_values = DynamicCache()
             else:
