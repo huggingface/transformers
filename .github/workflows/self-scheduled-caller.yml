@@ -10,6 +10,8 @@ jobs:
   setup:
     name: Setup
     runs-on: ubuntu-22.04
+    env:
+      ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: setup
