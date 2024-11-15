@@ -134,7 +134,7 @@ class IdeficsModelTester:
             num_attention_heads=self.vision_num_attention_heads,
             num_hidden_layers=self.vision_num_hidden_layers,
             intermediate_size=self.vision_intermediate_size,
-        )
+        ).to_dict()
 
         self.perceiver_qk_layer_norms_perceiver = perceiver_qk_layer_norms_perceiver
         self.perceiver_resampler_depth = perceiver_resampler_depth
@@ -316,7 +316,6 @@ class IdeficsModelTester:
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
     @require_torch_sdpa
-    @slow
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
@@ -332,7 +331,11 @@ class IdeficsModelTester:
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -348,6 +351,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             )
 
         return inputs_dict
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self):
+        pass
 
     def test_model_outputs_equivalence(self):
         try:
@@ -598,6 +607,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self, torch_dtype):
+        pass
+
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         """Overwrite because IDEFICS needs image attention mask to be also padded"""
@@ -768,13 +783,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_custom_4d_attention_mask(self):
-        pass
-
-    @unittest.skip(
-        reason="IDEFICS has specific requirements for working with inputs embeds like passing also the ids and pixels"
-    )
-    @parameterized.expand([(1,), (2,)])
-    def test_generate_from_inputs_embeds_decoder_only(self, num_beams):
         pass
 
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
