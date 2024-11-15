@@ -69,8 +69,12 @@ from dataclasses import dataclass
 
 @dataclass
 class AdaptiveFanInOutput:
+    # new_seq_len is less then input seq_len
     hidden_state: torch.Tensor # [ bs, new_seq_len, hidden_size ]
     attention_mask: torch.Tensor # [ bs, new_seq_len ]
+
+    # mask for bos and eos embeddings that should be never merged
+    special_embeddings_mask: torch.Tensor # [ bs, new_seq_len ]
 
     # merged_tokens_counts represents how many embeddings
     # has been merged in the corresponding output embedding
@@ -85,14 +89,15 @@ class AdaptiveFanInOutput:
 class AdaptiveFanOutOutput:
     hidden_state: torch.Tensor # [ bs, restored_seq_len, hidden_size ]
     attention_mask: torch.Tensor # [ bs, restored_seq_len ]
+    special_embeddings_mask: torch.Tensor
 
 class AdaptiveFanIn(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
-        self.hidden_size = config.hidden_act
+        self.hidden_size = config.hidden_size
         self.fan_in_mlp = nn.Linear(self.hidden_size * 2, 2)
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> AdaptiveFanInOutput:
+    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask: torch.Tensor, merging_map: torch.Tensor=None) -> AdaptiveFanInOutput:
         # TODO attention mask transforms
         # TODO return mirroring layer merging informarion to restore
 
@@ -102,41 +107,46 @@ class AdaptiveFanIn(nn.Module):
 
         # attention_mask ~ [ bs, seq_len ]
         assert hidden_state.shape[:2] == attention_mask.shape
+        assert special_embeddings_mask.shape == attention_mask.shape
 
-        # joined prev and next tokens
-        # each embedding could be explained as: should it be merged with the next one embedding?
-        # [ bs, seq_len - 1, hidden_size * 2 ]
-        attn_output_pairs = torch.cat([ hidden_state[:-1], hidden_state[1:] ], dim=-1)
-        # [ bs, seq_len - 1, 2 ] # should be merged or not (probas)?
-        attn_output_pairs_merging_log_probas = self.merge_mlp(attn_output_pairs)
-        # [ bs, seq_len - 1 ] # should be merged or not (booleans)?
-        merging_map = attn_output_pairs_merging_log_probas.max(dim=-1).indicies
+        if merging_map is None:
+            # joined prev and next tokens
+            # each embedding could be explained as: should it be merged with the next one embedding?
+            # [ bs, seq_len - 1, hidden_size * 2 ]
+            attn_output_pairs = torch.cat([ hidden_state[:, :-1], hidden_state[:, 1:] ], dim=-1)
+            # [ bs, seq_len - 1, 2 ] # should be merged or not (probas)?
+            attn_output_pairs_merging_log_probas = self.fan_in_mlp(attn_output_pairs)
+            # [ bs, seq_len - 1 ] # should be merged or not (booleans)?
+            merging_map = attn_output_pairs_merging_log_probas.max(dim=-1).indices
 
         merged_attention_outputs = torch.zeros_like(hidden_state)
         merged_attention_outputs[:, 0] = hidden_state[:, 0] # copy bos token embeddings
 
-        merged_embeddings_counts = torch.zeros_like(hidden_state)
+        merged_embeddings_counts = torch.zeros_like(attention_mask)
         merged_embeddings_counts[:, 0] = 1 # consider bos token embeddings
 
-        batch_size = hidden_state.shape[0]
-        merged_segments_lengths_in_batch = torch.zeros([batch_size], device=hidden_state.device)
+        merged_special_embeddings_mask = torch.zeros_like(attention_mask)
+        merged_special_embeddings_mask[:, 0] = 1 # consider bos token embeddings
 
+        batch_size = hidden_state.shape[0]
+        merged_segments_lengths_in_batch = torch.zeros([batch_size], device=hidden_state.device, dtype=torch.long)
 
         for batch_i in range(batch_size):
-            currnt_merged_embeddings_index = 1 # consider bos token
+            current_merged_embeddings_index = 1 # consider bos token
 
-            # List of tensors [ 1, hidden_dim ]
+            # List of tensors [ hidden_dim ]
             current_merging_buffer = []
-            for seq_len_i, is_masked in zip(range(1, hidden_state.shape[1]), attention_mask[batch_i]):
+            for seq_len_i, mask_value, embedding_is_special in zip(range(1, hidden_state.shape[1]), attention_mask[batch_i, 1:], special_embeddings_mask[batch_i, 1:]):
 
-                assert seq_len_i != hidden_state.shape[1] - 1, 'eos token should never be merged'
+                embedding_is_special = embedding_is_special.item()
+                mask_value = mask_value.item()
 
-                if is_masked == 0:
-                    # TODO check for bos / eos token not to be merged
+                if mask_value == 0:
                     # masked token found - skip it
+                    assert len(current_merging_buffer) == 0, 'no merge buffer allowed when the end of mask has been met'
                     break
 
-                should_be_merged = merging_map[batch_i, seq_len_i]
+                should_be_merged = (embedding_is_special != 1) and (merging_map[batch_i, seq_len_i] == 1)
 
                 if should_be_merged:
                     current_merging_buffer.append(hidden_state[batch_i, seq_len_i])
@@ -144,45 +154,73 @@ class AdaptiveFanIn(nn.Module):
                     if len(current_merging_buffer) == 0:
                         current_merging_buffer.append(hidden_state[batch_i, seq_len_i])
 
-                    merged_embeddings_count = len(current_merging_buffer)
-                    assert merged_embeddings_count > 0
-                    merged_embeddings_counts[batch_i, currnt_merged_embeddings_index] = merged_embeddings_count
+                        merged_embeddings_count = len(current_merging_buffer)
+                        assert merged_embeddings_count > 0
 
-                    # flush merging buffer
-                    # Mean merging
-                    for tensor_to_merge in current_merging_buffer:
-                        merged_attention_outputs[batch_i, currnt_merged_embeddings_index] += tensor_to_merge
+                        merged_embeddings_counts[batch_i, current_merged_embeddings_index] = merged_embeddings_count
 
-                    merged_attention_outputs[batch_i, currnt_merged_embeddings_index] /= merged_embeddings_count
+                        for tensor_to_merge in current_merging_buffer:
+                            merged_attention_outputs[batch_i, current_merged_embeddings_index] += tensor_to_merge
 
-                    currnt_merged_embeddings_index += 1
-                    current_merging_buffer = []
+                        merged_attention_outputs[batch_i, current_merged_embeddings_index] /= merged_embeddings_count
+
+                        current_merged_embeddings_index += 1
+                        current_merging_buffer = []
+                    else:
+                        # flush prev buffer
+                        merged_embeddings_count = len(current_merging_buffer)
+                        assert merged_embeddings_count > 0
+
+                        merged_embeddings_counts[batch_i, current_merged_embeddings_index] = merged_embeddings_count
+
+                        for tensor_to_merge in current_merging_buffer:
+                            merged_attention_outputs[batch_i, current_merged_embeddings_index] += tensor_to_merge
+
+                        merged_attention_outputs[batch_i, current_merged_embeddings_index] /= merged_embeddings_count
+
+                        current_merged_embeddings_index += 1
+                        current_merging_buffer = []
+
+                        if embedding_is_special == 1:
+                            # flush specisl tokens embeddings
+                            merged_special_embeddings_mask[batch_i, current_merged_embeddings_index] = 1
+                            merged_embeddings_counts[batch_i, current_merged_embeddings_index] = 1
+                            merged_attention_outputs[batch_i, current_merged_embeddings_index] = hidden_state[batch_i, seq_len_i]
+                            current_merged_embeddings_index += 1
+                        else:
+                            # add current token to buffer
+                            current_merging_buffer.append(hidden_state[batch_i, seq_len_i])
+
+                    # next iter is expected to be only padding tokens
 
                 # inner loop end
 
             assert len(current_merging_buffer) == 0, 'all buffers should be flushed in loop earlier'
             assert merged_embeddings_counts[batch_i].sum().item() == attention_mask[batch_i].sum().item(), 'sum of merged embeddings must be equals to initials embeddings count'
 
-            merged_segments_lengths_in_batch[batch_i] = currnt_merged_embeddings_index + 1
+            merged_segments_lengths_in_batch[batch_i] = current_merged_embeddings_index
 
         max_seq_len_after_merge = max(merged_segments_lengths_in_batch).item()
 
-        hidden_state = merged_attention_outputs[:, :max_seq_len_after_merge]
+        merged_attention_outputs = merged_attention_outputs[:, :max_seq_len_after_merge]
+        merged_embeddings_counts = merged_embeddings_counts[:, :max_seq_len_after_merge]
+        merged_special_embeddings_mask = merged_special_embeddings_mask[:, :max_seq_len_after_merge]
 
-        new_attention_mask = torch.arange(max_seq_len_after_merge, device=hidden_state.device).unsqueeze(0).repeat(batch_size, 1)
-        new_attention_mask = new_attention_mask < merged_segments_lengths_in_batch
+        merged_attention_mask = torch.arange(max_seq_len_after_merge, device=merged_attention_outputs.device).unsqueeze(0).repeat(batch_size, 1)
+        merged_attention_mask = merged_attention_mask < merged_segments_lengths_in_batch.unsqueeze(1)
 
         return AdaptiveFanInOutput(
-            hidden_state=hidden_state,
-            attention_mask=new_attention_mask,
+            hidden_state=merged_attention_outputs,
+            attention_mask=merged_attention_mask,
             merged_embeddings_counts=merged_embeddings_counts,
+            special_embeddings_mask=merged_special_embeddings_mask,
         )
 
 
 class AdaptiveFanOut(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
-        self.hidden_size = config.hidden_act
+        self.hidden_size = config.hidden_size
         # self.fan_out_mlp = nn.Linear(self.hidden_size * 2, self.hidden_size)
 
     def forward(self, hidden_states, attention_mask, merged_embeddings_counts, residual_hidden_states, residual_attention_mask) -> AdaptiveFanOutOutput:
