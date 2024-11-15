@@ -25,7 +25,6 @@ from torch.nn import CrossEntropyLoss
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import _flash_attention_forward
-
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -50,12 +49,11 @@ from ..llama.modeling_llama import (
     repeat_kv,
 )
 
+
 _CONFIG_FOR_DOC = "PhiConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/phi-1"
 
 logger = logging.get_logger(__name__)
-
-
 
 
 class PhiConfig(PretrainedConfig):
