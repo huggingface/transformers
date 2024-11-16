@@ -57,6 +57,7 @@ from .candidate_generator import (
     CandidateGenerator,
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
+    UniversalSpeculativeDecodingGenerator,
     _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
@@ -846,16 +847,31 @@ class GenerationMixin:
                 max_length=generation_config.max_length,
             )
         elif different_tokenizers:
-            candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
-                input_ids=input_ids,
-                assistant_model=assistant_model,
-                generation_config=generation_config,
-                model_kwargs=model_kwargs,
-                inputs_tensor=inputs_tensor,
-                logits_processor=logits_processor,
-                target_tokenizer=target_tokenizer,
-                assistant_tokenizer=assistant_tokenizer,
-            )
+            match generation_config.do_sample:
+                case True:
+                    candidate_generator = UniversalSpeculativeDecodingGenerator(
+                        input_ids=input_ids,
+                        assistant_model=assistant_model,
+                        generation_config=generation_config,
+                        model_kwargs=model_kwargs,
+                        inputs_tensor=inputs_tensor,
+                        logits_processor=logits_processor,
+                        target_tokenizer=target_tokenizer,
+                        assistant_tokenizer=assistant_tokenizer,
+                    )
+                case False:
+                    candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
+                        input_ids=input_ids,
+                        assistant_model=assistant_model,
+                        generation_config=generation_config,
+                        model_kwargs=model_kwargs,
+                        inputs_tensor=inputs_tensor,
+                        logits_processor=logits_processor,
+                        target_tokenizer=target_tokenizer,
+                        assistant_tokenizer=assistant_tokenizer,
+                    )
+                case _:
+                    raise ValueError(f"Invalid value for `do_sample`: {generation_config.do_sample}")
         else:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,
