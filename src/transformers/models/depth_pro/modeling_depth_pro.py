@@ -57,7 +57,7 @@ class DepthProViTPatchEmbeddings(nn.Module):
         super().__init__()
 
         self.config = config
-        self.in_channels = config.aux_num_channels
+        self.in_channels = config.num_channels
         self.out_channels = config.hidden_size
         self.patch_embeddings_size = config.patch_embeddings_size
 
@@ -70,7 +70,7 @@ class DepthProViTPatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
-        if num_channels != self.config.aux_num_channels:
+        if num_channels != self.config.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
@@ -90,14 +90,12 @@ class DepthProViTEmbeddings(nn.Module):
         super().__init__()
 
         self.config = config
-        self.seq_len = (config.aux_patch_size // config.patch_embeddings_size) ** 2
+        self.seq_len = (config.patch_size // config.patch_embeddings_size) ** 2
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.patch_embeddings = DepthProViTPatchEmbeddings(config)
         self.position_embeddings = nn.Parameter(torch.randn(1, self.seq_len + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.patch_size = config.patch_size
-        self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -120,8 +118,8 @@ class DepthProViTEmbeddings(nn.Module):
 
         dim = embeddings.shape[-1]
 
-        new_height = height // self.patch_size # TODO: check this
-        new_width = width // self.patch_size # TODO: check this
+        new_height = height // self.config.patch_embeddings_size
+        new_width = width // self.config.patch_embeddings_size
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -623,7 +621,7 @@ class DepthProEncoder(nn.Module):
         self.intermediate_feature_dims = config.intermediate_feature_dims
         self.intermediate_upsample_layers = config.intermediate_upsample_layers
 
-        self.out_size = config.aux_patch_size // config.patch_embeddings_size
+        self.out_size = config.patch_size // config.patch_embeddings_size
         self.seq_len = self.out_size ** 2
 
         # patch encoder
@@ -687,18 +685,18 @@ class DepthProEncoder(nn.Module):
         )
 
     def _patch(self, pixel_values, overlap_ratio):
-        patch_size = self.config.aux_patch_size
+        patch_size = self.config.patch_size
         stride = int(patch_size * (1 - overlap_ratio))
 
-        # pixel_values.shape (B, config.aux_num_channels, config.aux_image_size, config.aux_image_size)
+        # pixel_values.shape (B, config.num_channels, config.image_size, config.image_size)
         patches = torch.nn.functional.unfold(
             pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride)
         )
         # patches.shape (B, -1, num_patches)
         patches = patches.permute(2, 0, 1)
         # patches.shape (num_patches, B, -1)
-        patches = patches.reshape(-1, self.config.aux_num_channels, patch_size, patch_size)
-        # patches.shape (B * num_patches, config.aux_num_channels, config.aux_patch_size, config.aux_patch_size)
+        patches = patches.reshape(-1, self.config.num_channels, patch_size, patch_size)
+        # patches.shape (B * num_patches, config.num_channels, config.patch_size, config.patch_size)
 
         return patches
 
@@ -764,28 +762,28 @@ class DepthProEncoder(nn.Module):
 
         B, C, H, W = pixel_values.shape
 
-        # TODO validate: H = W = aux_image_size
-        # TODO validate: C = aux_num_channels
-        # TODO validate: aux_image_size = aux_patch_size * 4
+        # TODO validate: H = W = image_size
+        # TODO validate: C = num_channels
+        # TODO validate: image_size = patch_size * 4
 
-        # pixel_values.shape (B, config.aux_num_channels, config.aux_image_size, config.aux_image_size)
+        # pixel_values.shape (B, config.num_channels, config.image_size, config.image_size)
 
         # STEP 1: create 3-level image
 
-        high_res = pixel_values                         # (B, config.aux_num_channels, config.aux_image_size, config.aux_image_size)
-        med_res = self._interpolate(pixel_values, 0.5)  # (B, config.aux_num_channels, config.aux_image_size//2, config.aux_image_size//2)
-        low_res = self._interpolate(pixel_values, 0.25) # (B, config.aux_num_channels, config.aux_image_size//4, config.aux_image_size//4)
+        high_res = pixel_values                         # (B, config.num_channels, config.image_size, config.image_size)
+        med_res = self._interpolate(pixel_values, 0.5)  # (B, config.num_channels, config.image_size//2, config.image_size//2)
+        low_res = self._interpolate(pixel_values, 0.25) # (B, config.num_channels, config.image_size//4, config.image_size//4)
 
         # STEP 2: create patches
 
-        high_res_patches = self._patch(high_res, 0.25)  # (-1, config.aux_num_channels, config.aux_patch_size, config.aux_patch_size)
-        med_res_patches = self._patch(med_res, 0.5)     # (-1, config.aux_num_channels, config.aux_patch_size, config.aux_patch_size)
-        low_res_patches = low_res                       # (-1, config.aux_num_channels, config.aux_patch_size, config.aux_patch_size)
+        high_res_patches = self._patch(high_res, 0.25)  # (-1, config.num_channels, config.patch_size, config.patch_size)
+        med_res_patches = self._patch(med_res, 0.5)     # (-1, config.num_channels, config.patch_size, config.patch_size)
+        low_res_patches = low_res                       # (-1, config.num_channels, config.patch_size, config.patch_size)
 
         patches = torch.cat(
             (high_res_patches, med_res_patches, low_res_patches),
             dim=0,
-        ) # (num_patches, config.aux_num_channels, config.aux_patch_size, config.aux_patch_size)
+        ) # (num_patches, config.num_channels, config.patch_size, config.patch_size)
 
         # STEP 3: apply patch and image encoder
 
@@ -812,12 +810,12 @@ class DepthProEncoder(nn.Module):
         # b. reshape back to image like
         features = self._reshape_feature(
             hidden_state, self.out_size, self.out_size
-        ) # (num_patches, config.aux_num_channels, self.out_size, self.out_size)
+        ) # (num_patches, config.num_channels, self.out_size, self.out_size)
         high_res_features, med_res_features, low_res_features = torch.split(
             features,
             [len(high_res_patches), len(med_res_patches), len(low_res_patches)],
             dim=0,
-        ) # (num_patches, config.aux_num_channels, self.out_size, self.out_size)
+        ) # (num_patches, config.num_channels, self.out_size, self.out_size)
 
         # c. merge patches back together
         high_res_features = self._merge(high_res_features, batch_size=B, padding=3) # (B, config.hidden_size, ~, ~)
