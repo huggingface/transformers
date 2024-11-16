@@ -19,26 +19,27 @@ import tempfile
 import unittest
 from typing import List
 
-import numpy as np
-
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.models.layoutlmv3 import LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
+from transformers.models.layoutlmv3 import LayoutLMv3Processor, LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
 from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3ImageProcessor, LayoutLMv3Processor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 @require_pytesseract
 @require_tokenizers
-class LayoutLMv3ProcessorTest(unittest.TestCase):
+class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tokenizer_class = LayoutLMv3Tokenizer
     rust_tokenizer_class = LayoutLMv3TokenizerFast
+    processor_class = LayoutLMv3Processor
 
     def setUp(self):
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
@@ -100,17 +101,6 @@ class LayoutLMv3ProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()

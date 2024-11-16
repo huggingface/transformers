@@ -14,17 +14,22 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Qwen2_VL
-
+# Qwen2-VL
 
 ## Overview
 
-The [Qwen2_VL](https://qwenlm.github.io/blog/qwen2-vl/) is a major update to our [Qwen-VL](https://arxiv.org/pdf/2308.12966) model from the Qwen team. 
+The [Qwen2-VL](https://qwenlm.github.io/blog/qwen2-vl/) model is a major update to [Qwen-VL](https://arxiv.org/pdf/2308.12966) from the Qwen team at Alibaba Research. 
 
 The abstract from the blog is the following:
 
 *This blog introduces Qwen2-VL, an advanced version of the Qwen-VL model that has undergone significant enhancements over the past year. Key improvements include enhanced image comprehension, advanced video understanding, integrated visual agent functionality, and expanded multilingual support. The model architecture has been optimized for handling arbitrary image resolutions through Naive Dynamic Resolution support and utilizes Multimodal Rotary Position Embedding (M-ROPE) to effectively process both 1D textual and multi-dimensional visual data. This updated model demonstrates competitive performance against leading AI systems like GPT-4o and Claude 3.5 Sonnet in vision-related tasks and ranks highly among open-source models in text capabilities. These advancements make Qwen2-VL a versatile tool for various applications requiring robust multimodal processing and reasoning abilities.*
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/qwen2_vl_architecture.jpeg"
+alt="drawing" width="600"/>
+
+<small> Qwen2-VL architecture. Taken from the <a href="https://qwenlm.github.io/blog/qwen2-vl/">blog post.</a> </small>
+
+This model was contributed by [simonJJJ](https://huggingface.co/simonJJJ).
 
 ## Usage example
 
@@ -78,8 +83,6 @@ generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(in
 output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 print(output_text)
 
-
-
 # Video
 def fetch_video(ele: Dict, nframe_factor=2):
     if isinstance(ele['video'], str):
@@ -130,16 +133,13 @@ output_ids = model.generate(**inputs, max_new_tokens=128)
 generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
 output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 print(output_text)
-
 ```
-
 
 ### Batch Mixed Media Inference
 
 The model can batch inputs composed of mixed samples of various types such as images, videos, and text. Here is an example.
 
 ```python
-
 image1 = Image.open("/path/to/image1.jpg")
 image2 = Image.open("/path/to/image2.jpg")
 image3 = Image.open("/path/to/image3.jpg")
@@ -217,28 +217,30 @@ print(output_text)
 
 ### Usage Tips
 
-#### Image Resolution for performance boost
+#### Image Resolution trade-off
 
 The model supports a wide range of resolution inputs. By default, it uses the native resolution for input, but higher resolutions can enhance performance at the cost of more computation. Users can set the minimum and maximum number of pixels to achieve an optimal configuration for their needs.
 
 ```python
-
 min_pixels = 224*224
 max_pixels = 2048*2048
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
-
 ```
 
+In case of limited GPU RAM, one can reduce the resolution as follows:
 
+```python
+min_pixels = 256*28*28
+max_pixels = 1024*28*28 
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
+```
+This ensures each image gets encoded using a number between 256-1024 tokens. The 28 comes from the fact that the model uses a patch size of 14 and a temporal patch size of 2 (14 x 2 = 28).
 
 #### Multiple Image Inputs
 
 By default, images and video content are directly included in the conversation. When handling multiple images, it's helpful to add labels to the images and videos for better reference. Users can control this behavior with the following settings:
 
-
-
 ```python
-
 conversation = [
     {
         "role": "user",
@@ -303,7 +305,6 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
     attn_implementation="flash_attention_2",
 )
 ```
-
 
 ## Qwen2VLConfig
 

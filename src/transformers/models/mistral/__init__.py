@@ -35,6 +35,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mistral"] = [
         "MistralForCausalLM",
+        "MistralForQuestionAnswering",
         "MistralModel",
         "MistralPreTrainedModel",
         "MistralForSequenceClassification",
@@ -78,6 +79,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_mistral import (
             MistralForCausalLM,
+            MistralForQuestionAnswering,
             MistralForSequenceClassification,
             MistralForTokenClassification,
             MistralModel,

@@ -22,9 +22,11 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import CONFIG_NAME, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -60,6 +62,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
+        ("clip_text_model", "CLIPTextConfig"),
         ("clip_vision_model", "CLIPVisionConfig"),
         ("clipseg", "CLIPSegConfig"),
         ("clvp", "ClvpConfig"),
@@ -113,6 +116,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gemma", "GemmaConfig"),
         ("gemma2", "Gemma2Config"),
         ("git", "GitConfig"),
+        ("glm", "GlmConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
         ("gpt2", "GPT2Config"),
@@ -123,6 +127,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
+        ("granitemoe", "GraniteMoeConfig"),
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
@@ -131,6 +136,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
         ("idefics2", "Idefics2Config"),
+        ("idefics3", "Idefics3Config"),
         ("ijepa", "IJepaConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
@@ -150,6 +156,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("llava", "LlavaConfig"),
         ("llava_next", "LlavaNextConfig"),
         ("llava_next_video", "LlavaNextVideoConfig"),
+        ("llava_onevision", "LlavaOnevisionConfig"),
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
@@ -167,13 +174,16 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaConfig"),
         ("megatron-bert", "MegatronBertConfig"),
         ("mgp-str", "MgpstrConfig"),
+        ("mimi", "MimiConfig"),
         ("mistral", "MistralConfig"),
         ("mixtral", "MixtralConfig"),
+        ("mllama", "MllamaConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
         ("mobilevit", "MobileViTConfig"),
         ("mobilevitv2", "MobileViTV2Config"),
+        ("moshi", "MoshiConfig"),
         ("mpnet", "MPNetConfig"),
         ("mpt", "MptConfig"),
         ("mra", "MraConfig"),
@@ -188,6 +198,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nougat", "VisionEncoderDecoderConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("olmo", "OlmoConfig"),
+        ("olmoe", "OlmoeConfig"),
+        ("omdet-turbo", "OmDetTurboConfig"),
         ("oneformer", "OneFormerConfig"),
         ("open-llama", "OpenLlamaConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
@@ -203,7 +215,9 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),
         ("phi3", "Phi3Config"),
+        ("phimoe", "PhimoeConfig"),
         ("pix2struct", "Pix2StructConfig"),
+        ("pixtral", "PixtralVisionConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),
@@ -302,6 +316,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("zamba", "ZambaConfig"),
         ("zoedepth", "ZoeDepthConfig"),
     ]
 )
@@ -344,6 +359,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
+        ("clip_text_model", "CLIPTextModel"),
         ("clip_vision_model", "CLIPVisionModel"),
         ("clipseg", "CLIPSeg"),
         ("clvp", "CLVP"),
@@ -404,6 +420,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gemma", "Gemma"),
         ("gemma2", "Gemma2"),
         ("git", "GIT"),
+        ("glm", "GLM"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
         ("gpt2", "OpenAI GPT-2"),
@@ -414,6 +431,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
+        ("granitemoe", "GraniteMoeMoe"),
         ("graphormer", "Graphormer"),
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
@@ -423,6 +441,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),
         ("idefics2", "Idefics2"),
+        ("idefics3", "Idefics3"),
         ("ijepa", "I-JEPA"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
@@ -445,6 +464,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("llava", "LLaVa"),
         ("llava_next", "LLaVA-NeXT"),
         ("llava_next_video", "LLaVa-NeXT-Video"),
+        ("llava_onevision", "LLaVA-Onevision"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
@@ -466,8 +486,10 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron-bert", "Megatron-BERT"),
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mgp-str", "MGP-STR"),
+        ("mimi", "Mimi"),
         ("mistral", "Mistral"),
         ("mixtral", "Mixtral"),
+        ("mllama", "Mllama"),
         ("mluke", "mLUKE"),
         ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
@@ -475,6 +497,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilenet_v2", "MobileNetV2"),
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
+        ("moshi", "Moshi"),
         ("mpnet", "MPNet"),
         ("mpt", "MPT"),
         ("mra", "MRA"),
@@ -482,6 +505,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("musicgen", "MusicGen"),
         ("musicgen_melody", "MusicGen Melody"),
         ("mvp", "MVP"),
+        ("myt5", "myt5"),
         ("nat", "NAT"),
         ("nemotron", "Nemotron"),
         ("nezha", "Nezha"),
@@ -490,6 +514,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nougat", "Nougat"),
         ("nystromformer", "Nyströmformer"),
         ("olmo", "OLMo"),
+        ("olmoe", "OLMoE"),
+        ("omdet-turbo", "OmDet-Turbo"),
         ("oneformer", "OneFormer"),
         ("open-llama", "OpenLlama"),
         ("openai-gpt", "OpenAI GPT"),
@@ -505,8 +531,10 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("persimmon", "Persimmon"),
         ("phi", "Phi"),
         ("phi3", "Phi3"),
+        ("phimoe", "Phimoe"),
         ("phobert", "PhoBERT"),
         ("pix2struct", "Pix2Struct"),
+        ("pixtral", "Pixtral"),
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("pop2piano", "Pop2Piano"),
@@ -612,6 +640,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("zamba", "Zamba"),
         ("zoedepth", "ZoeDepth"),
     ]
 )
@@ -657,6 +686,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
         ("qwen2_audio_encoder", "qwen2_audio"),
+        ("clip_text_model", "clip"),
         ("siglip_vision_model", "siglip"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
@@ -711,7 +741,9 @@ class _LazyConfigMapping(OrderedDict):
         value = self._mapping[key]
         module_name = model_type_to_module_name(key)
         if module_name not in self._modules:
-            self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
+            self._modules[module_name] = importlib.import_module(
+                f".{module_name}", "transformers.models"
+            )
         if hasattr(self._modules[module_name], value):
             return getattr(self._modules[module_name], value)
 
@@ -724,13 +756,19 @@ class _LazyConfigMapping(OrderedDict):
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
     def values(self):
-        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
+        return [self[k] for k in self._mapping.keys()] + list(
+            self._extra_content.values()
+        )
 
     def items(self):
-        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
+        return [(k, self[k]) for k in self._mapping.keys()] + list(
+            self._extra_content.items()
+        )
 
     def __iter__(self):
-        return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
+        return iter(
+            list(self._mapping.keys()) + list(self._extra_content.keys())
+        )
 
     def __contains__(self, item):
         return item in self._mapping or item in self._extra_content
@@ -740,7 +778,9 @@ class _LazyConfigMapping(OrderedDict):
         Register a new configuration in this mapping.
         """
         if key in self._mapping.keys() and not exist_ok:
-            raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+            raise ValueError(
+                f"'{key}' is already used by a Transformers config, pick another name."
+            )
         self._extra_content[key] = value
 
 
@@ -767,7 +807,9 @@ class _LazyLoadAllMappings(OrderedDict):
 
         for model_type, map_name in self._mapping.items():
             module_name = model_type_to_module_name(model_type)
-            module = importlib.import_module(f".{module_name}", "transformers.models")
+            module = importlib.import_module(
+                f".{module_name}", "transformers.models"
+            )
             mapping = getattr(module, map_name)
             self._data.update(mapping)
 
@@ -806,10 +848,15 @@ def _get_class_name(model_class: Union[str, List[str]]):
 
 def _list_model_options(indent, config_to_class=None, use_model_types=True):
     if config_to_class is None and not use_model_types:
-        raise ValueError("Using `use_model_types=False` requires a `config_to_class` dictionary.")
+        raise ValueError(
+            "Using `use_model_types=False` requires a `config_to_class` dictionary."
+        )
     if use_model_types:
         if config_to_class is None:
-            model_type_to_name = {model_type: f"[`{config}`]" for model_type, config in CONFIG_MAPPING_NAMES.items()}
+            model_type_to_name = {
+                model_type: f"[`{config}`]"
+                for model_type, config in CONFIG_MAPPING_NAMES.items()
+            }
         else:
             model_type_to_name = {
                 model_type: _get_class_name(model_class)
@@ -827,7 +874,8 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
             if config in CONFIG_MAPPING_NAMES
         }
         config_to_model_name = {
-            config: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING_NAMES.items()
+            config: MODEL_NAMES_MAPPING[model_type]
+            for model_type, config in CONFIG_MAPPING_NAMES.items()
         }
         lines = [
             f"{indent}- [`{config_name}`] configuration class:"
@@ -837,7 +885,9 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
     return "\n".join(lines)
 
 
-def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True):
+def replace_list_option_in_docstrings(
+    config_to_class=None, use_model_types=True
+):
     def docstring_decorator(fn):
         docstrings = fn.__doc__
         if docstrings is None:
@@ -845,13 +895,20 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
             return fn
         lines = docstrings.split("\n")
         i = 0
-        while i < len(lines) and re.search(r"^(\s*)List options\s*$", lines[i]) is None:
+        while (
+            i < len(lines)
+            and re.search(r"^(\s*)List options\s*$", lines[i]) is None
+        ):
             i += 1
         if i < len(lines):
             indent = re.search(r"^(\s*)List options\s*$", lines[i]).groups()[0]
             if use_model_types:
                 indent = f"{indent}    "
-            lines[i] = _list_model_options(indent, config_to_class=config_to_class, use_model_types=use_model_types)
+            lines[i] = _list_model_options(
+                indent,
+                config_to_class=config_to_class,
+                use_model_types=use_model_types,
+            )
             docstrings = "\n".join(lines)
         else:
             raise ValueError(
@@ -988,21 +1045,37 @@ class AutoConfig:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
 
-        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
-        has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
+        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
+        has_remote_code = (
+            "auto_map" in config_dict
+            and "AutoConfig" in config_dict["auto_map"]
+        )
+        has_local_code = (
+            "model_type" in config_dict
+            and config_dict["model_type"] in CONFIG_MAPPING
+        )
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code,
+            has_remote_code,
         )
 
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(
-                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+                class_ref,
+                pretrained_model_name_or_path,
+                code_revision=code_revision,
+                **kwargs,
             )
             if os.path.isdir(pretrained_model_name_or_path):
                 config_class.register_for_auto_class()
-            return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return config_class.from_pretrained(
+                pretrained_model_name_or_path, **kwargs
+            )
         elif "model_type" in config_dict:
             try:
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -1016,9 +1089,13 @@ class AutoConfig:
         else:
             # Fallback: use pattern matching on the string.
             # We go from longer names to shorter names to catch roberta before bert (for instance)
-            for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
+            for pattern in sorted(
+                CONFIG_MAPPING.keys(), key=len, reverse=True
+            ):
                 if pattern in str(pretrained_model_name_or_path):
-                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
+                    return CONFIG_MAPPING[pattern].from_dict(
+                        config_dict, **unused_kwargs
+                    )
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
@@ -1035,7 +1112,10 @@ class AutoConfig:
             model_type (`str`): The model type like "bert" or "gpt".
             config ([`PretrainedConfig`]): The config to register.
         """
-        if issubclass(config, PretrainedConfig) and config.model_type != model_type:
+        if (
+            issubclass(config, PretrainedConfig)
+            and config.model_type != model_type
+        ):
             raise ValueError(
                 "The config you are passing has a `model_type` attribute that is not consistent with the model type "
                 f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "

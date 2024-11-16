@@ -14,8 +14,7 @@
 # limitations under the License.
 """ALIGN model configuration"""
 
-import os
-from typing import TYPE_CHECKING, List, Union
+from typing import TYPE_CHECKING, List
 
 
 if TYPE_CHECKING:
@@ -95,6 +94,7 @@ class AlignTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "align_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -132,24 +132,6 @@ class AlignTextConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.pad_token_id = pad_token_id
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from AlignConfig
-        if config_dict.get("model_type") == "align":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class AlignVisionConfig(PretrainedConfig):
@@ -223,6 +205,7 @@ class AlignVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "align_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -271,24 +254,6 @@ class AlignVisionConfig(PretrainedConfig):
         self.batch_norm_momentum = batch_norm_momentum
         self.drop_connect_rate = drop_connect_rate
         self.num_hidden_layers = sum(num_block_repeats) * 4
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from AlignConfig
-        if config_dict.get("model_type") == "align":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class AlignConfig(PretrainedConfig):
@@ -340,6 +305,7 @@ class AlignConfig(PretrainedConfig):
     ```"""
 
     model_type = "align"
+    sub_configs = {"text_config": AlignTextConfig, "vision_config": AlignVisionConfig}
 
     def __init__(
         self,
@@ -378,3 +344,6 @@ class AlignConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+
+__all__ = ["AlignTextConfig", "AlignVisionConfig", "AlignConfig"]

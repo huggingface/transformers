@@ -20,7 +20,8 @@ concurrency:
 jobs:
   latest-docker:
     name: "Latest PyTorch + TensorFlow [dev]"
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -68,7 +69,8 @@ jobs:
 
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -104,7 +106,8 @@ jobs:
   # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
   latest-torch-deepspeed-docker-for-push-ci-daily-build:
     name: "Latest PyTorch + DeepSpeed (Push CI - Daily Build)"
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -145,7 +148,8 @@ jobs:
     name: "Doc builder"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -180,7 +184,8 @@ jobs:
     name: "Latest PyTorch [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -215,7 +220,8 @@ jobs:
 
   latest-pytorch-amd:
     name: "Latest PyTorch (AMD) [dev]"
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       - 
         name: Set up Docker Buildx
@@ -265,7 +271,8 @@ jobs:
     name: "Latest TensorFlow [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -300,7 +307,8 @@ jobs:
 
   latest-pytorch-deepspeed-amd:
     name: "PyTorch + DeepSpeed (AMD) [dev]"
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       - 
         name: Set up Docker Buildx
@@ -350,7 +358,8 @@ jobs:
     name: "Latest Pytorch + Quantization [dev]"
      # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx

@@ -43,11 +43,11 @@ As a result, you can load a specific model version with the `revision` parameter
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # tag name, or branch name, or commit hash
 ... )
 ```
 
-Files are also easily edited in a repository, and you can view the commit history as well as the difference:
+Files are also easily edited in a repository, and you can view the commit history as well as the differences:
 
 ![vis_diff](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vis_diff.png)
 

@@ -113,6 +113,7 @@ class CircleCIJob:
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -133,7 +134,7 @@ class CircleCIJob:
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Get files to test", "command":f'curl -L -o {self.job_name}_test_list.txt <<pipeline.parameters.{self.job_name}_test_list>>' if self.name != "pr_documentation_tests" else 'echo "Skipped"'}},
-            {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
+                        {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
@@ -152,7 +153,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism:
-            job["parallelism"] = self.parallelism
+            job["parallelism"] = parallel
         job["steps"] = steps
         return job
 
@@ -311,6 +312,15 @@ repo_utils_job = CircleCIJob(
 )
 
 
+non_model_job = CircleCIJob(
+    "non_model",
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    marker="not generate",
+    parallelism=6,
+    pytest_num_workers=8,
+)
+
+
 # We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure. Otherwise, the pytest
 # hangs forever during test collection while showing `collecting 0 items / 21 errors`. (To see this, we have to remove
 # the bash output redirection.)
@@ -335,7 +345,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job] # fmt: skip
+REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
 PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]
@@ -359,12 +369,13 @@ def create_circleci_config(folder=None):
             "nightly": {"type": "boolean", "default": False},
             "tests_to_run": {"type": "string", "default": ''},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
+            **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
         "jobs" : {j.job_name: j.to_dict() for j in jobs},
         "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
     }
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-        f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
+        f.write(yaml.dump(config, sort_keys=False, default_flow_style=False).replace("' << pipeline", " << pipeline").replace(">> '", " >>"))
 
 
 if __name__ == "__main__":
