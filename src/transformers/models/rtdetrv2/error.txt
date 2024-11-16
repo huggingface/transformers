@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/user/app/transformers/utils/modular_model_converter.py", line 1510, in <module>
+    converted_files = convert_modular_file(file_name, args.old_model_name, args.new_model_name)
+  File "/home/user/app/transformers/utils/modular_model_converter.py", line 1447, in convert_modular_file
+    for file, module in create_modules(cst_transformers).items():
+  File "/home/user/app/transformers/utils/modular_model_converter.py", line 1387, in create_modules
+    nodes_to_add, file_type, new_imports = get_class_node_and_dependencies(modular_mapper, class_name, node, files)
+  File "/home/user/app/transformers/utils/modular_model_converter.py", line 1330, in get_class_node_and_dependencies
+    updated_node = replace_class_node(mapper, node, renamed_super_class)
+  File "/home/user/app/transformers/utils/modular_model_converter.py", line 915, in replace_class_node
+    original_docstring = docstring_node[0].body[0].value.value
+IndexError: list index out of range
