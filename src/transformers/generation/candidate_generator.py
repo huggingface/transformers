@@ -599,12 +599,12 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
     ):
         target_vocab: dict[str, int] = target_tokenizer.get_vocab()
         assistant_vocab: dict[str, int] = assistant_tokenizer.get_vocab()
-        self._target_to_assistant_input_ids: dict[int, int] = {
-            target_vocab[tok]: assistant_vocab[tok] for tok in target_vocab.keys() & assistant_vocab.keys()
+        self._assistant_to_target_input_ids: dict[int, int] = {
+            assistant_vocab[tok]: target_vocab[tok] for tok in target_vocab.keys() & assistant_vocab.keys()
         }
         # Suppress tokens that are in the assistant vocab but not in the target vocab
         suppress_input_ids = list(
-            set(assistant_vocab.values()) - set(self._target_to_assistant_input_ids.values())
+            set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.values())
         )
         logits_processor.append(
             SuppressTokensLogitsProcessor(
@@ -614,7 +614,8 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             LogitNormalization(),
         )
         super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
-        self.prev_target_seq_len: int = 0
+        self._prev_target_seq_len: int = 0
+        self._prev_assistant_ids: torch.LongTensor | None = None
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -629,19 +630,25 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
-        # input_ids = input_ids.to(self.assistant_model.device)
+        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
 
         def get_assistant_input_ids(target_input_ids: torch.LongTensor) -> torch.LongTensor:
+            nonlocal has_past_key_values
             target_seq_len = target_input_ids.shape[-1]
             target_new_ids = target_input_ids[
-                :, -(target_seq_len - self.prev_target_seq_len) :
+                :, -(target_seq_len - self._prev_target_seq_len) :
             ]
-            return torch.tensor(
-                [self._target_to_assistant_input_ids[tok.item()] for tok in target_new_ids.flatten()],
-                device=self.assistant_model.device,
-            ).view(target_new_ids.shape)
+            # convert target_new_ids to string, and then, convert the string to assistant_new_ids
+            target_new_toks = self.target_tokenizer.batch_decode(target_new_ids, skip_special_tokens=False)
+            assistant_new_ids = self.assistant_tokenizer.encode(target_new_toks, add_special_tokens=False)
+            if self._prev_assistant_ids is None:
+                self._prev_assistant_ids = assistant_new_ids
+            else:
+                self._prev_assistant_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
+            return self._prev_assistant_ids
 
         input_ids = get_assistant_input_ids(input_ids)
+        input_ids = input_ids.to(self.assistant_model.device)
 
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
         new_cur_len = input_ids.shape[-1]
@@ -652,7 +659,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
         # (which implicitly contains the number of accepted candidates from the previous round)
-        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
+        # has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
             new_cache_size = new_cur_len - 1
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
@@ -681,6 +688,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
+        candidate_ids.apply_(lambda x: self._assistant_to_target_input_ids[x.item()])
         return candidate_ids, candidate_logits
 
 
