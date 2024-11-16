@@ -119,7 +119,7 @@ class DepthProConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-6,
         image_size=384,
-        patch_size=16, # changed
+        patch_size=16, # TODO remove this
         num_channels=3,
         qkv_bias=True,
         layerscale_value=1.0,
@@ -139,6 +139,13 @@ class DepthProConfig(PretrainedConfig):
         global_feature_dims = 1024,
         use_batch_norm_in_decoder=False,
         use_fov_model=False,
+
+        # aux_image_size=1536,
+        # aux_patch_size=384,
+        aux_image_size=1536 // 2,
+        aux_patch_size=384 // 2,
+        aux_num_channels=3,
+        patch_embeddings_size=16,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -176,3 +183,8 @@ class DepthProConfig(PretrainedConfig):
         self.low_res_feature_dims = low_res_feature_dims
         self.image_feature_dims = image_feature_dims
         self.global_feature_dims = global_feature_dims
+
+        self.aux_image_size = aux_image_size
+        self.aux_patch_size = aux_patch_size
+        self.aux_num_channels = aux_num_channels
+        self.patch_embeddings_size = patch_embeddings_size
