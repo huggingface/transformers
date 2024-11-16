@@ -142,7 +142,7 @@ class DepthProConfig(PretrainedConfig):
         global_feature_dims = 1024,
 
         use_batch_norm_in_decoder=False,
-        use_fov=False,
+        use_fov_model=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -173,7 +173,7 @@ class DepthProConfig(PretrainedConfig):
         self.patch_encoder_hook_ids = patch_encoder_hook_ids
         self.patch_encoder_feature_dims = patch_encoder_feature_dims
         self.use_batch_norm_in_decoder = use_batch_norm_in_decoder
-        self.use_fov = use_fov
+        self.use_fov_model = use_fov_model
 
         self.intermediate_feature_dims = intermediate_feature_dims
         self.intermediate_upsample_layers = intermediate_upsample_layers
