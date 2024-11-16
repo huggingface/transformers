@@ -685,23 +685,25 @@ class DepthProEncoder(nn.Module):
         )
 
     def _patch(self, pixel_values, overlap_ratio):
-        patch_size = 384 # TODO: this should be infered
-        patch_stride = int(patch_size * (1 - overlap_ratio))
+        B, C, H, W = pixel_values.shape
 
-        image_size = pixel_values.shape[-1]
-        steps = int(math.ceil((image_size - patch_size) / patch_stride)) + 1
+        patch_size = 384  # TODO: this should be inferred
+        stride = int(patch_size * (1 - overlap_ratio))
 
-        x_patch_list = []
-        for j in range(steps):
-            j0 = j * patch_stride
-            j1 = j0 + patch_size
+        if pixel_values.dim() != 4:
+            raise ValueError("Input tensor must have shape (B, C, H, W).")
 
-            for i in range(steps):
-                i0 = i * patch_stride
-                i1 = i0 + patch_size
-                x_patch_list.append(pixel_values[..., j0:j1, i0:i1])
+        # pixel_values.shape (B, C, H, W)
+        patches = torch.nn.functional.unfold(
+            pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride)
+        )
+        # patches.shape (B, -1, num_patches)
+        patches = patches.permute(2, 0, 1)
+        # patches.shape (num_patches, B, -1)
+        patches = patches.reshape(-1, C, patch_size, patch_size)
+        # patches.shape (B * num_patches, C, patch_size, patch_size)
 
-        return torch.cat(x_patch_list, dim=0)
+        return patches
 
     def _reshape_feature(
         self, hidden_states: torch.Tensor, width, height, cls_token_offset=1
@@ -760,7 +762,7 @@ class DepthProEncoder(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        batch_size = pixel_values.shape[0]
+        B, C, H, W = pixel_values.shape
 
         # STEP 1: create 3-level image
 
@@ -812,8 +814,8 @@ class DepthProEncoder(nn.Module):
         )
 
         # c. merge patches back together
-        high_res_features = self._merge(high_res_features, batch_size=batch_size, padding=3)
-        med_res_features = self._merge(med_res_features, batch_size=batch_size, padding=6)
+        high_res_features = self._merge(high_res_features, batch_size=B, padding=3)
+        med_res_features = self._merge(med_res_features, batch_size=B, padding=6)
         low_res_features = low_res_features # no merge required with low res image
 
         # d. upsample
@@ -838,7 +840,7 @@ class DepthProEncoder(nn.Module):
 
             # c. merge patches back together
             features = self._merge(
-                features[: batch_size * 5 * 5], batch_size=batch_size, padding=3
+                features[: B * 5 * 5], batch_size=B, padding=3
             )
 
             # d. upsample
