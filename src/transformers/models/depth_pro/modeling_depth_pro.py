@@ -1239,7 +1239,7 @@ class DepthProModelOutput(BaseModelOutput):
     Base class for model's outputs, with potential fov, hidden states and attentions.
 
     Args:
-        fov (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `use_fov` is provided):
+        fov (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `use_fov_model` is provided):
             Field of View Scaler.
     """
     fov: Optional[torch.FloatTensor] = None
@@ -1250,17 +1250,17 @@ class DepthProModelOutput(BaseModelOutput):
     DEPTH_PRO_START_DOCSTRING,
 )
 class DepthProModel(DepthProPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, use_fov_model=None):
         super().__init__(config)
         self.config = config
-        self.use_fov = config.use_fov
+        self.use_fov_model = use_fov_model if use_fov_model is not None else self.config.use_fov_model
 
         # dinov2 (vit) like encoder
         self.encoder = DepthProEncoder(config)
         # dpt (vit) like decoder
         self.decoder = DepthProDecoder(config)
         # dinov2 (vit) like encoder
-        self.fov_model = DepthProFOVModel(config) if self.use_fov else None
+        self.fov_model = DepthProFOVModel(config) if self.use_fov_model else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1325,7 +1325,7 @@ class DepthProModel(DepthProPreTrainedModel):
         last_hidden_state = encodings.last_hidden_state
         last_hidden_state, global_features = self.decoder(last_hidden_state)
 
-        if self.use_fov:
+        if self.use_fov_model:
             fov_encodings = self.fov_model(
                 pixel_values=pixel_values,
                 global_features=global_features.detach(),
@@ -1392,7 +1392,7 @@ class DepthProDepthEstimatorOutput(DepthEstimatorOutput):
     Base class for outputs of DepthProDepthEstimator.
 
     Args:
-        fov (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `use_fov` is provided):
+        fov (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `use_fov_model` is provided):
             Field of View Scaler.
     """
     fov: Optional[torch.FloatTensor] = None
@@ -1405,10 +1405,11 @@ class DepthProDepthEstimatorOutput(DepthEstimatorOutput):
     DEPTH_PRO_START_DOCSTRING,
 )
 class DepthProForDepthEstimation(DepthProPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, use_fov_model=None):
         super().__init__(config)
+        self.use_fov_model = use_fov_model if use_fov_model is not None else self.config.use_fov_model
 
-        self.depth_pro = DepthProModel(config)
+        self.depth_pro = DepthProModel(config, use_fov_model=self.use_fov_model)
         self.head = DepthProDepthEstimationHead(config)
 
         # Initialize weights and apply final processing
@@ -1474,7 +1475,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        # use_fov = use_fov if use_fov is not None else self.config.use_fov
 
         depth_pro_outputs = self.depth_pro(
             pixel_values=pixel_values,
