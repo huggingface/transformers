@@ -1,10 +1,11 @@
-from transformers.models.rt_detr.modeling_rt_detr import (
+from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderLayer, RTDetrModelOutput, RTDetrObjectDetectionOutput, RTDetrConvEncoder, RTDetrHybridEncoder,
-    RTDetrEncoderLayer, RTDetrConvEncoder, RTDetrMLPPredictionHead, RTDetrDecoderOutput, RTDetrDecoderLayer, RTDetrMultiheadAttention
+    RTDetrEncoderLayer, RTDetrConvEncoder, RTDetrMLPPredictionHead, RTDetrDecoderOutput, RTDetrDecoderLayer, 
+    RTDetrMultiheadAttention, RTDetrMultiscaleDeformableAttention
 )
-from transformers import PreTrainedModel
-from transformers.models.rt_detr.configuration_rt_detr import RTDetrConfig
-from transformers.activations import ACT2FN
+from ...modeling_utils import PreTrainedModel
+from ..rt_detr.configuration_rt_detr import RTDetrConfig
+from ...activations import ACT2FN
 import math
 import os
 import warnings
@@ -19,8 +20,7 @@ from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
-from transformers.utils import is_torch_cuda_available
-import torch
+from ...utils import is_torch_cuda_available
 import torch.nn as nn
 
 class RTDetrv2Config(RTDetrConfig):
@@ -112,58 +112,34 @@ def multi_scale_deformable_attention_v2(
     return output.transpose(1, 2).contiguous()
 
 
-class RTDetrv2MultiscaleDeformableAttention(nn.Module):
+class RTDetrv2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
     """
-    Multiscale deformable attention as proposed in RTDETRv2.
+    RTDETRv2 version of multiscale deformable attention, extending the base implementation
+    with improved offset handling and initialization.
     """
 
     def __init__(self, config: RTDetrv2Config):
-        super().__init__()
-
-        kernel_loaded = MultiScaleDeformableAttention is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
-            try:
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-
-        if config.d_model % config.decoder_attention_heads != 0:
-            raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {config.decoder_attention_heads}"
-            )
-        dim_per_head = config.d_model // config.decoder_attention_heads
-        # check if dim_per_head is power of 2
-        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
-            warnings.warn(
-                "You'd better set embed_dim (d_model) in RTDetrMultiscaleDeformableAttention to make the"
-                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
-                " implementation."
-            )
-
-        self.im2col_step = 64
-
-        self.d_model = config.d_model
-        self.n_levels = config.decoder_n_levels
-        self.n_heads = config.decoder_attention_heads
+        # Initialize parent class with config parameters
+        super().__init__(
+            config=config,
+            num_heads=config.decoder_attention_heads,
+            n_points=config.decoder_n_points
+        )
+        
+        # V2-specific attributes
         self.offset_scale = config.decoder_offset_scale
-        self.n_points = config.decoder_n_points
-
+        
+        # Initialize n_points list and scale
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
-        # adding the bugger to state dict
         self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
-
-        self.sampling_offsets = nn.Linear(config.d_model, self.n_heads * self.n_levels * self.n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, self.n_heads * self.n_levels * self.n_points)
-        self.value_proj = nn.Linear(config.d_model, config.d_model)
-        self.output_proj = nn.Linear(config.d_model, config.d_model)
-
-        self.disable_custom_kernels = config.disable_custom_kernels
-
+        
+        # Initialize weights with v2-specific pattern
         self._reset_parameters()
 
     def _reset_parameters(self):
+        """V2-specific initialization of parameters"""
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
         default_dtype = torch.get_default_dtype()
         thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
@@ -175,17 +151,16 @@ class RTDetrv2MultiscaleDeformableAttention(nn.Module):
         )
         for i in range(self.n_points):
             grid_init[:, :, i, :] *= i + 1
+            
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+            
         nn.init.constant_(self.attention_weights.weight.data, 0.0)
         nn.init.constant_(self.attention_weights.bias.data, 0.0)
         nn.init.xavier_uniform_(self.value_proj.weight.data)
         nn.init.constant_(self.value_proj.bias.data, 0.0)
         nn.init.xavier_uniform_(self.output_proj.weight.data)
         nn.init.constant_(self.output_proj.bias.data, 0.0)
-
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
@@ -199,7 +174,7 @@ class RTDetrv2MultiscaleDeformableAttention(nn.Module):
         level_start_index=None,
         output_attentions: bool = False,
     ):
-        # add position embeddings to the hidden states before projecting to queries and keys
+        # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
             hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
 
@@ -212,41 +187,40 @@ class RTDetrv2MultiscaleDeformableAttention(nn.Module):
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
-            # we invert the attention_mask
             value = value.masked_fill(~attention_mask[..., None], float(0))
         value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        
+        # V2-specific sampling offsets shape
         sampling_offsets = self.sampling_offsets(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points, 2
         )
+        
         attention_weights = self.attention_weights(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
-        attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
-        )
-        # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        num_coordinates = reference_points.shape[-1]
-        if num_coordinates == 2:
+        attention_weights = F.softmax(attention_weights, -1)
+
+        # V2-specific sampling locations calculation
+        if reference_points.shape[-1] == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
-        elif num_coordinates == 4:
+        elif reference_points.shape[-1] == 4:
             n_points_scale = self.n_points_scale.to(dtype=hidden_states.dtype).unsqueeze(-1)
             offset = sampling_offsets * n_points_scale * reference_points[:, :, None, :, 2:] * self.offset_scale
             sampling_locations = reference_points[:, :, None, :, :2] + offset
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
+        # V2-specific attention implementation choice
         if self.disable_custom_kernels:
-            # PyTorch implementation
             output = multi_scale_deformable_attention_v2(
                 value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list
             )
         else:
             try:
-                # custom kernel
                 output = MultiScaleDeformableAttentionFunction.apply(
                     value,
                     spatial_shapes,
@@ -256,36 +230,25 @@ class RTDetrv2MultiscaleDeformableAttention(nn.Module):
                     self.im2col_step,
                 )
             except Exception:
-                # PyTorch implementation
                 output = multi_scale_deformable_attention_v2(
                     value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list
                 )
-        output = self.output_proj(output)
 
+        output = self.output_proj(output)
         return output, attention_weights
 
-# inherit and change
-class RTDetrv2DecoderLayer(nn.Module):
-    def __init__(self, config: RTDetrv2Config):
-        super().__init__()
-        # self-attention
-        self.self_attn = RTDetrMultiheadAttention(
-            embed_dim=config.d_model,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-        )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
-        # cross-attention
+class RTDetrv2DecoderLayer(RTDetrDecoderLayer):
+    """
+    RTDETRv2 decoder layer extending the base RTDetrDecoderLayer.
+    Main difference is the use of RTDetrv2MultiscaleDeformableAttention instead of RTDetrMultiscaleDeformableAttention.
+    """
+    def __init__(self, config: RTDetrv2Config):
+        # initialize parent class
+        super().__init__(config)
+        
+        # override only the encoder attention module with v2 version
         self.encoder_attn = RTDetrv2MultiscaleDeformableAttention(config)
-        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
-        # feedforward neural networks
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
-        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -293,35 +256,15 @@ class RTDetrv2DecoderLayer(nn.Module):
         position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,  # this parameter is ignored in v2
         level_start_index=None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer.
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
         residual = hidden_states
 
-        # Self Attention
+        # self attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=encoder_attention_mask,
@@ -334,7 +277,8 @@ class RTDetrv2DecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         second_residual = hidden_states
-        # Cross-Attention
+
+        # cross-Attention - note we don't pass spatial_shapes_list here
         cross_attn_weights = None
         hidden_states, cross_attn_weights = self.encoder_attn(
             hidden_states=hidden_states,
@@ -348,10 +292,9 @@ class RTDetrv2DecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = second_residual + hidden_states
-
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-        # Fully Connected
+        # fully connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
@@ -366,7 +309,6 @@ class RTDetrv2DecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
-
 
 class RTDetrv2PreTrainedModel(PreTrainedModel):
     config_class = RTDetrv2Config
@@ -407,12 +349,14 @@ class RTDetrv2PreTrainedModel(PreTrainedModel):
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             nn.init.xavier_uniform_(module.denoising_class_embed.weight)
 
+
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.inverse_sigmoid
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
     return torch.log(x1 / x2)
+
 ## we may use better use of inherit here
 class RTDetrv2Decoder(RTDetrv2PreTrainedModel):
     def __init__(self, config: RTDetrv2Config):
@@ -1036,31 +980,24 @@ class RTDetrv2ForObjectDetection(RTDetrv2PreTrainedModel):
         pred_boxes = outputs_coord[:, -1]
 
         loss, loss_dict, auxiliary_outputs = None, None, None
-        # if labels is not None:
-        #     # First: create the criterion
-        #     criterion = RTDetrLoss(self.config)
-        #     criterion.to(self.device)
-        #     # Second: compute the losses, based on outputs and labels
-        #     outputs_loss = {}
-        #     outputs_loss["logits"] = logits
-        #     outputs_loss["pred_boxes"] = pred_boxes
-        #     if self.config.auxiliary_loss:
-        #         enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
-        #         enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
-        #         auxiliary_outputs = self._set_aux_loss(
-        #             outputs_class[:, :-1].transpose(0, 1), outputs_coord[:, :-1].transpose(0, 1)
-        #         )
-        #         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-        #         outputs_loss["auxiliary_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
-        #         if self.training and denoising_meta_values is not None:
-        #             outputs_loss["dn_auxiliary_outputs"] = self._set_aux_loss(
-        #                 dn_out_class.transpose(0, 1), dn_out_coord.transpose(0, 1)
-        #             )
-        #             outputs_loss["denoising_meta_values"] = denoising_meta_values
-
-        #     loss_dict = criterion(outputs_loss, labels)
-
-        #     loss = sum(loss_dict.values())
+        # same loss as v1
+        if labels is not None:
+            if self.training and denoising_meta_values is not None:
+                enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
+                enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                self.config,
+                outputs_class,
+                outputs_coord,
+                enc_topk_logits=enc_topk_logits,
+                enc_topk_bboxes=enc_topk_bboxes,
+                denoising_meta_values=denoising_meta_values,
+                **loss_kwargs,
+            )
 
         if not return_dict:
             if auxiliary_outputs is not None:

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert RT Detr checkpoints with Timm backbone"""
+"""Convert RT Detrv2 checkpoints with Timm backbone"""
 
 import argparse
 import json
@@ -676,7 +676,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="rtdetr_v2_r101vd",
+        default="rtdetr_v2_r18vd",
         type=str,
         help="model_name of the checkpoint you'd like to convert.",
     )
