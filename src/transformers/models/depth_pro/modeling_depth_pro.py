@@ -938,8 +938,7 @@ class DepthProFOVModel(nn.Module):
 
         last_hidden_state = self.encoder_neck(last_hidden_state)
 
-        # TODO: add some comments
-        last_hidden_state = last_hidden_state[:, 1:]
+        last_hidden_state = last_hidden_state[:, 1:] # ignore cls_token
         last_hidden_state = last_hidden_state.permute(0, 2, 1)
 
         global_features = self.global_neck(global_features)
@@ -1357,10 +1356,10 @@ class DepthProModel(DepthProPreTrainedModel):
 
 class DepthProDepthEstimationHead(nn.Module):
     """
-    # TODO
-    Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
-    the predictions to the input resolution after the first convolutional layer (details can be found in the paper's
-    supplementary material).
+    The DepthProDepthEstimationHead module serves as the output head for depth estimation tasks.
+    This module comprises a sequence of convolutional and transposed convolutional layers
+    that process the feature map from the decoder to produce a single-channel depth map.
+    Key operations include dimensionality reduction and upsampling to match the input resolution.
     """
 
     def __init__(self, config):
