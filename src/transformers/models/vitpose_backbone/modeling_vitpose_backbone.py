@@ -243,7 +243,7 @@ class VitPoseBackboneMoeMLP(nn.Module):
         experts = [nn.Linear(hidden_features, part_features) for _ in range(num_experts)]
         self.experts = nn.ModuleList(experts)
 
-    def forward(self, hidden_state, indices):
+    def forward(self, hidden_state: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
         expert_hidden_state = torch.zeros_like(hidden_state[:, :, -self.part_features :])
 
         hidden_state = self.fc1(hidden_state)
