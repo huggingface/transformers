@@ -1332,14 +1332,15 @@ class DepthProModel(DepthProPreTrainedModel):
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
             )
             fov = fov_encodings.last_hidden_state
+            attentions = encodings.attentions + fov_encodings.attentions if output_attentions else None
+            hidden_states = encodings.hidden_states + fov_encodings.hidden_states if output_hidden_states else None
         else:
             fov = None
-
-        attentions = encodings.attentions + fov_encodings.attentions if output_attentions else None
-        hidden_states = encodings.hidden_states + fov_encodings.hidden_states if output_hidden_states else None
+            attentions = encodings.attentions
+            hidden_states = encodings.hidden_states
 
         if not return_dict:
             outputs = (last_hidden_state, fov, hidden_states, attentions)
