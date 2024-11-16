@@ -22,12 +22,6 @@ from torch.autograd.function import once_differentiable
 from transformers.utils import is_torch_cuda_available
 import torch
 import torch.nn as nn
-# self.decoder_n_levels = decoder_n_levels
-# self.decoder_offset_scale = decoder_offset_scale
-
-# in def _init_ this changes
-# decoder_n_levels=3,
-#         decoder_offset_scale=0.5,
 
 class RTDetrv2Config(RTDetrConfig):
     model_type = "rt_detr_v2"
@@ -632,15 +626,6 @@ class RTDetrv2Model(RTDetrv2PreTrainedModel):
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
             )
-        # maybe no need to add one additiona;    
-        # decoder_input_proj_list.append(
-        #     nn.Sequential(
-        #         nn.Conv2d(
-        #             config.decoder_in_channels[-1], config.d_model, kernel_size=3, stride=2, padding=1, bias=False
-        #         ),
-        #         nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-        #     )
-        # )
         num_backbone_outs = len(config.decoder_in_channels)
         if config.num_feature_levels > num_backbone_outs + 1:
             for _ in range(config.num_feature_levels - num_backbone_outs - 1):
