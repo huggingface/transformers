@@ -577,7 +577,7 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
 
     # finally, create HuggingFace model and load state dict
     model = RTDetrv2ForObjectDetection(config)
-    model.load_state_dict(state_dict, strict=False)
+    model.load_state_dict(state_dict)
     model.eval()
 
     # load image processor
@@ -676,7 +676,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="rtdetr_v2_r18vd",
+        default="rtdetr_v2_r101vd",
         type=str,
         help="model_name of the checkpoint you'd like to convert.",
     )

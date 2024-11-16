@@ -563,3 +563,7 @@ bbox_embed.2.layers.2.bias
 RuntimeError: Error(s) in loading state_dict for RTDetrv2ForObjectDetection:
         Missing key(s) in state_dict: "model.decoder_input_proj.3.0.weight", "model.decoder_input_proj.3.1.weight", "model.decoder_input_proj.3.1.bias", "model.decoder_input_proj.3.1.running_mean", "model.decoder_input_proj.3.1.running_var". 
         Unexpected key(s) in state_dict: "model.decoder.layers.0.encoder_attn.n_points_scale", "model.decoder.layers.1.encoder_attn.n_points_scale", "model.decoder.layers.2.encoder_attn.n_points_scale", "model.decoder.layers.3.encoder_attn.n_points_scale", "model.decoder.layers.4.encoder_attn.n_points_scale", "model.decoder.layers.5.encoder_attn.n_points_scale". 
+
+
+
+        

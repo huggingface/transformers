@@ -632,14 +632,15 @@ class RTDetrv2Model(RTDetrv2PreTrainedModel):
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
             )
-        decoder_input_proj_list.append(
-            nn.Sequential(
-                nn.Conv2d(
-                    config.decoder_in_channels[-1], config.d_model, kernel_size=3, stride=2, padding=1, bias=False
-                ),
-                nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-            )
-        )
+        # maybe no need to add one additiona;    
+        # decoder_input_proj_list.append(
+        #     nn.Sequential(
+        #         nn.Conv2d(
+        #             config.decoder_in_channels[-1], config.d_model, kernel_size=3, stride=2, padding=1, bias=False
+        #         ),
+        #         nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+        #     )
+        # )
         num_backbone_outs = len(config.decoder_in_channels)
         if config.num_feature_levels > num_backbone_outs + 1:
             for _ in range(config.num_feature_levels - num_backbone_outs - 1):
