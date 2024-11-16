@@ -67,6 +67,12 @@ _CONFIG_FOR_DOC = "LlamaConfig"
 
 from dataclasses import dataclass
 
+from enum import Enum
+
+class AdaptiveMode(Enum):
+    FAN_IN = "fan_in"
+    FAN_OUT = "fan_out"
+
 @dataclass
 class AdaptiveFanInOutput:
     # new_seq_len is less then input seq_len
@@ -319,6 +325,15 @@ class AdaptiveFanOut(nn.Module):
                     restored_hidden_states[batch_i, restored_seq_len] += current_hidden_state
                     restored_seq_len += 1
 
+        # TODO restore hidden states with no data leackage
+        # TODO Что делать, если объединяется больше одного токена?
+        #       - сохранять схлопнутый эмбэддинг только для последнего эмб
+        #       а все предыдущие предсказывать один за другим
+        # TODO Но как тогда сделать мерджинг произвольного количества эмб
+        #       на разных слоях?
+        # TODO Однослойный рекуррентный трансформер?
+        # TODO Сделать не поверх, а параллельно с надстройкой на единичные токены
+        # TODO посмотреть RWKW и RetNet - https://datasecrets.ru/articles/19
         assert restored_hidden_states.shape == residual_hidden_states.shape
 
         return restored_hidden_states
@@ -443,17 +458,6 @@ class AdaptiveLlamaAttention(nn.Module):
             attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
         else:
             attn_output = self.o_proj(attn_output)
-
-
-        # attn_output ~ [ bs, seq_len, hiddin_size ]
-        # Adaptive tokenization goes here!
-        if self.layer_idx > self.config.num_hidden_layers // 2:
-            # go merge tokens
-            pass
-        else:
-            # go divide tokens
-            # also add residual previouse tokens from prev layer before merging
-            self.division_mlp = ...
 
 
         if not output_attentions:
@@ -682,9 +686,21 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        assert config.num_hidden_layers % 2 == 0
+        num_hidden_layers_half = config.num_hidden_layers // 2
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [AdaptiveLlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        self.adaptive_down = nn.ModuleList(
+            [AdaptiveFanIn(config) for _ in range(num_hidden_layers_half)]
+        )
+        self.layers_down = nn.ModuleList(
+            [AdaptiveLlamaDecoderLayer(config, layer_idx) for layer_idx in range(num_hidden_layers_half)]
+        )
+        self.layers_up = nn.ModuleList(
+            [AdaptiveLlamaDecoderLayer(config, layer_idx) for layer_idx in range(num_hidden_layers_half)]
+        )
+        self.adaptive_up = nn.ModuleList(
+            [AdaptiveFanOut(config) for _ in range(num_hidden_layers_half)]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
@@ -704,6 +720,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        special_embeddings_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -767,7 +784,53 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for decoder_layer in self.layers:
+
+        for decoder_layer, adaptive_down_layer in zip(self.layers_down, self.adaptive_down):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    causal_mask,
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
+                    position_embeddings,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                    position_embeddings=position_embeddings,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            adaptive_down_layer: AdaptiveFanIn
+            adaptive_down_layer.forward(
+                hidden_state=hidden_states,
+                attention_mask=attention_mask,
+                special_embeddings_mask=special_embeddings_mask,
+            )
+
+            if use_cache:
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        for decoder_layer in self.layers_up:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -804,6 +867,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
+
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
