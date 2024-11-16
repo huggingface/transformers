@@ -603,9 +603,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             assistant_vocab[tok]: target_vocab[tok] for tok in target_vocab.keys() & assistant_vocab.keys()
         }
         # Suppress tokens that are in the assistant vocab but not in the target vocab
-        suppress_input_ids = list(
-            set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.values())
-        )
+        suppress_input_ids = list(set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.values()))
         logits_processor.append(
             SuppressTokensLogitsProcessor(
                 suppress_tokens=suppress_input_ids,
@@ -635,11 +633,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         def get_assistant_input_ids(target_input_ids: torch.LongTensor) -> torch.LongTensor:
             nonlocal has_past_key_values
             target_seq_len = target_input_ids.shape[-1]
-            target_new_ids = target_input_ids[
-                :, -(target_seq_len - self._prev_target_seq_len) :
-            ]
-            # convert target_new_ids to string, and then, convert the string to assistant_new_ids
+            target_new_ids = target_input_ids[:, -(target_seq_len - self._prev_target_seq_len) :]
+            # Convert target_new_ids to string
             target_new_toks = self.target_tokenizer.batch_decode(target_new_ids, skip_special_tokens=False)
+            # Convert the string to assistant_new_ids
             assistant_new_ids = self.assistant_tokenizer.encode(target_new_toks, add_special_tokens=False)
             if self._prev_assistant_ids is None:
                 self._prev_assistant_ids = assistant_new_ids
