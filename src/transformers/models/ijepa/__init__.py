@@ -20,7 +20,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_ijepa": ["IJepaConfig", "IJepaOnnxConfig"]}
+_import_structure = {"configuration_ijepa": ["IJepaConfig"]}
 
 try:
     if not is_torch_available():
@@ -35,7 +35,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_ijepa import IJepaConfig, IJepaOnnxConfig
+    from .configuration_ijepa import IJepaConfig
 
     try:
         if not is_torch_available():

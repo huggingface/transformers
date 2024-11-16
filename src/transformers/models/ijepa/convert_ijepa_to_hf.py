@@ -18,6 +18,8 @@ URL: https://github.com/facebookresearch/ijepa
 """
 
 import argparse
+import gc
+import re
 from pathlib import Path
 
 import requests
@@ -35,91 +37,57 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # Projection layer + position embeddings
+    r"pos_embed":                               r"embeddings.position_embeddings",
+    r"patch_embed.proj.weight":                 r"embeddings.patch_embeddings.projection.weight",
+    r"patch_embed.proj.bias":                   r"embeddings.patch_embeddings.projection.bias",
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
-    rename_keys = []
+    # Encoder layers: Layernorms, Attention, Feedforward layers
+    r"blocks.(\d+).norm1.weight":               r"encoder.layer.\1.layernorm_before.weight",
+    r"blocks.(\d+).norm1.bias":                 r"encoder.layer.\1.layernorm_before.bias",
+    r"blocks.(\d+).attn.proj.weight":           r"encoder.layer.\1.attention.output.dense.weight",
+    r"blocks.(\d+).attn.proj.bias":             r"encoder.layer.\1.attention.output.dense.bias",
+    r"blocks.(\d+).norm2.weight":               r"encoder.layer.\1.layernorm_after.weight",
+    r"blocks.(\d+).norm2.bias":                 r"encoder.layer.\1.layernorm_after.bias",
+    r"blocks.(\d+).mlp.fc1.weight":             r"encoder.layer.\1.intermediate.dense.weight",
+    r"blocks.(\d+).mlp.fc1.bias":               r"encoder.layer.\1.intermediate.dense.bias",
+    r"blocks.(\d+).mlp.fc2.weight":             r"encoder.layer.\1.output.dense.weight",
+    r"blocks.(\d+).mlp.fc2.bias":               r"encoder.layer.\1.output.dense.bias",
 
-    # projection layer + position embeddings
-    rename_keys.append(("pos_embed", "ijepa.embeddings.position_embeddings"))
-    rename_keys.append(("patch_embed.proj.weight", "ijepa.embeddings.patch_embeddings.projection.weight"))
-    rename_keys.append(("patch_embed.proj.bias", "ijepa.embeddings.patch_embeddings.projection.bias"))
+    # Layernorm + pooler
+    r"norm.weight":                             r"layernorm.weight",
+    r"norm.bias":                               r"layernorm.bias",
+}
+# fmt: on
 
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append(
-            (
-                f"blocks.{i}.norm1.weight",
-                f"ijepa.encoder.layer.{i}.layernorm_before.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.norm1.bias",
-                f"ijepa.encoder.layer.{i}.layernorm_before.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.attn.proj.weight",
-                f"ijepa.encoder.layer.{i}.attention.output.dense.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.attn.proj.bias",
-                f"ijepa.encoder.layer.{i}.attention.output.dense.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.norm2.weight",
-                f"ijepa.encoder.layer.{i}.layernorm_after.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.norm2.bias",
-                f"ijepa.encoder.layer.{i}.layernorm_after.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.mlp.fc1.weight",
-                f"ijepa.encoder.layer.{i}.intermediate.dense.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.mlp.fc1.bias",
-                f"ijepa.encoder.layer.{i}.intermediate.dense.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.mlp.fc2.weight",
-                f"ijepa.encoder.layer.{i}.output.dense.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"blocks.{i}.mlp.fc2.bias",
-                f"ijepa.encoder.layer.{i}.output.dense.bias",
-            )
-        )
 
-    # layernorm + pooler
-    rename_keys.extend(
-        [
-            ("norm.weight", "layernorm.weight"),
-            ("norm.bias", "layernorm.bias"),
-        ]
-    )
+def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+    """
+    Converts old keys to new keys using the mapping and dynamically removes the 'ijepa.' prefix if necessary.
 
-    # if just the base model, we should remove "ijepa" from all keys that start with "ijepa"
-    rename_keys = [(pair[0], pair[1][6:]) if pair[1].startswith("ijepa") else pair for pair in rename_keys]
+    Args:
+        state_dict_keys (dict): The keys from the state_dict to convert.
 
-    return rename_keys
+    Returns:
+        dict: A mapping from old keys to new keys.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+
+        # Apply regex-based mapping
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # Skip the key
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+
+    return output_dict
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
@@ -184,7 +152,7 @@ def get_ijepa_config(model_name):
 
 
 @torch.no_grad()
-def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
+def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_logits):
     """
     Copy/paste/tweak model's weights to our IJEPA structure.
     """
@@ -206,10 +174,9 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
 
     # Rename keys
     state_dict = original_state_dict.copy()
-    remove_classification_head_(state_dict)
-    rename_keys = create_rename_keys(config)
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
+    new_keys = convert_old_keys_to_new_keys(state_dict.keys())
+    for old_key, new_key in new_keys.items():
+        rename_key(state_dict, old_key, new_key)
     read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
@@ -234,10 +201,10 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
             atol=1e-4,
         )
 
-    if pytorch_dump_folder_path is not None:
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path)
+    if output_dir:
+        Path(output_dir).mkdir(exist_ok=True)
+        print(f"Saving model {model_name} to {output_dir}")
+        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
 
     if push_to_hub:
         model_name_to_hf_name = {
@@ -249,8 +216,15 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
         name = model_name_to_hf_name[model_name]
         model.push_to_hub(f"jmtzt/{name}", use_temp_dir=True)
 
+    if output_dir:
+        del model, state_dict
+        gc.collect()
+        print("Reloading the model to check if it's saved correctly.")
+        IJepaModel.from_pretrained(output_dir, device_map="auto")
+        print("Model reloaded successfully.")
 
-if __name__ == "__main__":
+
+def main():
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
@@ -266,10 +240,13 @@ if __name__ == "__main__":
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path",
+        "--output_dir",
         default=None,
         type=str,
         help="Path to the output PyTorch model directory.",
+    )
+    parser.add_argument(
+        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
     )
     parser.add_argument(
         "--push_to_hub",
@@ -282,4 +259,8 @@ if __name__ == "__main__":
 
     parser.set_defaults()
     args = parser.parse_args()
-    convert_ijepa_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
+    write_model(args.model_name, args.output_dir, args.safe_serialization, args.push_to_hub, args.verify_logits)
+
+
+if __name__ == "__main__":
+    main()
