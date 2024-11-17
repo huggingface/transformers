@@ -33,6 +33,7 @@ from ...utils import (
     is_vision_available,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 
@@ -274,6 +275,7 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
 class Owlv2VisionEmbeddings(nn.Module):
     def __init__(self, config: Owlv2VisionConfig):
         super().__init__()
+        self.patch_size = config.patch_size
         self.config = config
         self.embed_dim = config.hidden_size
         self.class_embedding = nn.Parameter(torch.randn(config.hidden_size))
@@ -291,15 +293,58 @@ class Owlv2VisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -610,6 +655,8 @@ OWLV2_VISION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -635,6 +682,8 @@ OWLV2_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_base_image_embeds (`bool`, *optional*):
             Whether or not to return the base image embeddings.
         return_dict (`bool`, *optional*):
@@ -914,6 +963,7 @@ class Owlv2VisionTransformer(nn.Module):
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -929,7 +979,7 @@ class Owlv2VisionTransformer(nn.Module):
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
         pixel_values = pixel_values.to(expected_input_dtype)
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -976,6 +1026,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -1002,6 +1053,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1084,6 +1136,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1115,6 +1168,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1133,6 +1187,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Owlv2Output]:
@@ -1165,6 +1220,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1295,8 +1351,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
-
-        self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
+        self.config = config
+        self.sqrt_num_patches = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
 
     @staticmethod
@@ -1403,6 +1459,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Tuple[torch.FloatTensor]:
         # Encode text and image
         outputs = self.owlv2(
@@ -1411,8 +1468,18 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
+
+        if interpolate_pos_encoding:
+            _, _, height, width = pixel_values.shape
+            # height must eq width.
+            self.sqrt_num_patches = height // self.config.vision_config.patch_size
+            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
+        else:
+            self.sqrt_num_patches = self.config.vision_config.image_size // self.config.vision_config.patch_size
+            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
 
         # Get image embeddings
         last_hidden_state = outputs.vision_model_output[0]
@@ -1443,9 +1510,21 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Tuple[torch.FloatTensor]:
         # Get Owlv2Model vision embeddings (same as CLIP)
-        vision_outputs = self.owlv2.vision_model(pixel_values=pixel_values, return_dict=True)
+        vision_outputs = self.owlv2.vision_model(
+            pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
+        )
+
+        if interpolate_pos_encoding:
+            _, _, height, width = pixel_values.shape
+            # height must eq width.
+            self.sqrt_num_patches = height // self.config.vision_config.patch_size
+            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
+        else:
+            self.sqrt_num_patches = self.config.vision_config.image_size // self.config.vision_config.patch_size
+            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
         last_hidden_state = vision_outputs[0]
@@ -1519,6 +1598,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         query_pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Owlv2ImageGuidedObjectDetectionOutput:
         r"""
@@ -1576,11 +1656,14 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Compute feature maps for the input and query images
-        query_feature_map = self.image_embedder(pixel_values=query_pixel_values)[0]
+        query_feature_map = self.image_embedder(
+            pixel_values=query_pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+        )[0]
         feature_map, vision_outputs = self.image_embedder(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
@@ -1630,6 +1713,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Owlv2ObjectDetectionOutput:
         r"""
@@ -1683,6 +1767,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         # Text and vision model outputs

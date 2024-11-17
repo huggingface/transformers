@@ -829,6 +829,89 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
 
     @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model_name = "google/owlv2-base-patch16"
+        model = Owlv2Model.from_pretrained(model_name).to(torch_device)
+        processor = OwlViTProcessor.from_pretrained(model_name)
+        processor.image_processor.size = {"height": 1024, "width": 1024}
+
+        image = prepare_img()
+        inputs = processor(
+            text=[["a photo of a cat", "a photo of a dog"]],
+            images=image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        self.assertEqual(
+            outputs.logits_per_image.shape,
+            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+        )
+        self.assertEqual(
+            outputs.logits_per_text.shape,
+            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+        )
+        expected_logits = torch.tensor([[-6.2520, -8.2970]], device=torch_device)
+        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        expected_shape = torch.Size((1, 4097, 768))
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        # Owlv2ForObjectDetection part.
+        model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        num_queries = int((inputs.pixel_values.shape[-1] / model.config.vision_config.patch_size) ** 2)
+        self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
+        expected_slice_boxes = torch.tensor(
+            [[0.2407, 0.0553, 0.4636], [0.1082, 0.0494, 0.1861], [0.2459, 0.0527, 0.4398]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+        model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
+        query_image = prepare_img()
+        inputs = processor(
+            images=image,
+            query_images=query_image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model.image_guided_detection(**inputs, interpolate_pos_encoding=True)
+
+        # No need to check the logits, we just check inference runs fine.
+        num_queries = int((inputs.pixel_values.shape[-1] / model.config.vision_config.patch_size) ** 2)
+        self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
+        # Deactivate interpolate_pos_encoding on same model, and use default image size.
+        # Verify the dynamic change caused by the activation/deactivation of interpolate_pos_encoding of variables: self.sqrt_num_patches, self.box_bias from (OwlViTForObjectDetection).
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        inputs = processor(
+            text=[["a photo of a cat", "a photo of a dog"]],
+            images=image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=False)
+
+        num_queries = int((inputs.pixel_values.shape[-1] // model.config.vision_config.patch_size) ** 2)
+        self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
+    @slow
     def test_inference_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
