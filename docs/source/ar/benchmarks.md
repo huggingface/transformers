@@ -104,7 +104,7 @@ google-bert/bert-base-uncased          8              512            1539
 python examples/tensorflow/benchmarking/run_benchmark_tf.py --help
 ```
 
-يمكن ببساطة تشغيل كائن قياس الأداء الذي تم تنفيذه عن طريق استدعاء `benchmark.run()`.
+يُمكن بعد ذلك تشغيل كائن قياس الأداء الذي تم تهيئته عن طريق استدعاء `benchmark.run()`.
 
 ```py
 >>> results = benchmark.run()
