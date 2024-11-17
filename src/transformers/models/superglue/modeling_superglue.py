@@ -204,10 +204,9 @@ class SuperGlueKeypointEncoder(nn.Module):
 
         layers = [
             SuperGlueMultiLayerPerceptron(config, encoder_channels[i - 1], encoder_channels[i])
-            if i < len(encoder_channels) - 1
-            else nn.Linear(encoder_channels[i - 1], encoder_channels[i])
-            for i in range(1, len(encoder_channels))
+            for i in range(1, len(encoder_channels) - 1)
         ]
+        layers.append(nn.Linear(encoder_channels[-2], encoder_channels[-1]))
         self.encoder = nn.ModuleList(layers)
 
     def forward(
@@ -436,10 +435,9 @@ class SuperGlueAttentionalPropagation(nn.Module):
         mlp_channels = [hidden_size * 2, hidden_size * 2, hidden_size]
         layers = [
             SuperGlueMultiLayerPerceptron(config, mlp_channels[i - 1], mlp_channels[i])
-            if i < len(mlp_channels) - 1
-            else nn.Linear(mlp_channels[i - 1], mlp_channels[i])
-            for i in range(1, len(mlp_channels))
+            for i in range(1, len(mlp_channels) - 1)
         ]
+        layers.append(nn.Linear(mlp_channels[-2], mlp_channels[-1]))
         self.mlp = nn.ModuleList(layers)
 
     def forward(
