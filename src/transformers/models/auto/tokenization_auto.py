@@ -522,6 +522,13 @@ else:
                     "XGLMTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "xalma",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("xlm", ("XLMTokenizer", None)),
             ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
             (

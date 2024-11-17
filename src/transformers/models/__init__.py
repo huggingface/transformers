@@ -275,6 +275,7 @@ from . import (
     wav2vec2_with_lm,
     wavlm,
     whisper,
+    xalma,
     x_clip,
     xglm,
     xlm,
