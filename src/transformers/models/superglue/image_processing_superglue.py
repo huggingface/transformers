@@ -401,6 +401,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
+        # Validate and convert the input images into a flattened list of images for all subsequent processing steps.
         images = validate_and_format_image_pairs(images)
 
         if not valid_images(images):
@@ -449,6 +450,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
+        # Convert back the flattened list of images into a list of pairs of images.
         image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
 
         data = {"pixel_values": image_pairs}
