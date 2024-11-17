@@ -48,7 +48,7 @@
 python examples/pytorch/benchmarking/run_benchmark.py --help
 ```
 
-يمكن ببساطة تشغيل كائن قياس الأداء الذي تم تنفيذه عن طريق استدعاء `benchmark.run()`.
+يُمكن ببساطة تشغيل كائن التقييم الذي تم تهيئته عن طريق استدعاء `benchmark.run()`.
 
 ```py
 >>> results = benchmark.run()
