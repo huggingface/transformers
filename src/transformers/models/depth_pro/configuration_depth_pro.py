@@ -108,9 +108,9 @@ class DepthProConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=1024, # changed
+        hidden_size=1024,
         decoder_hidden_size=256,
-        num_hidden_layers=24, # changed
+        num_hidden_layers=24,
         num_attention_heads=16,
         mlp_ratio=4,
         hidden_act="gelu",
@@ -132,7 +132,6 @@ class DepthProConfig(PretrainedConfig):
         reshape_hidden_states=True,
         patch_encoder_hook_ids = [5, 11],
         intermediate_feature_dims = [256, 256],
-        intermediate_upsample_layers = [3, 2],
         high_res_feature_dims = 512,
         med_res_feature_dims = 1024,
         low_res_feature_dims = 1024,
@@ -172,7 +171,6 @@ class DepthProConfig(PretrainedConfig):
         self.use_batch_norm_in_decoder = use_batch_norm_in_decoder
         self.use_fov_model = use_fov_model
         self.intermediate_feature_dims = intermediate_feature_dims
-        self.intermediate_upsample_layers = intermediate_upsample_layers
         self.high_res_feature_dims = high_res_feature_dims
         self.med_res_feature_dims = med_res_feature_dims
         self.low_res_feature_dims = low_res_feature_dims

@@ -619,7 +619,6 @@ class DepthProEncoder(nn.Module):
         self.decoder_hidden_size = config.decoder_hidden_size
         self.patch_encoder_hook_ids = config.patch_encoder_hook_ids
         self.intermediate_feature_dims = config.intermediate_feature_dims
-        self.intermediate_upsample_layers = config.intermediate_upsample_layers
 
         self.out_size = config.patch_size // config.patch_embeddings_size
         self.seq_len = self.out_size ** 2
@@ -632,17 +631,15 @@ class DepthProEncoder(nn.Module):
 
         # upsampling intermediate features - (1-2) in diagram
         self.upsample_intermediate = nn.ModuleList()
-        for i, (feature_dims, upsample_layers) in enumerate(zip(
-            self.intermediate_feature_dims,
-            self.intermediate_upsample_layers,
-        )):
+        for i, feature_dims in enumerate(self.intermediate_feature_dims):
             intermediate_dims = self.decoder_hidden_size if i == 0 else feature_dims
             upsample_block = DepthProUpsampleBlock(
                 input_dims=config.hidden_size,
                 intermediate_dims=intermediate_dims,
                 output_dims=feature_dims,
-                n_upsample_layers=upsample_layers,
+                n_upsample_layers=1+len(self.intermediate_feature_dims)-i,
             )
+
             self.upsample_intermediate.append(upsample_block)
 
         # upsampling patch features (high_res, med_res, low_res) - (3-5) in diagram
@@ -714,34 +711,46 @@ class DepthProEncoder(nn.Module):
         hidden_states = hidden_states.reshape(b, height, width, c).permute(0, 3, 1, 2)
         return hidden_states
 
-    def _merge(self, x: torch.Tensor, batch_size: int, padding: int = 3) -> torch.Tensor:
+    def _merge(self, x: torch.Tensor, batch_size: int, merge_out_size: int) -> torch.Tensor:
         """Merge the patched input into a image with sliding window."""
-        steps = int(math.sqrt(x.shape[0] // batch_size))
+        # x.shape (num_patches, config.num_channels, self.out_size, self.out_size)
+        box_size = int(math.sqrt(x.shape[0] // batch_size))
 
-        idx = 0
+        """
+        merge_out_size = (box_size - 2) * (out_size - 2 * padding) + (2) * (out_size - padding)
+        padding = (merge_out_size - box_size * out_size) / (6 - 2 * box_size)
+        """
+        padding = ( box_size * self.out_size - merge_out_size ) // ( 2 * box_size - 2 )
 
-        output_list = []
-        for j in range(steps):
-            output_row_list = []
-            for i in range(steps):
-                output = x[batch_size * idx : batch_size * (idx + 1)]
+        i = 0
+        boxes = []
+        for h in range(box_size):
+            boxes_in_row = []
+            for w in range(box_size):
+                box = x[batch_size * i : batch_size * (i + 1)]
 
-                if j != 0:
-                    output = output[..., padding:, :]
-                if i != 0:
-                    output = output[..., :, padding:]
-                if j != steps - 1:
-                    output = output[..., :-padding, :]
-                if i != steps - 1:
-                    output = output[..., :, :-padding]
+                if h != 0:
+                    # remove pad from height if box is not at top border
+                    box = box[..., padding:, :]
+                if w != 0:
+                    # remove pad from width if box is not at left border
+                    box = box[..., :, padding:]
+                if h != box_size - 1:
+                    # remove pad from height if box is not at bottom border
+                    box = box[..., :box.shape[-2]-padding, :]
+                if w != box_size - 1:
+                    # remove pad from width if box is not at right border
+                    box = box[..., :, :box.shape[-1]-padding]
 
-                output_row_list.append(output)
-                idx += 1
+                boxes_in_row.append(box)
+                i += 1
 
-            output_row = torch.cat(output_row_list, dim=-1)
-            output_list.append(output_row)
-        output = torch.cat(output_list, dim=-2)
-        return output
+            boxes_in_row = torch.cat(boxes_in_row, dim=-1)
+            boxes.append(boxes_in_row)
+
+        boxes = torch.cat(boxes, dim=-2)
+        boxes = boxes[..., :merge_out_size, :merge_out_size]
+        return boxes
 
     def forward(
         self,
@@ -818,19 +827,19 @@ class DepthProEncoder(nn.Module):
         ) # (num_patches, config.num_channels, self.out_size, self.out_size)
 
         # c. merge patches back together
-        high_res_features = self._merge(high_res_features, batch_size=B, padding=3) # (B, config.hidden_size, ~, ~)
-        med_res_features = self._merge(med_res_features, batch_size=B, padding=6)   # (B, config.hidden_size, ~, ~)
-        low_res_features = low_res_features # no merge required with low res image  # (B, config.hidden_size, ~, ~)
+        high_res_features = self._merge(high_res_features, batch_size=B, merge_out_size=self.out_size*4) # (B, config.hidden_size, self.out_size*2**2, self.out_size*2**2)
+        med_res_features = self._merge(med_res_features, batch_size=B, merge_out_size=self.out_size*2)   # (B, config.hidden_size, self.out_size*2**1, self.out_size*2**1)
+        low_res_features = low_res_features # no merge required with low res image  # (B, config.hidden_size, self.out_size*2**0, self.out_size*2**0)
 
         # d. upsample
-        high_res_features = self.upsample_high_res(high_res_features)   # (B, config.high_res_feature_dims, ~, ~)
-        med_res_features = self.upsample_med_res(med_res_features)      # (B, config.med_res_feature_dims, ~, ~)
-        low_res_features = self.upsample_low_res(low_res_features)      # (B, config.low_res_feature_dims, ~, ~)
+        high_res_features = self.upsample_high_res(high_res_features)   # (B, config.high_res_feature_dims, self.out_size*2**3, self.out_size*2**3)
+        med_res_features = self.upsample_med_res(med_res_features)      # (B, config.med_res_feature_dims, self.out_size*2**2, self.out_size*2**2)
+        low_res_features = self.upsample_low_res(low_res_features)      # (B, config.low_res_feature_dims, self.out_size*2**1, self.out_size*2**1)
 
         # STEP 5: get intermediate features - (1-2) in diagram
 
         intermediate_features = []
-        for layer_id in self.patch_encoder_hook_ids:
+        for i, layer_id in enumerate(self.patch_encoder_hook_ids):
 
             # a. extract hidden_state
             hidden_state = patch_encodings.hidden_states[layer_id+1] # +1 to correct index position as hidden_states contain embedding output as well
@@ -845,12 +854,12 @@ class DepthProEncoder(nn.Module):
 
             # c. merge patches back together
             features = self._merge(
-                features[: B * 5 * 5], batch_size=B, padding=3
-            )
+                features[: B * 5 * 5], batch_size=B, merge_out_size=self.out_size*4,
+            ) # (B, config.hidden_size, self.out_size*2**2, self.out_size*2**2)
 
             # d. upsample
             features = self.upsample_intermediate[layer_id](features)
-            # (B, config.intermediate_feature_dims[layer_id], ~, ~)
+            # (B, config.intermediate_feature_dims[i], self.out_size*2**(3+total-i), self.out_size*2**(3+total-i))
 
             intermediate_features.append(features)
 
@@ -868,16 +877,25 @@ class DepthProEncoder(nn.Module):
         # skipped, no merge required with low res image
 
         # d. upsample
-        image_features = self.upsample_image(image_features) # (B, config.image_feature_dims, ~, ~)
+        image_features = self.upsample_image(image_features) # (B, config.image_feature_dims, self.out_size*2**1, self.out_size*2**1)
 
         # STEP 7: return these features
         last_hidden_state =  [
-            *intermediate_features,
-            high_res_features,
-            med_res_features,
-            low_res_features,
-            image_features,
+            *intermediate_features, # (B, config.image_feature_dims, self.out_size*2**3+total-i, self.out_size*2**3+total-i)
+            high_res_features,      # (B, config.image_feature_dims, self.out_size*2**3, self.out_size*2**3)
+            med_res_features,       # (B, config.image_feature_dims, self.out_size*2**2, self.out_size*2**2)
+            low_res_features,       # (B, config.image_feature_dims, self.out_size*2**1, self.out_size*2**1)
+            image_features,         # (B, config.image_feature_dims, self.out_size*2**1, self.out_size*2**1)
         ]
+        # for i in last_hidden_state:
+            # ic(i.shape)
+        # exit()
+
+        #  768, 384, 192,  96, 48, 48 - image_size=1536
+        #  384, 192,  96,  48, 24, 24 - image_size=768 (ideal)
+        #  288, 144,  72,  24, 24, 24 - image_size=768 (practical)
+        # 1536, 768, 384, 192, 96, 96 - image_size=3072 (ideal)
+        # 1728, 864, 432, 240, 96, 96 - image_size=3072 (practical)
 
         hidden_states = patch_encodings.hidden_states + image_encodings.hidden_states if output_hidden_states else None
         attentions = patch_encodings.attentions + image_encodings.attentions if output_attentions else None
@@ -950,6 +968,11 @@ class DepthProFOVModel(nn.Module):
         last_hidden_state = last_hidden_state.permute(0, 2, 1)
 
         global_features = self.global_neck(global_features)
+
+        ic(last_hidden_state.shape)
+        ic(global_features.shape)
+
+        # exit()
 
         last_hidden_state = last_hidden_state.reshape_as(global_features)
         last_hidden_state = last_hidden_state + global_features
@@ -1107,7 +1130,15 @@ class DepthProDecoder(nn.Module):
         for i, feature_dim in enumerate(config.intermediate_feature_dims):
             if i == 0:
                 # no projection for final intermediate layer
-                proj = nn.Identity()
+                if feature_dim == config.decoder_hidden_size:
+                    proj = nn.Identity()
+                else:
+                    proj = nn.Conv2d(
+                        in_channels=feature_dim,
+                        out_channels=config.decoder_hidden_size,
+                        kernel_size=1,
+                        bias=False,
+                    )
                 fusion = DepthProFeatureFusionLayer(config, use_deconv=False)
             else:
                 proj = nn.Conv2d(
@@ -1124,6 +1155,10 @@ class DepthProDecoder(nn.Module):
             self.intermediate_fusion.append(fusion)
 
     def forward(self, hidden_states):
+        ic("Start of Decoder")
+
+        for i in hidden_states:
+            ic(i.shape)
 
         # STEP 1: extract features
 
@@ -1492,7 +1527,9 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             return_dict=True,
         )
         last_hidden_state = depth_pro_outputs[0]
+        ic(last_hidden_state.shape)
         predicted_depth = self.head(last_hidden_state)
+        ic(predicted_depth.shape)
 
         if not return_dict:
             if loss is None:
