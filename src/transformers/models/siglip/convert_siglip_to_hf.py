@@ -418,7 +418,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
                 [[-1.9432535, -0.05433846], [0.6222029, 2.2883186]],
             )
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
-        print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
