@@ -299,7 +299,9 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor") if is_vision_available() else None
+            AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
+            if is_vision_available()
+            else None
         )
 
     @slow
