@@ -14,7 +14,7 @@
 
 > هنا، ييُعرَّف _الاستدلال_ بأنه تمريرة أمامية واحدة، ويتم تعريف _التدريب_ بأنه تمريرة أمامية واحدة وتمريرة خلفية واحدة.
 
-تتوقع فئات قياس الأداء [`PyTorchBenchmark`] و [`TensorFlowBenchmark`] كائنًا من النوع [`PyTorchBenchmarkArguments`] و [`TensorFlowBenchmarkArguments`]، على التوالي، للتنفيذ. [`PyTorchBenchmarkArguments`] و [`TensorFlowBenchmarkArguments`] هي فئات بيانات وتحتوي على جميع التكوينات ذات الصلة لفئة قياس الأداء المقابلة. في المثال التالي، يتم توضيح كيفية قياس أداء نموذج BERT من النوع _bert-base-cased_.
+تتوقع فئات تقييم الأداء [`PyTorchBenchmark`] و [`TensorFlowBenchmark`] كائنًا من النوع [`PyTorchBenchmarkArguments`] و [`TensorFlowBenchmarkArguments`]، على التوالي، للتنفيذ. [`PyTorchBenchmarkArguments`] و [`TensorFlowBenchmarkArguments`] هي فئات بيانات وتحتوي على جميع التكوينات ذات الصلة لفئة تقييم الأداء المقابلة. في المثال التالي، يتم توضيح كيفية تقييم أداء نموذج BERT من النوع _bert-base-cased_.
 
 <frameworkcontent>
 <pt>
