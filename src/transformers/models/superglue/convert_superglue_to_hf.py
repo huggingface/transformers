@@ -253,7 +253,7 @@ def write_model(
     verify_model_outputs(model, model_name)
     print("Model outputs verified successfully.")
 
-    organization = "stevenbucaille"
+    organization = "magic-leap-community"
     if push_to_hub:
         print("Pushing model to the hub...")
         model.push_to_hub(

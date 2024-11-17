@@ -304,7 +304,7 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference(self):
-        model = SuperGlueForKeypointMatching.from_pretrained("stevenbucaille/superglue_outdoor").to(torch_device)
+        model = SuperGlueForKeypointMatching.from_pretrained("magic-leap-community/superglue_outdoor").to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
