@@ -565,24 +565,31 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
     pad_to_multiple_of: Optional[int] = None
     return_tensors: str = "pt"
 
-    def torch_call(self, features):  # Implementation taken from the docs.
-        label_name = "label" if "label" in features[0].keys() else "labels"
-        labels = [feature.pop(label_name) for feature in features]
-        batch_size = len(features)
-        num_choices = len(features[0]["input_ids"])
-        flattened_features = [
-            [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
-        ]
-        flattened_features = sum(flattened_features, [])
+    def torch_call(self, examples: List[Dict[str, Any]]):  # Refactored implementation from the docs.
+        # Take labels out of the examples beforehand, because they aren't nested.
+        label_name = "label" if "label" in examples[0].keys() else "labels"
+        labels = [example.pop(label_name) for example in examples]
 
+        batch_size  = len(examples)
+        num_choices = len(examples[0]["input_ids"])
+
+        # Go from e.g. 2 examples of 2 choices [{input_ids: [[1], [2]]}, {input_ids: [[3], [4]]}]
+        # to 4 examples [{input_ids: [1]}, {input_ids: [2]}] + [{input_ids: [3]}, {input_ids: [4]}]
+        flat_examples = sum(
+            ([{k: v[i] for k,v in example.items()} for i in range(num_choices)] for example in examples),
+            start=[]
+        )
+
+        # Pad all choices of all examples as if you're padding any other batch of examples.
         batch = self.tokenizer.pad(
-            flattened_features,
+            flat_examples,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
 
+        # Reshape from B*C x L into B x C x L, and add the labels back in.
         batch = {k: v.view(batch_size, num_choices, -1) for k, v in batch.items()}
         batch["labels"] = torch.tensor(labels, dtype=torch.int64)
         return batch
