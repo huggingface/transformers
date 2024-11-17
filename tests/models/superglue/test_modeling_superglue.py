@@ -286,7 +286,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 def prepare_imgs():
-    dataset = load_dataset("stevenbucaille/image_matching_fixtures", split="train")
+    dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
     image1 = dataset[0]["image"]
     image2 = dataset[1]["image"]
     image3 = dataset[2]["image"]

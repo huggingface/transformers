@@ -29,7 +29,7 @@ from transformers import (
 
 
 def prepare_imgs_for_image_processor():
-    dataset = load_dataset("stevenbucaille/image_matching_fixtures", split="train")
+    dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
     return [[dataset[0]["image"], dataset[1]["image"]], [dataset[2]["image"], dataset[1]["image"]]]
 
 
