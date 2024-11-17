@@ -22,10 +22,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -290,7 +291,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, : key_states.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -324,7 +325,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
             value_states,
             causal_mask,
             tgt_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -543,6 +544,7 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Qwen2AudioAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
@@ -557,14 +559,6 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 QWEN2AUDIOENCODER_START_DOCSTRING = r"""
@@ -855,16 +849,14 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
     """The QWEN2AUDIO model which consists of a audio backbone and a language model.""",
     QWEN2AUDIO_START_DOCSTRING,
 )
-class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
+class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
-        self.audio_tower = AutoModel.from_config(config.audio_config, attn_implementation=config._attn_implementation)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
 
         self.multi_modal_projector = Qwen2AudioMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
@@ -1252,16 +1244,17 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.prepare_inputs_for_generation with image->audio
     def prepare_inputs_for_generation(
         self,
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
-        input_features=None,  # Ignore copy
+        input_features=None,
         attention_mask=None,
         **kwargs,
     ):
+        # Overwritten -- custom processing (note: might not be needed, but there are no generation tests running atm)
+
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
@@ -1269,7 +1262,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
 
-            # Ignore copy
             # Here, we get the attention_mask, which was previously stored in the state after _merge_input_ids_with_audio_features.
             if input_features is not None and kwargs.get("attention_mask") is not None:
                 attention_mask = kwargs["attention_mask"]
@@ -1309,7 +1301,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        # Ignore copy
         feature_attention_mask = kwargs.get("feature_attention_mask", None)
         model_inputs.update(
             {

@@ -13,7 +13,8 @@ concurrency:
 jobs:
   latest-with-torch-nightly-docker:
     name: "Nightly PyTorch + Stable TensorFlow"
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -40,7 +41,8 @@ jobs:
 
   nightly-torch-deepspeed-docker:
     name: "Nightly PyTorch + DeepSpeed"
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx

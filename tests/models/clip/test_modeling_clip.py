@@ -191,6 +191,53 @@ class CLIPModelTesterMixin(ModelTesterMixin):
     different output logits, and are not supposed to be used or tested with padding_side="left".
     """
 
+    def test_sdpa_can_dispatch_composite_models(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            # SigLip has one shared cls attr for all models, so we assign both submodels heer
+            vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
+
+            # `None` as it is the requested one which will be assigned to each sub-config
+            # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "text_model"):
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
+
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
+            has_sdpa = False
+            for name, submodule in model_sdpa.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    has_sdpa = True
+                    break
+            if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                raise ValueError("The SDPA model should have SDPA attention layers")
+
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
@@ -251,24 +298,6 @@ class CLIPModelTesterMixin(ModelTesterMixin):
                     attn_implementation="eager",
                 )
                 model_eager = model_eager.eval().to(torch_device)
-
-            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-            self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-            for name, submodule in model_eager.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    raise ValueError("The eager model should not have SDPA attention layers")
-
-            has_sdpa = False
-            for name, submodule in model_sdpa.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    has_sdpa = True
-                    break
-
-            if not has_sdpa:
-                raise ValueError("The SDPA model should have SDPA attention layers")
 
             # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving the model each time,
             # but it would be nicer to have an efficient way to use parameterized.expand
@@ -461,6 +490,10 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
             use_attention_mask_options=(None,),
         )
 
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
+
 
 class CLIPTextModelTester:
     def __init__(
@@ -640,6 +673,10 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
         )
 
     @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
+
+    @require_torch_sdpa
     def test_sdpa_can_dispatch_on_flash(self):
         self.skipTest(reason="CLIPTextModel has two attention masks: `causal_attention_mask` and `attention_mask`")
 
@@ -704,13 +741,21 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = CLIPModelTester(self)
+        common_properties = ["projection_dim", "logit_scale_init_value"]
+        self.config_tester = ConfigTester(
+            self, config_class=CLIPConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -848,6 +893,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with self.subTest(model_class.__name__):
                 # load PyTorch class
                 pt_model = model_class(config).eval()
+                pt_model.to(torch_device)
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
                 # So we disable `use_cache` here for PyTorch model.
                 pt_model.config.use_cache = False
@@ -881,7 +927,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 fx_outputs = fx_model(**fx_inputs).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -892,7 +938,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(force=True), 4e-2)
 
     # overwrite from common since FlaxCLIPModel returns nested output
     # which is not supported in the common test
@@ -921,6 +967,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+                pt_model.to(torch_device)
 
                 # make sure weights are tied in PyTorch
                 pt_model.tie_weights()
@@ -940,11 +987,12 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
                     pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded.to(torch_device)
 
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
@@ -953,7 +1001,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 4e-2)
 
     @slow
     def test_model_from_pretrained(self):
@@ -971,6 +1019,10 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             logit_keys=("logits_per_image", "logits_per_text"),
             use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
         )
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_on_flash(self):
@@ -1101,6 +1153,7 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = CLIPForImageClassificationModelTester(self)
@@ -1139,6 +1192,10 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
             logit_keys=("logits",),
             use_attention_mask_options=(None,),
         )
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
 
 
 # We will verify our results on an image of cute cats
@@ -1179,3 +1236,40 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # CLIP models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(torch_device)
+
+        processor = CLIPProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 26, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )

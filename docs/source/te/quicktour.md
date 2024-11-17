@@ -142,7 +142,7 @@ label: NEGATIVE, with score: 0.5309
 ```
 
 <frameworkcontent>
-<pt> 
+<pt>
 ముందుగా శిక్షణ పొందిన మోడల్‌ను లోడ్ చేయడానికి [`AutoModelForSequenceClassification`] మరియు [`AutoTokenizer`]ని ఉపయోగించండి మరియు దాని అనుబంధిత టోకెనైజర్ (తదుపరి విభాగంలో `AutoClass`పై మరిన్ని):
 
 ```py
@@ -154,7 +154,7 @@ label: NEGATIVE, with score: 0.5309
 </pt>
 <tf>
 ముందుగా శిక్షణ పొందిన మోడల్‌ను లోడ్ చేయడానికి [`TFAutoModelForSequenceClassification`] మరియు [`AutoTokenizer`]ని ఉపయోగించండి మరియు దాని అనుబంధిత టోకెనైజర్ (తదుపరి విభాగంలో `TFAutoClass`పై మరిన్ని):
-  
+
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
@@ -329,7 +329,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 <frameworkcontent>
 <pt>
 మీ మోడల్ చక్కగా ట్యూన్ చేయబడిన తర్వాత, మీరు దానిని [`PreTrainedModel.save_pretrained`]ని ఉపయోగించి దాని టోకెనైజర్‌తో సేవ్ చేయవచ్చు:
-  
+
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
 >>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
@@ -344,7 +344,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 </pt>
 <tf>
 మీ మోడల్ చక్కగా ట్యూన్ చేయబడిన తర్వాత, మీరు దానిని [`TFPreTrainedModel.save_pretrained`]ని ఉపయోగించి దాని టోకెనైజర్‌తో సేవ్ చేయవచ్చు:
-  
+
 ```py
 >>> tf_save_directory = "./tf_save_pretrained"
 >>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
@@ -395,7 +395,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 <frameworkcontent>
 <pt>
 [`AutoModel.from_config`]తో మీ అనుకూల కాన్ఫిగరేషన్ నుండి మోడల్‌ను సృష్టించండి:
-  
+
 ```py
 >>> from transformers import AutoModel
 
@@ -404,7 +404,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 </pt>
 <tf>
 [`TFAutoModel.from_config`]తో మీ అనుకూల కాన్ఫిగరేషన్ నుండి మోడల్‌ను సృష్టించండి:
-  
+
 ```py
 >>> from transformers import TFAutoModel
 
@@ -465,7 +465,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```
 
    ఆపై దానిని [`~datasets.Dataset.map`]తో మొత్తం డేటాసెట్‌లో వర్తింపజేయండి:
-   
+
    ```py
    >>> dataset = dataset.map(tokenize_dataset, batched=True)
    ```
@@ -488,7 +488,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ...     args=training_args,
 ...     train_dataset=dataset["train"],
 ...     eval_dataset=dataset["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )  # doctest: +SKIP
 ```

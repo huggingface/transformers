@@ -228,6 +228,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_name_or_path",
                 "_commit_hash",
                 "_attn_implementation_internal",
+                "_attn_implementation_autoset",
                 "transformers_version",
             ],
         )
@@ -247,12 +248,10 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertEqual(config.text_config.__class__.__name__, "CLIPTextConfig")
 
     def test_from_pretrained_subfolder(self):
-        with self.assertRaises(OSError):
-            # config is in subfolder, the following should not work without specifying the subfolder
-            _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder")
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder")
+        self.assertIsNotNone(config)
 
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
-
         self.assertIsNotNone(config)
 
     def test_cached_files_are_used_when_internet_is_down(self):
@@ -318,18 +317,17 @@ class ConfigTestUtils(unittest.TestCase):
     def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
         config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertLogs("transformers.configuration_utils", level="WARNING") as logs:
+            with self.assertWarns(UserWarning) as cm:
                 config.save_pretrained(tmp_dir)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("min_length", logs.output[0])
+            self.assertIn("min_length", str(cm.warning))
 
-    def test_has_non_default_generation_parameters(self):
+    def test_get_non_default_generation_parameters(self):
         config = BertConfig()
-        self.assertFalse(config._has_non_default_generation_parameters())
+        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
         config = BertConfig(min_length=3)
-        self.assertTrue(config._has_non_default_generation_parameters())
+        self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)
         config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
-        self.assertFalse(config._has_non_default_generation_parameters())
+        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
 
     def test_loading_config_do_not_raise_future_warnings(self):
         """Regression test for https://github.com/huggingface/transformers/issues/31002."""

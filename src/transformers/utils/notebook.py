@@ -114,6 +114,8 @@ class NotebookProgressBar:
         self.last_value = None
         self.comment = None
         self.output = None
+        self.value = None
+        self.label = None
 
     def update(self, value: int, force_update: bool = False, comment: str = None):
         """
