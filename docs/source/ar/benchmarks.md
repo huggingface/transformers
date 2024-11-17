@@ -39,7 +39,7 @@
 </tf>
 </frameworkcontent>
 
-هنا، يتم تمرير ثلاثة حجج إلى فئات بيانات حجة قياس الأداء، وهي `models` و `batch_sizes` و `sequence_lengths`. الحجة `models` مطلوبة وتتوقع `قائمة` من محددات هوية النموذج من [مركز النماذج](https://huggingface.co/models) تحدد حجج القائمة `batch_sizes` و `sequence_lengths` حجم `input_ids` الذي يتم قياس أداء النموذج عليه. هناك العديد من المعلمات الأخرى التي يمكن تكوينها عبر فئات بيانات حجة قياس الأداء. لمزيد من التفاصيل حول هذه المعلمات، يمكنك إما الرجوع مباشرة إلى الملفات `src/transformers/benchmark/benchmark_args_utils.py`، `src/transformers/benchmark/benchmark_args.py` (لـ PyTorch) و `src/transformers/benchmark/benchmark_args_tf.py` (لـ Tensorflow). أو، بدلاً من ذلك، قم بتشغيل أوامر shell التالية من الجذر لطباعة قائمة وصفية بجميع المعلمات القابلة للتكوين لـ PyTorch و Tensorflow على التوالي.
+هنا، يتم تمرير ثلاثة معامﻻت إلى فئات بيانات حجة قياس الأداء، وهي `models` و `batch_sizes` و `sequence_lengths`. المعامل `models` مطلوبة وتتوقع `قائمة` من بمعرّفات النموذج من [مركز النماذج](https://huggingface.co/models) تحدد معامﻻت القائمة `batch_sizes` و `sequence_lengths` حجم `input_ids` الذي يتم قياس أداء النموذج عليه. هناك العديد من المعلمات الأخرى التي يمكن تكوينها عبر فئات بيانات معال قياس الأداء. لمزيد من التفاصيل حول هذه المعلمات، يمكنك إما الرجوع مباشرة إلى الملفات `src/transformers/benchmark/benchmark_args_utils.py`، `src/transformers/benchmark/benchmark_args.py` (لـ PyTorch) و `src/transformers/benchmark/benchmark_args_tf.py` (لـ Tensorflow). أو، بدلاً من ذلك، قم بتشغيل أوامر shell التالية من المجلد الرئيسي لطباعة قائمة وصفية بجميع المعلمات القابلة للتكوين لـ PyTorch و Tensorflow على التوالي.
 
 <frameworkcontent>
 <pt>
