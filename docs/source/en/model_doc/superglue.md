@@ -52,8 +52,8 @@ image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
 
 images = [image1, image2]
 
-processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
-model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
+processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
+model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
 
 inputs = processor(images, return_tensors="pt")
 with torch.no_grad():

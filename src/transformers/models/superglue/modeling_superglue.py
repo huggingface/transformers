@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 
-_CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
+_CHECKPOINT_FOR_DOC_ = "magic-leap-community/superglue_indoor"
 
 
 def concat_pairs(tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
@@ -789,8 +789,8 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> image2 = Image.open(requests.get(url, stream=True).raw)
         >>> images = [image1, image2]
 
-        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
-        >>> model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
+        >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
+        >>> model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
 
         >>> with torch.no_grad():
         >>>     inputs = processor(images, return_tensors="pt")

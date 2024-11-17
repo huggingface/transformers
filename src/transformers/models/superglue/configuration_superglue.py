@@ -28,7 +28,7 @@ class SuperGlueConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`SuperGlueModel`]. It is used to instantiate a
     SuperGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperGlue
-    [stevenbucaille/superglue_indoor](https://huggingface.co/stevenbucaille/superglue_indoor) architecture.
+    [magic-leap-community/superglue_indoor](https://huggingface.co/magic-leap-community/superglue_indoor) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

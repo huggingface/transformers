@@ -263,7 +263,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        from_pretrained_ids = ["stevenbucaille/superglue_indoor", "stevenbucaille/superglue_outdoor"]
+        from_pretrained_ids = ["magic-leap-community/superglue_indoor", "magic-leap-community/superglue_outdoor"]
         for model_name in from_pretrained_ids:
             model = SuperGlueForKeypointMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
@@ -299,7 +299,7 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor") if is_vision_available() else None
+            AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor") if is_vision_available() else None
         )
 
     @slow
