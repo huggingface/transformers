@@ -169,11 +169,9 @@ class PrismTokenizer(PreTrainedTokenizer):
         fairseq_language_code = FAIRSEQ_LANGUAGE_CODES[language_codes]
         self.lang_code_to_token = {lang_code: f"<{lang_code}>" for lang_code in fairseq_language_code}
 
+        language_tokens = [self.get_lang_token(lang_code) for lang_code in fairseq_language_code]
         additional_special_tokens = kwargs.pop("additional_special_tokens", [])
-        for lang_code in fairseq_language_code:
-            token = self.get_lang_token(lang_code)
-            if token not in additional_special_tokens and lang_code not in str(token) not in self.added_tokens_encoder:
-                additional_special_tokens.append(token)
+        self.additional_special_tokens = language_tokens + additional_special_tokens
 
         self.vocab_file = vocab_file
         self.encoder = load_json(vocab_file)
@@ -215,6 +213,8 @@ class PrismTokenizer(PreTrainedTokenizer):
             num_madeup_words=num_madeup_words,
             **kwargs,
         )
+        
+        self.special_tokens_map['additional_special_tokens'] = self.additional_special_tokens
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property
