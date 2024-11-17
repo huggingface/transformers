@@ -21,6 +21,7 @@ from .data_collator import (
     DataCollatorForWholeWordMask,
     DataCollatorWithFlattening,
     DataCollatorWithPadding,
+    DataCollatorForMultipleChoice,
     DefaultDataCollator,
     default_data_collator,
 )

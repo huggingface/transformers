@@ -106,6 +106,7 @@ _import_structure = {
         "DataCollatorForSeq2Seq",
         "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
+        "DataCollatorForMultipleChoice",
         "DataCollatorForWholeWordMask",
         "DataCollatorWithFlattening",
         "DataCollatorWithPadding",
@@ -4960,6 +4961,7 @@ if TYPE_CHECKING:
         DataCollatorForWholeWordMask,
         DataCollatorWithFlattening,
         DataCollatorWithPadding,
+        DataCollatorForMultipleChoice,
         DefaultDataCollator,
         default_data_collator,
     )
