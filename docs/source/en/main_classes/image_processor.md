@@ -20,13 +20,7 @@ An image processor is in charge of preparing input features for vision models an
 
 Fast image processors are available for a few models and more will be added in the future. They are based on the [torchvision](https://pytorch.org/vision/stable/index.html) library and provide a significant speed-up, especially when processing on GPU.
 They have the same API as the base image processors and can be used as drop-in replacements.
-To use a fast image processor, you need to install the `torchvision` library, and set the `use_fast` argument to `True` when instantiating the image processor:
-
-```python
-from transformers import AutoImageProcessor
-
-processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", use_fast=True)
-```
+Fast image processors are used by default when available and when the `torchvision` library is installed. To force the use of a standard processor, you can set the `use_fast` argument to `False` when instantiating the image processor.
 
 When using a fast image processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.
 
@@ -42,21 +36,17 @@ images_processed = processor(images, return_tensors="pt", device="cuda")
 Here are some speed comparisons between the base and fast image processors for the `DETR` and `RT-DETR` models, and how they impact overall inference time:
 
 <div class="flex">
-  <div>
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_detr_fast_padded.png" />
-  </div>
-  <div>
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_detr_fast_batched_compiled.png" />
-  </div>
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_detr_fast_padded.png" />
+</div>
+<div class="flex">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_detr_fast_batched_compiled.png" />
 </div>
 
 <div class="flex">
-  <div>
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_rt_detr_fast_single.png" />
-  </div>
-  <div>
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_rt_detr_fast_batched.png" />
-  </div>
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_rt_detr_fast_single.png" />
+</div>
+<div class="flex">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/benchmark_results_full_pipeline_rt_detr_fast_batched.png" />
 </div>
 
 These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon.com/ec2/instance-types/g5/), utilizing an NVIDIA A10G Tensor Core GPU.
