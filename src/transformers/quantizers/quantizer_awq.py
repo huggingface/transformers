@@ -57,11 +57,7 @@ class AwqQuantizer(HfQuantizer):
                 raise RuntimeError(
                     "To use IPEX backend, you need autoawq>0.6.2. Please install the latest version or from source."
                 )
-            if (
-                device_map is not None
-                and isinstance(device_map, dict)
-                and ("disk" in device_map.values())
-            ):
+            if device_map is not None and isinstance(device_map, dict) and ("disk" in device_map.values()):
                 raise ValueError(
                     "You are attempting to load an IPEX version AWQ model with a device_map that contains more than CPU and XPU."
                     " This is not supported. Please make sure only cpu and xpu in the device_map."
