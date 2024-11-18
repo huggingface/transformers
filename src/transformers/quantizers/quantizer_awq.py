@@ -60,11 +60,11 @@ class AwqQuantizer(HfQuantizer):
             if (
                 device_map is not None
                 and isinstance(device_map, dict)
-                and (torch.device("cpu") not in device_map.values() or len(device_map.values()) > 1)
+                and ("disk" in device_map.values())
             ):
                 raise ValueError(
-                    "You are attempting to load an IPEX version AWQ model with a device_map that contains more than CPU."
-                    " This is not supported. Please make sure only cpu in the device_map."
+                    "You are attempting to load an IPEX version AWQ model with a device_map that contains more than CPU and XPU."
+                    " This is not supported. Please make sure only cpu and xpu in the device_map."
                 )
         else:
             if not torch.cuda.is_available():
