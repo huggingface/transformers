@@ -30,27 +30,36 @@ The original code can be found [here](https://github.com/facebookresearch/ijepa)
 
 ## How to use
 
-Here is how to use this model to classify an image of the COCO 2017 dataset into one of the 1,000 ImageNet classes:
+Here is how to use this model for image feature extraction:
 
 ```python
 import requests
-
 from PIL import Image
-from transformers import AutoProcessor, IJepaForImageClassification
+from torch.nn.functional import cosine_similarity
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+from transformers import AutoModel, AutoProcessor
+
+url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
+image_1 = Image.open(requests.get(url_1, stream=True).raw)
+image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 model_id = "jmtzt/ijepa_vith14_1k"
 processor = AutoProcessor.from_pretrained(model_id)
-model = IJepaForImageClassification.from_pretrained(model_id)
+model = AutoModel.from_pretrained(model_id)
 
-inputs = processor(images=image, return_tensors="pt")
-outputs = model(**inputs)
-logits = outputs.logits
-# model predicts one of the 1000 ImageNet classes
-predicted_class_idx = logits.argmax(-1).item()
-print("Predicted class:", model.config.id2label[predicted_class_idx])
+
+def infer(image):
+    inputs = processor(image, return_tensors="pt")
+    outputs = model(**inputs)
+    return outputs.pooler_output
+
+
+embed_1 = infer(image_1)
+embed_2 = infer(image_2)
+
+similarity = cosine_similarity(embed_1, embed_2)
+print(similarity)
 ```
 
 ## IJepaConfig
