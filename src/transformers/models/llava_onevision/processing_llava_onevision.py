@@ -189,9 +189,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             while special_token in sample:
                 image_size_list = next(image_sizes)
                 original_size = image_size_list[0] if num_frames != 1 else image_size_list
-                orig_height, orig_width = (
-                    original_size.tolist()
-                )  # cast to list to avoid numerical precision errors when calculating unpadding
+                # cast to list to avoid numerical precision errors when calculating unpadding
+                orig_height, orig_width = original_size.tolist()
                 num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
