@@ -107,11 +107,20 @@ class EncodecModelTester:
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
-        config, inputs_dict = self.prepare_config_and_inputs()
-        inputs_dict["audio_codes"] = ids_tensor([1, self.batch_size, 1, self.num_channels], self.codebook_size).type(
-            torch.int32
-        )
-        inputs_dict["audio_scales"] = [None]
+        if model_class == EncodecDiscriminator:
+            config = EncodecDiscriminatorConfig()
+            inputs_dict = {
+                "input_values": floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+            }
+        else:
+            config = self.get_config()
+            inputs_dict = self.prepare_config_and_inputs()[1]
+
+        if model_class == EncodecDiscriminator:
+            inputs_dict["input_values"] = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        else:
+            inputs_dict["audio_codes"] = ids_tensor([1, self.batch_size, 1, self.num_channels], self.codebook_size).type(torch.int32)
+            inputs_dict["audio_scales"] = [None]
 
         return config, inputs_dict
 
@@ -643,6 +652,8 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     )
 
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -656,7 +667,10 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            configs_no_init = _config_zero_init(config)
             model = model_class(config=configs_no_init)
+
             for name, param in model.named_parameters():
                 uniform_init_parms = ["conv"]
                 ignore_init = ["lstm"]
