@@ -933,7 +933,7 @@ def parse_args_from_docstring_by_indentation(docstring):
 
 
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
-    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout"]
+    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout", "tesseract_config"]
 
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
     docstring_args = set(parse_args_from_docstring_by_indentation(docstring))

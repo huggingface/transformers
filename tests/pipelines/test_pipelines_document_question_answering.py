@@ -114,6 +114,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
             ]
             * 3,
         )
+        for single_output in outputs:
+            compare_pipeline_output_to_hub_spec(single_output, DocumentQuestionAnsweringOutputElement)
 
     @require_torch
     @require_detectron2
