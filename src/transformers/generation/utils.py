@@ -813,7 +813,7 @@ class GenerationMixin:
         """
         different_tokenizers = all(v is not None for v in (assistant_model, target_tokenizer, assistant_tokenizer))
 
-        if generation_config.early_exit is not None:
+        if generation_config.assistant_early_exit is not None:
             candidate_generator = EarlyExitCandidateGenerator(
                 input_ids=input_ids,
                 assistant_model=self,

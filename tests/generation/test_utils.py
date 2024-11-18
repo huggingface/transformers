@@ -3924,9 +3924,9 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
         self.assertEqual(original_decoded, [expected_output])
 
-        early_exit_outputs = model.generate(**inputs, early_exit=4, do_sample=False, max_new_tokens=20)
-        early_exit_decoded = tokenizer.batch_decode(early_exit_outputs, skip_special_tokens=True)
-        self.assertEqual(early_exit_decoded, [expected_output])
+        outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+        decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
+        self.assertEqual(decoded_assisted, [expected_output])
 
 
 @require_torch

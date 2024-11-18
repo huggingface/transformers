@@ -360,7 +360,7 @@ class GenerationConfig(PushToHubMixin):
             The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
-        early_exit(`int`, *optional*):
+        assistant_early_exit(`int`, *optional*):
             If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
             models that support early exit (i.e. is trained to compute logits in earlier layers).
 
@@ -462,7 +462,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", 0.4)
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
-        self.early_exit = kwargs.pop("early_exit", None)
+        self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -539,7 +539,7 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.BEAM_SEARCH
 
         # Assisted generation may extend some generation modes
-        if assistant_model is not None or self.prompt_lookup_num_tokens is not None or self.early_exit is not None:
+        if assistant_model is not None or self.prompt_lookup_num_tokens is not None or self.assistant_early_exit is not None:
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
