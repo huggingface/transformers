@@ -995,7 +995,6 @@ class AqlmConfig(QuantizationConfigMixin):
             self.linear_weights_not_to_quantize = []
 
 
-
 @dataclass
 class VptqLayerConfig(QuantizationConfigMixin):
     """
@@ -1012,6 +1011,7 @@ class VptqLayerConfig(QuantizationConfigMixin):
         outlier_size: outliers
         vector_lens: centroid vector length in quantization
     """
+
     def __init__(
         self,
         enable_norm: bool = True,
@@ -1064,7 +1064,7 @@ class VptqConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        enable_proxy_error: bool=False,
+        enable_proxy_error: bool = False,
         config_for_layers: Dict[str, Any] = {},
         **kwargs,
     ):
@@ -1082,6 +1082,7 @@ class VptqConfig(QuantizationConfigMixin):
             VptqLayerConfig(**layer_param)
         if self.enable_proxy_error is True:
             raise ValueError("enable_proxy_error should always be False until we support training")
+
 
 @dataclass
 class QuantoConfig(QuantizationConfigMixin):

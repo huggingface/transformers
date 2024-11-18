@@ -52,7 +52,8 @@ class VptqHfQuantizer(HfQuantizer):
         if not is_vptq_available():
             raise ImportError("Using `vptq` quantization requires VPTQ: `pip install vptq`")
         import vptq
-        assert version.Version(vptq.__version__) >= version.Version("0.0.4"), 'vptq is avaiable since 0.0.4'
+
+        assert version.Version(vptq.__version__) >= version.Version("0.0.4"), "vptq is avaiable since 0.0.4"
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:

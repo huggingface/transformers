@@ -33,7 +33,6 @@ if is_torch_available():
     import torch
 
 
-
 class VptqConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """

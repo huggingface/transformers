@@ -1139,11 +1139,13 @@ def require_aqlm(test_case):
     """
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
 
+
 def require_vptq(test_case):
     """
     Decorator marking a test that requires vptq
     """
     return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
+
 
 def require_eetq(test_case):
     """

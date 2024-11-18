@@ -50,7 +50,6 @@ def replace_with_vptq_linear(
             f"VPTQ requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
         )
 
-
     from accelerate import init_empty_weights
     from vptq import VQuantLinear
 
