@@ -62,6 +62,7 @@ class ChameleonVQVAEConfig(PretrainedConfig):
     """
 
     model_type = "chameleon_vqgan"
+    base_config_key = "vq_config"
 
     def __init__(
         self,
@@ -187,6 +188,7 @@ class ChameleonConfig(PretrainedConfig):
     ```"""
 
     model_type = "chameleon"
+    sub_configs = {"vq_config": ChameleonVQVAEConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

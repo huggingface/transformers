@@ -16,17 +16,14 @@
 
 import unittest
 
-import pytest
 import requests
 from parameterized import parameterized
 
 from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
-    require_flash_attn,
     require_read_token,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -279,6 +276,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         {
             "feature-extraction": ChameleonModel,
             "text-generation": ChameleonForConditionalGeneration,
+            "image-text-to-text": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -328,43 +326,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    @require_flash_attn
-    @require_read_token
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
-
-        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        processor.tokenizer.padding_side = "right"
-
-        inputs = processor(text=texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = processor.tokenizer.batch_decode(output_native)
-
-        model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b",
-            load_in_4bit=True,
-            attn_implementation="flash_attention_2",
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = processor.tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
 
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
