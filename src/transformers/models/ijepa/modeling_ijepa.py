@@ -533,7 +533,7 @@ IJEPA_INPUTS_DOCSTRING = r"""
     IJEPA_START_DOCSTRING,
 )
 class IJepaModel(IJepaPreTrainedModel):
-    def __init__(self, config: IJepaConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
         self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)
