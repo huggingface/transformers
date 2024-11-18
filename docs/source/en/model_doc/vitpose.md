@@ -114,8 +114,11 @@ for pose_result in pose_results:
     for keypoint in pose_result["keypoints"]:
         x, y, score = keypoint
         print(f"coordinate : [{x}, {y}], score : {score}")
+```
 
-# Visualization for supervision user
+
+### Visualization for supervision user
+```py
 import supervision as sv
 
 key_points = sv.KeyPoints(xy=torch.cat([pose_result['keypoints'].unsqueeze(0) for pose_result in pose_results]).cpu().numpy())
@@ -128,8 +131,10 @@ annotated_frame = edge_annotator.annotate(
     scene=image.copy(),
     key_points=key_points
 )
+```
 
-# Visualization for advanced user
+### Visualization for advanced user
+```py
 def draw_points(image, keypoints, pose_keypoint_color, keypoint_score_threshold, radius, show_keypoint_weight):
     if pose_keypoint_color is not None:
         assert len(pose_keypoint_color) == len(keypoints)
