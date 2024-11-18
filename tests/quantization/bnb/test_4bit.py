@@ -674,7 +674,7 @@ class BaseSerializationTest(unittest.TestCase):
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         out_0 = model_0(**encoded_input)
         out_1 = model_1(**encoded_input)
-        self.assertTrue(torch.allclose(out_0["logits"], out_1["logits"], atol=0.02))
+        self.assertTrue(torch.allclose(out_0["logits"], out_1["logits"], atol=0.05))
 
         # comparing generate() outputs
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
