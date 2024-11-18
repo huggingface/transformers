@@ -314,6 +314,8 @@ class TrainingArguments:
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
             Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of `warmup_ratio`.
+        stable_train_warmup_steps (`int`, *optional*, defaults to 10):
+            Number of steps to skip before collecting performance numbers for stable_train_samples_per_second.
         log_level (`str`, *optional*, defaults to `passive`):
             Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
             'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and keeps the
@@ -606,8 +608,6 @@ class TrainingArguments:
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
 
-        ortmodule (:obj:`bool`, `optional`):
-            Use `ORTModule <https://github.com/microsoft/onnxruntime>`__.
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -923,6 +923,7 @@ class TrainingArguments:
         default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
     )
     warmup_steps: int = field(default=10, metadata={"help": "Linear warmup over warmup_steps."})
+    stable_train_warmup_steps: int = field(default=10, metadata={"help": "warmup steps to skip before collecting training performance."})
 
     log_level: Optional[str] = field(
         default="passive",
@@ -1268,10 +1269,6 @@ class TrainingArguments:
                 " loaded json file as a dict"
             )
         },
-    )
-    ort: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Enable Ort"},
     )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
