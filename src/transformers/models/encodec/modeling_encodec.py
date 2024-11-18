@@ -19,7 +19,6 @@ import typing as tp
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Union
 
-import einops
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -961,10 +960,17 @@ class ConvLayerNorm(nn.LayerNorm):
         super().__init__(normalized_shape, **kwargs)
 
     def forward(self, x):
-        x = einops.rearrange(x, "b ... t -> b t ...")
+        # Move time dimension to second position
+        ndim = len(x.shape)
+        perm = [0] + [ndim - 1] + list(range(1, ndim - 1))
+        x = x.permute(perm)
+
         x = super().forward(x)
-        x = einops.rearrange(x, "b t ... -> b ... t")
-        return
+
+        # Move time dimension back to last position
+        perm = [0] + list(range(2, ndim)) + [1]
+        x = x.permute(perm)
+        return x
 
 
 CONV_NORMALIZATIONS = frozenset(

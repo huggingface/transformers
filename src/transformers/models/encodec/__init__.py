@@ -41,7 +41,7 @@ else:
         "EncodecModel",
         "EncodecPreTrainedModel",
         "EncodecDiscriminator",
-        "EncodecDiscriminatorConfig"
+        "EncodecDiscriminatorConfig",
     ]
 
 if TYPE_CHECKING:
