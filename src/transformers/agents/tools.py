@@ -46,7 +46,7 @@ from ..utils import (
     is_vision_available,
     logging,
 )
-from .agent_types import handle_agent_inputs, handle_agent_outputs
+from .agent_types import ImageType, handle_agent_inputs, handle_agent_outputs
 
 
 logger = logging.get_logger(__name__)
@@ -419,7 +419,9 @@ class Tool:
             )
 
     @staticmethod
-    def from_space(space_id: str, name: str, description: str, api_name: Optional[str] = None):
+    def from_space(
+        space_id: str, name: str, description: str, api_name: Optional[str] = None, token: Optional[str] = None
+    ):
         """
         Creates a [`Tool`] from a Space given its id on the Hub.
 
@@ -432,7 +434,8 @@ class Tool:
                 The description of the tool.
             api_name (`str`, *optional*):
                 The specific api_name to use, if the space has several tabs. If not precised, will default to the first available api.
-
+            token (`str`, *optional*):
+                Add your token to access private spaces or increase your GPU quotas.
         Returns:
             [`Tool`]:
                 The Space, as a tool.
@@ -459,8 +462,15 @@ class Tool:
         from gradio_client.utils import is_http_url_like
 
         class SpaceToolWrapper(Tool):
-            def __init__(self, space_id: str, name: str, description: str, api_name: Optional[str] = None):
-                self.client = Client(space_id)
+            def __init__(
+                self,
+                space_id: str,
+                name: str,
+                description: str,
+                api_name: Optional[str] = None,
+                token: Optional[str] = None,
+            ):
+                self.client = Client(space_id, hf_token=token)
                 self.name = name
                 self.description = description
                 space_description = self.client.view_api(return_format="dict", print_info=False)["named_endpoints"]
@@ -496,18 +506,33 @@ class Tool:
                 else:
                     self.output_type = "any"
 
+            def sanitize_argument_for_prediction(self, arg):
+                if isinstance(arg, ImageType):
+                    temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                    arg.save(temp_file.name)
+                    arg = temp_file.name
+                if (isinstance(arg, (str, Path)) and Path(arg).exists() and Path(arg).is_file()) or is_http_url_like(
+                    arg
+                ):
+                    arg = handle_file(arg)
+                return arg
+
             def forward(self, *args, **kwargs):
-                # Test if any arg is a file and processes it accordingly:
+                # Preprocess args and kwargs:
                 args = list(args)
                 for i, arg in enumerate(args):
-                    if (
-                        isinstance(arg, (str, Path)) and Path(arg).exists() and Path(arg).is_file()
-                    ) or is_http_url_like(arg):
-                        args[i] = handle_file(arg)
-                output = self.client.predict(*args, api_name=self.api_name, **kwargs)
-                return output[0]  # Usually the first output is the result
+                    args[i] = self.sanitize_argument_for_prediction(arg)
+                for arg_name, arg in kwargs.items():
+                    kwargs[arg_name] = self.sanitize_argument_for_prediction(arg)
 
-        return SpaceToolWrapper(space_id, name, description, api_name=api_name)
+                output = self.client.predict(*args, api_name=self.api_name, **kwargs)
+                if isinstance(output, tuple) or isinstance(output, list):
+                    return output[
+                        0
+                    ]  # Sometime the space also returns the generation seed, in which case the result is at index 0
+                return output
+
+        return SpaceToolWrapper(space_id, name, description, api_name=api_name, token=token)
 
     @staticmethod
     def from_gradio(gradio_tool):
