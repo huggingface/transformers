@@ -191,44 +191,39 @@ def write_model(model_path, model_name, push_to_hub):
         new_key = new_keys[key]
         value = original_state_dict[key]
 
-    if re.search("qkv", new_key):
-        if "weight" in new_key:
-            state_dict[new_key.replace("self.qkv", "attention.query")] = value[:dim, :]
-            state_dict[new_key.replace("self.qkv", "attention.key")] = value[dim : dim * 2, :]
-            state_dict[new_key.replace("self.qkv", "attention.value")] = value[-dim:, :]
-        else:
+        if re.search("qkv", new_key):
             state_dict[new_key.replace("self.qkv", "attention.query")] = value[:dim]
             state_dict[new_key.replace("self.qkv", "attention.key")] = value[dim : dim * 2]
             state_dict[new_key.replace("self.qkv", "attention.value")] = value[-dim:]
 
-    elif re.search("head", new_key) and not config.use_simple_decoder:
-        # Pattern for deconvolution layers
-        print(new_key)
-        deconv_pattern = r"deconv_layers\.(0|3)\.weight"
-        new_key = re.sub(deconv_pattern, lambda m: f"deconv{int(m.group(1))//3 + 1}.weight", new_key)
-        # Pattern for batch normalization layers
-        bn_patterns = [
-            (r"deconv_layers\.(\d+)\.weight", r"batchnorm\1.weight"),
-            (r"deconv_layers\.(\d+)\.bias", r"batchnorm\1.bias"),
-            (r"deconv_layers\.(\d+)\.running_mean", r"batchnorm\1.running_mean"),
-            (r"deconv_layers\.(\d+)\.running_var", r"batchnorm\1.running_var"),
-            (r"deconv_layers\.(\d+)\.num_batches_tracked", r"batchnorm\1.num_batches_tracked"),
-        ]
+        elif re.search("head", new_key) and not config.use_simple_decoder:
+            # Pattern for deconvolution layers
+            print(new_key)
+            deconv_pattern = r"deconv_layers\.(0|3)\.weight"
+            new_key = re.sub(deconv_pattern, lambda m: f"deconv{int(m.group(1))//3 + 1}.weight", new_key)
+            # Pattern for batch normalization layers
+            bn_patterns = [
+                (r"deconv_layers\.(\d+)\.weight", r"batchnorm\1.weight"),
+                (r"deconv_layers\.(\d+)\.bias", r"batchnorm\1.bias"),
+                (r"deconv_layers\.(\d+)\.running_mean", r"batchnorm\1.running_mean"),
+                (r"deconv_layers\.(\d+)\.running_var", r"batchnorm\1.running_var"),
+                (r"deconv_layers\.(\d+)\.num_batches_tracked", r"batchnorm\1.num_batches_tracked"),
+            ]
 
-        for pattern, replacement in bn_patterns:
-            if re.search(pattern, new_key):
-                # Convert the layer number to the correct batch norm index
-                layer_num = int(re.search(pattern, key).group(1))
-                bn_num = layer_num // 3 + 1
-                new_key = re.sub(pattern, replacement.replace(r"\1", str(bn_num)), new_key)
-        state_dict[new_key] = value
-    else:
-        state_dict[new_key] = value
+            for pattern, replacement in bn_patterns:
+                if re.search(pattern, new_key):
+                    # Convert the layer number to the correct batch norm index
+                    layer_num = int(re.search(pattern, key).group(1))
+                    bn_num = layer_num // 3 + 1
+                    new_key = re.sub(pattern, replacement.replace(r"\1", str(bn_num)), new_key)
+            state_dict[new_key] = value
+        else:
+            state_dict[new_key] = value
 
     print("Loading the checkpoint in a Vitpose model.")
     model = VitPoseForPoseEstimation(config)
     model.eval()
-    model.load_state_dict(state_dict, strict=False)
+    model.load_state_dict(state_dict)
     print("Checkpoint loaded successfully.")
 
     # create image processor

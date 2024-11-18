@@ -271,7 +271,7 @@ class VitPoseBackboneMLP(nn.Module):
         self.activation = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
 
-    def forward(self, hidden_state: torch.Tensor, indices=None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.fc1(hidden_state)
         hidden_state = self.activation(hidden_state)
         hidden_state = self.fc2(hidden_state)
@@ -281,8 +281,9 @@ class VitPoseBackboneMLP(nn.Module):
 class VitPoseBackboneLayer(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
+        self.num_experts = config.num_experts
         self.attention = VitPoseBackboneAttention(config)
-        self.mlp = VitPoseBackboneMLP(config) if config.num_experts == 1 else VitPoseBackboneMoeMLP(config)
+        self.mlp = VitPoseBackboneMLP(config) if self.num_experts == 1 else VitPoseBackboneMoeMLP(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -293,6 +294,13 @@ class VitPoseBackboneLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        # Validate dataset_index when using multiple experts
+        if self.num_experts > 1 and dataset_index is None:
+            raise ValueError(
+                "dataset_index must be provided when using multiple experts "
+                f"(num_experts={self.num_experts}). Please provide dataset_index "
+                "to the forward pass."
+            )
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in VitPoseBackbone, layernorm is applied before self-attention
             head_mask,
@@ -305,7 +313,10 @@ class VitPoseBackboneLayer(nn.Module):
         hidden_states = attention_output + hidden_states
 
         layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.mlp(layer_output, indices=dataset_index)
+        if self.num_experts == 1:
+            layer_output = self.mlp(layer_output)
+        else:
+            layer_output = self.mlp(layer_output, indices=dataset_index)
 
         # second residual connection
         layer_output = layer_output + hidden_states
