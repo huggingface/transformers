@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """X-ALMA model configuration"""
-import sssss
 from transformers.models.llama.configuration_llama import LlamaConfig
 
 class XALMAConfig(LlamaConfig):

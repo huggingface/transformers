@@ -840,7 +840,7 @@ _import_structure = {
         "WhisperProcessor",
         "WhisperTokenizer",
     ],
-    "model.xalma": ["XALMAConfig"],
+    "models.xalma": ["XALMAConfig"],
     "models.x_clip": [
         "XCLIPConfig",
         "XCLIPProcessor",

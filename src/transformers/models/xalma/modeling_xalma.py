@@ -132,7 +132,6 @@ GROUP2LANG = {
 }
 
 LANG2GROUP = {lang: str(group) for group, langs in GROUP2LANG.items() for lang in langs}
-LORA_ALPHA = 2
 
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
@@ -193,11 +192,12 @@ class XALMAMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.lora_size = 512
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
+        self.lora_size = config.lora_size
+        self.lora_alpha = config.lora_alpha
 
         self.gate_lora_A = nn.ModuleDict({str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
         self.gate_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.intermediate_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
@@ -207,9 +207,9 @@ class XALMAMLP(nn.Module):
         self.down_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.hidden_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
 
     def forward(self, x, lang=""):
-        gate_proj_weight = self.gate_proj.weight + self.gate_lora_B[LANG2GROUP[lang]].weight @ self.gate_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        up_proj_weight = self.up_proj.weight + self.up_lora_B[LANG2GROUP[lang]].weight @ self.up_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        down_proj_weight = self.down_proj.weight + self.down_lora_B[LANG2GROUP[lang]].weight @ self.down_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
+        gate_proj_weight = self.gate_proj.weight + self.gate_lora_B[LANG2GROUP[lang]].weight @ self.gate_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        up_proj_weight = self.up_proj.weight + self.up_lora_B[LANG2GROUP[lang]].weight @ self.up_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        down_proj_weight = self.down_proj.weight + self.down_lora_B[LANG2GROUP[lang]].weight @ self.down_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
         
         if self.config.pretraining_tp > 1:
             slice = self.intermediate_size // self.config.pretraining_tp
@@ -256,7 +256,8 @@ class XALMAAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.lora_size = 512
+        self.lora_size = config.lora_size
+        self.lora_alpha = config.lora_alpha
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
@@ -288,10 +289,10 @@ class XALMAAttention(nn.Module):
         lang: str = "",
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
+        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -406,10 +407,10 @@ class XALMAFlashAttention2(XALMAAttention):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
+        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
 
         output_attentions = False
 
@@ -520,10 +521,10 @@ class XALMASdpaAttention(XALMAAttention):
         lang: str = "",
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
-        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * LORA_ALPHA
+        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
 
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
