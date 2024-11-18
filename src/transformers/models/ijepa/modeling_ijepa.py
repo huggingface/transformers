@@ -665,7 +665,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.ijepa = IJepaModel(config)
+        self.ijepa = IJepaModel(config, add_pooling_layer=False)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()

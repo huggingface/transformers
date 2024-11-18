@@ -198,7 +198,7 @@ class IJepaPooler(ViTPooler):
 class IJepaForImageClassification(IJepaPreTrainedModel, ViTForImageClassification):
     def __init__(self, config: IJepaConfig):
         super().__init__(config)
-        self.ijepa = IJepaModel(config)
+        self.ijepa = IJepaModel(config, add_pooling_layer=False)
         self.post_init()
 
 
