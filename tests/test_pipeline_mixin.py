@@ -39,7 +39,6 @@ from huggingface_hub import (
     ZeroShotImageClassificationInput,
 )
 
-from transformers import TableQuestionAnsweringPipeline
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from transformers.pipelines import (
     AudioClassificationPipeline,
