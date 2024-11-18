@@ -38,8 +38,14 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.modeling_utils import PreTrainedModel
+from transformers.models.llama.modeling_llama import (
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    repeat_kv,
+)
+from transformers.models.xalma.configuration_xalma import XALMAConfig
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
 from transformers.utils import (
     add_start_docstrings,
@@ -49,9 +55,7 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
 )
-from transformers.models.xalma.configuration_xalma import XALMAConfig
-from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, LlamaLinearScalingRotaryEmbedding, LlamaDynamicNTKScalingRotaryEmbedding
-from transformers.models.llama.modeling_llama import rotate_half, apply_rotary_pos_emb, repeat_kv
+
 
 ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
@@ -133,6 +137,7 @@ GROUP2LANG = {
 
 LANG2GROUP = {lang: str(group) for group, langs in GROUP2LANG.items() for lang in langs}
 
+
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -199,18 +204,48 @@ class XALMAMLP(nn.Module):
         self.lora_size = config.lora_size
         self.lora_alpha = config.lora_alpha
 
-        self.gate_lora_A = nn.ModuleDict({str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.gate_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.intermediate_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.up_lora_A = nn.ModuleDict({str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.up_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.intermediate_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.down_lora_A = nn.ModuleDict({str(i): nn.Linear(self.intermediate_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.down_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.hidden_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
+        self.gate_lora_A = nn.ModuleDict(
+            {str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)}
+        )
+        self.gate_lora_B = nn.ModuleDict(
+            {
+                str(i): nn.Linear(self.lora_size, self.intermediate_size, bias=False)
+                for i in range(1, len(GROUP2LANG) + 1)
+            }
+        )
+        self.up_lora_A = nn.ModuleDict(
+            {str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)}
+        )
+        self.up_lora_B = nn.ModuleDict(
+            {
+                str(i): nn.Linear(self.lora_size, self.intermediate_size, bias=False)
+                for i in range(1, len(GROUP2LANG) + 1)
+            }
+        )
+        self.down_lora_A = nn.ModuleDict(
+            {
+                str(i): nn.Linear(self.intermediate_size, self.lora_size, bias=False)
+                for i in range(1, len(GROUP2LANG) + 1)
+            }
+        )
+        self.down_lora_B = nn.ModuleDict(
+            {str(i): nn.Linear(self.lora_size, self.hidden_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)}
+        )
 
     def forward(self, x, lang=""):
-        gate_proj_weight = self.gate_proj.weight + self.gate_lora_B[LANG2GROUP[lang]].weight @ self.gate_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        up_proj_weight = self.up_proj.weight + self.up_lora_B[LANG2GROUP[lang]].weight @ self.up_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        down_proj_weight = self.down_proj.weight + self.down_lora_B[LANG2GROUP[lang]].weight @ self.down_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        
+        gate_proj_weight = (
+            self.gate_proj.weight
+            + self.gate_lora_B[LANG2GROUP[lang]].weight @ self.gate_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        up_proj_weight = (
+            self.up_proj.weight
+            + self.up_lora_B[LANG2GROUP[lang]].weight @ self.up_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        down_proj_weight = (
+            self.down_proj.weight
+            + self.down_lora_B[LANG2GROUP[lang]].weight @ self.down_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+
         if self.config.pretraining_tp > 1:
             slice = self.intermediate_size // self.config.pretraining_tp
             gate_proj_slices = gate_proj_weight.split(slice, dim=0)
@@ -264,14 +299,42 @@ class XALMAAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
 
-        self.q_lora_A = nn.ModuleDict({str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.q_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.num_heads * self.head_dim, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.k_lora_A = nn.ModuleDict({str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.k_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.num_key_value_heads * self.head_dim, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.v_lora_A = nn.ModuleDict({str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.v_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.num_key_value_heads * self.head_dim, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.o_lora_A = nn.ModuleDict({str(i): nn.Linear(self.num_heads * self.head_dim, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
-        self.o_lora_B = nn.ModuleDict({str(i): nn.Linear(self.lora_size, self.hidden_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)})
+        self.q_lora_A = nn.ModuleDict(
+            {str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)}
+        )
+        self.q_lora_B = nn.ModuleDict(
+            {
+                str(i): nn.Linear(self.lora_size, self.num_heads * self.head_dim, bias=False)
+                for i in range(1, len(GROUP2LANG) + 1)
+            }
+        )
+        self.k_lora_A = nn.ModuleDict(
+            {str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)}
+        )
+        self.k_lora_B = nn.ModuleDict(
+            {
+                str(i): nn.Linear(self.lora_size, self.num_key_value_heads * self.head_dim, bias=False)
+                for i in range(1, len(GROUP2LANG) + 1)
+            }
+        )
+        self.v_lora_A = nn.ModuleDict(
+            {str(i): nn.Linear(self.hidden_size, self.lora_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)}
+        )
+        self.v_lora_B = nn.ModuleDict(
+            {
+                str(i): nn.Linear(self.lora_size, self.num_key_value_heads * self.head_dim, bias=False)
+                for i in range(1, len(GROUP2LANG) + 1)
+            }
+        )
+        self.o_lora_A = nn.ModuleDict(
+            {
+                str(i): nn.Linear(self.num_heads * self.head_dim, self.lora_size, bias=False)
+                for i in range(1, len(GROUP2LANG) + 1)
+            }
+        )
+        self.o_lora_B = nn.ModuleDict(
+            {str(i): nn.Linear(self.lora_size, self.hidden_size, bias=False) for i in range(1, len(GROUP2LANG) + 1)}
+        )
 
         # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
@@ -289,18 +352,28 @@ class XALMAAttention(nn.Module):
         lang: str = "",
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        q_proj_weight = (
+            self.q_proj.weight
+            + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        k_proj_weight = (
+            self.k_proj.weight
+            + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        v_proj_weight = (
+            self.v_proj.weight
+            + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        o_proj_weight = (
+            self.o_proj.weight
+            + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
 
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
-            query_slices = q_proj_weight.split(
-                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
-            )
+            query_slices = q_proj_weight.split((self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0)
             key_slices = k_proj_weight.split(key_value_slicing, dim=0)
             value_slices = v_proj_weight.split(key_value_slicing, dim=0)
 
@@ -407,10 +480,22 @@ class XALMAFlashAttention2(XALMAAttention):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        q_proj_weight = (
+            self.q_proj.weight
+            + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        k_proj_weight = (
+            self.k_proj.weight
+            + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        v_proj_weight = (
+            self.v_proj.weight
+            + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        o_proj_weight = (
+            self.o_proj.weight
+            + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
 
         output_attentions = False
 
@@ -521,10 +606,22 @@ class XALMASdpaAttention(XALMAAttention):
         lang: str = "",
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        q_proj_weight = self.q_proj.weight + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        k_proj_weight = self.k_proj.weight + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        v_proj_weight = self.v_proj.weight + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
-        o_proj_weight = self.o_proj.weight + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        q_proj_weight = (
+            self.q_proj.weight
+            + self.q_lora_B[LANG2GROUP[lang]].weight @ self.q_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        k_proj_weight = (
+            self.k_proj.weight
+            + self.k_lora_B[LANG2GROUP[lang]].weight @ self.k_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        v_proj_weight = (
+            self.v_proj.weight
+            + self.v_lora_B[LANG2GROUP[lang]].weight @ self.v_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
+        o_proj_weight = (
+            self.o_proj.weight
+            + self.o_lora_B[LANG2GROUP[lang]].weight @ self.o_lora_A[LANG2GROUP[lang]].weight * self.lora_alpha
+        )
 
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.

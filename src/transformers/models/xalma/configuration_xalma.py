@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """X-ALMA model configuration"""
+
 from transformers.models.llama.configuration_llama import LlamaConfig
+
 
 class XALMAConfig(LlamaConfig):
     r"""
@@ -30,9 +32,9 @@ class XALMAConfig(LlamaConfig):
 
 
     Args:
-        lora_size (:obj:`int`, `optional`, defaults to 512):
+        lora_size (:obj:`int`, *optional*, defaults to 512):
             The size of the LoRA layer.
-        lora_alpha (:obj:`int`, `optional`, defaults to 2):
+        lora_alpha (:obj:`int`, *optional*, defaults to 2):
             The alpha hyper-parameter for the LoRA layer.
 
     ```python

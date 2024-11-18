@@ -514,19 +514,19 @@ else:
             ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
             ("whisper", ("WhisperTokenizer", "WhisperTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "xalma",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("xclip", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "xglm",
                 (
                     "XGLMTokenizer" if is_sentencepiece_available() else None,
                     "XGLMTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
-                "xalma",
-                (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("xlm", ("XLMTokenizer", None)),

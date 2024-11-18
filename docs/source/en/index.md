@@ -350,9 +350,9 @@ Flax), PyTorch, and/or TensorFlow.
 |              [Wav2Vec2Phoneme](model_doc/wav2vec2_phoneme)               |       ✅        |         ✅         |      ✅      |
 |                         [WavLM](model_doc/wavlm)                         |       ✅        |         ❌         |      ❌      |
 |                       [Whisper](model_doc/whisper)                       |       ✅        |         ✅         |      ✅      |
-|                        [X-ALMA](model_doc/xalma)                         |       ✅        |         ❌         |      ❌      |
 |                        [X-CLIP](model_doc/xclip)                         |       ✅        |         ❌         |      ❌      |
 |                         [X-MOD](model_doc/xmod)                          |       ✅        |         ❌         |      ❌      |
+|                         [XALMA](model_doc/xalma)                         |       ✅        |         ❌         |      ❌      |
 |                          [XGLM](model_doc/xglm)                          |       ✅        |         ✅         |      ✅      |
 |                           [XLM](model_doc/xlm)                           |       ✅        |         ✅         |      ❌      |
 |                [XLM-ProphetNet](model_doc/xlm-prophetnet)                |       ✅        |         ❌         |      ❌      |

@@ -98,6 +98,7 @@ print(outputs)
 model = AutoModelForCausalLM.from_pretrained("haoranxu/X-ALMA-13B-Pretrain", torch_dtype=torch.float16, device_map="auto")
 model = PeftModel.from_pretrained(model, f"haoranxu/X-ALMA-13B-Group{group_id}")
 tokenizer = AutoTokenizer.from_pretrained(f"haoranxu/X-ALMA-13B-Group{group_id}", padding_side='left')
+```
 
 ## XALMAConfig
 
