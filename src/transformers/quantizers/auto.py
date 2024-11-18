@@ -45,6 +45,7 @@ from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
 
+
 AUTO_QUANTIZER_MAPPING = {
     "awq": AwqQuantizer,
     "bitsandbytes_4bit": Bnb4BitHfQuantizer,

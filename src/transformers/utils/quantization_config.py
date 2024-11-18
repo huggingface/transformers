@@ -995,25 +995,93 @@ class AqlmConfig(QuantizationConfigMixin):
             self.linear_weights_not_to_quantize = []
 
 
+
+@dataclass
+class VptqLayerConfig(QuantizationConfigMixin):
+    """
+    This is used to explain vptq config params for each layer
+    Args:
+        enable_norm: to control if we have scale/bias for fp-weight
+        enable_perm: to perm input_channel or not
+        group_num: how many single groups for vector-quantization
+        group_size:depends on out-features
+        indices_as_float: for Finetuning
+        is_indice_packed: should always be True
+        num_centroids: centriod numbers of clusters
+        num_res_centroids: ditto for residual
+        outlier_size: outliers
+        vector_lens: centroid vector length in quantization
+    """
+    def __init__(
+        self,
+        enable_norm: bool = True,
+        enable_perm: bool = True,
+        group_num: int = 1,
+        group_size: int = -1,
+        in_features: int = -1,
+        indices_as_float: bool = False,
+        is_indice_packed: bool = True,
+        num_centroids: tuple = [-1, -1],
+        num_res_centroids: tuple = [-1, -1],
+        out_features: int = -1,
+        outlier_size: int = 0,
+        vector_lens: tuple = [-1, -1],
+        **kwargs,
+    ):
+        self.enable_norm = enable_norm
+        self.enable_perm = enable_perm
+        self.group_num = group_num
+        self.group_size = group_size
+        self.in_features = in_features
+        self.indices_as_float = indices_as_float
+        self.is_indice_packed = is_indice_packed
+        self.num_centroids = num_centroids
+        self.num_res_centroids = num_res_centroids
+        self.out_features = out_features
+        self.outlier_size = outlier_size
+        self.vector_lens = vector_lens
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        if self.is_indice_packed is False:
+            raise ValueError("is_indice_packed should always be True")
+
+
 @dataclass
 class VptqConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about `vptq` parameters.
 
     Args:
-        each layer has its own params
+        enable_proxy_error (`bool`, *optional*, defaults to `False`): calculate proxy error for each layer
+        config_for_layers (`Dict`, *optional*, defaults to `{}`): quantization params for each layer
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
 
     def __init__(
         self,
+        enable_proxy_error: bool=False,
+        config_for_layers: Dict[str, Any] = {},
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.VPTQ
+        self.enable_proxy_error = enable_proxy_error
         kwargs.pop("quant_method", None)
-        self.layer_params_dict = kwargs
+        self.config_for_layers: Dict[str, Any] = config_for_layers
+        self.post_init()
 
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        for layer_name, layer_param in self.config_for_layers.items():
+            VptqLayerConfig(**layer_param)
+        if self.enable_proxy_error is True:
+            raise ValueError("enable_proxy_error should always be False until we support training")
 
 @dataclass
 class QuantoConfig(QuantizationConfigMixin):

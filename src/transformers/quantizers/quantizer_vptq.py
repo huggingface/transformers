@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..integrations import replace_with_vptq_linear
-from ..utils import is_accelerate_available, is_vptq_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_vptq_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -57,9 +57,9 @@ class VptqHfQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             if torch.cuda.is_available():
-                torch_dtype = torch.bfloat16
+                torch_dtype = torch.float16
                 logger.info(
-                    "CUDA available. Assuming VPTQ inference on GPU and loading the model in `torch.bfloat16`. To overwrite it, set `torch_dtype` manually."
+                    "CUDA available. Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
                 )
             else:
                 torch_dtype = torch.float32

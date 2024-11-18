@@ -13,7 +13,7 @@
 # limitations under the License.
 "VPTQ (Vector Post-Training Quantization) integration file"
 
-from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_vptq_available, is_torch_available
+from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_torch_available, is_vptq_available
 
 
 if is_torch_available():
@@ -60,8 +60,8 @@ def replace_with_vptq_linear(
         current_key_name.append(name)
         layer_name = ".".join(current_key_name)
 
-        if isinstance(module, nn.Linear) and layer_name in quantization_config.layer_params_dict:
-            layer_params = quantization_config.layer_params_dict[layer_name]
+        if isinstance(module, nn.Linear) and layer_name in quantization_config.config_for_layers:
+            layer_params = quantization_config.config_for_layers[layer_name]
             with init_empty_weights():
                 in_features = module.in_features
                 out_features = module.out_features
