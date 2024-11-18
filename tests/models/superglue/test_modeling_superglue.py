@@ -386,7 +386,9 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference(self):
-        model = SuperGlueForKeypointMatching.from_pretrained("magic-leap-community/superglue_outdoor").to(torch_device)
+        model = SuperGlueForKeypointMatching.from_pretrained(
+            "magic-leap-community/superglue_outdoor", matching_threshold=0
+        ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
@@ -401,25 +403,25 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         predicted_matches_values = outputs.matches[0, 0, :30]
         predicted_matching_scores_values = outputs.matching_scores[0, 0, :20]
 
-        expected_number_of_matches = 162
+        expected_number_of_matches = 282
 
         expected_matches_values = torch.tensor(
             [
                 125,
-                -1,
+                73,
                 137,
                 138,
                 19,
-                -1,
+                143,
                 135,
                 -1,
                 -1,
                 153,
                 -1,
                 114,
-                -1,
+                120,
                 160,
-                -1,
+                154,
                 149,
                 147,
                 152,
@@ -427,34 +429,34 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
                 -1,
                 165,
                 182,
-                -1,
+                55,
                 190,
                 187,
                 188,
                 189,
+                22,
                 -1,
-                -1,
-                -1,
+                162,
             ],
             device=predicted_matches_values.device,
         )
         expected_matching_scores_values = torch.tensor(
             [
                 0.2051,
-                0,
+                0.0747,
                 0.8839,
                 0.7345,
                 0.3125,
-                0,
+                0.1815,
                 0.6214,
                 0,
                 0,
                 0.9455,
                 0,
                 0.3285,
-                0,
+                0.1138,
                 0.2405,
-                0,
+                0.1848,
                 0.9715,
                 0.6425,
                 0.7148,
