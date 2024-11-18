@@ -907,17 +907,17 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
             Number of input channels.
         out_channels (`int`, *optional*, defaults to 1):
             Number of output channels.
-        n_ffts (`List[int]`, *optional*, defaults to `[1024, 2048, 512]`):
+        n_ffts (`List[int]`, *optional*, defaults to `<factory>`):
             List of FFT sizes for the STFT discriminators.
-        hop_lengths (`List[int]`, *optional*, defaults to `[256, 512, 128]`):
+        hop_lengths (`List[int]`, *optional*, defaults to `<factory>`):
             List of hop lengths for the STFT discriminators.
-        win_lengths (`List[int]`, *optional*, defaults to `[1024, 2048, 512]`):
+        win_lengths (`List[int]`, *optional*, defaults to `<factory>`):
             List of window lengths for the STFT discriminators.
         kernel_size (`Tuple[int, int]`, *optional*, defaults to `(3, 9)`):
             Kernel size for the convolutional layers.
         stride (`Tuple[int, int]`, *optional*, defaults to `(1, 2)`):
             Stride for the convolutional layers.
-        dilations (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
+        dilations (`List[int]`, *optional*, defaults to `<factory>`):
             List of dilations for the convolutional layers.
         max_filters (`int`, *optional*, defaults to 1024):
             Maximum number of filters in the convolutional layers.
@@ -929,7 +929,7 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
             Normalization method to use.
         activation (`str`, *optional*, defaults to `"LeakyReLU"`):
             Activation function to use.
-        activation_params (`Dict`, *optional*, defaults to `{"negative_slope": 0.2}`):
+        activation_params (`Dict`, *optional*, defaults to `<factory>`):
             Parameters for the activation function.
     """
 

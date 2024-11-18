@@ -3769,6 +3769,20 @@ def load_tf_weights_in_electra(*args, **kwargs):
     requires_backends(load_tf_weights_in_electra, ["torch"])
 
 
+class EncodecDiscriminator(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EncodecDiscriminatorConfig(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class EncodecModel(metaclass=DummyObject):
     _backends = ["torch"]
 
