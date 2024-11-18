@@ -482,6 +482,11 @@ class AutoImageProcessor:
         image_processor_class = None
         if image_processor_type is not None:
             # Update class name to reflect the use_fast option. If class is not found, we fall back to the slow version.
+            if use_fast and not is_torchvision_available():
+                logger.warning_once(
+                    "Using `use_fast=True` but `torchvision` is not available. Falling back to the slow image processor."
+                )
+                use_fast = False
             if use_fast:
                 if not image_processor_type.endswith("Fast"):
                     image_processor_type += "Fast"
