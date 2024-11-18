@@ -177,8 +177,9 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                 for sample in text:
                     while self.image_token in sample:
                         image_size = next(image_sizes)
-                        # cast to list to avoid numerical precision errors when calculating unpadding
-                        orig_height, orig_width = image_size.tolist()
+                        if not isinstance(image_size, (list, tuple)):
+                            # cast to list to avoid numerical precision errors when calculating unpadding
+                            orig_height, orig_width = image_size.tolist()
                         num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                         if self.vision_feature_select_strategy == "default":
                             num_image_tokens -= 1
