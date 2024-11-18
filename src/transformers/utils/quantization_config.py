@@ -997,7 +997,22 @@ class AqlmConfig(QuantizationConfigMixin):
 
 @dataclass
 class VptqConfig(QuantizationConfigMixin):
-    pass
+    """
+    This is a wrapper class about `vptq` parameters.
+
+    Args:
+        each layer has its own params
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.VPTQ
+        kwargs.pop("quant_method", None)
+        self.layer_params_dict = kwargs
 
 
 @dataclass

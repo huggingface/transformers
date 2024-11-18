@@ -27,9 +27,9 @@ Inference support for VPTQ is released in the `vptq` library. Make sure to insta
 pip install vptq
 ```
 
-The library provides efficient kernels for both GPU and CPU inference and training.
+The library provides efficient kernels for NVIDIA/AMD GPU inference.
 
-The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM). To run AQLM models simply load a model that has been quantized with AQLM:
+To run VPTQ models simply load a model that has been quantized with VPTQ:
 
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
