@@ -161,7 +161,7 @@ class ImageToTextPipeline(Pipeline):
                     model_inputs = model_inputs.to(self.torch_dtype)
 
             elif model_type == "qwen2_vl":
-                model_inputs = self.processor(text=prompt, images=[image], padding=True, return_tensors=self.framework)
+                model_inputs = self.processor(text=prompt, images=[image], return_tensors=self.framework)
                 if self.framework == "pt":
                     model_inputs = model_inputs.to(self.torch_dtype)
 
