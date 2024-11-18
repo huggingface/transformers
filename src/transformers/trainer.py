@@ -2344,7 +2344,7 @@ class Trainer:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
 
-                if (self.state.global_step == 10):
+                if (self.state.global_step == args.stable_train_warmup_steps):
                     start_train_stable_time = time.time()
 
                 # Skip past any already trained steps if resuming training
@@ -2499,9 +2499,8 @@ class Trainer:
 
         metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps,num_tokens=num_train_tokens,)
 
-        total_samples = self.state.global_step*total_train_batch_size if args.max_steps > 0 else num_examples*num_train_epochs
-        perf_samples = total_samples - self.args.warmup_steps*total_train_batch_size
-        stable_train_metrics = speed_metrics("stable_train", start_train_stable_time, perf_samples)
+        stable_train_samples = num_train_samples - args.stable_train_warmup_steps*total_train_batch_size
+        stable_train_metrics = speed_metrics("stable_train", start_train_stable_time, stable_train_samples)
 
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
