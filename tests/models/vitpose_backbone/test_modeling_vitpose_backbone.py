@@ -188,12 +188,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
-
-
 @require_torch
 class VitPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (VitPoseBackbone,) if is_torch_available() else ()
