@@ -12,14 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import os
 import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
+from packaging import version
 
-from transformers import AutoModelForCausalLM, OPTForCausalLM
+from transformers import AutoModelForCausalLM, OPTForCausalLM, logging
 from transformers.testing_utils import (
+    CaptureLogger,
     require_bitsandbytes,
     require_peft,
     require_torch,
@@ -70,9 +73,15 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         This checks if we pass a remote folder that contains an adapter config and adapter weights, it
         should correctly load a model that has adapters injected on it.
         """
+        logger = logging.get_logger("transformers.integrations.peft")
+
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                with CaptureLogger(logger) as cl:
+                    peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                # ensure that under normal circumstances, there  are no warnings about keys
+                self.assertNotIn("unexpected keys", cl.out)
+                self.assertNotIn("missing keys", cl.out)
 
                 self.assertTrue(self._check_lora_correctly_converted(peft_model))
                 self.assertTrue(peft_model._hf_peft_config_loaded)
@@ -478,6 +487,48 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = model.generate(input_ids=dummy_input)
 
+    def test_peft_add_adapter_with_state_dict_low_cpu_mem_usage(self):
+        """
+        Check the usage of low_cpu_mem_usage, which is supported in PEFT >= 0.13.0
+        """
+        from peft import LoraConfig
+
+        min_version_lcmu = "0.13.0"
+        is_lcmu_supported = version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu)
+
+        for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig()
+                state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
+                dummy_state_dict = torch.load(state_dict_path)
+
+                # this should always work
+                model.load_adapter(
+                    adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
+                )
+
+                if is_lcmu_supported:
+                    # if supported, this should not raise an error
+                    model.load_adapter(
+                        adapter_state_dict=dummy_state_dict,
+                        adapter_name="other",
+                        peft_config=peft_config,
+                        low_cpu_mem_usage=True,
+                    )
+                    # after loading, no meta device should be remaining
+                    self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
+                else:
+                    err_msg = r"The version of PEFT you are using does not support `low_cpu_mem_usage` yet"
+                    with self.assertRaisesRegex(ValueError, err_msg):
+                        model.load_adapter(
+                            adapter_state_dict=dummy_state_dict,
+                            adapter_name="other",
+                            peft_config=peft_config,
+                            low_cpu_mem_usage=True,
+                        )
+
     def test_peft_from_pretrained_hub_kwargs(self):
         """
         Tests different combinations of PEFT model + from_pretrained + hub kwargs
@@ -504,3 +555,70 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
         model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
         self.assertTrue(self._check_lora_correctly_converted(model))
+
+    def test_peft_from_pretrained_unexpected_keys_warning(self):
+        """
+        Test for warning when loading a PEFT checkpoint with unexpected keys.
+        """
+        from peft import LoraConfig
+
+        logger = logging.get_logger("transformers.integrations.peft")
+
+        for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig()
+                state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
+                dummy_state_dict = torch.load(state_dict_path)
+
+                # add unexpected key
+                dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
+
+                with CaptureLogger(logger) as cl:
+                    model.load_adapter(
+                        adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
+                    )
+
+                msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"
+                self.assertIn(msg, cl.out)
+
+    def test_peft_from_pretrained_missing_keys_warning(self):
+        """
+        Test for warning when loading a PEFT checkpoint with missing keys.
+        """
+        from peft import LoraConfig
+
+        logger = logging.get_logger("transformers.integrations.peft")
+
+        for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig()
+                state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
+                dummy_state_dict = torch.load(state_dict_path)
+
+                # remove a key so that we have missing keys
+                key = next(iter(dummy_state_dict.keys()))
+                del dummy_state_dict[key]
+
+                with CaptureLogger(logger) as cl:
+                    model.load_adapter(
+                        adapter_state_dict=dummy_state_dict,
+                        peft_config=peft_config,
+                        low_cpu_mem_usage=False,
+                        adapter_name="other",
+                    )
+
+                # Here we need to adjust the key name a bit to account for PEFT-specific naming.
+                # 1. Remove PEFT-specific prefix
+                # If merged after dropping Python 3.8, we can use: key = key.removeprefix(peft_prefix)
+                peft_prefix = "base_model.model."
+                key = key[len(peft_prefix) :]
+                # 2. Insert adapter name
+                prefix, _, suffix = key.rpartition(".")
+                key = f"{prefix}.other.{suffix}"
+
+                msg = f"Loading adapter weights from state_dict led to missing keys in the model: {key}"
+                self.assertIn(msg, cl.out)

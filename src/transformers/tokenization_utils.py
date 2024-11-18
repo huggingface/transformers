@@ -316,6 +316,9 @@ class ExtensionsTrie(Trie):
         """
         node = self.data
         for char in token:
+            if char not in node:
+                break
+
             node = node[char]
         return node
 
@@ -574,7 +577,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 token_index = current_vocab[token.content]
 
             if token.special and str(token) not in self.all_special_tokens:
-                self._additional_special_tokens.append(token)
+                self._special_tokens_map["additional_special_tokens"].append(token)
             # the setter automatically updates the reverse map
             self._added_tokens_decoder[token_index] = token
             self._added_tokens_encoder[token.content] = token_index
