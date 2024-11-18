@@ -1119,7 +1119,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         self.model = LlamaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.config.loss_type = "ForCausalLM"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1258,7 +1257,6 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         self.num_labels = config.num_labels
         self.model = LlamaModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-        self.config.loss_type = "ForSequenceClassification"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1357,7 +1355,6 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         super().__init__(config)
         self.transformer = LlamaModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
-        self.config.loss_type = "ForQuestionAnswering"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1450,7 +1447,6 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
         self.score = nn.Linear(config.hidden_size, config.num_labels)
-        self.config.loss_type = "ForTokenClassification"
 
         # Initialize weights and apply final processing
         self.post_init()
