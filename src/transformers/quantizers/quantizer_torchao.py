@@ -74,49 +74,11 @@ class TorchAoHfQuantizer(HfQuantizer):
                 else:
                     self.offload = True
         if self.pre_quantized:
-            safe_globals = []
-            if self.quantization_config.quant_type == "int4_weight_only":
-                from torchao.dtypes.affine_quantized_tensor import (
-                    AffineQuantizedTensor,
-                    TensorCoreTiledAQTLayout,
-                    TensorCoreTiledLayoutType,
-                    ZeroPointDomain,
-                )
-
-                safe_globals += [
-                    AffineQuantizedTensor,
-                    TensorCoreTiledAQTLayout,
-                    TensorCoreTiledLayoutType,
-                    ZeroPointDomain,
-                ]
-            elif self.quantization_config.quant_type == "int8_weight_only":
-                from torchao.dtypes.affine_quantized_tensor import (
-                    AffineQuantizedTensor,
-                    PlainAQTLayout,
-                    PlainLayoutType,
-                    ZeroPointDomain,
-                )
-
-                safe_globals += [PlainAQTLayout, AffineQuantizedTensor, PlainLayoutType, ZeroPointDomain]
-            elif self.quantization_config.quant_type == "int8_dynamic_activation_int8_weight":
-                from torchao.dtypes.affine_quantized_tensor import (
-                    AffineQuantizedTensor,
-                    PlainAQTLayout,
-                    PlainLayoutType,
-                    ZeroPointDomain,
-                )
-                from torchao.quantization.linear_activation_quantized_tensor import LinearActivationQuantizedTensor
-                from torchao.quantization.quant_api import _int8_symm_per_token_reduced_range_quant
-
-                safe_globals += [
-                    LinearActivationQuantizedTensor,
-                    AffineQuantizedTensor,
-                    PlainAQTLayout,
-                    PlainLayoutType,
-                    ZeroPointDomain,
-                    _int8_symm_per_token_reduced_range_quant,
-                ]
-            torch.serialization.add_safe_globals(safe_globals)
+            torch_version = version.parse(importlib.metadata.version("torch"))
+            if torch_version < version.parse("2.5.0"):
+                raise RuntimeError(
+                        f"In order to use torchao prequantized model, you need to have torch>=2.5.0. However, the current version is {torch_version}"
+                    )
 
     def update_torch_dtype(self, torch_dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
