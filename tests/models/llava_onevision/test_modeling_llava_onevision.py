@@ -226,7 +226,13 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     def setUp(self):
         self.model_tester = LlavaOnevisionVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaOnevisionConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaOnevisionConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

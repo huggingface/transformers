@@ -179,7 +179,13 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VipLlavaConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "vision_feature_layers", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=VipLlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -368,12 +374,14 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
+        processor.num_additional_image_tokens = 1
         inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 593)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
+        processor.num_additional_image_tokens = None
         inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 18)
 
