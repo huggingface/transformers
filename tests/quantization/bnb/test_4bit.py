@@ -555,6 +555,8 @@ class Bnb4BitTestTraining(Base4bitTest):
 
         if torch.cuda.is_available():
             self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        elif torch.xpu.is_available():
+            self.assertEqual(set(model.hf_device_map.values()), {f"xpu:{torch.xpu.current_device()}"})
         else:
             self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 
@@ -635,6 +637,7 @@ class BaseSerializationTest(unittest.TestCase):
 
             model_1 = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
 
+        import pdb; pdb.set_trace()
         # checking quantized linear module weight
         linear = get_some_linear_layer(model_1)
         self.assertTrue(linear.weight.__class__ == bnb.nn.Params4bit)
