@@ -43,7 +43,7 @@ Folglich können Sie eine bestimmte Modellversion mit dem Parameter "Revision" l
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # tag name, or branch name, or commit hash
 ... )
 ```
 

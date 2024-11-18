@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AddedToken, AutoModelForCausalLM, AutoTokenizer
+from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
     require_gguf,
     require_torch_gpu,
@@ -48,12 +48,19 @@ class GgufIntegrationTests(unittest.TestCase):
     falcon7b_model_id = "xaviviro/falcon-7b-quantized-gguf"
     falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
+    t5_model_id = "repetitio/flan-t5-small"
+    original_t5_model_id = "google/flan-t5-small"
     stablelm_model_id = "afrideva/stablelm-3b-4e1t-GGUF"
     stablelm2_model_id = "afrideva/stablelm-2-1_6b-GGUF"
     original_stablelm2_model_id = "stabilityai/stablelm-2-1_6b"
     gpt2_model_id = "mradermacher/gpt2-GGUF"
     gpt2_original_model_id = "openai-community/gpt2"
     gpt2_xl_model_id = "RichardErkhov/openai-community_-_gpt2-xl-gguf"
+    starcoder2_model_id = "QuantFactory/starcoder2-3b-GGUF"
+    starcoder2_fp16_model_id = "brittlewis12/starcoder2-3b-GGUF"
+    starcoder2_original_model_id = "bigcode/starcoder2-3b"
+    mamba_original_model_id = "state-spaces/mamba-2.8b-hf"
+    mamba_model_id = "jpodivin/mamba-2.8b-hf-GGUF"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -89,10 +96,16 @@ class GgufIntegrationTests(unittest.TestCase):
     q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
     fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
     q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
+    fp16_t5_model_id = "flan-t5-small-f16.gguf"
+    q8_0_t5_model_id = "flan-t5-small-q8_0.gguf"
     fp16_qwen2moe_model_id = "Qwen1.5-MoE-A2.7B.gguf"
     fp16_gpt2_model_id = "gpt2.f16.gguf"
     q8_gpt2_model_id = "gpt2.Q8_0.gguf"
     q6_k_gpt2_xl_model_id = "gpt2-xl.Q6_K.gguf"
+    q6_k_starcoder2_model_id = "starcoder2-3b.Q6_K.gguf"
+    fp16_starcoder2_gguf_model_id = "starcoder2-3b.fp16.gguf"
+    q6_k_mamba_model_id = "ggml-model-Q6_K.gguf"
+    fp16_mamba_model_id = "ggml-model-f16.gguf"
 
     example_text = "Hello"
 
@@ -482,6 +495,56 @@ class GgufIntegrationTests(unittest.TestCase):
                 self.assertTrue(quantized_param.shape == original_param.shape)
                 torch.testing.assert_close(quantized_param, original_param)
 
+    def test_t5_f16(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.fp16_t5_model_id)
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.t5_model_id, gguf_file=self.fp16_t5_model_id, device_map="auto", torch_dtype=torch.float16
+        )
+
+        T5_EXAMPLE_TEXT = "translate English to German: How old are you?"
+
+        text = tokenizer(T5_EXAMPLE_TEXT, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Wie ich er?"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_t5_q8_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.q8_0_t5_model_id)
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.t5_model_id, gguf_file=self.q8_0_t5_model_id, device_map="auto", torch_dtype=torch.float16
+        )
+
+        T5_EXAMPLE_TEXT = "translate English to German: How old are you?"
+
+        text = tokenizer(T5_EXAMPLE_TEXT, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Wie ich er?"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_t5_weights_conversion_fp16(self):
+        quantized_model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.t5_model_id,
+            gguf_file=self.fp16_t5_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+        original_model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.original_t5_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        quantized_state_dict = quantized_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for (quantized_name, quantized_param), (original_name, original_param) in zip(
+            quantized_state_dict.items(), original_state_dict.items()
+        ):
+            self.assertTrue(quantized_param.shape == original_param.shape)
+            torch.testing.assert_close(quantized_param, original_param, rtol=5e-04, atol=5e-04)
+
     def test_gpt2_q8(self):
         tokenizer = AutoTokenizer.from_pretrained(self.gpt2_model_id, gguf_file=self.q8_gpt2_model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -514,6 +577,8 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_gpt2_xl_Q6_K(self):
         tokenizer = AutoTokenizer.from_pretrained(self.gpt2_xl_model_id, gguf_file=self.q6_k_gpt2_xl_model_id)
@@ -580,6 +645,8 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in quantized_state_dict:
                 self.assertTrue(original_params.shape == quantized_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, quantized_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     def test_stablelm_q4_k_m(self):
         model = AutoModelForCausalLM.from_pretrained(
@@ -606,10 +673,6 @@ class GgufIntegrationTests(unittest.TestCase):
             self.stablelm2_model_id,
             gguf_file=self.fp16_stablelm2_model_id,
             torch_dtype=torch.float16,
-            # for precise comparison it is required to use the original model config
-            # as quantized one is different in parameters: use_parallel_residual and use_qkv_bias
-            # and it highly influences on the output results
-            config=original_model.config,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.stablelm2_model_id, gguf_file=self.fp16_stablelm2_model_id)
@@ -636,10 +699,6 @@ class GgufIntegrationTests(unittest.TestCase):
             gguf_file=self.fp16_stablelm2_model_id,
             device_map="auto",
             torch_dtype=torch.float16,
-            # for precise comparison it is required to use the original model config
-            # as quantized one is different in parameters: use_parallel_residual and use_qkv_bias
-            # and it highly influences on the output results
-            config=original_model.config,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -649,6 +708,89 @@ class GgufIntegrationTests(unittest.TestCase):
             if layer_name in converted_state_dict:
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
                 torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    def test_starcoder2_weights_conversion_fp16(self):
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.starcoder2_original_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.starcoder2_fp16_model_id,
+            gguf_file=self.fp16_starcoder2_gguf_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        converted_state_dict = converted_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in converted_state_dict:
+                self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    def test_starcoder2_q6_k(self):
+        example_function_text = "def print_hello_world():"
+        model = AutoModelForCausalLM.from_pretrained(
+            self.starcoder2_model_id,
+            gguf_file=self.q6_k_starcoder2_model_id,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.starcoder2_model_id, gguf_file=self.q6_k_starcoder2_model_id)
+        text = tokenizer(example_function_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = 'def print_hello_world():\n    print("Hello World")\n\ndef print'
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_mamba_weights_conversion_fp16(self):
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.mamba_original_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.mamba_model_id,
+            gguf_file=self.fp16_mamba_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_state_dict = converted_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in converted_state_dict:
+                self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
+                if "mixer.A_log" in layer_name:
+                    # we should increase tolerance after exponential reversing
+                    # and performing np.log(-weights) operation as numbers are slightly different
+                    torch.testing.assert_close(original_params, converted_state_dict[layer_name], atol=1e-3, rtol=1e-3)
+                else:
+                    torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    def test_mamba_q6_k(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.mamba_model_id,
+            gguf_file=self.q6_k_mamba_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.mamba_model_id, gguf_file=self.q6_k_mamba_model_id)
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello,I answerthe question.\n\nA"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):
         import tqdm

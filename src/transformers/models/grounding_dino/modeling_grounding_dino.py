@@ -32,30 +32,18 @@ from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
-    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_accelerate_available, is_ninja_available, logging
+from ...utils import is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_grounding_dino import GroundingDinoConfig
 
-
-if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
     from timm import create_model
@@ -2997,7 +2985,7 @@ def build_text_mask(logits, attention_mask):
 
     return text_mask.bool()
 
-
+  
 @add_start_docstrings(
     """
     Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top,

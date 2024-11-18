@@ -14,7 +14,11 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from typing import List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+
+
+if TYPE_CHECKING:
+    from ...modeling_outputs import DepthEstimatorOutput
 
 import numpy as np
 import PIL.Image
@@ -27,12 +31,17 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_torch_available,
     make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -218,3 +227,44 @@ class GLPNImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_depth_estimation(
+        self,
+        outputs: "DepthEstimatorOutput",
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+    ) -> List[Dict[str, TensorType]]:
+        """
+        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
+        Only supports PyTorch.
+
+        Args:
+            outputs ([`DepthEstimatorOutput`]):
+                Raw outputs of the model.
+            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+
+        Returns:
+            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
+        """
+        requires_backends(self, "torch")
+
+        predicted_depth = outputs.predicted_depth
+
+        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
+            )
+
+        results = []
+        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        for depth, target_size in zip(predicted_depth, target_sizes):
+            if target_size is not None:
+                depth = depth[None, None, ...]
+                depth = torch.nn.functional.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
+                depth = depth.squeeze()
+
+            results.append({"predicted_depth": depth})
+
+        return results

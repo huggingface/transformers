@@ -414,6 +414,8 @@
         title: Gemma
       - local: model_doc/gemma2
         title: Gemma2
+      - local: model_doc/glm
+        title: GLM
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -512,6 +514,8 @@
         title: Nyströmformer
       - local: model_doc/olmo
         title: OLMo
+      - local: model_doc/olmo_1124
+        title: OLMo November 2024
       - local: model_doc/olmoe
         title: OLMoE
       - local: model_doc/open-llama
@@ -604,6 +608,8 @@
         title: XLNet
       - local: model_doc/yoso
         title: YOSO
+      - local: model_doc/zamba
+        title: Zamba
       title: Text models
     - isExpanded: false
       sections:
@@ -713,8 +719,6 @@
         title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
-      - local: model_doc/zamba
-        title: Zamba
       - local: model_doc/zoedepth
         title: ZoeDepth
       title: Vision models
@@ -740,6 +744,8 @@
         title: Mimi
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/moshi
+        title: Moshi
       - local: model_doc/musicgen
         title: MusicGen
       - local: model_doc/musicgen_melody

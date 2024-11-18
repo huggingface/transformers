@@ -23,8 +23,6 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
@@ -38,14 +36,27 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_gemma2 import Gemma2Config
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
+
+
+logger = logging.get_logger(__name__)
+
+
+_CHECKPOINT_FOR_DOC = "google/gemma2-7b"
+_CONFIG_FOR_DOC = "Gemma2Config"
 
 
 class Gemma2RMSNorm(nn.Module):
@@ -81,9 +92,6 @@ class Gemma2MLP(nn.Module):
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
-
-logger = logging.get_logger(__name__)
 
 
 class Gemma2RotaryEmbedding(nn.Module):
@@ -195,12 +203,12 @@ class Gemma2Attention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
         self.rotary_emb = Gemma2RotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
+        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
 
     def forward(
         self,
@@ -492,12 +500,12 @@ class Gemma2DecoderLayer(nn.Module):
         self.self_attn = GEMMA2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.mlp = Gemma2MLP(config)
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.config = config
         self.is_sliding = not bool(layer_idx % 2)
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
-        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -633,9 +641,6 @@ class Gemma2PreTrainedModel(PreTrainedModel):
             config._attn_implementation = "eager"
 
         return config
-
-
-_CONFIG_FOR_DOC = "Gemma2Config"
 
 
 GEMMA2_INPUTS_DOCSTRING = r"""
@@ -862,6 +867,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
             attentions=all_self_attns,
         )
 
+    @torch.no_grad()
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -905,6 +911,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -998,6 +1005,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1064,18 +1072,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1257,27 +1254,8 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1322,6 +1300,11 @@ class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(GEMMA2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1360,8 +1343,7 @@ class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = self.loss_function(logits, labels, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

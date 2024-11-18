@@ -206,8 +206,8 @@
       title: 다중 CPU에서 훈련하기
     - local: perf_train_tpu_tf
       title: TensorFlow로 TPU에서 훈련하기
-    - local: in_translation
-      title: (번역중) PyTorch training on Apple silicon
+    - local: perf_train_special
+      title: Apple 실리콘에서 PyTorch 학습
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
     - local: hpo_train
@@ -308,6 +308,8 @@
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: 특성 추출기
     - local: in_translation
@@ -320,16 +322,16 @@
         title: (번역중) ALBERT
       - local: model_doc/bart
         title: BART
-      - local: in_translation
-        title: (번역중) BARThez
-      - local: in_translation
-        title: (번역중) BARTpho
-      - local: in_translation
-        title: (번역중) BERT
+      - local: model_doc/barthez
+        title: BARThez
+      - local: model_doc/bartpho
+        title: BARTpho
+      - local: model_doc/bert
+        title: BERT
       - local: in_translation
         title: (번역중) BertGeneration
-      - local: in_translation
-        title: (번역중) BertJapanese
+      - local: model_doc/bert-japanese
+        title: 일본어 Bert
       - local: model_doc/bertweet
         title: Bertweet
       - local: in_translation
@@ -356,8 +358,8 @@
         title: (번역중) CodeGen
       - local: model_doc/cohere
         title: Cohere
-      - local: in_translation
-        title: (번역중) ConvBERT
+      - local: model_doc/convbert
+        title: ConvBERT
       - local: in_translation
         title: (번역중) CPM
       - local: in_translation
@@ -400,6 +402,8 @@
         title: (번역중) Funnel Transformer
       - local: model_doc/gemma
         title: Gemma
+      - local: model_doc/gemma2
+        title: Gemma2
       - local: model_doc/openai-gpt
         title: GPT
       - local: in_translation
@@ -444,8 +448,8 @@
         title: Mamba
       - local: model_doc/mamba2
         title: Mamba2
-      - local: in_translation
-        title: (번역중) MarianMT
+      - local: model_doc/marian
+        title: MarianMT
       - local: in_translation
         title: (번역중) MarkupLM
       - local: in_translation
@@ -673,14 +677,23 @@
       title: (번역중) 오디오 모델
     - isExpanded: false
       sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: in_translation
+        title: (번역중) VideoMAE
+      - local: model_doc/vivit
+        title: ViViT
+      title: (번역중) 비디오 모델
+    - isExpanded: false
+      sections:
       - local: in_translation
         title: (번역중) ALIGN
       - local: in_translation
         title: (번역중) AltCLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
       - local: model_doc/blip
         title: BLIP
-      - local: in_translation
-        title: (번역중) BLIP-2
       - local: in_translation
         title: (번역중) BridgeTower
       - local: model_doc/chameleon
@@ -783,8 +796,8 @@
       title: 파이프라인을 위한 유틸리티
     - local: internal/tokenization_utils
       title: 토크나이저를 위한 유틸리티
-    - local: in_translation
-      title: (번역중) Utilities for Trainer
+    - local: internal/trainer_utils
+      title: Trainer를 위한 유틸리티
     - local: internal/generation_utils
       title: 생성을 위한 유틸리티
     - local: internal/image_processing_utils
