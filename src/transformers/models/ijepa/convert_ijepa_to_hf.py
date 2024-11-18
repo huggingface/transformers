@@ -109,12 +109,6 @@ def read_in_q_k_v(state_dict, config):
         state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
-def remove_classification_head_(state_dict):
-    ignore_keys = ["head.weight", "head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
-
-
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
@@ -182,21 +176,33 @@ def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_
     # load HuggingFace model
     model = IJepaModel(config, add_pooling_layer=False).eval()
     model.load_state_dict(state_dict)
+    size = {"height": config.image_size, "width": config.image_size}
+    image_processor = ViTImageProcessor(size=size)
 
     if verify_logits:
         # Check outputs on an image, prepared by ViTImageProcessor
-        image_processor = ViTImageProcessor()
         encoding = image_processor(images=prepare_img(), return_tensors="pt")
         pixel_values = encoding["pixel_values"]
         with torch.no_grad():
             outputs = model(pixel_values)
 
-        expected_slice = torch.Tensor(
-            [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
-        )
+        expected_slices = {
+            "ijepa_vith14_1k": torch.Tensor(
+                [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+            ),
+            "ijepa_vith14_22k": torch.Tensor(
+                [[0.0358, -0.0045, -0.2154], [0.0418, -0.0246, 0.0108], [0.2529, -0.0345, -0.0246]]
+            ),
+            "ijepa_vith16_1k": torch.Tensor(
+                [[0.5145, -0.1259, 0.0615], [0.1132, 0.0028, -0.0496], [1.1586, -0.0056, -0.0387]]
+            ),
+            "ijepa_vitg16_22k": torch.Tensor(
+                [[0.0512, -0.0510, -0.0649], [0.1972, 0.0380, -0.0790], [0.1667, -0.0834, -0.1240]]
+            ),
+        }
 
         assert torch.allclose(
-            expected_slice,
+            expected_slices[model_name],
             outputs.last_hidden_state[0, :3, :3],
             atol=1e-4,
         )
@@ -204,17 +210,12 @@ def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_
     if output_dir:
         Path(output_dir).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {output_dir}")
+        image_processor.save_pretrained(output_dir, safe_serialization=safe_serialization)
         model.save_pretrained(output_dir, safe_serialization=safe_serialization)
 
     if push_to_hub:
-        model_name_to_hf_name = {
-            "ijepa_vith14_1k": "ijepa_huge_patch14_1k",
-            "ijepa_vith14_22k": "ijepa_huge_patch14_22k",
-            "ijepa_vith16_1k": "ijepa_huge_patch16_1k",
-            "ijepa_vitg16_22k": "ijepa_giant_patch16_22k",
-        }
-        name = model_name_to_hf_name[model_name]
-        model.push_to_hub(f"jmtzt/{name}", use_temp_dir=True)
+        image_processor.push_to_hub(repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization)
+        model.push_to_hub(repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization)
 
     if output_dir:
         del model, state_dict
