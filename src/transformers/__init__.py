@@ -621,6 +621,7 @@ _import_structure = {
     "models.nougat": ["NougatProcessor"],
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
+    "models.olmo_1124": ["Olmo1124Config"],
     "models.olmoe": ["OlmoeConfig"],
     "models.omdet_turbo": [
         "OmDetTurboConfig",
@@ -2926,6 +2927,13 @@ else:
             "OlmoForCausalLM",
             "OlmoModel",
             "OlmoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.olmo_1124"].extend(
+        [
+            "Olmo1124ForCausalLM",
+            "Olmo1124Model",
+            "Olmo1124PreTrainedModel",
         ]
     )
     _import_structure["models.olmoe"].extend(
@@ -5516,6 +5524,7 @@ if TYPE_CHECKING:
         NystromformerConfig,
     )
     from .models.olmo import OlmoConfig
+    from .models.olmo_1124 import Olmo1124Config
     from .models.olmoe import OlmoeConfig
     from .models.omdet_turbo import (
         OmDetTurboConfig,
@@ -7538,6 +7547,11 @@ if TYPE_CHECKING:
             OlmoForCausalLM,
             OlmoModel,
             OlmoPreTrainedModel,
+        )
+        from .models.olmo_1124 import (
+            Olmo1124ForCausalLM,
+            Olmo1124Model,
+            Olmo1124PreTrainedModel,
         )
         from .models.olmoe import (
             OlmoeForCausalLM,
