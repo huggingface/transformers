@@ -637,7 +637,6 @@ class BaseSerializationTest(unittest.TestCase):
 
             model_1 = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
 
-        import pdb; pdb.set_trace()
         # checking quantized linear module weight
         linear = get_some_linear_layer(model_1)
         self.assertTrue(linear.weight.__class__ == bnb.nn.Params4bit)
