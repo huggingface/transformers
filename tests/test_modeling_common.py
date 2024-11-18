@@ -3802,22 +3802,18 @@ class ModelTesterMixin:
                 self.skipTest("Model is not a composite model.")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            sub_configs = {
-                key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
-            }
 
             # set eager as it will be the one supported in all models
             # we just need to test if passing 'attn_implementation' as a dict fails or not
             attn_implementation_per_subconfig = {}
-            for key, sub_config in sub_configs.items():
+            for key in config.sub_configs.keys():
                 attn_implementation_per_subconfig[key] = "eager"
 
             config._attn_implementation = attn_implementation_per_subconfig
             model = model_class(config)
-            for key in model.config:
-                if isinstance(getattr(model.config, key), PretrainedConfig):
-                    sub_config = getattr(model.config, key)
-                    self.assertTrue(sub_config._attn_implementation == "eager")
+            for key in config.sub_configs.keys():
+                sub_config = getattr(model.config, key)
+                self.assertTrue(sub_config._attn_implementation == "eager")
 
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
@@ -3826,7 +3822,7 @@ class ModelTesterMixin:
                     or "SdpaSelfAttention" in class_name
                     or "FlashAttention" in class_name
                 ):
-                    raise ValueError("The eager model should not have SDPA/FA2 attention layers")
+                    raise ValueError(f"The eager model should not have SDPA/FA2 attention layers but got {class_name}")
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -3932,7 +3928,6 @@ class ModelTesterMixin:
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @slow
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -3958,8 +3953,10 @@ class ModelTesterMixin:
 
         atols = {
             ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -3970,8 +3967,10 @@ class ModelTesterMixin:
         }
         rtols = {
             ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -3987,12 +3986,31 @@ class ModelTesterMixin:
         if hasattr(self.model_tester, "num_hidden_layers"):
             self.model_tester.num_hidden_layers = 1
         if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
+            self.model_tester.vision_config = copy.deepcopy(self.model_tester.vision_config)
             self.model_tester.vision_config["num_hidden_layers"] = 1
         if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
+            self.model_tester.text_config = copy.deepcopy(self.model_tester.text_config)
             self.model_tester.text_config["num_hidden_layers"] = 1
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            config.rms_norm_eps = 1.0
+            config.layer_norm_eps = 1.0
+            config.norm_eps = 1.0
+            config.norm_epsilon = 1.0
+            config.layer_norm_epsilon = 1.0
+
+            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
+            # (We don't need the original epsilon values to check eager/sdpa matches)
+            for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
+                if hasattr(config, attr):
+                    getattr(config, attr).rms_norm_eps = 1.0
+                    getattr(config, attr).layer_norm_eps = 1.0
+                    getattr(config, attr).norm_eps = 1.0
+                    getattr(config, attr).norm_epsilon = 1.0
+                    getattr(config, attr).layer_norm_epsilon = 1.0
+
             model = model_class(config)
             # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
             # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
@@ -4004,14 +4022,22 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
-                model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch_dtype,
                     attn_implementation="eager",
                 )
-                model_eager = model_eager.eval().to(torch_device)
+                model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
+
+                # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
+                for x in model_eager.modules():
+                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
+                        x.eps = 1.0
+                for x in model_sdpa.modules():
+                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
+                        x.eps = 1.0
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand

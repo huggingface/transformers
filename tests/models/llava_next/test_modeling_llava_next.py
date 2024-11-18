@@ -90,7 +90,7 @@ class LlavaNextVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 16,
+            "image_size": 8,
             "patch_size": 4,
             "num_channels": 3,
             "is_training": True,
@@ -123,10 +123,10 @@ class LlavaNextVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 95
-        self.image_grid_pinpoints = [[32, 32]]
-        self.num_image_tokens = 88
+        self.image_grid_pinpoints = [[16, 16]]
+        self.num_image_tokens = 24
         self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return LlavaNextConfig(
@@ -223,7 +223,13 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     def setUp(self):
         self.model_tester = LlavaNextVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaNextConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaNextConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

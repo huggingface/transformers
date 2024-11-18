@@ -363,10 +363,11 @@ GPU, if available, which we didn't need to do earlier when training, as [`Traine
 ```py
 >>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
 >>> import torch
+>>> from accelerate.test_utils.testing import get_backend
 
 >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
 >>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> model.to(device)
 ```
 
