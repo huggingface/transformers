@@ -1096,6 +1096,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
+        run_compressed: bool = True,
         **kwargs,
     ):
         from compressed_tensors import QuantizationConfig
@@ -1115,10 +1116,10 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
+                    "run_compressed": run_compressed,
                     **kwargs,
                 }
             )
-
         if sparsity_config:
             self.sparsity_config = SparsityCompressionConfig.load_from_registry(
                 sparsity_config.get("format"), **sparsity_config
