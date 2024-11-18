@@ -186,6 +186,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipForQuestionAnswering",
     "BlipVisionModel",
     "BlipTextLMHeadModel",
+    "EncodecDiscriminator",
     "BlipTextModel",
     "BrosSpadeEEForTokenClassification",
     "BrosSpadeELForTokenClassification",
