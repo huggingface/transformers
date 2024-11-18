@@ -6,9 +6,12 @@ import torch
 import torch.nn.functional as F
 from torch import autograd
 
+
 """
     Balancer code directly copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/balancer.py
 """
+
+
 class Balancer:
     """Loss balancer.
 
@@ -46,14 +49,14 @@ class Balancer:
     """
 
     def __init__(
-            self,
-            weights: tp.Dict[str, float],
-            rescale_grads: bool = True,
-            total_norm: float = 1.0,
-            ema_decay: float = 0.999,
-            per_batch_item: bool = True,
-            epsilon: float = 1e-12,
-            monitor: bool = False,
+        self,
+        weights: tp.Dict[str, float],
+        rescale_grads: bool = True,
+        total_norm: float = 1.0,
+        ema_decay: float = 0.999,
+        per_batch_item: bool = True,
+        epsilon: float = 1e-12,
+        monitor: bool = False,
     ):
         self.weights = weights
         self.per_batch_item = per_batch_item
@@ -161,7 +164,7 @@ def averager(beta: float = 1):
 
 
 def compute_discriminator_loss(
-        real_logits: List[torch.Tensor], fake_logits: List[torch.Tensor], num_discriminators: int
+    real_logits: List[torch.Tensor], fake_logits: List[torch.Tensor], num_discriminators: int
 ) -> torch.Tensor:
     """
     Compute the discriminator loss based on real and fake logits.
@@ -198,7 +201,7 @@ def compute_generator_adv_loss(fake_logits: List[torch.Tensor], num_discriminato
 
 
 def compute_feature_matching_loss(
-        real_features: List[List[torch.Tensor]], fake_features: List[List[torch.Tensor]], num_discriminators: int
+    real_features: List[List[torch.Tensor]], fake_features: List[List[torch.Tensor]], num_discriminators: int
 ):
     """
     Compute the feature matching loss between real and fake features.

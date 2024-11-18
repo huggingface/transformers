@@ -63,3 +63,19 @@ Here is a quick example of how to encode and decode an audio using this model:
     - decode
     - encode
     - forward
+
+# EncodecDiscriminator
+
+## Overview
+
+The EncodecDiscriminator is used for adversarial training of the Encodec neural codec model.
+
+## EncodecDiscriminatorConfig
+
+[[autodoc]] EncodecDiscriminatorConfig
+
+## EncodecDiscriminator
+
+[[autodoc]] EncodecDiscriminator
+    - forward
+    - compute_loss

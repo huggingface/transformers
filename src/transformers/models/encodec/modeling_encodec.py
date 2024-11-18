@@ -877,9 +877,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         if self.training and self.loss_function is not None:
             reconstruction_loss, commitment_loss = self.loss_function(
-                model=self,
-                input_values=input_values,
-                audio_values=audio_values
+                model=self, input_values=input_values, audio_values=audio_values
             )
             outputs["reconstruction_loss"] = reconstruction_loss
             outputs["commitment_loss"] = commitment_loss
@@ -897,6 +895,44 @@ class EncodecModel(EncodecPreTrainedModel):
 
 @dataclass
 class EncodecDiscriminatorConfig(PretrainedConfig):
+    """
+    Configuration class for EncodecDiscriminator.
+
+    Args:
+        model_type (`str`, *optional*, defaults to `"encodec_discriminator"`):
+            The model type.
+        filters (`int`, *optional*, defaults to 32):
+            The number of filters in the initial convolutional layer.
+        in_channels (`int`, *optional*, defaults to 1):
+            Number of input channels.
+        out_channels (`int`, *optional*, defaults to 1):
+            Number of output channels.
+        n_ffts (`List[int]`, *optional*, defaults to `[1024, 2048, 512]`):
+            List of FFT sizes for the STFT discriminators.
+        hop_lengths (`List[int]`, *optional*, defaults to `[256, 512, 128]`):
+            List of hop lengths for the STFT discriminators.
+        win_lengths (`List[int]`, *optional*, defaults to `[1024, 2048, 512]`):
+            List of window lengths for the STFT discriminators.
+        kernel_size (`Tuple[int, int]`, *optional*, defaults to `(3, 9)`):
+            Kernel size for the convolutional layers.
+        stride (`Tuple[int, int]`, *optional*, defaults to `(1, 2)`):
+            Stride for the convolutional layers.
+        dilations (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
+            List of dilations for the convolutional layers.
+        max_filters (`int`, *optional*, defaults to 1024):
+            Maximum number of filters in the convolutional layers.
+        filters_scale (`int`, *optional*, defaults to 2):
+            Scaling factor for the number of filters in each convolutional layer.
+        normalized (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the STFT.
+        norm (`str`, *optional*, defaults to `"weight_norm"`):
+            Normalization method to use.
+        activation (`str`, *optional*, defaults to `"LeakyReLU"`):
+            Activation function to use.
+        activation_params (`Dict`, *optional*, defaults to `{"negative_slope": 0.2}`):
+            Parameters for the activation function.
+    """
+
     model_type: str = "encodec_discriminator"
     filters: int = 32
     in_channels: int = 1
@@ -1052,6 +1088,36 @@ DiscriminatorOutput = tp.Tuple[tp.List[LogitsType], tp.List[FeatureMapType]]
 
 
 class EncodecDiscriminator(PreTrainedModel):
+    """
+    The EncodecDiscriminator model is used for adversarial training of the Encodec audio codec.
+
+    This model uses multiple STFT (Short-Time Fourier Transform) discriminators operating at different scales to assess
+    the quality of generated audio. Each discriminator analyzes the audio at a different frequency resolution.
+
+    Args:
+        config ([`EncodecDiscriminatorConfig`]):
+            Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+
+    Example:
+
+    ```python
+    >>> from transformers import EncodecDiscriminatorConfig, EncodecDiscriminator
+    >>> import torch
+
+    >>> # Initialize configuration and model
+    >>> config = EncodecDiscriminatorConfig()
+    >>> discriminator = EncodecDiscriminator(config)
+
+    >>> # Create dummy audio input
+    >>> batch_size, channels, audio_length = 4, 1, 16000
+    >>> audio = torch.randn(batch_size, channels, audio_length)
+
+    >>> # Get discriminator outputs
+    >>> logits, feature_maps = discriminator(audio)
+    ```
+    """
+
     config_class = EncodecDiscriminatorConfig
 
     def __init__(self, config):
@@ -1081,6 +1147,18 @@ class EncodecDiscriminator(PreTrainedModel):
         self.num_discriminators = len(self.discriminators)
 
     def forward(self, x: torch.Tensor) -> DiscriminatorOutput:
+        """
+        Applies the discriminator to the input audio.
+
+        Args:
+            x (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+                Input audio waveform.
+
+        Returns:
+            `tuple`:
+                - `logits` (`List[torch.Tensor]`): List of discriminator outputs for each STFT scale.
+                - `fmaps` (`List[List[torch.Tensor]]`): List of feature maps from each discriminator.
+        """
         logits = []
         fmaps = []
         for disc in self.discriminators:
@@ -1090,6 +1168,22 @@ class EncodecDiscriminator(PreTrainedModel):
         return logits, fmaps
 
     def compute_loss(self, real_audio, fake_audio):
+        """
+        Computes the discriminator and generator losses.
+
+        Args:
+            real_audio (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+                Real audio waveform.
+            fake_audio (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+                Generated/fake audio waveform.
+
+        Returns:
+            `tuple`:
+                - d_loss (`torch.Tensor`): Discriminator loss.
+                - g_adv_loss (`torch.Tensor`): Generator adversarial loss.
+                - fm_loss (`torch.Tensor`): Feature matching loss.
+        """
+
         # Compute discriminator and generator losses
         real_logits, real_features = self.forward(real_audio)
         fake_logits, fake_features = self.forward(fake_audio)

@@ -1,11 +1,8 @@
 import torch
 import torch.nn.functional as F
 
-def EncodecLoss(
-        model,
-        input_values,
-        audio_values
-):
+
+def EncodecLoss(model, input_values, audio_values):
     """
     Computes the reconstruction and commitment losses for the Encodec model.
 

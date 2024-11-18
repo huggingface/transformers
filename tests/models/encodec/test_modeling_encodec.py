@@ -139,7 +139,7 @@ class EncodecModelTester:
 
 @require_torch
 class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (EncodecModel,) if is_torch_available() else ()
+    all_model_classes = (EncodecModel, EncodecDiscriminator) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -305,9 +305,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             print(f"Reconstruction loss: {outputs.reconstruction_loss.item():.4f}")
             if outputs.commitment_loss is not None:
                 print(f"Commitment loss: {outputs.commitment_loss.item():.4f}")
-            total_gen_loss = (
-                    outputs.reconstruction_loss.item() + g_adv_loss.item() + fm_loss.item()
-            )
+            total_gen_loss = outputs.reconstruction_loss.item() + g_adv_loss.item() + fm_loss.item()
             if outputs.commitment_loss is not None:
                 total_gen_loss += outputs.commitment_loss.item()
             print(f"Total generator loss (before balancing): {total_gen_loss:.4f}\n")
