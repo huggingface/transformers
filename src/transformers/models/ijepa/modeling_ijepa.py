@@ -16,14 +16,20 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    torch_int,
+)
 from .configuration_ijepa import IJepaConfig
 
 
 logger = logging.get_logger(__name__)
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "google/ijepa-base-patch16-224-in21k"
+
+_CHECKPOINT_FOR_DOC = "facebook/ijepa_vith14_1k"
 
 # General docstring
 _CONFIG_FOR_DOC = "IJepaConfig"
@@ -52,44 +58,36 @@ class IJepaEmbeddings(nn.Module):
         Adapted from:
         - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
-
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embeddings.shape[1]
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+
+        patch_pos_embed = self.position_embeddings
+
         dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(
-            1,
-            int(math.sqrt(num_positions)),
-            int(math.sqrt(num_positions)),
-            dim,
-        )
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(
-                h0 / math.sqrt(num_positions),
-                w0 / math.sqrt(num_positions),
-            ),
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         )
+
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+        return patch_pos_embed
 
     def forward(
         self,
@@ -667,11 +665,10 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.ijepa = IJepaModel(config, add_pooling_layer=False)
+        self.ijepa = IJepaModel(config)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-        self.vit = IJepaModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()
