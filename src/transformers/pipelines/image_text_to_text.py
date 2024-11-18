@@ -77,8 +77,11 @@ def retrieve_images_in_messages(
         for content in message["content"]:
             if isinstance(content, dict):
                 if content.get("type") == "image":
-                    if "image" in content:
-                        retrieved_images.append(content["image"])
+                    if any(key in content for key in ["image", "url", "path"]):
+                        for key in ["image", "url", "path"]:
+                            if key in content:
+                                retrieved_images.append(content[key])
+                                break
                     elif idx_images < len(images):
                         retrieved_images.append(images[idx_images])
                         idx_images += 1
