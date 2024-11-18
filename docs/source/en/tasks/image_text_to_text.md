@@ -120,6 +120,51 @@ print(generated_texts)
 ## ['User: What do we see in this image? \nAssistant: In this image we can see two cats on the nets. \nUser: And how about this image? \nAssistant: In this image we can see flowers, plants and insect.']
 ```
 
+## Pipeline
+
+You can also use `pipeline` to easily infer `image-text-to-text` models. To do so, first initialize the `image-text-to-text` pipeline.
+
+```python
+from transformers import pipeline
+pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+```
+
+We will use chat templates to format our text inputs.
+
+```python
+messages = [
+     {
+         "role": "user",
+         "content": [
+             {
+                 "type": "image",
+                 "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+             },
+             {"type": "text", "text": "Describe this image."},
+         ],
+     },
+     {
+         "role": "assistant",
+         "content": [
+             {"type": "text", "text": "There's a pink flower"},
+         ],
+     },
+ ]
+```
+
+Simply pass in the chat template formatted text and image. `return_full_text` argument will remove the part of the output that contains the input, leaving us with generated text.
+
+```python
+outputs = pipe(text=messages, max_new_tokens=20, return_full_text=False)
+```
+
+We can then access the generation like below. 
+
+```python
+outputs[0]["generated_text"]
+#  with a yellow center in the foreground. The flower is surrounded by red and white flowers with green stems
+```
+
 ## Streaming
 
 We can use [text streaming](./generation_strategies#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
