@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-[X-ALMA](https://arxiv.org/pdf/2410.03115) is a high-quality LLM-based translation model that supports 50 languages: en,da,nl,de,is,no,sv,af,ca,ro,gl,it,pt,es,bg,mk,sr,uk,ru,id,ms,th,vi,mg,fr,hu,el,cs,pl,lt,lv,ka,zh,ja,ko,fi,et,gu,hi,mr,ne,ur,az,kk,ky,tr,uz,ar,he,fa, ensuring their high-performance in translation, regardless of thir resource level.
+[X-ALMA](https://arxiv.org/pdf/2410.03115) is a high-quality LLM-based translation model that supports 50 languages: en,da,nl,de,is,no,sv,af,ca,ro,gl,it,pt,es,bg,mk,sr,uk,ru,id,ms,th,vi,mg,fr,hu,el,cs,pl,lt,lv,ka,zh,ja,ko,fi,et,gu,hi,mr,ne,ur,az,kk,ky,tr,uz,ar,he,fa, ensuring their high-performance in translation, regardless of their resource level.
 
 X-ALMA builds upon [ALMA-R](https://arxiv.org/pdf/2401.08417) and [ALMA](https://arxiv.org/abs/2309.11674) by expanding support from 6 to 50 languages. It utilizes a plug-and-play architecture with language-specific modules, complemented by a carefully designed training recipe. This release includes the **the complete X-ALMA model that contains the [X-ALMA pre-trained base model](https://huggingface.co/haoranxu/X-ALMA-13B-Pretrain) and all its language-specific modules**. Please find more details and other uses of X-ALMA [here](https://github.com/fe1ixxu/ALMA).
 
