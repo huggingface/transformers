@@ -28,7 +28,7 @@ Try Quanto + transformers with this [notebook](https://colab.research.google.com
 - weights quantization (`float8`,`int8`,`int4`,`int2`)
 - activation quantization (`float8`,`int8`)
 - modality agnostic (e.g CV,LLM)
-- device agnostic (e.g CUDA,MPS,CPU)
+- device agnostic (e.g CUDA,XPU,MPS,CPU)
 - compatibility with `torch.compile`
 - easy to add custom kernel for specific device
 - supports quantization aware training
