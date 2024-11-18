@@ -28,6 +28,30 @@ This paper demonstrates an approach for learning highly semantic image represent
 This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
 The original code can be found [here](https://github.com/facebookresearch/ijepa).
 
+## How to use
+
+Here is how to use this model to classify an image of the COCO 2017 dataset into one of the 1,000 ImageNet classes:
+
+```python
+import requests
+
+from PIL import Image
+from transformers import AutoProcessor, IJepaForImageClassification
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+model_id = "jmtzt/ijepa_vith14_1k"
+processor = AutoProcessor.from_pretrained(model_id)
+model = IJepaForImageClassification.from_pretrained(model_id)
+
+inputs = processor(images=image, return_tensors="pt")
+outputs = model(**inputs)
+logits = outputs.logits
+# model predicts one of the 1000 ImageNet classes
+predicted_class_idx = logits.argmax(-1).item()
+print("Predicted class:", model.config.id2label[predicted_class_idx])
+```
 
 ## IJepaConfig
 
