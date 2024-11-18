@@ -37,7 +37,7 @@ This work is partially supported by ILLUIN Technology, and by a grant from ANRT 
 
 - A blog post detailing ColPali, a vision retrieval model, can be found [here](https://huggingface.co/blog/manu/colpali). 📝
 - The code for training ColPali and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
-- Cookbooks to fine-tune ColPali (with optional quantization) and generate similarity maps can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
+- Cookbooks for learning to use the Hf version of ColPali, fine-tuning, and similarity maps generation can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
 
 This model was contributed by [tonywu71](https://huggingface.co/tonywu71) and [yonigozlan](https://huggingface.co/yonigozlan).
 The original code can be found [here](https://github.com/illuin-tech/colpali). To be more precise, the Hf version of Colpali was adapter from [`colpali-engine==0.3.2`](https://github.com/illuin-tech/colpali/releases/tag/v0.3.2).
