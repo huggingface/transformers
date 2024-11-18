@@ -61,6 +61,8 @@ class AWQLinearVersion(str, Enum):
             return AWQLinearVersion.GEMV
         elif version == "exllama":
             return AWQLinearVersion.EXLLAMA
+        elif version == "ipex":
+            return AWQLinearVersion.IPEX
         else:
             raise ValueError(f"Unknown AWQLinearVersion {version}")
 
@@ -1086,6 +1088,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             do not override, should be compressed-tensors
     """
 
+    QUANTIZATION_NAME = "compressed-tensors"
+
     def __init__(
         self,
         config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
@@ -1099,15 +1103,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         run_compressed: bool = True,
         **kwargs,
     ):
-        from compressed_tensors import QuantizationConfig
         from compressed_tensors.config import SparsityCompressionConfig
+        from compressed_tensors.quantization import QuantizationConfigHFQuantizer
 
         self.quantization_config = None
         self.sparsity_config = None
 
         # parse from dict to load nested QuantizationScheme objects
-        if config_groups:
-            self.quantization_config = QuantizationConfig.parse_obj(
+        if config_groups or kv_cache_scheme:
+            self.quantization_config = QuantizationConfigHFQuantizer.parse_obj(
                 {
                     "config_groups": config_groups,
                     "quant_method": quant_method,
@@ -1120,6 +1124,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     **kwargs,
                 }
             )
+
         if sparsity_config:
             self.sparsity_config = SparsityCompressionConfig.load_from_registry(
                 sparsity_config.get("format"), **sparsity_config
@@ -1144,6 +1149,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
+
         """
         if "quantization_config" in config_dict:
             config_dict = dict(
@@ -1158,13 +1164,18 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
-        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+        quantization_config = {}
+        if self.quantization_config is not None:
+            quantization_config = self.quantization_config.dict()
+        else:
+            quantization_config["quant_method"] = self.QUANTIZATION_NAME
 
-        return {
-            "quantization_config": quantization_config,
-            "sparsity_config": sparsity_config,
-        }
+        if self.sparsity_config is not None:
+            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+        else:
+            quantization_config["sparsity_config"] = {}
+
+        return quantization_config
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
@@ -1304,4 +1315,23 @@ class TorchAoConfig(QuantizationConfigMixin):
         return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
 
     def __repr__(self):
-        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.quant_type_kwargs.items())})"
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+
+@dataclass
+class BitNetConfig(QuantizationConfigMixin):
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.BITNET
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        pass
