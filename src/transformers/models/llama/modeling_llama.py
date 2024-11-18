@@ -619,11 +619,176 @@ class LlamaSdpaAttention(LlamaAttention):
 
         return attn_output, None, past_key_value
 
+class LlamaFlexAttention(LlamaAttention):
+    """
+    Llama attention module using torch.nn.attention.flex_attention.flex_attention. This module inherits from
+    `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    flex_attention API.
+    """
+
+    # Adapted from LlamaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        from torch.nn.attention.flex_attention import flex_attention, create_block_mask
+        def noop(score, b, h, q_idx, kv_idx):
+            return score
+        def causal_mask(score, b, h, q_idx, kv_idx):
+            return torch.where(q_idx >= kv_idx, score, -float("inf"))
+
+        attn_output = flex_attention(query_states, key_states, value_states, score_mod=causal_mask if q_len > 1 else noop, return_lse=output_attentions)
+        attn_weights = None
+        if output_attentions:
+            attn_output = attn_output[0]
+            attn_weights = attn_output[1]
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights, past_key_value
+
+
+class LlamaPagedAttention(LlamaAttention):
+    """
+    Llama attention module using torch.nn.attention.experimental._paged_attention.PagedAttention. This module inherits from
+    `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    flex_attention API.
+    """
+
+    # Adapted from LlamaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        from torch.nn.attention.flex_attention import flex_attention, create_block_mask
+        def noop(score, b, h, q_idx, kv_idx):
+            return score
+        def causal_mask(score, b, h, q_idx, kv_idx):
+            return torch.where(q_idx >= kv_idx, score, -float("inf"))
+
+        def generate_causal_offset(offset: torch.Tensor):
+            def causal_offset_mask(b, h, q_idx, kv_idx):
+                return (offset + q_idx) >= kv_idx
+
+            return causal_offset_mask
+
+        mod = generate_causal_offset(
+            torch.tensor(past_key_value.get_seq_length(), device=query_states.device, dtype=torch.int32)
+        )
+        block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=query_states.device, BLOCK_SIZE=past_key_value.paged_attentions[self.layer_idx].page_size)
+        block_mask = past_key_value.paged_attentions[self.layer_idx].convert_logical_block_mask(block_mask)
+        score_mod = past_key_value.paged_attentions[self.layer_idx].get_score_mod(causal_mask if q_len > 1 else noop)
+        attn_output = flex_attention(query_states, key_states, value_states, block_mask=block_mask, score_mod=score_mod, return_lse=output_attentions)
+        attn_weights = None
+        if output_attentions:
+            attn_output = attn_output[0]
+            attn_weights = attn_output[1]
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights, past_key_value
+
 
 LLAMA_ATTENTION_CLASSES = {
     "eager": LlamaAttention,
     "flash_attention_2": LlamaFlashAttention2,
     "sdpa": LlamaSdpaAttention,
+    "flex_attention": LlamaFlexAttention,
+    "paged_attention": LlamaPagedAttention,
 }
 
 
@@ -736,6 +901,8 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_paged_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True

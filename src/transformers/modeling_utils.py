@@ -1505,12 +1505,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "eager",
                 "sdpa",
                 "flash_attention_2",
+                "flex_attention",
+                "paged_attention",
             ]:
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
                 if cls._supports_sdpa:
                     message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+                if cls._support_flex_attn:
+                    message += ', `"attn_implementation=flex_attention"` (implementation using flex attention)'
+                if cls._support_paged_attn:
+                    message += ', `"attn_implementation=paged_attention"` (implementation using paged attention)'
                 raise ValueError(message + ".")
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
@@ -1561,6 +1567,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
                 )
                 torch.backends.cuda.enable_flash_sdp(False)
+        elif requested_attn_implementation in ["flex_attention", "paged_attention"]:
+            return config
         elif isinstance(requested_attn_implementation, dict):
             config._attn_implementation = None
         else:

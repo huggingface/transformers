@@ -2120,3 +2120,45 @@ class OffloadedStaticCache(StaticCache):
 
         self._device_key_cache[layer_idx & 1].copy_(self.key_cache[layer_idx], non_blocking=True)
         self._device_value_cache[layer_idx & 1].copy_(self.value_cache[layer_idx], non_blocking=True)
+
+
+class PagedAttentionCache(Cache):
+    def __init__(self, n_pages, page_size=128, device=torch.device("cpu")):
+        super().__init__()
+        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self.paged_attentions = []
+        self.key_cache = []
+        self.value_cache = []
+        self.page_size = page_size
+        self.n_pages = n_pages
+
+    def batch_reserve(self, paged_attention, target_seq_len):
+        (B,) = target_seq_len.shape
+        for b in range(B):
+            paged_attention.reserve(
+                torch.tensor(b),
+                target_seq_len[b],
+            )
+
+    def update(self, key_states, value_states, layer_idx, cache_kwargs=None):
+        # update seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += key_states.shape[-2]
+        KV_B, KV_H, KV_S, QK_D = key_states.shape
+        _, _, _, V_D = value_states.shape
+        device = key_states.device
+        from torch.nn.attention.experimental._paged_attention import PagedAttention
+        if len(self.paged_attentions) <= layer_idx:
+            max_cached_seq_len = self.n_pages * self.page_size
+            self.paged_attentions.append(PagedAttention(self.n_pages, self.page_size, KV_B, device=device))
+            self.key_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, QK_D, device=device))
+            self.value_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, V_D, device=device))
+
+        self.batch_reserve(self.paged_attentions[layer_idx], torch.tensor([KV_S]))
+        batch_idx = torch.arange(KV_B, device=device, dtype=torch.int32)
+        self.paged_attentions[layer_idx].assign(batch_idx, cache_kwargs['cache_position'], key_states, value_states, self.key_cache[layer_idx], self.value_cache[layer_idx])
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        return self._seen_tokens if layer_idx == 0 else self._seen_tokens - 1
