@@ -1505,12 +1505,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "eager",
                 "sdpa",
                 "flash_attention_2",
+                "differential",
             ]:
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
                 if cls._supports_sdpa:
                     message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+                if cls._supports_differential:
+                    message += ', `"attn_implementation=differential"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
                 raise ValueError(message + ".")
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
@@ -1563,6 +1566,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch.backends.cuda.enable_flash_sdp(False)
         elif isinstance(requested_attn_implementation, dict):
             config._attn_implementation = None
+        elif config._attn_implementation == "differential":
+            config = cls._check_and_enable_differential(
+                config,
+            )
         else:
             config._attn_implementation = "eager"
 
@@ -1764,6 +1771,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not hard_check_only:
             config._attn_implementation = "sdpa"
+        return config
+
+    @classmethod
+    def _check_and_enable_differential(cls, config) -> PretrainedConfig:
+        """
+        Checks the availability of Differential Attention for a given model.
+        """
+        if not cls._supports_differential:
+            raise ValueError(
+                f"{cls.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+                " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
+                ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
+            )
         return config
 
     def enable_input_require_grads(self):
