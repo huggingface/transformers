@@ -539,7 +539,11 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.BEAM_SEARCH
 
         # Assisted generation may extend some generation modes
-        if assistant_model is not None or self.prompt_lookup_num_tokens is not None or self.assistant_early_exit is not None:
+        if (
+            assistant_model is not None
+            or self.prompt_lookup_num_tokens is not None
+            or self.assistant_early_exit is not None
+        ):
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:

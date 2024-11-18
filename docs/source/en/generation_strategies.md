@@ -489,13 +489,14 @@ to ensure the new tokens include the correct prompt suffix.
 Alternatively, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
 to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
 
-#### Early Exit (Self-Speculative Decoding)
+#### Self-Speculative Decoding
 
 An LLM can be trained to also use its language modeling head with earlier hidden states as input, effectivelly
-skipping layers to yield a lower-quality output. If the model you're using was trained to do early exit, you can pass
-`early_exit` (integer). In this case, the assistant model will be the model itself with early exit, hence
+skipping layers to yield a lower-quality output -- a technique called early exits.
+If the model you're using was trained to do early exit, you can pass
+`assistant_early_exit` (integer). In this case, the assistant model will be the model itself with early exit, hence
 "self-speculative" name. Contrarily to vanilla assisted generation, here the assistant model shares the cache with the
-model itself, since they are the same model.
+model itself, since they are the same model, resulting in lower memory requirements.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -507,7 +508,7 @@ model itself, since they are the same model.
 >>> inputs = tokenizer(prompt, return_tensors="pt")
 
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> outputs = model.generate(**inputs, early_exit=4, do_sample=False, max_new_tokens=20)
+>>> outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
