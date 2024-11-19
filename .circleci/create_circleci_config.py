@@ -389,7 +389,7 @@ def create_circleci_config(folder=None):
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
         "jobs": {j.job_name: j.to_dict() for j in jobs},
-        "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name if j is not final_collection_job else {j.job_name: {"requires": [k.job_name for k in jobs if k not in [first_collection_job, final_collection_job]]}} for j in jobs]}}
+        "workflows": {"version": 2, "run_tests": {"jobs": _jobs}
     }
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
         f.write(yaml.dump(config, sort_keys=False, default_flow_style=False).replace("' << pipeline", " << pipeline").replace(">> '", " >>"))
