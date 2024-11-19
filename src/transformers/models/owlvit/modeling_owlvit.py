@@ -1332,19 +1332,22 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
         self.config = config
-        self.sqrt_num_patches = self.config.vision_config.image_size // self.config.vision_config.patch_size
-        self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
+        self.sqrt_patch_dim_h = self.sqrt_patch_dim_w = (
+            self.config.vision_config.image_size // self.config.vision_config.patch_size
+        )
+        self.box_bias = self.compute_box_bias(self.sqrt_patch_dim_h, self.sqrt_patch_dim_w)
 
     @staticmethod
-    def normalize_grid_corner_coordinates(num_patches: int) -> torch.Tensor:
+    def normalize_grid_corner_coordinates(patch_dim_h: int, patch_dim_w: int) -> torch.Tensor:
         # Create grid coordinates using torch
-        x_coordinates = torch.arange(1, num_patches + 1, dtype=torch.float32)
-        y_coordinates = torch.arange(1, num_patches + 1, dtype=torch.float32)
+        x_coordinates = torch.arange(1, patch_dim_h + 1, dtype=torch.float32)
+        y_coordinates = torch.arange(1, patch_dim_w + 1, dtype=torch.float32)
         xx, yy = torch.meshgrid(x_coordinates, y_coordinates, indexing="xy")
 
-        # Stack the coordinates and divide by num_patches
+        # Stack the coordinates and divide by their respective patch counts
         box_coordinates = torch.stack((xx, yy), dim=-1)
-        box_coordinates /= num_patches
+        box_coordinates[..., 0] /= patch_dim_h
+        box_coordinates[..., 1] /= patch_dim_w
 
         # Flatten (h, w, 2) -> (h*w, 2)
         box_coordinates = box_coordinates.view(-1, 2)
@@ -1352,18 +1355,22 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return box_coordinates
 
     @lru_cache(maxsize=2)
-    def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+    def compute_box_bias(
+        self, patch_dim_h: int, patch_dim_w: int, feature_map: Optional[torch.FloatTensor] = None
+    ) -> torch.Tensor:
         if feature_map is not None:
             raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
         # The box center is biased to its position on the feature grid
-        box_coordinates = self.normalize_grid_corner_coordinates(num_patches)
+        box_coordinates = self.normalize_grid_corner_coordinates(patch_dim_h, patch_dim_w)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
 
         # Unnormalize xy
         box_coord_bias = torch.log(box_coordinates + 1e-4) - torch.log1p(-box_coordinates + 1e-4)
 
         # The box size is biased to the patch size
-        box_size = torch.full_like(box_coord_bias, 1.0 / num_patches)
+        box_size = torch.full_like(box_coord_bias, 1.0)
+        box_size[..., 0] /= patch_dim_h
+        box_size[..., 1] /= patch_dim_w
         box_size_bias = torch.log(box_size + 1e-4) - torch.log1p(-box_size + 1e-4)
 
         # Compute box bias
@@ -1433,14 +1440,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             return_dict=True,
         )
 
-        if interpolate_pos_encoding:
-            _, _, height, width = pixel_values.shape
-            # height must eq width.
-            self.sqrt_num_patches = height // self.config.vision_config.patch_size
-            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
-        else:
-            self.sqrt_num_patches = self.config.vision_config.image_size // self.config.vision_config.patch_size
-            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
+        _, _, height, width = pixel_values.shape
+        self.sqrt_patch_dim_h = height // self.config.vision_config.patch_size
+        self.sqrt_patch_dim_w = width // self.config.vision_config.patch_size
+        self.box_bias = self.compute_box_bias(self.sqrt_patch_dim_h, self.sqrt_patch_dim_w)
 
         # Get image embeddings
         last_hidden_state = outputs.vision_model_output[0]
@@ -1453,11 +1456,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = image_embeds[:, 1:, :] * class_token_out
         image_embeds = self.layer_norm(image_embeds)
 
-        # Resize to [batch_size, num_patches, num_patches, hidden_size]
+        # Resize to [batch_size, num_patches_h, num_patches_w, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            self.sqrt_num_patches,
-            self.sqrt_num_patches,
+            self.sqrt_patch_dim_h,
+            self.sqrt_patch_dim_w,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1477,14 +1480,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
         )
 
-        if interpolate_pos_encoding:
-            _, _, height, width = pixel_values.shape
-            # height must eq width.
-            self.sqrt_num_patches = height // self.config.vision_config.patch_size
-            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
-        else:
-            self.sqrt_num_patches = self.config.vision_config.image_size // self.config.vision_config.patch_size
-            self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
+        _, _, height, width = pixel_values.shape
+        self.sqrt_patch_dim_h = height // self.config.vision_config.patch_size
+        self.sqrt_patch_dim_w = width // self.config.vision_config.patch_size
+        self.box_bias = self.compute_box_bias(self.sqrt_patch_dim_h, self.sqrt_patch_dim_w)
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
         last_hidden_state = vision_outputs[0]
@@ -1500,8 +1499,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            self.sqrt_num_patches,
-            self.sqrt_num_patches,
+            self.sqrt_patch_dim_h,
+            self.sqrt_patch_dim_w,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1610,11 +1609,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
-        batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
-        image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+        batch_size, num_patches_h, num_patches_w, hidden_dim = feature_map.shape
+        image_feats = torch.reshape(feature_map, (batch_size, num_patches_h * num_patches_w, hidden_dim))
 
-        batch_size, num_patches, num_patches, hidden_dim = query_feature_map.shape
-        query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+        batch_size, num_patches_h, num_patches_w, hidden_dim = query_feature_map.shape
+        query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches_h * num_patches_w, hidden_dim))
         # Get top class embedding and best box index for each query image in batch
         query_embeds, best_box_indices, query_pred_boxes = self.embed_image_query(query_image_feats, query_feature_map)
 
@@ -1716,8 +1715,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         text_outputs = outputs.text_model_output
         vision_outputs = outputs.vision_model_output
 
-        batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
-        image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+        batch_size, num_patches_h, num_patches_w, hidden_dim = feature_map.shape
+        image_feats = torch.reshape(feature_map, (batch_size, num_patches_h * num_patches_w, hidden_dim))
 
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
         max_text_queries = input_ids.shape[0] // batch_size

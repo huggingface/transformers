@@ -864,6 +864,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
 
         # Owlv2ForObjectDetection part.
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
+        processor.image_processor.size = {"height": 1024, "width": 1024}
 
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
@@ -910,6 +911,61 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
 
         num_queries = int((inputs.pixel_values.shape[-1] // model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
+        expected_default_box_bias = torch.tensor(
+            [
+                [-4.0717, -4.0717, -4.0717, -4.0717],
+                [-3.3644, -4.0717, -4.0717, -4.0717],
+                [-2.9425, -4.0717, -4.0717, -4.0717],
+            ]
+        )
+
+        self.assertTrue(torch.allclose(model.box_bias[:3, :4], expected_default_box_bias, atol=1e-4))
+
+        # Interpolate with any resolution size.
+        processor.image_processor.size = {"height": 1264, "width": 1024}
+
+        image = prepare_img()
+        inputs = processor(
+            text=[["a photo of a cat", "a photo of a dog"]],
+            images=image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        num_queries = int(
+            (inputs.pixel_values.shape[-2] // model.config.vision_config.patch_size)
+            * (inputs.pixel_values.shape[-1] / model.config.vision_config.patch_size)
+        )
+        self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
+        expected_slice_boxes = torch.tensor(
+            [[0.2068, 0.1142, 0.4153], [0.1126, 0.0528, 0.2040], [0.2080, 0.0524, 0.3914]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+        query_image = prepare_img()
+        inputs = processor(
+            images=image,
+            query_images=query_image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model.image_guided_detection(**inputs, interpolate_pos_encoding=True)
+
+        # No need to check the logits, we just check inference runs fine.
+        num_queries = int(
+            (inputs.pixel_values.shape[-2] // model.config.vision_config.patch_size)
+            * (inputs.pixel_values.shape[-1] / model.config.vision_config.patch_size)
+        )
+        self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
     @slow
     def test_inference_object_detection(self):
