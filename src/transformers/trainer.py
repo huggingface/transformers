@@ -532,7 +532,6 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        # if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_trainable:
         if _is_quantized_and_base_model and not _is_peft_model(model):
             raise ValueError(
                 "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
