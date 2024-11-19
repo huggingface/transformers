@@ -2867,6 +2867,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        image_token_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -2943,21 +2944,27 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
+        image_features = None
+        if pixel_values is not None and image_token_indices is not None:
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
                 vision_feature_layers=vision_feature_layers,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
+            image_features = image_features.to(inputs_embeds.device)
+            image_token_indices = image_token_indices.to(inputs_embeds.device)
 
-            special_image_mask = (
-                (input_ids == self.config.image_token_index)
-                .unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            batch_size, seq_len, hidden_size = inputs_embeds.size()
+            inputs_embeds = inputs_embeds.view(-1, hidden_size)
+            image_features = image_features.view(-1, hidden_size)
+            image_token_indices = image_token_indices.view(-1)
+
+            # insert image features at specified positions
+            valid_indices = image_token_indices >= 0
+            inputs_embeds[image_token_indices[valid_indices]] = image_features[valid_indices]
+
+            inputs_embeds = inputs_embeds.view(batch_size, seq_len, hidden_size)
+
 
         outputs = self.language_model(
             attention_mask=attention_mask,

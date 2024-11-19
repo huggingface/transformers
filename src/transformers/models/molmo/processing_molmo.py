@@ -109,6 +109,7 @@ class MolmoProcessor(ProcessorMixin):
         self.image_token = image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+
     def __call__(
         self,
         images: ImageInput = None,
@@ -174,7 +175,7 @@ class MolmoProcessor(ProcessorMixin):
         # TODO should be vectorizable
         if image_inputs.get("pixel_values") is not None and image_inputs.get("crop_grids") is not None:
             if self.patch_size is not None:
-                for crop_grid, patch_ordering in zip(image_inputs.get("crop_grids"), image_inputs.get("patch_orderings")):
+                for crop_grid, patch_ordering in zip(image_inputs.pop("crop_grids"), image_inputs.pop("patch_orderings")):
                     overlap_margins = self.image_processor.overlap_margins
                     crop_window_patches = self.image_processor.crop_window_patches
 
@@ -227,6 +228,7 @@ class MolmoProcessor(ProcessorMixin):
                     image_token_mask = image_token_mask[sorted_patch_ixs_ex * valid]
                     image_token_mask = image_token_mask * valid - 100 * (1 - valid)
                     image_token_mask = np.reshape(image_token_mask, [-1, self.image_processor.tokens_per_image_width * self.image_processor.tokens_per_image_height])
+                    image_inputs.setdefault('image_token_indices', []).append(image_token_mask)
                     # Replace the image token with the expanded image token sequence
                     prompt_strings = []
                     for sample in text:
