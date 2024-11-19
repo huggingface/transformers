@@ -156,10 +156,6 @@ Pass the chat template formatted text and image to [`Pipeline`] and set `return_
 
 ```python
 outputs = pipe(text=messages, max_new_tokens=20, return_full_text=False)
-```
-
-
-```python
 outputs[0]["generated_text"]
 #  with a yellow center in the foreground. The flower is surrounded by red and white flowers with green stems
 ```
