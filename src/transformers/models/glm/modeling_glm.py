@@ -708,6 +708,8 @@ class GlmModel(GlmPreTrainedModel):
             dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
         )
         self.gradient_checkpointing = False
+        if getattr(config, "pretraining_tp", 1) != 1:
+            logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -967,6 +969,7 @@ class GlmModel(GlmPreTrainedModel):
 
 class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config: GlmConfig):
         super().__init__(config)

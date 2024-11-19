@@ -51,10 +51,20 @@ class VideoLlavaProcessor(ProcessorMixin):
             Special token used to denote video location.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        num_additional_image_tokens (`int`, *optional*, defaults to 0):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
+    valid_kwargs = [
+        "chat_template",
+        "patch_size",
+        "vision_feature_select_strategy",
+        "image_token",
+        "video_token",
+        "num_additional_image_tokens",
+    ]
     image_processor_class = "VideoLlavaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -67,9 +77,11 @@ class VideoLlavaProcessor(ProcessorMixin):
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         video_token="<video>",
         chat_template=None,
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
@@ -165,13 +177,17 @@ class VideoLlavaProcessor(ProcessorMixin):
                 height, width = get_image_size(one_video[0])
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_image_tokens = (height // self.patch_size) * (
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
 
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_image_tokens = (height // self.patch_size) * (
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= 1
+                num_image_tokens -= self.num_additional_image_tokens
 
             prompt_strings = []
             for sample in text:

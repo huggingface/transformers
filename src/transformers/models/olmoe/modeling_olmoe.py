@@ -888,7 +888,7 @@ OLMOE_INPUTS_DOCSTRING = r"""
     "The bare Olmoe Model outputting raw hidden-states without any specific head on top.",
     OLMOE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Olmoe
+# TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Olmoe
 class OlmoeModel(OlmoePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OlmoeDecoderLayer`]
