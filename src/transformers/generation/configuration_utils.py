@@ -359,7 +359,7 @@ class GenerationConfig(PushToHubMixin):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
         assistant_early_exit(`int`, *optional*):
             If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
-            models that support early exit (i.e. is trained to compute logits in earlier layers).
+            models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
 
         > Wild card
 
