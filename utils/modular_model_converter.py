@@ -1485,7 +1485,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma/modular_gemma.py"],
+        default=["src/transformers/models/molmo/modular_molmo.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
