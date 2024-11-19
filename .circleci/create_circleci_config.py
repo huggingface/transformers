@@ -42,14 +42,14 @@ class EmptyJob:
     def to_dict(self):
         steps = ["checkout"]
         if self.job_name == "first_collection_job":
-            step = {"run": 'echo "Hello, world!" > workspace/echo-output'},
+            step = {"run": 'echo "Hello, world!" > workspace/echo-output'}
             steps.append(step)
             step = {
                 "persist_to_workspace": {
                     "root": "workspace",
                     "paths:": ["echo-output"]
                 }
-            },
+            }
             steps.append(step)
         return {
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
