@@ -129,7 +129,7 @@ from transformers import pipeline
 pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
 ```
 
-We will use chat templates to format our text inputs.
+The example below uses chat templates to format the text inputs.
 
 ```python
 messages = [
