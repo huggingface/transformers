@@ -1186,7 +1186,7 @@ else:
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
     _import_structure["models.deformable_detr"].extend(
-        ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
+        ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast"]
     )
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
     _import_structure["models.deprecated.deta"].append("DetaImageProcessor")
@@ -6100,6 +6100,7 @@ if TYPE_CHECKING:
         from .models.deformable_detr import (
             DeformableDetrFeatureExtractor,
             DeformableDetrImageProcessor,
+            DeformableDetrImageProcessorFast,
         )
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
