@@ -47,18 +47,18 @@ class EmptyJob:
         step = {"run": 'ls -la'}
         steps.append(step)
         if self.job_name == "first_collection_job":
-            step = {"run": 'echo "Hello, world!" > workspace/echo-output'}
+            step = {"run": 'echo "Hello, world!" > project/echo-output'}
             steps.append(step)
             step = {
                 "persist_to_workspace": {
-                    "root": "workspace",
+                    "root": "project",
                     "paths": ["echo-output"]
                 }
             }
             steps.append(step)
         return {
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
-            "steps": steps,
+            "steps": steps,ssh -p 64535 54.174.144.244
         }
 
 @dataclass
