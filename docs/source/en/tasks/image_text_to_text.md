@@ -122,7 +122,7 @@ print(generated_texts)
 
 ## Pipeline
 
-You can also use `pipeline` to easily infer `image-text-to-text` models. To do so, first initialize the `image-text-to-text` pipeline.
+The fastest way to get started is to use the [`Pipeline`] API. Specify the `"image-text-to-text"` task and the model you want to use.
 
 ```python
 from transformers import pipeline
