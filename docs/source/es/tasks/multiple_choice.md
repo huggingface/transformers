@@ -95,6 +95,10 @@ Para crear un lote de ejemplos para selección múltiple, este también le *aña
 `padding=True`, el rellenado dinámico es más eficiente.
 
 El [`DataCollatorForMultipleChoice`] aplanará todas las entradas del modelo, les aplicará relleno y luego des-aplanará los resultados.
+```py
+>>> from transformers import DataCollatorForMultipleChoice
+>>> collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
+```
 
 ## Entrenamiento
 
@@ -137,7 +141,7 @@ En este punto, solo quedan tres pasos:
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
 ...     processing_class=tokenizer,
-...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
+...     data_collator=collator,
 ... )
 
 >>> trainer.train()

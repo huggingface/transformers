@@ -4954,6 +4954,7 @@ if TYPE_CHECKING:
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForMultipleChoice,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSeq2Seq,
         DataCollatorForSOP,
@@ -4961,7 +4962,6 @@ if TYPE_CHECKING:
         DataCollatorForWholeWordMask,
         DataCollatorWithFlattening,
         DataCollatorWithPadding,
-        DataCollatorForMultipleChoice,
         DefaultDataCollator,
         default_data_collator,
     )

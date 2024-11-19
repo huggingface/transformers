@@ -113,6 +113,10 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 
 [`DataCollatorForMultipleChoice`]는 모든 모델 입력을 평탄화하고 패딩을 적용하며 그 결과를 결과를 다차원화합니다:
+```py
+>>> from transformers import DataCollatorForMultipleChoice
+>>> collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
+```
 
 ## 평가 하기[[evaluate]]
 
@@ -182,7 +186,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
 ...     processing_class=tokenizer,
-...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
+...     data_collator=collator,
 ...     compute_metrics=compute_metrics,
 ... )
 

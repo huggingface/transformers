@@ -114,6 +114,10 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 
 [`DataCollatorForMultipleChoice`] は、すべてのモデル入力を平坦化し、パディングを適用して、結果を非平坦化します。
+```py
+>>> from transformers import DataCollatorForMultipleChoice
+>>> collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
+```
 
 ## Evaluate
 
@@ -183,7 +187,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
 ...     processing_class=tokenizer,
-...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
+...     data_collator=collator,
 ...     compute_metrics=compute_metrics,
 ... )
 

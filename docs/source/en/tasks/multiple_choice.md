@@ -109,10 +109,14 @@ The preprocessing function you want to create needs to:
 To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] method. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
 
 ```py
-tokenized_swag = swag.map(preprocess_function, batched=True)
+>>> tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 
 To create a batch of examples, it's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximum length. [`DataCollatorForMultipleChoice`] flattens all the model inputs, applies padding, and then unflattens the results.
+```py
+>>> from transformers import DataCollatorForMultipleChoice
+>>> collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
+```
 
 ## Evaluate
 
@@ -182,7 +186,7 @@ At this point, only three steps remain:
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
 ...     processing_class=tokenizer,
-...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
+...     data_collator=collator,
 ...     compute_metrics=compute_metrics,
 ... )
 

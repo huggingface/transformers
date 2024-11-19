@@ -23,11 +23,10 @@ import os
 import sys
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import Optional, Union
+from typing import Optional
 
 import datasets
 import numpy as np
-import torch
 from datasets import load_dataset
 
 import transformers
@@ -35,16 +34,15 @@ from transformers import (
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
+    DataCollatorForMultipleChoice,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
     default_data_collator,
-    DataCollatorForMultipleChoice,
     set_seed,
 )
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import PaddingStrategy, check_min_version, send_example_telemetry
+from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -369,7 +367,9 @@ def main():
     data_collator = (
         default_data_collator
         if data_args.pad_to_max_length
-        else DataCollatorForMultipleChoice(tokenizer=tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None, return_tensors="pt")
+        else DataCollatorForMultipleChoice(
+            tokenizer=tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None, return_tensors="pt"
+        )
     )
 
     # Metric

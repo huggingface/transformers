@@ -25,7 +25,7 @@ import sys
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import datasets
 import tensorflow as tf
@@ -37,8 +37,8 @@ from transformers import (
     TF2_WEIGHTS_NAME,
     AutoConfig,
     AutoTokenizer,
-    DefaultDataCollator,
     DataCollatorForMultipleChoice,
+    DefaultDataCollator,
     HfArgumentParser,
     PushToHubCallback,
     TFAutoModelForMultipleChoice,
@@ -46,8 +46,7 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.utils import PaddingStrategy, check_min_version, send_example_telemetry
+from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

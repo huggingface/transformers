@@ -24,10 +24,8 @@ import logging
 import math
 import os
 import random
-from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Optional, Union
 
 import datasets
 import evaluate
@@ -47,13 +45,12 @@ from transformers import (
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
-    PreTrainedTokenizerBase,
+    DataCollatorForMultipleChoice,
     SchedulerType,
     default_data_collator,
-    DataCollatorForMultipleChoice,
     get_scheduler,
 )
-from transformers.utils import PaddingStrategy, check_min_version, send_example_telemetry
+from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -424,7 +421,9 @@ def main():
             pad_to_multiple_of = 8
         else:
             pad_to_multiple_of = None
-        data_collator = DataCollatorForMultipleChoice(tokenizer, pad_to_multiple_of=pad_to_multiple_of, return_tensors="pt")
+        data_collator = DataCollatorForMultipleChoice(
+            tokenizer, pad_to_multiple_of=pad_to_multiple_of, return_tensors="pt"
+        )
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
