@@ -58,7 +58,7 @@ class EmptyJob:
             steps.append(step)
         return {
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
-            "steps": steps,ssh -p 64535 54.174.144.244
+            "steps": steps,
         }
 
 @dataclass
