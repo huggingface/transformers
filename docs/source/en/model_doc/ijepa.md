@@ -52,7 +52,7 @@ model = AutoModel.from_pretrained(model_id)
 def infer(image):
     inputs = processor(image, return_tensors="pt")
     outputs = model(**inputs)
-    return outputs.pooler_output
+    return outputs.last_hidden_state.mean(dim=1)
 
 
 embed_1 = infer(image_1)
