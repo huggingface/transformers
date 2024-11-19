@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_or_tf,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -69,7 +70,8 @@ class TextToAudioPipelineTests(unittest.TestCase):
     # TODO: @ylacombe
     @slow
     @require_torch
-    @unittest.skip("`SeamlessM4TForTextToSpeech.generate` has issue with `generation_config`. See issue #34811")
+    # @unittest.skip("`SeamlessM4TForTextToSpeech.generate` has issue with `generation_config`. See issue #34811")
+    @run_test_using_subprocess
     def test_medium_seamless_m4t_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="facebook/hf-seamless-m4t-medium", framework="pt")
 
