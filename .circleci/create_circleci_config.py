@@ -47,7 +47,7 @@ class EmptyJob:
             step = {
                 "persist_to_workspace": {
                     "root": "workspace",
-                    "paths:": ["echo-output"]
+                    "paths": ["echo-output"]
                 }
             }
             steps.append(step)
