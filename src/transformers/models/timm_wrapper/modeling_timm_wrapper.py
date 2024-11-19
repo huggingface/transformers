@@ -202,9 +202,9 @@ class TimmWrapperForImageClassification(TimmWrapperModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (loss,) + outputs
-            output = tuple(output for output in output if output is not None)
-            return output
+            outputs = (loss,) + outputs
+            outputs = tuple(out for out in outputs if out is not None)
+            return outputs
 
         return ImageClassifierOutput(
             loss=loss,
