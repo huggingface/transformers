@@ -67,7 +67,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _fix_state_dict_key(key):
+    def _fix_state_dict_key_on_load(key):
         """
         Override original method which renames `gamma` and `beta` to `weight` and `bias`.
         We don't want this behavior for timm wrapped models. Instead, this method adds

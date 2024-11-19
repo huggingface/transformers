@@ -4260,7 +4260,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @staticmethod
-    def _fix_state_dict_key(key):
+    def _fix_state_dict_key_on_load(key):
         """Replace legacy parameter names with their modern equivalents. E.g. beta -> bias, gamma -> weight."""
 
         if "beta" in key:
@@ -4282,7 +4282,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return key
 
     @classmethod
-    def _fix_state_dict_keys(cls, state_dict):
+    def _fix_state_dict_keys_on_load(cls, state_dict):
         """Fixes state dict keys by replacing legacy parameter names with their modern equivalents.
         Logs if any parameters have been renamed.
         """
@@ -4290,7 +4290,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
-            new_key = cls._fix_state_dict_key(key)
+            new_key = cls._fix_state_dict_key_on_load(key)
             if new_key != key:
                 state_dict[new_key] = state_dict.pop(key)
 
@@ -4366,7 +4366,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
         original_loaded_keys = loaded_keys
-        loaded_keys = [cls._fix_state_dict_key(key) for key in loaded_keys]
+        loaded_keys = [cls._fix_state_dict_key_on_load(key) for key in loaded_keys]
 
         if len(prefix) > 0:
             has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
@@ -4605,7 +4605,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # For GGUF models `state_dict` is never set to None as the state dict is always small
             if gguf_path:
-                fixed_state_dict = cls._fix_state_dict_keys(state_dict)
+                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     fixed_state_dict,
@@ -4627,7 +4627,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
-                fixed_state_dict = cls._fix_state_dict_keys(state_dict)
+                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 error_msgs = _load_state_dict_into_model(
                     model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
                 )
@@ -4694,7 +4694,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                 )
                     else:
-                        fixed_state_dict = cls._fix_state_dict_keys(state_dict)
+                        fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
                             fixed_state_dict,
@@ -4718,7 +4718,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         assign_to_params_buffers = check_support_param_buffer_assignment(
                             model_to_load, state_dict, start_prefix
                         )
-                    fixed_state_dict = cls._fix_state_dict_keys(state_dict)
+                    fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                     error_msgs += _load_state_dict_into_model(
                         model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
                     )
@@ -4852,7 +4852,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
         state_dict = load_state_dict(resolved_archive_file, weights_only=weights_only)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
-        fixed_state_dict = model._fix_state_dict_keys(state_dict)
+        fixed_state_dict = model._fix_state_dict_keys_on_load(state_dict)
         error_msgs = _load_state_dict_into_meta_model(
             model,
             fixed_state_dict,
