@@ -1,35 +1,39 @@
-name: Run Scheduled Events Docker
-
+name: Run Scheduled Events Action
 permissions:
   actions: write
   contents: write
   issues: write
   pull-requests: write
-
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 0 10 * *'
-
 jobs:
   run-scheduled-events:
-    uses: Cemberk/fork-maintenance-system/.github/workflows/fork-maintenance-action.yml@artifacts
-    with:
-      platform: 'gfx90a'
-      upstream_repo: 'https://github.com/huggingface/transformers'
-      pr_branch_prefix: 'scheduled-merge'
-      requirements_command: |
-        rm -rf $(pip show numpy | grep Location: | awk '{print $2}')/numpy* && 
-        sudo sed -i 's/torchaudio//g' examples/pytorch/_tests_requirements.txt && 
-        pip install -r examples/pytorch/_tests_requirements.txt && 
-        git restore examples/pytorch/_tests_requirements.txt && 
-        pip install --no-cache-dir GPUtil azureml azureml-core tokenizers ninja cerberus sympy sacremoses sacrebleu==1.5.1 sentencepiece scipy scikit-learn urllib3 && pip install huggingface_hub datasets && 
-        pip install parameterized && 
-        pip install -e .
-      unit_test_command: folders=\$(python3 -c 'import os; workspace = \"/myworkspace\"; repo_root = os.path.join(workspace, \"tests\"); models_dir = os.path.join(repo_root, \"models\"); model_tests = os.listdir(models_dir); d1 = sorted([d for d in os.listdir(repo_root) if os.path.isdir(os.path.join(repo_root, d)) and d != \"models\"]); d2 = sorted([os.path.join(\"models\", x) for x in model_tests if os.path.isdir(os.path.join(models_dir, x))]); d = d2 + d1; print(\" \".join(d[:5]))'); echo \$folders;  for folder in \${folders[@]}; do pytest tests/\${folder} -v --make-reports=huggingface_unit_tests_\${machine_type}_run_models_gpu_\${folder} -rfEs --continue-on-collection-errors -m \"not not_device_test\" -p no:cacheprovider; done; allstats=\$(find reports -name stats.txt); for stat in \${allstats[@]}; do echo \$stat; cat \$stat; done
-      performance_test_command: 'echo \"python examples/pytorch/language-modeling/run_mlm.py --model_name_or_path bert-base-uncased --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train --do_eval --output_dir /tmp/test-mlm --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --max_steps 500\"'
-      docker_image: 'rocm/pytorch:latest'
-      docker_options: '--device=/dev/kfd --device=/dev/dri --group-add video --shm-size 16G --network=host'
-    secrets:
-      GIT_TOKEN: ${{ secrets.CRED_TOKEN }}
-      schedule_json: ${{ secrets.SCHEDULE_CONFIG }}
+    runs-on: self-hosted
+    env:
+      SCHEDULE_CONFIG: ${{ secrets.SCHEDULE_CONFIG }} # Secret storing the schedule JSON
+    steps:
+      - name: Fork Maintenance System
+        uses: Cemberk/Fork-Maintenance-System@artifacts
+        with:
+          platform: 'gfx90a'
+          github_token: ${{ secrets.CRED_TOKEN }}
+          upstream_repo: "https://github.com/huggingface/transformers"
+          schedule_json: |
+            ${{ env.SCHEDULE_CONFIG }}
+          pr_branch_prefix: "scheduled-merge"
+          requirements_command: |
+            rm -rf $(pip show numpy | grep Location: | awk '{print $2}')/numpy* && 
+            sudo sed -i 's/torchaudio//g' examples/pytorch/_tests_requirements.txt && 
+            pip install -r examples/pytorch/_tests_requirements.txt && 
+            git restore examples/pytorch/_tests_requirements.txt && 
+            pip install --no-cache-dir GPUtil azureml azureml-core tokenizers ninja cerberus sympy sacremoses sacrebleu==1.5.1 sentencepiece scipy scikit-learn urllib3 && pip install huggingface_hub datasets && 
+            pip install parameterized && 
+            pip install -e .
+            pip install --upgrade torch torchvision --extra-index-url https://download.pytorch.org/whl/rocm5.6
+            #sudo sed -i 's/torchaudio//g' examples/pytorch/_tests_requirements.txt && pip install -r examples/pytorch/_tests_requirements.txt && git restore examples/pytorch/_tests_requirements.txt && pip install --no-cache-dir GPUtil azureml azureml-core tokenizers ninja cerberus sympy sacremoses sacrebleu==1.5.1 sentencepiece scipy scikit-learn urllib3 && pip install huggingface_hub datasets && pip install parameterized && pip install -e .
+          unit_test_command: folders=\$(python3 -c 'import os; workspace = \"/myworkspace\"; repo_root = os.path.join(workspace, \"tests\"); models_dir = os.path.join(repo_root, \"models\"); model_tests = os.listdir(models_dir); d1 = sorted([d for d in os.listdir(repo_root) if os.path.isdir(os.path.join(repo_root, d)) and d != \"models\"]); d2 = sorted([os.path.join(\"models\", x) for x in model_tests if os.path.isdir(os.path.join(models_dir, x))]); d = d2 + d1; print(\" \".join(d[:5]))'); echo \$folders;  for folder in \${folders[@]}; do pytest tests/\${folder} -v --make-reports=huggingface_unit_tests_\${machine_type}_run_models_gpu_\${folder} -rfEs --continue-on-collection-errors -m \"not not_device_test\" -p no:cacheprovider; done; allstats=\$(find reports -name stats.txt); for stat in \${allstats[@]}; do echo \$stat; cat \$stat; done
+          performance_test_command: echo \"python examples/pytorch/language-modeling/run_mlm.py --model_name_or_path bert-base-uncased --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train --do_eval --output_dir /tmp/test-mlm --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --max_steps 500\"
+          docker_image: rocm/pytorch:latest
+          docker_options: --device=/dev/kfd --device=/dev/dri --group-add video --shm-size 16G --network=host
