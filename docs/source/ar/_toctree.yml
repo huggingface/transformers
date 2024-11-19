@@ -119,24 +119,24 @@
     title: مشاركة نموذج مخصص
   - local: chat_templating
     title: قوالب لنماذج الدردشة
-#   - local: trainer
-#     title: المدرب
-#   - local: sagemaker
-#     title: تشغيل التدريب على Amazon SageMaker
-#   - local: serialization
-#     title: التصدير إلى ONNX
+  - local: trainer
+    title: المدرب
+  - local: sagemaker
+    title: تشغيل التدريب على Amazon SageMaker
+  - local: serialization
+    title: التصدير إلى ONNX
   - local: tflite
     title: التصدير إلى TFLite
-#   - local: torchscript
-#     title: التصدير إلى TorchScript
+  - local: torchscript
+    title: التصدير إلى TorchScript
 #   - local: benchmarks
 #     title: المعايير
 #   - local: notebooks
 #     title: دفاتر الملاحظات مع الأمثلة
 #   - local: community
 #     title: موارد المجتمع
-#   - local: troubleshooting
-#     title: استكشاف الأخطاء وإصلاحها
+  - local: troubleshooting
+    title: استكشاف الأخطاء وإصلاحها
   - local: gguf
     title: التوافق مع ملفات GGUF
   title: أدلة المطورين
