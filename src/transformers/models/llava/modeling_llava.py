@@ -485,7 +485,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
                 "Expanding inputs for image tokens in LLaVa should be done in processing. "
                 "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
                 "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
             )
             # prefill stage vs decoding stage (legacy behavior copied)
             if input_ids.shape[1] != 1:
@@ -527,8 +527,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
         # TODO: @raushan retain only the new behavior after v4.47
         elif image_features is not None:
-            n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
-            n_image_features = image_features.shape[1]
+            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+            n_image_features = image_features.shape[0] * image_features.shape[1]
+
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"

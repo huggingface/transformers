@@ -23,7 +23,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -49,7 +48,10 @@ from ...utils import (
 from .configuration_gemma import GemmaConfig
 
 
+logger = logging.get_logger(__name__)
+
 _CHECKPOINT_FOR_DOC = "google/gemma-7b"
+_CONFIG_FOR_DOC = "GemmaConfig"
 
 
 class GemmaRMSNorm(nn.Module):
@@ -70,9 +72,6 @@ class GemmaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-logger = logging.get_logger(__name__)
 
 
 class GemmaRotaryEmbedding(nn.Module):
@@ -622,9 +621,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-
-_CONFIG_FOR_DOC = "GemmaConfig"
 
 
 GEMMA_INPUTS_DOCSTRING = r"""
