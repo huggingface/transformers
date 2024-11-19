@@ -2428,8 +2428,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # Perform post-processing to get instance segmentation map
-        >>> pred_instance_map = image_processor.post_process_semantic_segmentation(
-        ...     outputs, target_sizes=[image.size[::-1]]
+        >>> pred_instance_map = image_processor.post_process_instance_segmentation(
+        ...     outputs, target_sizes=[(image.height, image.width)]
         ... )[0]
         >>> print(pred_instance_map.shape)
         torch.Size([480, 640])
@@ -2462,7 +2462,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         >>> # Perform post-processing to get semantic segmentation map
         >>> pred_semantic_map = image_processor.post_process_semantic_segmentation(
-        ...     outputs, target_sizes=[image.size[::-1]]
+        ...     outputs, target_sizes=[(image.height, image.width)]
         ... )[0]
         >>> print(pred_semantic_map.shape)
         torch.Size([512, 683])
@@ -2496,7 +2496,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         >>> # Perform post-processing to get panoptic segmentation map
         >>> pred_panoptic_map = image_processor.post_process_panoptic_segmentation(
-        ...     outputs, target_sizes=[image.size[::-1]]
+        ...     outputs, target_sizes=[(image.height, image.width)]
         ... )[0]["segmentation"]
         >>> print(pred_panoptic_map.shape)
         torch.Size([338, 676])
