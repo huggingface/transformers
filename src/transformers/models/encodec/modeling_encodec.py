@@ -930,6 +930,10 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
             Activation function to use.
         activation_params (`Dict`, *optional*, defaults to `<factory>`):
             Parameters for the activation function.
+        output_hidden_states (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        output_attentions (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        return_dict (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        torchscript (`bool`, *optional*, defaults to `False`): <fill_docstring>
     """
 
     model_type: str = "encodec_discriminator"
