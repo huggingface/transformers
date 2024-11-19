@@ -220,6 +220,8 @@
       title: CPU inference
     - local: perf_infer_gpu_one
       title: GPU inference
+    - local: perf_infer_gpu_multi
+      title: Multi-GPU inference
     title: Optimizing inference
   - local: big_models
     title: Instantiate a big model
