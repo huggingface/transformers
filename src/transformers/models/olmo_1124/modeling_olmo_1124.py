@@ -971,6 +971,7 @@ class Olmo1124Model(Olmo1124PreTrainedModel):
         return causal_mask
 
 
+# TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO_1124,Llama->Olmo1124
 class Olmo1124ForCausalLM(Olmo1124PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
