@@ -52,6 +52,7 @@ from .pytorch_utils import (  # noqa: F401
     find_pruneable_heads_and_indices,
     id_tensor_storage,
     is_torch_greater_or_equal_than_1_13,
+    is_torch_greater_or_equal_than_2_4,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
@@ -1518,6 +1519,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "eager",
                 "sdpa",
                 "flash_attention_2",
+                "flex_attention",
             ]:
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
@@ -5005,6 +5007,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_mesh (`torch.distributed.DeviceMesh`):
                 The device mesh to use for tensor parallelism.
         """
+        if not is_torch_greater_or_equal_than_2_4:
+            raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
 
         # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
         # No op if `_tp_plan` attribute does not exist under the module.
