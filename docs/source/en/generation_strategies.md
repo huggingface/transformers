@@ -491,12 +491,12 @@ to model based assisted decoding. You can read more about it [here](https://twit
 
 #### Self-Speculative Decoding
 
-An LLM can be trained to also use its language modeling head with earlier hidden states as input, effectivelly
-skipping layers to yield a lower-quality output -- a technique called early exits.
+An LLM can be trained to also use its language modeling head with earlier hidden states as input, effectively
+skipping layers to yield a lower-quality output -- a technique called early exiting.
+We use the lower-quality early exit output as an assistant output, and apply self-speculation to fix the output using the remaining layers. The final generation of that self-speculative solution is the same (or has the same distribution) as the original model's generation.
 If the model you're using was trained to do early exit, you can pass
-`assistant_early_exit` (integer). In this case, the assistant model will be the model itself with early exit, hence
-"self-speculative" name. Contrarily to vanilla assisted generation, here the assistant model shares the cache with the
-model itself, since they are the same model, resulting in lower memory requirements.
+`assistant_early_exit` (integer). In this case, the assistant model will be the same model but exiting early, hence the
+"self-speculative" name. Because the assistant model is a portion of the target model, caches and weights can be shared, which results in lower memory requirements. As in other assisted generation methods, the final generated result has the same quality as if no assistant had been used.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
