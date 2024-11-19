@@ -46,18 +46,14 @@ class GptqHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
         if not is_optimum_available():
-            raise ImportError(
-                "Loading a GPTQ quantized model requires optimum (`pip install optimum`)"
-            )
+            raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
         from optimum.gptq import GPTQQuantizer
 
         self.optimum_quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_available():
-            raise ImportError(
-                "Loading a GPTQ quantized model requires optimum (`pip install optimum`)"
-            )
+            raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
 
         if not is_auto_gptq_available():
             raise ImportError(
