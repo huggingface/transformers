@@ -278,7 +278,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
-        model_id = "google/gemma-2-9b"
+        model_id = "google/gemma-2-2b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1960s and I am trying to find out what the average",
