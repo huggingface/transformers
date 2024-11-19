@@ -34,7 +34,7 @@ import time
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -66,7 +66,7 @@ from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint
+from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -233,7 +233,6 @@ if is_accelerate_available():
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
-        GradientAccumulationPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -358,6 +357,11 @@ class Trainer:
         optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your
             model and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
+        optimizer_cls_and_kwargs (`Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]`, *optional*):
+            A tuple containing the optimizer class and keyword arguments to use.
+            Overrides `optim` and `optim_args` in `args`. Incompatible with the `optimizers` argument.
+
+            Unlike `optimizers`, this argument avoids the need to place model parameters on the correct devices before initializing the Trainer.
         preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`, *optional*):
             A function that preprocess the logits right before caching them at each evaluation step. Must take two
             tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
@@ -401,7 +405,8 @@ class Trainer:
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        optimizers: Tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
+        optimizer_cls_and_kwargs: Optional[Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]] = None,
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         if args is None:
@@ -595,14 +600,19 @@ class Trainer:
             if not _is_peft_model(unwrapped_model)
             else unwrapped_model.get_base_model().forward
         )
-
-        self.model_accepts_loss_kwargs = "loss_kwargs" in inspect.signature(model_forward).parameters
+        forward_params = inspect.signature(model_forward).parameters
+        self.model_accepts_loss_kwargs = (
+            "loss_kwargs" in forward_params and forward_params["loss_kwargs"].kind == inspect.Parameter.VAR_KEYWORD
+        )
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
         self.optimizer, self.lr_scheduler = optimizers
+        self.optimizer_cls_and_kwargs = optimizer_cls_and_kwargs
+        if self.optimizer_cls_and_kwargs is not None and self.optimizer is not None:
+            raise RuntimeError("Passing both `optimizers` and `optimizer_cls_and_kwargs` arguments is incompatible.")
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
@@ -1171,7 +1181,10 @@ class Trainer:
                 },
             ]
 
-            optimizer_cls, optimizer_kwargs = self.get_optimizer_cls_and_kwargs(self.args, opt_model)
+            if self.optimizer_cls_and_kwargs is not None:
+                optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
+            else:
+                optimizer_cls, optimizer_kwargs = self.get_optimizer_cls_and_kwargs(self.args, opt_model)
 
             # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
             # e.g. for GaLore optimizer.
@@ -2264,8 +2277,11 @@ class Trainer:
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
         use_accelerator_prepare = True if model is self.model else False
 
-        # configure fsdp plugin for qlora if any
-        if use_accelerator_prepare:
+        if use_accelerator_prepare and self.is_fsdp_enabled:
+            # In case of auto_find_batch_size=True
+            # Remove FSDP wrapping from sub-models.
+            self.model = unwrap_model(self.model, recursive=True)
+            # configure fsdp plugin for qlora if any
             self._fsdp_qlora_plugin_updates()
 
         if delay_optimizer_creation:
@@ -2392,7 +2408,6 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
             if hasattr(epoch_dataloader, "set_epoch"):
@@ -2433,15 +2448,9 @@ class Trainer:
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
                 batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
-                for inputs in batch_samples:
+                for i, inputs in enumerate(batch_samples):
                     step += 1
-                    total_batched_samples += 1
-                    is_last_step_and_steps_less_than_grad_acc = (
-                        steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
-                    )
-                    do_sync_step = is_last_step_and_steps_less_than_grad_acc or (
-                        total_batched_samples % args.gradient_accumulation_steps == 0
-                    )
+                    do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
                     # Since we perform prefetching, we need to manually set sync_gradients
                     if not do_sync_step:
                         self.accelerator.gradient_state._set_sync_gradients(False)
@@ -2479,7 +2488,13 @@ class Trainer:
                     if step % args.gradient_accumulation_steps == 0:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                    with self.accelerator.accumulate(model):
+                    # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
+                    context = (
+                        functools.partial(self.accelerator.no_sync, model=model)
+                        if i != len(batch_samples) - 1
+                        else contextlib.nullcontext
+                    )
+                    with context():
                         tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
                     if (
@@ -3464,13 +3479,18 @@ class Trainer:
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
             kwargs (`Dict[str, Any]`, *optional*):
-                Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
-                information see:
+                Additional keyword arguments for each backend:
 
-                - the documentation of
-                  [optuna.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
-                - the documentation of [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run)
-                - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
+                - `optuna`: parameters from
+                  [optuna.study.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
+                  and also the parameters `timeout`, `n_jobs` and `gc_after_trial` from
+                  [optuna.study.Study.optimize](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.Study.html#optuna.study.Study.optimize)
+                - `ray`: parameters from [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run).
+                  If `resources_per_trial` is not set in the `kwargs`, it defaults to 1 CPU core and 1 GPU (if available).
+                  If `progress_reporter` is not set in the `kwargs`,
+                  [ray.tune.CLIReporter](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CLIReporter.html) is used.
+                - `sigopt`: the parameter `proxies` from
+                  [sigopt.Connection.set_proxies](https://docs.sigopt.com/support/faq#how-do-i-use-sigopt-with-a-proxy).
 
         Returns:
             [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
@@ -3631,15 +3651,11 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            if num_items_in_batch is not None:
-                if self.compute_loss_func or self.model_accepts_loss_kwargs:
-                    loss *= self.args.gradient_accumulation_steps
-                # Average tokens across devices is orthogonal to gradient accumulation
-                if self.args.average_tokens_across_devices:
-                    loss *= self.args.world_size
             self.accelerator.backward(loss, **kwargs)
-
-        return loss.detach() / self.args.gradient_accumulation_steps
+            # Finally we need to normalize the loss for reporting
+            if num_items_in_batch is None:
+                return loss.detach() / self.args.gradient_accumulation_steps
+            return loss.detach()
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
@@ -3651,9 +3667,6 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
-            num_items_in_batch_tensor = torch.tensor(num_items_in_batch, device=self.args.device)
-            num_items_in_batch = int(self.accelerator.gather(num_items_in_batch_tensor).sum().cpu())
         if self.model_accepts_loss_kwargs:
             loss_kwargs = {}
             if num_items_in_batch is not None:
@@ -3686,6 +3699,9 @@ class Trainer:
                 )
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        if self.args.average_tokens_across_devices and self.model_accepts_loss_kwargs:
+            loss *= self.accelerator.num_processes
 
         return (loss, outputs) if return_outputs else loss
 
@@ -4941,24 +4957,21 @@ class Trainer:
             self.repo.git_push()
 
     def create_accelerator_and_postprocess(self):
+        # We explicitly don't rely on the `Accelerator` to do gradient accumulation
         grad_acc_kwargs = {}
         if is_accelerate_available("0.28.0") and self.args.accelerator_config.gradient_accumulation_kwargs is not None:
             grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
 
         # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
-        if "num_steps" in grad_acc_kwargs and self.args.gradient_accumulation_steps > 1:
-            # raise because we do not know which setting is intended.
-            raise ValueError(
-                "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
-                "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
-            )
-        elif "num_steps" not in grad_acc_kwargs:
-            # take the gradient_accumulation_steps setting from TrainingArguments.
-            grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
-
-        grad_acc_kwargs["sync_with_dataloader"] = False
-
-        gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
+        if "num_steps" in grad_acc_kwargs:
+            if self.args.gradient_accumulation_steps > 1:
+                # raise because we do not know which setting is intended.
+                raise ValueError(
+                    "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
+                    "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
+                )
+            else:
+                self.args.gradient_accumulation_steps = grad_acc_kwargs["num_steps"]
 
         accelerator_config = self.args.accelerator_config.to_dict()
 
@@ -4989,7 +5002,6 @@ class Trainer:
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
-            "gradient_accumulation_plugin": gradient_accumulation_plugin,
         }
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
@@ -5085,12 +5097,18 @@ class Trainer:
                 batch_samples += [next(epoch_iterator)]
             except StopIteration:
                 break
+
+        # Keep default behavior the same
+        if not self.model_accepts_loss_kwargs:
+            return batch_samples, None
+
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum(
-                    [data_batch["labels"][..., 1:].ne(-100).sum().item() for data_batch in batch_samples]
-                )
-            except TypeError:
+                num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
+            except (TypeError, AttributeError):
                 pass
+
+        if self.args.average_tokens_across_devices:
+            num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
         return batch_samples, num_items_in_batch
