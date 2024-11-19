@@ -58,6 +58,17 @@ class EmptyJob:
                 }
             }
             steps.append(step)
+        elif self.job_name == "final_collection_job":
+            step = {"run": 'mkdir -p outputs'}
+            steps.append(step)
+            step = {
+                "attach_workspace": {
+                    "at": "outputs",
+                }
+            }
+            steps.append(step)
+            step = {"run": 'ls -la outputs'}
+            steps.append(step)
         return {
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
             "steps": steps,
