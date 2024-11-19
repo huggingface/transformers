@@ -77,6 +77,13 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             return f"timm_model.{key}"
         return key
 
+    def _fix_state_dict_key_on_save(self, key):
+        """
+        Override original method to remove "timm_model." prefix from state_dict keys.
+        Makes saved checkpoint compatible with `timm` library.
+        """
+        return key.replace("timm_model.", "")
+
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.

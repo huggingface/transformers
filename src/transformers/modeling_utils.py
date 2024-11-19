@@ -2819,6 +2819,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
+
+        # Rename state_dict keys before saving to file. Do nothing unless overriden in a particular model.
+        # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
+        state_dict = self._fix_state_dict_keys_on_save(state_dict)
+
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
@@ -4309,6 +4314,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info_once(warning_msg)
 
         return state_dict
+
+    @staticmethod
+    def _fix_state_dict_key_on_save(key):
+        """
+        Similar to `_fix_state_dict_key_on_load` allows to define hook for state dict key renaming on model save.
+        Do nothing by default, but can be overriden in particular models.
+        """
+        return key
+
+    def _fix_state_dict_keys_on_save(self, state_dict):
+        """
+        Similar to `_fix_state_dict_keys_on_load` allows to define hook for state dict key renaming on model save.
+        Apply `_fix_state_dict_key_on_save` to all keys in `state_dict`.
+        """
+        return {self._fix_state_dict_key_on_save(key): value for key, value in state_dict.items()}
 
     @classmethod
     def _load_pretrained_model(
