@@ -1025,7 +1025,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
                 import_ref_count[name] = ref_count
 
     imports_to_keep = []
-    existing_protected_statements = set() # str representation of the import node statements - does not work with the nodes directly
+    existing_protected_statements = set()  # str repr of the import node - does not work with the nodes directly
     for node in all_imports:
         if m.matches(node, m.If()):  # handle safe imports
             new_statements = []
