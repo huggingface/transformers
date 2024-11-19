@@ -77,18 +77,18 @@ def retrieve_images_in_messages(
         for content in message["content"]:
             if isinstance(content, dict):
                 if content.get("type") == "image":
-                    if any(key in content for key in ["image", "url", "path", "base64"]):
-                        for key in ["image", "url", "path", "base64"]:
-                            if key in content:
-                                retrieved_images.append(content[key])
-                                break
-                    elif idx_images < len(images):
-                        retrieved_images.append(images[idx_images])
-                        idx_images += 1
+                    for key in ["image", "url", "path", "base64"]:
+                        if key in content:
+                            retrieved_images.append(content[key])
+                            break
                     else:
-                        raise ValueError(
-                            "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
-                        )
+                        if idx_images < len(images):
+                            retrieved_images.append(images[idx_images])
+                            idx_images += 1
+                        else:
+                            raise ValueError(
+                                "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
+                            )
                 # Add support for OpenAI/TGI chat format
                 elif content.get("type") == "image_url":
                     if isinstance(content.get("image_url"), dict) and "url" in content["image_url"]:
