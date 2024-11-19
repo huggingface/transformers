@@ -152,7 +152,7 @@ messages = [
  ]
 ```
 
-Simply pass in the chat template formatted text and image. `return_full_text` argument will remove the part of the output that contains the input, leaving us with generated text.
+Pass the chat template formatted text and image to [`Pipeline`] and set `return_full_text=False` to remove the input from the generated output.
 
 ```python
 outputs = pipe(text=messages, max_new_tokens=20, return_full_text=False)
