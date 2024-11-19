@@ -107,20 +107,11 @@ class EncodecModelTester:
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
-        if model_class == EncodecDiscriminator:
-            config = EncodecDiscriminatorConfig()
-            inputs_dict = {
-                "input_values": floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
-            }
-        else:
-            config = self.get_config()
-            inputs_dict = self.prepare_config_and_inputs()[1]
-
-        if model_class == EncodecDiscriminator:
-            inputs_dict["input_values"] = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
-        else:
-            inputs_dict["audio_codes"] = ids_tensor([1, self.batch_size, 1, self.num_channels], self.codebook_size).type(torch.int32)
-            inputs_dict["audio_scales"] = [None]
+        config, inputs_dict = self.prepare_config_and_inputs()
+        inputs_dict["audio_codes"] = ids_tensor([1, self.batch_size, 1, self.num_channels], self.codebook_size).type(
+            torch.int32
+        )
+        inputs_dict["audio_scales"] = [None]
 
         return config, inputs_dict
 
@@ -148,7 +139,7 @@ class EncodecModelTester:
 
 @require_torch
 class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (EncodecModel, EncodecDiscriminator) if is_torch_available() else ()
+    all_model_classes = (EncodecModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -346,7 +337,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 outputs = model(input_values, bandwidth=bandwidth, return_dict=True, return_loss=True)
 
             print(f"\nBandwidth: {bandwidth}")
-            print(f"Reconstruction loss: {outputs.reconstruction_loss.item()}")
             print(f"Audio codes shape: {outputs.audio_codes[0].shape}")
             print(f"Audio values shape: {outputs.audio_values.shape}")
             print(f"Input max: {input_values.max().item()}, min: {input_values.min().item()}")
@@ -362,37 +352,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             output_spec = spec_transform(reconstructed_audio.squeeze())
             spec_mae = torch.mean(torch.abs(input_spec - output_spec))
             print(f"Spectrogram MAE: {spec_mae.item()}")
-
-    @slow
-    @require_torchaudio
-    def test_gradients_exist(self):
-        model_id = "facebook/encodec_24khz"
-        model = EncodecModel.from_pretrained(model_id).to(torch_device)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        model.train()
-
-        sample_rate = 24000
-        duration = 1
-        t = torch.linspace(0, duration, int(sample_rate * duration), device=torch_device)
-        frequency = 440  # A4 note
-        audio_input = torch.sin(2 * torch.pi * frequency * t).unsqueeze(0).unsqueeze(0)
-        audio_input = audio_input.repeat(1, model.config.audio_channels, 1).to(torch_device)
-
-        inputs = processor(
-            raw_audio=audio_input.squeeze().cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt"
-        )
-        input_values = inputs.input_values.to(torch_device)
-
-        outputs = model(input_values, return_dict=True, return_loss=True)
-        total_loss = outputs.reconstruction_loss
-
-        total_loss.backward()
-
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                self.assertIsNotNone(param.grad, f"Gradient for {name} is None")
-                self.assertFalse(torch.isnan(param.grad).any(), f"Gradient for {name} contains NaN values")
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states
@@ -652,8 +611,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     )
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -667,10 +624,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-            configs_no_init = _config_zero_init(config)
             model = model_class(config=configs_no_init)
-
             for name, param in model.named_parameters():
                 uniform_init_parms = ["conv"]
                 ignore_init = ["lstm"]

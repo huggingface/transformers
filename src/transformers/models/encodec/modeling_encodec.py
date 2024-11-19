@@ -948,6 +948,10 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
     norm: str = "weight_norm"
     activation: str = "LeakyReLU"
     activation_params: dict = field(default_factory=lambda: {"negative_slope": 0.2})
+    output_hidden_states: bool = False
+    output_attentions: bool = False
+    return_dict: bool = False
+    torchscript: bool = False
 
 
 class ConvLayerNorm(nn.LayerNorm):
@@ -1088,9 +1092,18 @@ class STFTDiscriminator(nn.Module):
         return z, feature_maps
 
 
-FeatureMapType = tp.List[torch.Tensor]
-LogitsType = torch.Tensor
-DiscriminatorOutput = tp.Tuple[tp.List[LogitsType], tp.List[FeatureMapType]]
+@dataclass
+class DiscriminatorOutput(ModelOutput):
+    """
+    Args:
+        logits (`List[torch.Tensor]`):
+            List of discriminator outputs for each STFT scale.
+        feature_maps (`List[List[torch.Tensor]]`):
+            List of feature maps from each discriminator.
+    """
+
+    logits: List[torch.Tensor] = None
+    feature_maps: List[List[torch.Tensor]] = None
 
 
 class EncodecDiscriminator(PreTrainedModel):
@@ -1152,26 +1165,39 @@ class EncodecDiscriminator(PreTrainedModel):
         )
         self.num_discriminators = len(self.discriminators)
 
-    def forward(self, x: torch.Tensor) -> DiscriminatorOutput:
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ModelOutput]:
         """
-        Applies the discriminator to the input audio.
-
         Args:
-            x (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+            input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
                 Input audio waveform.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            `tuple`:
-                - `logits` (`List[torch.Tensor]`): List of discriminator outputs for each STFT scale.
-                - `fmaps` (`List[List[torch.Tensor]]`): List of feature maps from each discriminator.
+            A tuple of `(logits, feature_maps)` where:
+                - logits is a list of discriminator outputs for each STFT scale
+                - feature_maps is a list of feature maps from each discriminator
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         logits = []
         fmaps = []
         for disc in self.discriminators:
-            logit, fmap = disc(x)
+            logit, fmap = disc(input_values)
             logits.append(logit)
             fmaps.append(fmap)
-        return logits, fmaps
+
+        if not return_dict:
+            return (logits, fmaps)
+
+        return DiscriminatorOutput(
+            logits=logits,
+            feature_maps=fmaps,
+        )
 
     def compute_loss(self, real_audio, fake_audio):
         """
