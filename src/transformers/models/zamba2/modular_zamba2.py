@@ -535,7 +535,7 @@ class Zamba2Attention(ZambaAttention):
     """
 
     def __init__(
-        self, config: Zamba2Config, layer_idx: Optional[int] = None, num_fwd_mem_blocks: int =None, block_id: int = None
+        self, config: Zamba2Config, layer_idx: Optional[int] = None, num_fwd_mem_blocks: int = None, block_id: int = None
     ):
         super().__init__(config, layer_idx)
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
@@ -1317,7 +1317,7 @@ class Zamba2MambaMixer(nn.Module):
     def forward(
         self,
         hidden_states,
-        cache_params: Optional[Zamba2HybriDynamicCache] = None,
+        cache_params: Optional[Zamba2HybridDynamicCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
