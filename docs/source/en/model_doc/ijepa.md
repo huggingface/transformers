@@ -34,6 +34,7 @@ Here is how to use this model for image feature extraction:
 
 ```python
 import requests
+import torch
 from PIL import Image
 from torch.nn.functional import cosine_similarity
 
@@ -48,7 +49,7 @@ model_id = "jmtzt/ijepa_vith14_1k"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModel.from_pretrained(model_id)
 
-
+@torch.no_grad()
 def infer(image):
     inputs = processor(image, return_tensors="pt")
     outputs = model(**inputs)

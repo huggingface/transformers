@@ -250,7 +250,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "jmtzt/ijepa_huge_patch14_1k"
+        model_name = "jmtzt/ijepa_vith14_1k"
         model = IJepaModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -266,11 +266,11 @@ def prepare_img():
 class IJepaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return ViTImageProcessor.from_pretrained("jmtzt/ijepa_vith14_1k") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
-        model = IJepaModel.from_pretrained("jmtzt/ijepa_huge_patch14_1k").to(torch_device)
+        model = IJepaModel.from_pretrained("jmtzt/ijepa_vith14_1k").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -299,7 +299,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         A small test to make sure that inference work in half precision without any problem.
         """
         model = IJepaModel.from_pretrained(
-            "jmtzt/ijepa_huge_patch14_1k",
+            "jmtzt/ijepa_vith14_1k",
             torch_dtype=torch.float16,
             device_map="auto",
         )
@@ -312,3 +312,30 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
             _ = model(pixel_values)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # I-JEPA, similar to ViT models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = IJepaModel.from_pretrained("jmtzt/ijepa_vith14_1k").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 256, 1280))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

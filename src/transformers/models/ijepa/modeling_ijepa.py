@@ -489,20 +489,6 @@ class IJepaPreTrainedModel(PreTrainedModel):
             ).to(module.position_embeddings.dtype)
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-
-IJEPA_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`IJepaConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
 IJEPA_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -525,6 +511,19 @@ IJEPA_INPUTS_DOCSTRING = r"""
             Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+
+IJEPA_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`IJepaConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -647,8 +646,8 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 @add_start_docstrings(
     """
-    IJepa Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    IJepa Model transformer with an image classification head on top (a linear layer on top of the final hidden states)
+    e.g. for ImageNet.
 
     <Tip>
 
@@ -709,7 +708,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        logits = self.classifier(sequence_output.mean(dim=1))
 
         loss = None
         if labels is not None:
