@@ -117,7 +117,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
         # add image URL for return dict
-        messages[0]["content"][0] = {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+        messages[0]["content"][0] = {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
         out_dict_with_image = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True
         )
@@ -130,7 +130,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
             },

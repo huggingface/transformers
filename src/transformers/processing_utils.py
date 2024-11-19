@@ -1078,7 +1078,7 @@ class ProcessorMixin(PushToHubMixin):
         tokenize: bool = False,
         return_dict: bool = False,
         num_frames: int = None,
-        video_load_backend: str = "opencv",
+        video_load_backend: str = "pyav",
         processor_kwargs: Dict = {},
         **kwargs,
     ) -> str:
@@ -1112,9 +1112,9 @@ class ProcessorMixin(PushToHubMixin):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             num_frames (`int`, *optional*):
                 Number of frames to sample uniformly. If not passed, the whole video is loaded.
-            backend (`str`, *optional*, defaults to `"opencv"`):
+            backend (`str`, *optional*, defaults to `"pyav"`):
                 The backend to use when loading the video which will be used only when there are videos in the conversation.
-                Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
+                Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
             processor_kwargs (`Dict[str: Any]`, *optional*):
                 Additional kwargs to pass to the processor. Used when `return_dict=True` and `tokenize=True`.
             **kwargs:
@@ -1142,12 +1142,16 @@ class ProcessorMixin(PushToHubMixin):
             for message in conversation:
                 visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
                 for vision_info in visuals:
-                    if vision_info["type"] == "image" and "image" in vision_info:
-                        images.append(load_image(vision_info["image"]))
-                    elif vision_info["type"] == "video" and "video" in vision_info:
-                        videos.append(
-                            load_video(vision_info["video"], num_frames=num_frames, backend=video_load_backend)
-                        )
+                    if vision_info["type"] == "image":
+                        for key in ["image", "url", "path", "base64"]:
+                            if key in vision_info:
+                                images.append(load_image(vision_info[key]))
+                    elif vision_info["type"] == "video":
+                        for key in ["video", "url", "path"]:
+                            if key in vision_info:
+                                videos.append(
+                                    load_video(vision_info[key], num_frames=num_frames, backend=video_load_backend)
+                                )
 
             out = self(
                 text=prompt,

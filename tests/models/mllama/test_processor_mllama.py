@@ -148,9 +148,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "Describe this image in two sentences"},
-                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": " Test sentence   "},
-                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "ok\n"},
                 ],
             }
