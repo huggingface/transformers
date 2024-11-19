@@ -3854,7 +3854,7 @@ class ModelTesterMixin:
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                        raise ValueError(f"The eager model should not have SDPA attention layers but got {class_name}")
 
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
