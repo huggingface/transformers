@@ -1165,7 +1165,6 @@ def create_test_list_from_filter(full_test_list, out_path):
             else:
                 files_to_test = files_to_test.union(set(re.findall(_filter, all_test_files)))
         print(job_name, file_name)
-        breakpoint()
         if len(files_to_test) > 0:  # No tests -> no file with test list
             with open(file_name, "w") as f:
                 f.write("\n".join(sorted(files_to_test)))
