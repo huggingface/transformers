@@ -1452,10 +1452,11 @@ class GenerationMixin:
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
-            generation_config.max_length = generation_config.max_length + input_ids_length
-            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
-            if max_position_embeddings is not None:
-                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+            if generation_config.max_length == GenerationConfig().max_length:
+                generation_config.max_length = generation_config.max_length + input_ids_length
+                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+                if max_position_embeddings is not None:
+                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1635,7 +1636,10 @@ class GenerationMixin:
             # This is needed here if we don't want to make changes in accelerate in order to save execution_device
             # For offloaded case, we need to get the execution device, not just the device where it is offloaded
             if hasattr(self, "hf_device_map"):
-                main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
+                if set(self.hf_device_map.values()) == {"cpu"} or set(self.hf_device_map.values()) == {"cpu", "disk"}:
+                    main_device = "cpu"
+                else:
+                    main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
                 execution_device_map = {
                     name: main_device if device in ["cpu", "disk"] else device
                     for name, device in self.hf_device_map.items()
