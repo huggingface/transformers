@@ -23,6 +23,7 @@ import unittest
 import numpy as np
 import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Config
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
@@ -454,10 +455,12 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
+    @pytest.mark.generate
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
     @unittest.skip(
         "KOSMOS-2 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten"
     )
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    def test_generate_from_inputs_embeds(self):
         pass
 
     @pytest.mark.generate
