@@ -77,8 +77,8 @@ def retrieve_images_in_messages(
         for content in message["content"]:
             if isinstance(content, dict):
                 if content.get("type") == "image":
-                    if any(key in content for key in ["image", "url", "path"]):
-                        for key in ["image", "url", "path"]:
+                    if any(key in content for key in ["image", "url", "path", "base64"]):
+                        for key in ["image", "url", "path", "base64"]:
                             if key in content:
                                 retrieved_images.append(content[key])
                                 break
