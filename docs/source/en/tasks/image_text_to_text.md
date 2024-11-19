@@ -158,7 +158,6 @@ Pass the chat template formatted text and image to [`Pipeline`] and set `return_
 outputs = pipe(text=messages, max_new_tokens=20, return_full_text=False)
 ```
 
-We can then access the generation like below. 
 
 ```python
 outputs[0]["generated_text"]
