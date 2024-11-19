@@ -84,6 +84,14 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         """
         return key.replace("timm_model.", "")
 
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        """
+        Override original method to fix state_dict keys on load for cases when weight are loaded
+        without using `from_pretrained` method (e.g. in Trainer to resume from checkpoint).
+        """
+        state_dict = self._fix_state_dict_keys_on_load(state_dict)
+        return super().load_state_dict(state_dict, *args, **kwargs)
+
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.
