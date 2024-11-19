@@ -40,8 +40,13 @@ class EmptyJob:
     job_name = "empty"
 
     def to_dict(self):
-        steps = ["checkout"]
+        # steps = ["checkout"]
+        steps = []
         if self.job_name == "first_collection_job":
+            step = {"run": 'dir'}
+            steps.append(step)
+            step = {"run": 'ls -la'}
+            steps.append(step)
             step = {"run": 'echo "Hello, world!" > workspace/echo-output'}
             steps.append(step)
             step = {
