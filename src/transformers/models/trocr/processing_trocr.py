@@ -72,7 +72,7 @@ class TrOCRProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        *args,
+        *,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -86,7 +86,7 @@ class TrOCRProcessor(ProcessorMixin):
         """
         # For backward compatibility
         if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
+            return self.current_processor(images, **kwargs)
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
@@ -98,7 +98,7 @@ class TrOCRProcessor(ProcessorMixin):
         )
 
         if images is not None:
-            inputs = self.image_processor(images, *args, **output_kwargs["images_kwargs"])
+            inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
