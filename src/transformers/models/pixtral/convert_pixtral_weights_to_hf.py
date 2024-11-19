@@ -172,7 +172,6 @@ def convert_mistral_tokenizer(model_name = "mistralai/Pixtral-Large-Instruct-241
     specials_tokens = {token: all_special.index(token) for token in all_special}
     specials_tokens.update(vocab)
     vocab = specials_tokens
-    import pdb;pdb.set_trace()
     tokenizer = PreTrainedTokenizerFast(
         tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
         bos_token="<s>",
@@ -276,8 +275,6 @@ def convert_mistral_model(input_dir, output_dir):
         for file in safetensors_files:
             loaded_dict = safe_load_file(f"{input_dir}/{file}")
             full_original_state_dict.update(loaded_dict)
-            print(loaded_dict.keys())
-            import pdb;pdb.set_trace()
     if "multi_modal_projector.linear_1.bias" not in full_original_state_dict:
         full_original_state_dict["multi_modal_projector.linear_1.bias"] = torch.zeros(text_config.hidden_size)
 
@@ -289,7 +286,9 @@ def convert_mistral_model(input_dir, output_dir):
         model = LlavaForConditionalGeneration(config)
     model.load_state_dict(new_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
-    import pdb;pdb.set_trace()
+    config_json = config.to_dict()
+    with open(f"{output_dir}/config.json","w") as f:
+        json.dump(f, config_json)
     
 def main():
     parser = argparse.ArgumentParser()
