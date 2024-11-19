@@ -17,7 +17,7 @@ import gc
 import glob
 import json
 from typing import List
-
+import os
 import regex as re
 import torch
 import torch.nn.functional as F
@@ -156,7 +156,6 @@ def write_model(
     model_path,
     input_base_path,
     safe_serialization=True,
-    instruct=False,
 ):
     # os.makedirs(model_path, exist_ok=True)
     # torch_dtype = torch.bfloat16
@@ -183,8 +182,10 @@ def write_model(
     # Convert weights
     # ------------------------------------------------------------
     state_dict = {}
-    # TODO move from fixed path to configurable/hub
-    weight_files = glob.glob("/raid/pablo/molmo/model-000*")
+    if os.path.isdir(input_base_path):
+        weight_files = glob.glob(os.path.join(input_base_path, "model-000*"))
+    else:
+        raise NotADirectoryError("Pass a directory for where the weights are found")
     for file in weight_files:
         partial_state_dict = load_file(file)
         state_dict.update(partial_state_dict)
@@ -252,22 +253,6 @@ def write_model(
     print("Model reloaded successfully.")
 
     # generation config
-    # TODO should be provided by defaults in Molmo original code
-
-    #
-    """
-    if instruct:
-        print("Saving generation config...")
-        generation_config = GenerationConfig(
-            do_sample=True,
-            temperature=0.6,
-            top_p=0.9,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-        )
-        generation_config.save_pretrained(model_path)
-    """
 
 
 def main():
@@ -275,7 +260,7 @@ def main():
     parser.add_argument(
         "--input_dir",
         default="Molmo-7B-D-0924",
-        help="Location of Molmo weights, which contains tokenizer.model and model folders in safetensors",
+        help="Location locally or on the hub of Molmo weights, which contains tokenizer.model and model folders in safetensors",
     )
     parser.add_argument(
         "--output_dir",
@@ -290,11 +275,6 @@ def main():
         default=None,
         type=List[str],
         help="The list of special tokens that should be added to the model.",
-    )
-    parser.add_argument(
-        "--instruct",
-        action="store_true",
-        help="Whether the model is an instruct model",
     )
     args = parser.parse_args()
     write_model(
