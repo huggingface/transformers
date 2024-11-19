@@ -141,7 +141,7 @@ messages = [
     {
       "role": "user",
       "content": [
-          {"type": "image", "image": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+          {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
           {"type": "text", "text": "What are these?"},
         ],
     },
