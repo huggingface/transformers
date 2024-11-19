@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -309,8 +308,6 @@ class Gemma2Attention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.scaling = 1 / math.sqrt(config.head_dim)
-
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
         self.attn_logit_softcapping = config.attn_logit_softcapping
