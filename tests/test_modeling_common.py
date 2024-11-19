@@ -847,7 +847,9 @@ class ModelTesterMixin:
                     ]
                     or not model_class.supports_gradient_checkpointing
                 ):
-                    self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    # TODO (ydshieh): use `skipTest` once pytest-dev/pytest-subtests/pull/169 is merged
+                    # self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    continue
 
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 config.use_cache = False
