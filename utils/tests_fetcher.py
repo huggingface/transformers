@@ -1167,7 +1167,7 @@ def create_test_list_from_filter(full_test_list, out_path):
         print(job_name, file_name)
         if len(files_to_test) > 0:  # No tests -> no file with test list
             with open(file_name, "w") as f:
-                f.write("\n".join(sorted(list(files_to_test))))
+                f.write("\n".join(sorted(files_to_test)))
 
 
 if __name__ == "__main__":
