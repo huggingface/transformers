@@ -66,6 +66,7 @@ class TrOCRProcessor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
     def __call__(
@@ -85,7 +86,7 @@ class TrOCRProcessor(ProcessorMixin):
         """
         # For backward compatibility
         if self._in_target_context_manager:
-            return self.tokenizer(*args, **kwargs)
+            return self.current_processor(*args, **kwargs)
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
@@ -134,7 +135,9 @@ class TrOCRProcessor(ProcessorMixin):
             "your images inputs, or in a separate call."
         )
         self._in_target_context_manager = True
+        self.current_processor = self.tokenizer
         yield
+        self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
     @property
