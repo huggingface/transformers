@@ -362,6 +362,10 @@ def create_circleci_config(folder=None):
     if len(jobs) == 0:
         jobs = [EmptyJob()]
     print("Full list of job name inputs", {j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs})
+
+    final_collection_job = EmptyJob()
+    final_collection_job.job_name = "final_collection_job"
+    jobs.append(final_collection_job)
     config = {
         "version": "2.1",
         "parameters": {
@@ -371,8 +375,8 @@ def create_circleci_config(folder=None):
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
-        "jobs" : {j.job_name: j.to_dict() for j in jobs},
-        "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+        "jobs": {j.job_name: j.to_dict() for j in jobs},
+        "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name if j is not final_collection_job else {j.job_name: {"requires": [k.job_name for k in jobs if k is not final_collection_job]}} for j in jobs]}}
     }
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
         f.write(yaml.dump(config, sort_keys=False, default_flow_style=False).replace("' << pipeline", " << pipeline").replace(">> '", " >>"))
