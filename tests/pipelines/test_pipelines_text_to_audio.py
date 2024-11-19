@@ -66,8 +66,10 @@ class TextToAudioPipelineTests(unittest.TestCase):
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
+    # TODO: @ylacombe
     @slow
     @require_torch
+    @unittest.skip("`SeamlessM4TForTextToSpeech.generate` has issue with `generation_config`. See issue #34811")
     def test_medium_seamless_m4t_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="facebook/hf-seamless-m4t-medium", framework="pt")
 
