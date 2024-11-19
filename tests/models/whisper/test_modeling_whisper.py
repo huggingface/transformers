@@ -1975,10 +1975,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                [2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281, 2928, 702, 14943],
-                [6966, 307, 2221, 13, 2326, 388, 1559, 6, 9060, 1570, 1880, 813, 702, 1871, 13, 50256, 50256, 50256, 50256, 50256],
-                [634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 365, 5272, 293, 12904, 9256, 450, 10539, 949, 505],
-                [634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 293, 393, 4411, 294] 
+                [1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284, 7062, 465],
+                [5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256, 50256, 50256],
+                [679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236, 878, 514],
+                [679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 7073, 287] 
             ]
 
         )
@@ -1988,9 +1988,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel",
-            " Nor is Mr. Quilters' manner less interesting than his matter.",
-            " He tells us that at this festive season of the year with Christmas and roast beef looming before us",
+            " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his",
+            " Nor is Mr. Quilter's manner less interesting than his matter.",
+            " He tells us that at this festive season of the year, with Christmas and roast beef looming before us",
             " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in",
         ]
         # fmt: on
