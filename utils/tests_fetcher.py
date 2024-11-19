@@ -1157,17 +1157,17 @@ def create_test_list_from_filter(full_test_list, out_path):
     os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
     for job_name, _filters in JOB_TO_TEST_FILE.items():
-        files_to_test = []
+        files_to_test = set()  # Using sets to avoid duplicates when multiple filters match the same file
         for _filter in _filters:
             file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
             if job_name == "tests_hub":
                 files_to_test = ["tests"]
             else:
-                files_to_test.extend(list(re.findall(_filter, all_test_files)))
+                files_to_test.union(set(re.findall(_filter, all_test_files)))
         print(job_name, file_name)
         if len(files_to_test) > 0:  # No tests -> no file with test list
             with open(file_name, "w") as f:
-                f.write("\n".join(sorted(files_to_test)))
+                f.write("\n".join(sorted(list(files_to_test))))
 
 
 if __name__ == "__main__":
