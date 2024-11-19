@@ -43,8 +43,9 @@ Let's see the pipeline in action. First, initialize the pipeline. If you don't p
 ```python
 import torch
 from transformers import pipeline
-
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from accelerate.test_utils.testing import get_backend
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+DEVICE, _, _ = get_backend()
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 
