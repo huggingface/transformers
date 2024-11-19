@@ -278,9 +278,12 @@ def convert_mistral_model(input_dir, output_dir):
             full_original_state_dict.update(loaded_dict)
             print(loaded_dict.keys())
             import pdb;pdb.set_trace()
-    if "multi_modal_projector.linear_1.bias" in full_original_state_dict:
-        print("Key is here!") 
-        import pdb;pdb.set_trace()
+    if "multi_modal_projector.linear_1.bias" not in full_original_state_dict:
+        full_original_state_dict["multi_modal_projector.linear_1.bias"] = torch.zeros(text_config.hidden_size)
+
+    if "multi_modal_projector.linear_2.bias" not in full_original_state_dict:
+        full_original_state_dict["multi_modal_projector.linear_2.bias"] = torch.zeros(text_config.hidden_size)
+
     new_dict = convert_dictionnary(full_original_state_dict, vision_config, text_config)
     with torch.device("meta"):
         model = LlavaForConditionalGeneration(config)
