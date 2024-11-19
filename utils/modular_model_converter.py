@@ -266,7 +266,6 @@ class SuperTransformer(cst.CSTTransformer):
             if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
                 target = self.python_module.code_for_node(stmt.body[0].targets[0].target)
                 if target in self.deleted_targets:
-                    logger.warning(f"Deleted the assign for {target}")
                     continue
                 if target in self.all_assign_target:
                     stmt = self.all_assign_target[target]
