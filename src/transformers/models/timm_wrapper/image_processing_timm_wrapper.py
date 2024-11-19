@@ -21,7 +21,7 @@ import torch
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_list_of_images
-from ...utils import TensorType, requires_backends
+from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import is_timm_available, is_torch_available
 
 
@@ -30,6 +30,9 @@ if is_timm_available():
 
 if is_torch_available():
     import torch
+
+
+logger = logging.get_logger(__name__)
 
 
 class TimmWrapperImageProcessor(BaseImageProcessor):
@@ -105,3 +108,11 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
             images = torch.stack([self.val_transforms(image) for image in images])
 
         return BatchFeature({"pixel_values": images}, tensor_type=return_tensors)
+
+    def save_pretrained(self, *args, **kwargs):
+        # disable it to make checkpoint the same as in `timm` library.
+        logger.warning_once(
+            "The `save_pretrained` method is disabled for TimmWrapperImageProcessor. "
+            "Image processor configuration is saved directly in `config.json` while "
+            "`save_pretrained` is called for model saving."
+        )
