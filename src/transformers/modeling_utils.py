@@ -224,6 +224,9 @@ def set_quantized_state():
     finally:
         _is_quantized = False
 
+# Skip recursive calls to deepspeed.zero.Init to avoid pinning errors.
+# This issue occurs with ZeRO stage 3 when using NVMe offloading.
+# For more details, refer to issue #34429.
 @contextmanager
 def set_zero3_state():
     global _is_ds_init_called
