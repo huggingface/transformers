@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_aria import AriaImageProcessor
+        from .processing_aria import AriaProcessor
 
     try:
         if not is_torch_available():
@@ -59,7 +60,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .processing_aria import AriaProcessor
         from .modeling_aria import (
             AriaForConditionalGeneration,
             AriaPreTrainedModel,

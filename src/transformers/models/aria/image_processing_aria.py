@@ -19,18 +19,14 @@ from ...image_transforms import (
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
-    get_image_size,
     PILImageResampling,
+    get_image_size,
     to_numpy_array,
 )
 from ...tokenization_utils import (
     TensorType,
 )
-from ...utils.import_utils import is_torch_available, is_vision_available
-
-
-if is_vision_available():
-    from PIL import Image
+from ...utils.import_utils import is_torch_available
 
 
 if is_torch_available():

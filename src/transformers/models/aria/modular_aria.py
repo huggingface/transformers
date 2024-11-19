@@ -18,8 +18,8 @@ from ...image_transforms import (
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
-    get_image_size,
     PILImageResampling,
+    get_image_size,
     to_numpy_array,
 )
 from ...modeling_utils import PreTrainedModel
@@ -32,7 +32,7 @@ from ...tokenization_utils import (
 from ...utils import (
     logging,
 )
-from ...utils.import_utils import is_torch_available, is_vision_available
+from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -52,9 +52,6 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch import nn
-
-if is_vision_available():
-    from PIL import Image
 
 
 def sequential_gemm(token_states, expert_weights, tokens_per_expert):
@@ -976,7 +973,7 @@ class AriaGroupedExpertsGEMM(nn.Module):
         )
 
 
-class AriaGroupedMLP(nn.Module):
+class AriaGroupedExpertsMLP(nn.Module):
     """
     Grouped MLP module for Mixture of Experts.
 
@@ -1025,7 +1022,7 @@ class AriaTextMoELayer(nn.Module):
         super().__init__()
 
         self.router = AriaTopKRouter(config)
-        self.experts = AriaGroupedMLP(config)
+        self.experts = AriaGroupedExpertsMLP(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
         self.config = config
 
@@ -1233,6 +1230,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
+        cache_position: Optional[torch.LongTensor] = None,
         **loss_kwargs,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
