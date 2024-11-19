@@ -1496,7 +1496,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = image_embeds[:, 1:, :] * class_token_out
         image_embeds = self.layer_norm(image_embeds)
 
-        # Resize to [batch_size, num_patches, num_patches, hidden_size]
+        # Resize to [batch_size, num_patches_h, num_patches_w, hidden_size]
         new_size = (
             image_embeds.shape[0],
             self.sqrt_patch_dim_h,
