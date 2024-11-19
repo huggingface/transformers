@@ -930,10 +930,14 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
             Activation function to use.
         activation_params (`Dict`, *optional*, defaults to `<factory>`):
             Parameters for the activation function.
-        output_hidden_states (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        output_attentions (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        return_dict (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        torchscript (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        output_hidden_states (`bool`, *optional*, defaults to `False`):
+            Whether to return the hidden states of each discriminator layer.
+        output_attentions (`bool`, *optional*, defaults to `False`):
+            Whether to return the attentions tensors of all attention layers.
+        return_dict (`bool`, *optional*, defaults to `False`):
+            Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        torchscript (`bool`, *optional*, defaults to `False`):
+            Whether the model is used with torchscript.
     """
 
     model_type: str = "encodec_discriminator"
