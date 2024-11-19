@@ -929,6 +929,14 @@ def is_flash_attn_greater_or_equal(library_version: str):
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
 
 
+@lru_cache()
+def is_torch_greater_or_equal(library_version: str):
+    if not _is_package_available("torch"):
+        return False
+
+    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
