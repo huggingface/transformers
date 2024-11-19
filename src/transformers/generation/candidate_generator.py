@@ -243,7 +243,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
             scores_tensor = torch.cat(assistant_output.scores, dim=0)
             scores_softmax = torch.softmax(scores_tensor, dim=-1)
-            ids = assistant_output.sequences[-1, -len(assistant_output.scores):]
+            ids = assistant_output.sequences[-1, -len(assistant_output.scores) :]
             p = scores_softmax[range(len(ids)), ids]
             self.probs.extend(p.tolist())
 
