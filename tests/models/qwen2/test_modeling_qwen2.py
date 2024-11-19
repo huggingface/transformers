@@ -20,7 +20,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, Qwen2Config, is_torch_available, pipeline, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -437,6 +436,8 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @require_torch
 class Qwen2IntegrationTest(unittest.TestCase):
+    input_text = ["Hello I am doing", "Hi today"]
+
     @slow
     def test_model_450m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
@@ -504,7 +505,25 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    @require_torch_sdpa
+    @require_torch_gpu
+    def test_model_450m_long_prompt_sdpa(self):
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project in which I need to create a class that will be used to store the data of a",
+            "Hi today I am going to show you how to make a simple and easy recipe for a delicious and healthy salad",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "Qwen/Qwen2-450m-beta", torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-450m-beta")
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+
+    @slow
+    @require_torch_gpu
     def test_model_450m_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
