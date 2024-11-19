@@ -47,11 +47,13 @@ class EmptyJob:
         step = {"run": 'ls -la'}
         steps.append(step)
         if self.job_name == "first_collection_job":
-            step = {"run": 'echo "Hello, world!" > /project/echo-output'}
+            step = {"run": 'mkdir -p outputs'}
+            steps.append(step)
+            step = {"run": 'echo "Hello, world!" > outputs/echo-output'}
             steps.append(step)
             step = {
                 "persist_to_workspace": {
-                    "root": "project",
+                    "root": "outputs",
                     "paths": ["echo-output"]
                 }
             }
