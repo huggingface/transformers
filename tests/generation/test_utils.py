@@ -4113,7 +4113,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
         manipulation, which will cause the test to fail if something goes wrong there.
         """
-        expected_output = [""]
+        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 8s and Bob has a pair"
 
         prompt = "Alice and Bob"
         checkpoint = "facebook/layerskip-llama3.2-1B"
