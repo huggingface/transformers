@@ -48,6 +48,8 @@ from transformers.testing_utils import (
 def get_some_linear_layer(model):
     if model.config.model_type == "gpt2":
         return model.transformer.h[0].mlp.c_fc
+    elif model.config.model_type == "llama":
+        return model.model.layers[0].mlp.gate_proj
     return model.transformer.h[0].mlp.dense_4h_to_h
 
 
@@ -900,6 +902,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
 
 @apply_skip_if_not_implemented
+@unittest.skipIf(torch_device == "xpu", reason="XPU has precision issue on gpt model, will test it once fixed")
 class MixedInt8GPT2Test(MixedInt8Test):
     model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
@@ -919,6 +922,33 @@ class MixedInt8GPT2Test(MixedInt8Test):
         from bitsandbytes.nn import Int8Params
 
         model_id = "ybelkada/gpt2-xl-8bit"
+
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+
+        linear = get_some_linear_layer(model)
+        self.assertTrue(linear.weight.__class__ == Int8Params)
+        self.assertTrue(hasattr(linear.weight, "SCB"))
+
+        # generate
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
+
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+
+class MixedInt8LlamaTest(MixedInt8Test):
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    EXPECTED_RELATIVE_DIFFERENCE = 1.7869331026479096
+    EXPECTED_OUTPUTS = set()
+    EXPECTED_OUTPUTS.add("Hello my name is John Smith and I am a software engineer. I")
+
+    def test_int8_from_pretrained(self):
+        r"""
+        Test whether loading a 8bit model from the Hub works as expected
+        """
+        from bitsandbytes.nn import Int8Params
+
+        model_id = "Jiqing/TinyLlama-1.1B-Chat-v1.0-bnb-8bit"
 
         model = AutoModelForCausalLM.from_pretrained(model_id)
 
