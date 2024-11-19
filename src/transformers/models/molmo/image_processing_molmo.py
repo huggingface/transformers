@@ -448,6 +448,39 @@ class MolmoImageProcessor(BaseImageProcessor):
         patch_orderings[patch_orderings >= 0] = patch_ordering_left_right[patch_ordering_left_right >= 0]
         return patch_orderings
 
+    def _prepare_crop_grids(self, data):
+        """
+        Prepares crop_grids by stacking them into a batch dimension.
+        """
+        crop_grids = data['crop_grids']  # List of arrays with shape (2,)
+        data['crop_grids'] = np.stack(crop_grids, axis=0)  # Shape: (batch_size, 2)
+
+
+    def _pad_patch_orderings(self, data):
+        """
+        Pads patch_orderings to have the same length across the batch.
+        """
+        patch_orderings = data['patch_orderings']  # List of arrays with shape (length_i,)
+        batch_size = len(patch_orderings)
+        max_length = max(ordering.shape[0] for ordering in patch_orderings)
+
+        # use a fill value that doesn't interfere with valid data (e.g., -2)
+        fill_value = -2
+        batched_patch_orderings = np.full(
+            (batch_size, max_length), fill_value=fill_value, dtype=patch_orderings[0].dtype
+        )
+
+        patch_orderings_mask = np.zeros((batch_size, max_length), dtype=bool)
+
+        for idx, ordering in enumerate(patch_orderings):
+            length = ordering.shape[0]
+            batched_patch_orderings[idx, :length] = ordering
+            patch_orderings_mask[idx, :length] = True
+
+        # Update the data dictionary
+        data['patch_orderings'] = batched_patch_orderings  # Shape: (batch_size, max_length)
+
+
     def _pad_for_batching(
         self,
         data: Dict,
@@ -459,7 +492,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         crops = data['pixel_values']
         max_num_crops = max(image.shape[0] for image in crops)
         batch_size = len(crops)
-        crop_shape = crops[0].shape[1:]  # Should be (576, 588)
+        crop_shape = crops[0].shape[1:]
 
         batched_crops = np.zeros(
             (batch_size, max_num_crops) + crop_shape, dtype=crops[0].dtype
@@ -471,6 +504,10 @@ class MolmoImageProcessor(BaseImageProcessor):
             crop_masks[idx, :num_crops] = True
 
         data['pixel_values'] = batched_crops
+
+        self._pad_patch_orderings(data)
+
+        self._prepare_crop_grids(data)
         return data
     
     def preprocess(
@@ -619,7 +656,6 @@ class MolmoImageProcessor(BaseImageProcessor):
             all_patch_orderings.append(patch_orderings)
         data = {
             "pixel_values": all_images,
-            "cropped_masks": all_cropped_masks,
             "crop_grids": all_crop_grids,
             "patch_orderings": all_patch_orderings,
             }
