@@ -241,10 +241,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
         if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
-            for i, score in enumerate(assistant_output.scores):
-                id = assistant_output.sequences[-1, i - len(assistant_output.scores)]
-                p = score.softmax(-1)[0, id].item()
-                self.probs.append(p)
+            scores_tensor = torch.cat(assistant_output.scores, dim=0)
+            scores_softmax = torch.softmax(scores_tensor, dim=-1)
+            ids = assistant_output.sequences[-1, -len(assistant_output.scores):]
+            p = scores_softmax[range(len(ids)), ids]
+            self.probs.extend(p.tolist())
 
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
