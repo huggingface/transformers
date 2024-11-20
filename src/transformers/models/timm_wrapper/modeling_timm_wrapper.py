@@ -19,7 +19,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings_to_model_forward,
@@ -107,9 +107,9 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     Wrapper class for timm models to be used in transformers.
     """
 
-    def __init__(self, config: TimmWrapperConfig, add_classification_head: bool = False):
+    def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, add_classification_head=add_classification_head)
+        self.timm_model = _load_timm_model(config, add_classification_head=False)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
@@ -120,7 +120,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[BaseModelOutput, Tuple[Tensor, ...]]:
+    ) -> Union[BaseModelOutputWithPooling, Tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -128,7 +128,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if output_attentions:
-            raise ValueError("Cannot set `output_attentions` for timm models")
+            raise ValueError("Cannot set `output_attentions` for timm models.")
 
         if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
             raise ValueError(
@@ -149,23 +149,29 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
             last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
             hidden_states = None
 
-        # logits in case add_classification_head=True, otherwise it would be pooled output
-        head_output = self.timm_model.forward_head(last_hidden_state)
+        # classification head is not created, applying pooling only
+        pooler_output = self.timm_model.forward_head(last_hidden_state)
 
         if not return_dict:
-            output = (head_output, hidden_states) if hidden_states is not None else (head_output,)
-            return output
+            outputs = (last_hidden_state, pooler_output, hidden_states)
+            outputs = tuple(output for output in outputs if output is not None)
+            return outputs
 
-        return BaseModelOutput(last_hidden_state=head_output, hidden_states=hidden_states)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooler_output,
+            hidden_states=hidden_states,
+        )
 
 
-class TimmWrapperForImageClassification(TimmWrapperModel):
+class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
     Wrapper class for timm models to be used in transformers for image classification.
     """
 
     def __init__(self, config: TimmWrapperConfig):
-        super().__init__(config, add_classification_head=True)
+        super().__init__(config)
+        self.timm_model = _load_timm_model(config, add_classification_head=True)
         self.num_labels = config.num_labels
         self.post_init()
 
@@ -186,18 +192,36 @@ class TimmWrapperForImageClassification(TimmWrapperModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = super().forward(
-            pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            **kwargs,
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        if output_attentions:
+            raise ValueError("Cannot set `output_attentions` for timm models.")
+
+        if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
+            raise ValueError(
+                "The 'output_hidden_states' option cannot be set for this timm model. "
+                "To enable this feature, the 'forward_intermediates' method must be implemented "
+                "in the timm model (available in timm versions > 1.*). Please consider using a "
+                "different architecture or updating the timm package to a compatible version."
+            )
+
+        pixel_values = pixel_values.to(self.device, self.dtype)
+
+        if output_hidden_states:
+            # to enable hidden states selection
+            if isinstance(output_hidden_states, (list, tuple)):
+                kwargs["indices"] = output_hidden_states
+            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            logits = self.timm_model.forward_head(last_hidden_state)
+        else:
+            logits = self.timm_model(pixel_values, **kwargs)
+            hidden_states = None
 
         loss = None
         if labels is not None:
-            logits = outputs[0]
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -219,12 +243,12 @@ class TimmWrapperForImageClassification(TimmWrapperModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            outputs = (loss,) + outputs
-            outputs = tuple(out for out in outputs if out is not None)
+            outputs = (loss, logits, hidden_states)
+            outputs = tuple(output for output in outputs if output is not None)
             return outputs
 
         return ImageClassifierOutput(
             loss=loss,
-            logits=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
+            logits=logits,
+            hidden_states=hidden_states,
         )
