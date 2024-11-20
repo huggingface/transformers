@@ -1076,6 +1076,8 @@ if __name__ == "__main__":
 
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
+                        if "= test session starts =" in line:
+                            continue
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
