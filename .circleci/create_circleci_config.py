@@ -186,6 +186,7 @@ class CircleCIJob:
             {"run": 'mv reports/tests_torch_and_tf reports/tests_torch_and_tf_$CIRCLE_NODE_INDEX'},
             {"run": {"name": "Move reports", "command": "cp -r reports outputs"}},
             {"run": 'ls -la outputs'},
+            {"run": 'ls -la outputs/reports'},
         ]
         if self.parallelism:
             job["parallelism"] = parallel
