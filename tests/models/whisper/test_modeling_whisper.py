@@ -22,6 +22,7 @@ import re
 import tempfile
 import time
 import unittest
+import types
 
 import numpy as np
 import pytest
@@ -1676,6 +1677,104 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
+    
+    # Whisper's generate method does return the decoder initial tokens.
+    # To keep compatibility with generic GenerationTesterMixin, we need to patch generate first.
+    def generate_patch(self, generate):
+        def wrapper(self, *args, **kwargs):
+            # Call the original generate method
+            output_generate = generate(self, *args, **kwargs)
+
+            # Add the initial tokens to the generated sequences
+            init_tokens = [self.generation_config.decoder_start_token_id]
+            init_tokens = torch.as_tensor(init_tokens, dtype=torch.long, device=torch_device)
+            
+            if kwargs["return_dict_in_generate"]:
+                init_tokens = init_tokens.expand(output_generate.sequences.shape[0], -1)
+                output_generate.sequences = torch.cat([init_tokens, output_generate.sequences], dim=-1)
+            else:
+                init_tokens = init_tokens.expand(output_generate.shape[0], -1)
+                output_generate = torch.cat([init_tokens, output_generate], dim=-1)
+                
+            return output_generate
+        return wrapper
+    
+    def _greedy_generate(
+        self,
+        model,
+        inputs_dict,
+        **kwargs
+    ):
+        if not hasattr(model, '_generate_patched'):
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+            model._generate_patched = True
+        return super()._greedy_generate(model, inputs_dict, **kwargs)
+    
+    def _sample_generate(
+        self,
+        model,
+        inputs_dict,
+        **kwargs
+    ):
+        if not hasattr(model, '_generate_patched'):
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+            model._generate_patched = True
+        return super()._sample_generate(model, inputs_dict, **kwargs) 
+    
+    def _beam_search_generate(
+        self,
+        model,
+        inputs_dict,
+        **kwargs
+    ):
+        if not hasattr(model, '_generate_patched'):
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+            model._generate_patched = True
+        return super()._beam_search_generate(model, inputs_dict, **kwargs)
+
+    def _beam_sample_generate(
+        self,
+        model,
+        inputs_dict,
+        **kwargs
+    ):
+        if not hasattr(model, '_generate_patched'):
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+            model._generate_patched = True
+        return super()._beam_sample_generate(model, inputs_dict, **kwargs)
+
+    def _group_beam_search_generate(
+        self,
+        model,
+        inputs_dict,
+        **kwargs
+    ):
+        if not hasattr(model, '_generate_patched'):
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+            model._generate_patched = True
+        return super()._group_beam_search_generate(model, inputs_dict, **kwargs)
+
+    def _constrained_beam_search_generate(
+        self,
+        model,
+        inputs_dict,
+        **kwargs
+    ):
+        if not hasattr(model, '_generate_patched'):
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+            model._generate_patched = True
+        return super()._constrained_beam_search_generate(model, inputs_dict, **kwargs)
+
+    def _contrastive_generate(
+        self,
+        model,
+        inputs_dict,
+        **kwargs
+    ):
+        if not hasattr(model, '_generate_patched'):
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+            model._generate_patched = True
+        return super()._contrastive_generate(model, inputs_dict, **kwargs)
 
 
 @require_torch
