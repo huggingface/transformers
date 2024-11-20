@@ -41,8 +41,6 @@ class Emu3VQVAEConfig(PretrainedConfig):
             Residual block number in each stage.
         attn_resolutions (`List[int]`, *optional*, defaults to `[3]`):
             Stage indices to apply attention.
-        initializer_range (`<float>`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     ```python
     >>> from transformers import Emu3VQVAE, Emu3VQVAEConfig
@@ -72,7 +70,6 @@ class Emu3VQVAEConfig(PretrainedConfig):
         channel_multiplier: List[int] = [1, 2, 2, 4],
         num_res_blocks: int = 2,
         attn_resolutions: List[int] = [3],
-        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -88,7 +85,6 @@ class Emu3VQVAEConfig(PretrainedConfig):
         self.channel_multiplier = channel_multiplier
         self.num_res_blocks = num_res_blocks
         self.attn_resolutions = attn_resolutions
-        self.initializer_range = initializer_range
 
 
 class Emu3TextConfig(PretrainedConfig):
@@ -126,8 +122,6 @@ class Emu3TextConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 9216):
             The maximum sequence length that this model might ever be used with. Emu supports up to 9216 tokens,
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -139,11 +133,6 @@ class Emu3TextConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 151850):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 1000000.0):
@@ -219,13 +208,11 @@ class Emu3TextConfig(PretrainedConfig):
         num_key_value_heads: Optional[int] = 8,
         hidden_act: str = "silu",
         max_position_embeddings: int = 9216,
-        initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
         pad_token_id: int = 151643,
         bos_token_id: int = 151849,
         eos_token_id: int = 151850,
-        pretraining_tp: int = 1,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1000000.0,
         rope_scaling: Optional = None,
@@ -242,7 +229,6 @@ class Emu3TextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
@@ -252,7 +238,6 @@ class Emu3TextConfig(PretrainedConfig):
         rope_config_validation(self)
 
         self.attention_dropout = attention_dropout
-        self.pretraining_tp = pretraining_tp
 
         super().__init__(
             pad_token_id=pad_token_id,
