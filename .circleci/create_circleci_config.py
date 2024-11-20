@@ -179,7 +179,15 @@ class CircleCIJob:
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
+            {"run": 'mkdir -p outputs'},
+            {"attach_workspace": {"at": "outputs"}},
+            {"run": 'ls -la outputs'},
+            {"run": {"name": "Move reports", "command": "cp -r reports outputs"}},
+            {"run": 'ls -la outputs'},
         ]
+
+
+
         if self.parallelism:
             job["parallelism"] = parallel
         job["steps"] = steps
@@ -378,6 +386,13 @@ EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
 PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
+
+REGULAR_TESTS = [torch_and_tf_job] # fmt: skip
+EXAMPLES_TESTS = []
+PIPELINE_TESTS = []
+REPO_UTIL_TESTS = []
+DOC_TESTS = []
+
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
 
 def create_circleci_config(folder=None):
