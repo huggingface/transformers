@@ -1901,13 +1901,17 @@ class GenerationTesterMixin:
             # Test different data type of static cache
             for dtype in (torch.float32, torch.float16):
                 model = model.to(dtype)
-                static_cache_generation = model.generate(**generation_kwargs, **inputs_dict, cache_implementation="static")
+                static_cache_generation = model.generate(
+                    **generation_kwargs, **inputs_dict, cache_implementation="static"
+                )
 
                 # Check 1: The cache shapes must match the expected shapes
                 max_cache_len = seq_length + max_new_tokens
                 config = config.text_config if hasattr(config, "text_config") else config
                 head_dim = (
-                    config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+                    config.head_dim
+                    if hasattr(config, "head_dim")
+                    else config.hidden_size // config.num_attention_heads
                 )
                 num_key_value_heads = (
                     config.num_attention_heads
