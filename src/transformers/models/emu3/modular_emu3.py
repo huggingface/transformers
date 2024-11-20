@@ -227,10 +227,10 @@ class Emu3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
 
