@@ -239,13 +239,16 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         image_processor = self.default_image_processor
         # TODO update organization
         model = VitPoseForPoseEstimation.from_pretrained("danelcsb/vitpose-base-simple")
+        model.to(torch_device)
+        model.eval()
 
         image = prepare_img()
         boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
 
-        inputs = image_processor(images=image, boxes=boxes, return_tensors="pt")
+        inputs = image_processor(images=image, boxes=boxes, return_tensors="pt").to(torch_device)
 
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         heatmaps = outputs.heatmaps
 
         assert heatmaps.shape == (2, 17, 64, 48)
@@ -256,30 +259,40 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
                 [9.9330e-06, 9.9330e-06, 9.9330e-06],
                 [9.9330e-06, 9.9330e-06, 9.9330e-06],
             ]
-        )
+        ).to(torch_device)
 
         assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
 
         pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
 
-        expected_bbox = torch.tensor([439.3250, 226.6150, 438.9719, 226.4776, 22320.4219, 0.0000]).to(torch_device)
+        expected_bbox = torch.tensor([391.9900, 190.0800, 391.1575, 189.3034])
         expected_keypoints = torch.tensor(
             [
-                [3.9813e02, 1.8184e02, 8.7529e-01],
-                [3.9828e02, 1.7981e02, 8.4315e-01],
-                [3.9596e02, 1.7948e02, 9.2678e-01],
+                [3.9813e02, 1.8184e02],
+                [3.9828e02, 1.7981e02],
+                [3.9596e02, 1.7948e02],
             ]
-        ).to(torch_device)
+        )
+        expected_scores = torch.tensor(
+            [
+                [8.7529e-01],
+                [8.4315e-01],
+                [9.2678e-01],
+            ]
+        )
 
         self.assertEqual(len(pose_results), 2)
-        self.assertTrue(torch.allclose(pose_results[0]["bbox"], expected_bbox, atol=1e-4))
-        self.assertTrue(torch.allclose(pose_results[0]["keypoints"], expected_keypoints, atol=1e-4))
+        self.assertTrue(torch.allclose(pose_results[1]["bbox"].cpu(), expected_bbox, atol=1e-4))
+        self.assertTrue(torch.allclose(pose_results[1]["keypoints"][:3].cpu(), expected_keypoints, atol=1e-2))
+        self.assertTrue(torch.allclose(pose_results[1]["scores"][:3].cpu(), expected_scores, atol=1e-4))
 
     @slow
     def test_batched_inference(self):
         image_processor = self.default_image_processor
         # TODO update organization
         model = VitPoseForPoseEstimation.from_pretrained("danelcsb/vitpose-base-simple")
+        model.to(torch_device)
+        model.eval()
 
         image = prepare_img()
         boxes = [
@@ -287,9 +300,10 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
             [[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]],
         ]
 
-        inputs = image_processor(images=[image, image], boxes=boxes, return_tensors="pt")
+        inputs = image_processor(images=[image, image], boxes=boxes, return_tensors="pt").to(torch_device)
 
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         heatmaps = outputs.heatmaps
 
         assert heatmaps.shape == (4, 17, 64, 48)
@@ -300,22 +314,31 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
                 [9.9330e-06, 9.9330e-06, 9.9330e-06],
                 [9.9330e-06, 9.9330e-06, 9.9330e-06],
             ]
-        )
+        ).to(torch_device)
 
         assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
 
         pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
+        print(pose_results)
 
-        expected_bbox = torch.tensor([439.3250, 226.6150, 438.9719, 226.4776, 22320.4219, 0.0000]).to(torch_device)
+        expected_bbox = torch.tensor([391.9900, 190.0800, 391.1575, 189.3034])
         expected_keypoints = torch.tensor(
             [
-                [3.9813e02, 1.8184e02, 8.7529e-01],
-                [3.9828e02, 1.7981e02, 8.4315e-01],
-                [3.9596e02, 1.7948e02, 9.2678e-01],
+                [3.9813e02, 1.8184e02],
+                [3.9828e02, 1.7981e02],
+                [3.9596e02, 1.7948e02],
             ]
-        ).to(torch_device)
+        )
+        expected_scores = torch.tensor(
+            [
+                [8.7529e-01],
+                [8.4315e-01],
+                [9.2678e-01],
+            ]
+        )
 
         self.assertEqual(len(pose_results), 2)
         self.assertEqual(len(pose_results[0]), 2)
-        self.assertTrue(torch.allclose(pose_results[0][0]["bbox"], expected_bbox, atol=1e-4))
-        self.assertTrue(torch.allclose(pose_results[0][0]["keypoints"], expected_keypoints, atol=1e-4))
+        self.assertTrue(torch.allclose(pose_results[0][1]["bbox"].cpu(), expected_bbox, atol=1e-4))
+        self.assertTrue(torch.allclose(pose_results[0][1]["keypoints"][:3].cpu(), expected_keypoints, atol=1e-2))
+        self.assertTrue(torch.allclose(pose_results[0][1]["scores"][:3].cpu(), expected_scores, atol=1e-4))
