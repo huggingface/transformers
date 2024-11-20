@@ -1075,6 +1075,9 @@ if __name__ == "__main__":
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
                 for line in artifact["summary_short"].split("\n"):
+                    # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
+                    # `stacktraces.pop` below.
+                    # See `run_test_using_subprocess` in `src/transformers/testing_utils.py`
                     if line.startswith("FAILED "):
                         if " - Failed: (subprocess)" in line:
                             continue
@@ -1187,9 +1190,11 @@ if __name__ == "__main__":
 
             if failed:
                 for line in artifact["summary_short"].split("\n"):
-                    print(line)
                     if line.startswith("FAILED "):
-                        if "(subprocess) " in line:
+                        # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
+                        # `stacktraces.pop` below.
+                        # See `run_test_using_subprocess` in `src/transformers/testing_utils.py`
+                        if " - Failed: (subprocess)" in line:
                             continue
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
