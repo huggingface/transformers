@@ -32,8 +32,23 @@ class SummarizationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        summarizer = SummarizationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]
 
     def run_pipeline_test(self, summarizer, _):
@@ -70,8 +85,9 @@ class SummarizationPipelineTests(unittest.TestCase):
                 and len(summarizer.model.trainable_weights) > 0
                 and "GPU" in summarizer.model.trainable_weights[0].device
             ):
-                with self.assertRaises(Exception):
-                    outputs = summarizer("This " * 1000)
+                if str(summarizer.device) == "cpu":
+                    with self.assertRaises(Exception):
+                        outputs = summarizer("This " * 1000)
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch

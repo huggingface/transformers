@@ -20,11 +20,14 @@ import copy
 import inspect
 import json
 import os
+import sys
+import typing
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
+import typing_extensions
 
 from .dynamic_module_utils import custom_object_save
 from .image_utils import ChannelDimension, is_valid_image, is_vision_available
@@ -35,7 +38,9 @@ if is_vision_available():
 
 from .tokenization_utils_base import (
     PaddingStrategy,
+    PreTokenizedInput,
     PreTrainedTokenizerBase,
+    TextInput,
     TruncationStrategy,
 )
 from .utils import (
@@ -66,6 +71,11 @@ AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
 }
+
+if sys.version_info >= (3, 11):
+    Unpack = typing.Unpack
+else:
+    Unpack = typing_extensions.Unpack
 
 
 class TextKwargs(TypedDict, total=False):
@@ -106,6 +116,9 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
     """
 
+    text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+    text_pair_target: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
     add_special_tokens: Optional[bool]
     padding: Union[bool, str, PaddingStrategy]
     truncation: Union[bool, str, TruncationStrategy]
@@ -151,6 +164,8 @@ class ImagesKwargs(TypedDict, total=False):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the image.
         data_format (`ChannelDimension` or `str`, *optional*):
@@ -170,6 +185,7 @@ class ImagesKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_pad: Optional[bool]
+    pad_size: Optional[Dict[str, int]]
     do_center_crop: Optional[bool]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
@@ -291,6 +307,17 @@ class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, Comm
         }
 
     ```
+
+    For Python 3.8 compatibility, when inheriting from this class and overriding one of the kwargs,
+    you need to manually update the __annotations__ dictionary. This can be done as follows:
+
+    ```python
+    class CustomProcessorKwargs(ProcessingKwargs, total=False):
+        images_kwargs: CustomImagesKwargs
+
+    CustomProcessorKwargs.__annotations__["images_kwargs"] = CustomImagesKwargs  # python 3.8 compatibility
+    ```python
+
     """
 
     common_kwargs: CommonKwargs = {
@@ -317,6 +344,7 @@ class ProcessorMixin(PushToHubMixin):
 
     attributes = ["feature_extractor", "tokenizer"]
     optional_attributes = ["chat_template"]
+    optional_call_args: List[str] = []
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
     tokenizer_class = None
@@ -792,6 +820,8 @@ class ProcessorMixin(PushToHubMixin):
             "common_kwargs": {},
         }
 
+        used_keys = set()
+
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
@@ -799,7 +829,12 @@ class ProcessorMixin(PushToHubMixin):
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
-                    default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                    value = (
+                        getattr(self.tokenizer, modality_key)
+                        if hasattr(self.tokenizer, modality_key)
+                        else tokenizer_init_kwargs[modality_key]
+                    )
+                    default_kwargs[modality][modality_key] = value
         # now defaults kwargs are updated with the tokenizers defaults.
         # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
@@ -814,21 +849,38 @@ class ProcessorMixin(PushToHubMixin):
                     # check if this key was passed as a flat kwarg.
                     if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
                         raise ValueError(
-                            f"Keyword argument {modality_key} was passed two times: in a dictionary for {modality} and as a **kwarg."
+                            f"Keyword argument {modality_key} was passed two times:\n"
+                            f"in a dictionary for {modality} and as a **kwarg."
                         )
                 elif modality_key in kwargs:
-                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                    # we get a modality_key instead of popping it because modality-specific processors
+                    # can have overlapping kwargs
+                    kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
                 if kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
-        # if something remains in kwargs, it belongs to common after flattening
-        if set(kwargs) & set(default_kwargs):
-            # here kwargs is dictionary-based since it shares keys with default set
-            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+                    used_keys.add(modality_key)
+
+        # Determine if kwargs is a flat dictionary or contains nested dictionaries
+        if any(key in default_kwargs for key in kwargs):
+            # kwargs is dictionary-based, and some keys match modality names
+            for modality, subdict in kwargs.items():
+                if modality in default_kwargs:
+                    for subkey, subvalue in subdict.items():
+                        if subkey not in used_keys:
+                            output_kwargs[modality][subkey] = subvalue
+                            used_keys.add(subkey)
         else:
-            # here it's a flat dict
-            output_kwargs["common_kwargs"].update(kwargs)
+            # kwargs is a flat dictionary
+            for key in kwargs:
+                if key not in used_keys:
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                        output_kwargs["common_kwargs"][key] = kwargs[key]
+                    else:
+                        logger.warning_once(
+                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                        )
 
         # all modality-specific kwargs are updated with common kwargs
         for modality in output_kwargs:
@@ -961,6 +1013,64 @@ class ProcessorMixin(PushToHubMixin):
             unused_kwargs = {k: processor_config[k] for k in unused_keys}
         return unused_kwargs
 
+    def prepare_and_validate_optional_call_args(self, *args):
+        """
+        Matches optional positional arguments to their corresponding names in `optional_call_args`
+        in the processor class in the order they are passed to the processor call.
+
+        Note that this should only be used in the `__call__` method of the processors with special
+        arguments. Special arguments are arguments that aren't `text`, `images`, `audio`, nor `videos`
+        but also aren't passed to the tokenizer, image processor, etc. Examples of such processors are:
+            - `CLIPSegProcessor`
+            - `LayoutLMv2Processor`
+            - `OwlViTProcessor`
+
+        Also note that passing by position to the processor call is now deprecated and will be disallowed
+        in future versions. We only have this for backward compatibility.
+
+        Example:
+            Suppose that the processor class has `optional_call_args = ["arg_name_1", "arg_name_2"]`.
+            And we define the call method as:
+            ```python
+            def __call__(
+                self,
+                text: str,
+                images: Optional[ImageInput] = None,
+                *arg,
+                audio=None,
+                videos=None,
+            )
+            ```
+
+            Then, if we call the processor as:
+            ```python
+            images = [...]
+            processor("What is common in these images?", images, arg_value_1, arg_value_2)
+            ```
+
+            Then, this method will return:
+            ```python
+            {
+                "arg_name_1": arg_value_1,
+                "arg_name_2": arg_value_2,
+            }
+            ```
+            which we could then pass as kwargs to `self._merge_kwargs`
+        """
+        if len(args):
+            warnings.warn(
+                "Passing positional arguments to the processor call is now deprecated and will be disallowed in v4.47. "
+                "Please pass all arguments as keyword arguments."
+            )
+        if len(args) > len(self.optional_call_args):
+            raise ValueError(
+                f"Expected *at most* {len(self.optional_call_args)} optional positional arguments in processor call"
+                f"which will be matched with {' '.join(self.optional_call_args)} in the order they are passed."
+                f"However, got {len(args)} positional arguments instead."
+                "Please pass all arguments as keyword arguments instead (e.g. `processor(arg_name_1=..., arg_name_2=...))`."
+            )
+        return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
+
     def apply_chat_template(
         self,
         conversation: Union[List[Dict[str, str]]],
@@ -996,6 +1106,20 @@ class ProcessorMixin(PushToHubMixin):
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of a vlm to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
 
 def _validate_images_text_input_order(images, text):

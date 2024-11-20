@@ -18,11 +18,19 @@ from .agent_types import AgentAudio, AgentImage, AgentText
 from .agents import ReactAgent
 
 
-def pull_message(step_log: dict):
+def pull_message(step_log: dict, test_mode: bool = True):
     try:
         from gradio import ChatMessage
     except ImportError:
-        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+        if test_mode:
+
+            class ChatMessage:
+                def __init__(self, role, content, metadata=None):
+                    self.role = role
+                    self.content = content
+                    self.metadata = metadata
+        else:
+            raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
     if step_log.get("rationale"):
         yield ChatMessage(role="assistant", content=step_log["rationale"])
@@ -46,30 +54,40 @@ def pull_message(step_log: dict):
         )
 
 
-def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
+def stream_to_gradio(agent: ReactAgent, task: str, test_mode: bool = False, **kwargs):
     """Runs an agent with the given task and streams the messages from the agent as gradio ChatMessages."""
 
     try:
         from gradio import ChatMessage
     except ImportError:
-        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+        if test_mode:
+
+            class ChatMessage:
+                def __init__(self, role, content, metadata=None):
+                    self.role = role
+                    self.content = content
+                    self.metadata = metadata
+        else:
+            raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
     for step_log in agent.run(task, stream=True, **kwargs):
         if isinstance(step_log, dict):
-            for message in pull_message(step_log):
+            for message in pull_message(step_log, test_mode=test_mode):
                 yield message
 
-    if isinstance(step_log, AgentText):
-        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{step_log.to_string()}\n```")
-    elif isinstance(step_log, AgentImage):
+    final_answer = step_log  # Last log is the run's final_answer
+
+    if isinstance(final_answer, AgentText):
+        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{final_answer.to_string()}\n```")
+    elif isinstance(final_answer, AgentImage):
         yield ChatMessage(
             role="assistant",
-            content={"path": step_log.to_string(), "mime_type": "image/png"},
+            content={"path": final_answer.to_string(), "mime_type": "image/png"},
         )
-    elif isinstance(step_log, AgentAudio):
+    elif isinstance(final_answer, AgentAudio):
         yield ChatMessage(
             role="assistant",
-            content={"path": step_log.to_string(), "mime_type": "audio/wav"},
+            content={"path": final_answer.to_string(), "mime_type": "audio/wav"},
         )
     else:
-        yield ChatMessage(role="assistant", content=str(step_log))
+        yield ChatMessage(role="assistant", content=str(final_answer))

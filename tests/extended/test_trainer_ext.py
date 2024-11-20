@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     require_apex,
     require_bitsandbytes,
+    require_non_xpu,
     require_torch,
     require_torch_gpu,
     require_torch_multi_accelerator,
@@ -109,6 +110,7 @@ class TestTrainerExt(TestCasePlus):
     def test_run_seq2seq_ddp(self):
         self.run_seq2seq_quick(distributed=True)
 
+    @require_non_xpu
     @require_apex
     @require_torch_gpu
     @skipIfRocm

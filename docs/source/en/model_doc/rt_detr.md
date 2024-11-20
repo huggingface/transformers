@@ -46,7 +46,7 @@ Initially, an image is processed using a pre-trained convolutional neural networ
 >>> from PIL import Image
 >>> from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
@@ -57,7 +57,7 @@ Initially, an image is processed using a pre-trained convolutional neural networ
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3)
+>>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.3)
 
 >>> for result in results:
 ...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
@@ -92,6 +92,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## RTDetrImageProcessor
 
 [[autodoc]] RTDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+
+## RTDetrImageProcessorFast
+
+[[autodoc]] RTDetrImageProcessorFast
     - preprocess
     - post_process_object_detection
 

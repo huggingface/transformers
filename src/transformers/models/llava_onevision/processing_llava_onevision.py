@@ -18,22 +18,12 @@ Processor class for LLaVa-Onevision.
 
 import math
 import os
-import sys
 from typing import Iterable, List, Union
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
-from ...processing_utils import (
-    ProcessingKwargs,
-    ProcessorMixin,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ..auto import AutoImageProcessor
@@ -57,11 +47,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     r"""
     Constructs a LLaVa-Onevision processor which wraps a LLaVa-Onevision video processor, LLaVa-NeXT image processor and a LLaMa tokenizer into a single processor.
 
-    [`LlavaNextProcessor`] offers all the functionalities of [`LlavaOnevisionVideoProcessor`], [`LlavaNextImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LlavaNextProcessor`] offers all the functionalities of [`LlavaOnevisionVideoProcessor`], [`LlavaOnevisionImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~LlavaOnevisionVideoProcessor.__call__`], [`~LlavaNextProcessor.__call__`] and [`~LlavaNextProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`LlavaNextImageProcessor`], *optional*):
+        image_processor ([`LlavaOnevisionImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -106,14 +96,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     ):
         self.num_image_tokens = num_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = image_token
-        self.video_token = video_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:
@@ -181,8 +172,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
-        # Padding side can be in TextKwargs but is not accepted by the tokenizer
-        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
 
@@ -199,7 +188,10 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         for sample in text:
             while special_token in sample:
                 image_size_list = next(image_sizes)
-                orig_height, orig_width = image_size_list[0] if num_frames != 1 else image_size_list
+                original_size = image_size_list[0] if num_frames != 1 else image_size_list
+                if not isinstance(original_size, (list, tuple)):
+                    # cast to list to avoid numerical precision errors when calculating unpadding
+                    orig_height, orig_width = original_size.tolist()
                 num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1

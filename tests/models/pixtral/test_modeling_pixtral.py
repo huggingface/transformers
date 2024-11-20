@@ -14,22 +14,16 @@
 # limitations under the License.
 """Testing suite for the PyTorch Pixtral model."""
 
-import gc
 import unittest
 
-import requests
-
 from transformers import (
-    AutoProcessor,
-    PixtralModel,
     PixtralVisionConfig,
+    PixtralVisionModel,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
-    require_bitsandbytes,
     require_torch,
-    slow,
     torch_device,
 )
 
@@ -43,10 +37,10 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
-class PixtralModelTester:
+class PixtralVisionModelTester:
     def __init__(
         self,
         parent,
@@ -107,7 +101,7 @@ class PixtralModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = PixtralModel(config=config)
+        model = PixtralVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -120,7 +114,7 @@ class PixtralModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, pixel_values):
-        model = PixtralModel(config=config)
+        model = PixtralVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -140,17 +134,18 @@ class PixtralModelTester:
 
 
 @require_torch
-class PixtralModelModelTest(ModelTesterMixin, unittest.TestCase):
+class PixtralVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Model tester for `PixtralModel`.
+    Model tester for `PixtralVisionModel`.
     """
 
-    all_model_classes = (PixtralModel,) if is_torch_available() else ()
+    all_model_classes = (PixtralVisionModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
-        self.model_tester = PixtralModelTester(self)
+        self.model_tester = PixtralVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PixtralVisionConfig, has_text_modality=False)
 
     @unittest.skip("model does not support input embeds")
@@ -258,35 +253,3 @@ class PixtralModelModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Not supported yet")
     def test_determinism(self):
         pass
-
-
-@require_torch
-class PixtralModelIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("hf-internal-testing/pixtral-12b")
-
-    def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = PixtralModel.from_pretrained("hf-internal-testing/pixtral-12b", load_in_4bit=True)
-
-        prompt = "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
-        image_file = "https://pixtral-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
-
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
-
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )

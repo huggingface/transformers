@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -358,7 +359,6 @@ class Mamba2Mixer(nn.Module):
                     dim=-1,
                 )
 
-                time_step = nn.functional.softplus(time_step + self.dt_bias)
                 # 1D Convolution
                 if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
                     hidden_states_B_C = self.act(
@@ -391,6 +391,8 @@ class Mamba2Mixer(nn.Module):
                     z=None,
                     seq_idx=None,
                     return_final_states=True,
+                    dt_bias=self.dt_bias,
+                    dt_softplus=True,
                     **dt_limit_kwargs,
                 )
                 if ssm_state is not None and cache_params is not None:
@@ -509,7 +511,7 @@ class Mamba2Mixer(nn.Module):
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
             C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
-            pad_size = self.chunk_size - (seq_len % self.chunk_size)
+            pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
 
             D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
 
@@ -803,6 +805,16 @@ MAMBA2_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The position of the current input in the cache. This is used to ensure that the cache is correctly updated.
+            If `cache_params` is passed, `cache_position` should also be passed.
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
 """
 
 
@@ -860,9 +872,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
@@ -931,7 +941,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     """,
     MAMBA2_START_DOCSTRING,
 )
-class Mamba2ForCausalLM(Mamba2PreTrainedModel):
+class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = []
 
     def __init__(self, config):
@@ -963,6 +973,8 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
+        # Overwitten -- uses `cache_params` as opposed to `past_key_values`
+
         if inputs_embeds is not None:
             past_len = inputs_embeds.shape[1] + input_ids.shape[1]
         else:
