@@ -566,7 +566,9 @@ class WhisperGenerationMixin(GenerationMixin):
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
-        num_beams = generation_config.num_beams if generation_config.num_beams is not None else kwargs.get("num_beams", 1)
+        num_beams = (
+            generation_config.num_beams if generation_config.num_beams is not None else kwargs.get("num_beams", 1)
+        )
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
@@ -724,10 +726,9 @@ class WhisperGenerationMixin(GenerationMixin):
                     return_token_timestamps=return_token_timestamps,
                 )
 
-                seek[prev_i] += segment_offset     
+                seek[prev_i] += segment_offset
 
                 current_segments[prev_i] += segments
-
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
@@ -852,7 +853,7 @@ class WhisperGenerationMixin(GenerationMixin):
             model_output_type = type(seek_outputs)
 
             # post-process sequence tokens and outputs to be in list form
-            is_first_segment = (seek == 0.).all()
+            is_first_segment = (seek == 0.0).all()
 
             seek_sequences, seek_outputs = self._postprocess_outputs(
                 seek_outputs=seek_outputs,
@@ -899,7 +900,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     decoder_input_ids,
                 )
 
-                # remove eos token 
+                # remove eos token
                 if seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
                     if return_token_timestamps:
@@ -947,11 +948,17 @@ class WhisperGenerationMixin(GenerationMixin):
         return current_segments
 
     def _postprocess_outputs(
-        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform, is_first_segment
+        self,
+        seek_outputs,
+        decoder_input_ids,
+        return_token_timestamps,
+        generation_config,
+        is_shortform,
+        is_first_segment,
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
-        start_idx = decoder_input_ids.shape[-1] 
+        start_idx = decoder_input_ids.shape[-1]
 
         if isinstance(seek_outputs, torch.Tensor):
             seek_outputs = seek_outputs[:, start_idx:]
@@ -1077,7 +1084,12 @@ class WhisperGenerationMixin(GenerationMixin):
             else:
                 scores = seek_outputs[index]["scores"]
                 logprobs = self._retrieve_avg_logprobs(
-                    scores, seek_sequence, generation_config.eos_token_id, temperature, is_first_segment, decoder_input_ids
+                    scores,
+                    seek_sequence,
+                    generation_config.eos_token_id,
+                    temperature,
+                    is_first_segment,
+                    decoder_input_ids,
                 )
 
             if logprobs < generation_config.logprob_threshold:
@@ -1760,7 +1772,7 @@ class WhisperGenerationMixin(GenerationMixin):
         if scores.shape[0] > tokens.shape[0]:
             scores = scores[: tokens.shape[0]]
         else:
-            tokens = tokens[-scores.shape[0]:]
+            tokens = tokens[-scores.shape[0] :]
 
         logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
 

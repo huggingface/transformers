@@ -21,8 +21,8 @@ import random
 import re
 import tempfile
 import time
-import unittest
 import types
+import unittest
 
 import numpy as np
 import pytest
@@ -1677,7 +1677,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
-    
+
     # Whisper's generate method does return the decoder initial tokens.
     # To keep compatibility with generic GenerationTesterMixin, we need to patch generate first.
     def generate_patch(self, generate):
@@ -1688,101 +1688,66 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # Add the initial tokens to the generated sequences
             init_tokens = [self.generation_config.decoder_start_token_id]
             init_tokens = torch.as_tensor(init_tokens, dtype=torch.long, device=torch_device)
-            
+
             if kwargs["return_dict_in_generate"]:
                 init_tokens = init_tokens.expand(output_generate.sequences.shape[0], -1)
                 output_generate.sequences = torch.cat([init_tokens, output_generate.sequences], dim=-1)
             else:
                 init_tokens = init_tokens.expand(output_generate.shape[0], -1)
                 output_generate = torch.cat([init_tokens, output_generate], dim=-1)
-                
+
             return output_generate
+
         return wrapper
-    
-    def _greedy_generate(
-        self,
-        model,
-        inputs_dict,
-        **kwargs
-    ):
-        if not hasattr(model, '_generate_patched'):
+
+    def _greedy_generate(self, model, inputs_dict, **kwargs):
+        if not hasattr(model, "_generate_patched"):
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
         return super()._greedy_generate(model, inputs_dict, **kwargs)
-    
-    def _sample_generate(
-        self,
-        model,
-        inputs_dict,
-        **kwargs
-    ):
-        if not hasattr(model, '_generate_patched'):
+
+    def _sample_generate(self, model, inputs_dict, **kwargs):
+        if not hasattr(model, "_generate_patched"):
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
-        return super()._sample_generate(model, inputs_dict, **kwargs) 
-    
-    def _beam_search_generate(
-        self,
-        model,
-        inputs_dict,
-        **kwargs
-    ):
-        if not hasattr(model, '_generate_patched'):
+        return super()._sample_generate(model, inputs_dict, **kwargs)
+
+    def _beam_search_generate(self, model, inputs_dict, **kwargs):
+        if not hasattr(model, "_generate_patched"):
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
         return super()._beam_search_generate(model, inputs_dict, **kwargs)
 
-    def _beam_sample_generate(
-        self,
-        model,
-        inputs_dict,
-        **kwargs
-    ):
-        if not hasattr(model, '_generate_patched'):
+    def _beam_sample_generate(self, model, inputs_dict, **kwargs):
+        if not hasattr(model, "_generate_patched"):
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
         return super()._beam_sample_generate(model, inputs_dict, **kwargs)
 
-    def _group_beam_search_generate(
-        self,
-        model,
-        inputs_dict,
-        **kwargs
-    ):
-        if not hasattr(model, '_generate_patched'):
+    def _group_beam_search_generate(self, model, inputs_dict, **kwargs):
+        if not hasattr(model, "_generate_patched"):
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
         return super()._group_beam_search_generate(model, inputs_dict, **kwargs)
 
-    def _constrained_beam_search_generate(
-        self,
-        model,
-        inputs_dict,
-        **kwargs
-    ):
-        if not hasattr(model, '_generate_patched'):
+    def _constrained_beam_search_generate(self, model, inputs_dict, **kwargs):
+        if not hasattr(model, "_generate_patched"):
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
         return super()._constrained_beam_search_generate(model, inputs_dict, **kwargs)
 
-    def _contrastive_generate(
-        self,
-        model,
-        inputs_dict,
-        **kwargs
-    ):
-        if not hasattr(model, '_generate_patched'):
+    def _contrastive_generate(self, model, inputs_dict, **kwargs):
+        if not hasattr(model, "_generate_patched"):
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
         return super()._contrastive_generate(model, inputs_dict, **kwargs)
-    
+
     # Whisper's generate method does return the decoder initial tokens.
     # We need to adapt GenerationTesterMixin's test_generate_continue_from_past_key_values to account for this.
     # Adapted from https://github.com/huggingface/transformers/blob/67890de3b86c81fb4775f41b4690b2abaf2a19cf/tests/generation/test_utils.py#L1720
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
-
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             # Let's make it always:
@@ -1810,7 +1775,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-        
+
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
             outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
 
@@ -1832,7 +1797,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     mode="constant",
                     value=1,
                 )
-    
+
             outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
             outputs_cached.sequences = torch.cat([inputs["decoder_input_ids"], outputs_cached.sequences], dim=-1)
 
@@ -1846,7 +1811,75 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                             outputs_cached.past_key_values[layer_idx][kv_idx],
                         )
                     )
-    
+
+    # Whisper's generate method does return the decoder initial tokens.
+    # We need to adapt GenerationTesterMixin's test_prompt_lookup_decoding_matches_greedy_search to account for this.
+    # Adapted from https://github.com/huggingface/transformers/blob/67890de3b86c81fb4775f41b4690b2abaf2a19cf/tests/generation/test_utils.py#L1176
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        # This test ensures that the prompt lookup generation does not introduce output changes over greedy search.
+        # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
+
+        for model_class in self.all_generative_model_classes:
+            if model_class._is_stateful:
+                self.skipTest(reason="Stateful models don't support assisted generation")
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                self.skipTest(reason="Won't fix: old model with different cache format")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "bigbirdpegasus",
+                    "led",
+                    "mega",
+                    "moshi",
+                    "speech2text",
+                    "git",
+                    "prophetnet",
+                    "seamlessm4t",
+                    "clvp",
+                ]
+            ):
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
+
+            # enable cache
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            # NOTE: assisted generation only works with cache on at the moment.
+            if not hasattr(config, "use_cache"):
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
+
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
+
+            # Sets assisted generation arguments such that:
+            # a) no EOS is generated, to ensure generation doesn't break early
+            # b) the prompt lookup tries to give the model 2 tokens, to ensure the input preparation of
+            #    prompt lookup is correct
+            # c) there are at least two forward passes in the main model, to ensure the input preparation of
+            #    the main model is correct
+            generation_kwargs = {
+                "eos_token_id": -1,  # see a)
+                "max_new_tokens": 4,  # see c)
+                "num_beams": 1,
+                "do_sample": False,
+                "output_scores": True,
+                "output_logits": True,
+                "output_hidden_states": True,
+                "output_attentions": self.has_attentions,
+                "return_dict_in_generate": True,
+                "use_cache": True,
+            }
+
+            output_greedy = model.generate(**generation_kwargs, **inputs_dict)
+
+            generation_kwargs.update({"prompt_lookup_num_tokens": 2})  # see b)
+            output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict)
+
+            # The two outputs must match and their shape must be as expected
+            self._check_similar_generate_outputs(output_greedy, output_prompt_lookup)
+            for output in (output_greedy, output_prompt_lookup):
+                self._check_outputs(output, model.config, use_cache=True)
+
 
 @require_torch
 @require_torchaudio
