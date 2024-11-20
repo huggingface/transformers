@@ -420,7 +420,7 @@ def create_circleci_config(folder=None):
         if job is first_collection_job:
             _jobs.append(job.job_name)
         elif job is final_collection_job:
-            _jobs.append({job.job_name: {"requires": [k.job_name for k in jobs if k not in [first_collection_job, final_collection_job]]}})
+            _jobs.append({job.job_name: {"when": "always", "requires": [k.job_name for k in jobs if k not in [first_collection_job, final_collection_job]]}})
         else:
             _jobs.append({job.job_name: {"requires": [first_collection_job.job_name]}})
 
