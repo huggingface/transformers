@@ -27,11 +27,15 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+_CONFIG_FOR_DOC = "Emu3Config"
 
 
 class Emu3RMSNorm(nn.Module):
@@ -1822,6 +1826,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         return self.model
 
     @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="Emu3TextConfig")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2045,6 +2050,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         return image
 
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

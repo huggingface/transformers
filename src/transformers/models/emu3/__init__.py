@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_emu3": ["Emu3Config", "Emu3VQVAEConfig", "Emu3TextConfig"],
+    "configuration_emu3": ["Emu3Config", "Emu3TextConfig", "Emu3VQVAEConfig"],
     "processing_emu3": ["Emu3Processor"],
 }
 

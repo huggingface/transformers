@@ -22,6 +22,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     logging,
+    replace_return_docstrings,
 )
 from ..chameleon.modeling_chameleon import (
     ChameleonLayerNorm,
@@ -1645,6 +1646,7 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="Emu3TextConfig")
     def forward(**super_kwargs):
         r"""
         Args:
@@ -1735,6 +1737,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         return image
 
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
