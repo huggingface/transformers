@@ -475,7 +475,7 @@ class SamFeedForward(nn.Module):
 class SamMaskDecoder(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
-
+        self.config = config
         self.hidden_size = config.hidden_size
 
         self.num_multimask_outputs = config.num_multimask_outputs
