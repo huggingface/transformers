@@ -27,7 +27,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 if is_torch_available():
     import torch
-    from torch.nn import functional as F
 
     from transformers import SuperGlueForKeypointMatching
 
@@ -395,16 +394,11 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
 
-        number_of_matches_tolerance = 1e-2
-        matches_tolerance = 1e-1
-        matching_scores_tolerance = 1e-2
-
         predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
         predicted_matches_values = outputs.matches[0, 0, :30]
         predicted_matching_scores_values = outputs.matching_scores[0, 0, :20]
 
         expected_number_of_matches = 282
-
         expected_matches_values = torch.tensor(
             [
                 125,
@@ -466,26 +460,23 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
             device=predicted_matches_values.device,
         )
 
-        # Check output shapes
-        self.assertTrue(
-            expected_number_of_matches - expected_number_of_matches * number_of_matches_tolerance
-            < predicted_number_of_matches
-        )
-        self.assertTrue(
-            predicted_number_of_matches
-            < expected_number_of_matches + expected_number_of_matches * number_of_matches_tolerance
-        )
+        """
+        Because of inconsistencies introduced between CUDA versions, the checks here are less strict. SuperGlue relies
+        on SuperPoint, which may, depending on CUDA version, return different number of keypoints (866 or 867 in this
+        specific test example). The consequence of having different number of keypoints is that the number of matches
+        will also be different. In the 20 first matches being checked, having one keypoint less will result in 1 less
+        match. The matching scores will also be different, as the keypoints are different. The checks here are less
+        strict to account for these inconsistencies.
+        Therefore, the test checks that the predicted number of matches, matches and matching scores are close to the
+        expected values, individually. Here, the tolerance of the number of values changing is set to 2.
 
-        matching_score_similarity = F.cosine_similarity(
-            predicted_matching_scores_values.flatten(),
-            expected_matching_scores_values.flatten(),
-            dim=0,
-        ).item()
-        matches_similarity = F.cosine_similarity(
-            predicted_matches_values.to(torch.float).flatten(),
-            expected_matches_values.to(torch.float).flatten(),
-            dim=0,
-        ).item()
+        This was discussed [here](https://github.com/huggingface/transformers/pull/29886#issuecomment-2482752787)
+        Such CUDA inconsistencies can be found
+        [here](https://github.com/huggingface/transformers/pull/33200/files#r1785980300)
+        """
 
-        self.assertTrue((1 - matching_score_similarity) < matching_scores_tolerance)
-        self.assertTrue((1 - matches_similarity) < matches_tolerance)
+        self.assertTrue(abs(predicted_number_of_matches - expected_number_of_matches) < 2)
+        self.assertTrue(
+            torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-3)) < 2
+        )
+        self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 2)
