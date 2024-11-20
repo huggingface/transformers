@@ -2385,6 +2385,9 @@ def run_test_using_subprocess(func):
 
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
+                # This prevents the entries in `short test summary info` given by the subprocess being truncated. so the
+                # full information can be passed to the parent pytest process.
+                # See: https://docs.pytest.org/en/stable/explanation/ci.html
                 env["CI"] = "true"
 
                 # If not subclass of `unitTest.TestCase` and `pytestconfig` is used: try to grab and use the arguments
