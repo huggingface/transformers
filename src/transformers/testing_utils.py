@@ -2402,6 +2402,15 @@ def run_test_using_subprocess(func):
                 subprocess.run(command, env=env, check=True, capture_output=True)
             except subprocess.CalledProcessError as e:
                 exception_message = e.stdout.decode()
+
+                lines = exception_message.split('\n')
+                if "= test session starts =" in lines[0]:
+                    for line in lines[1:]:
+                        if line.startswith("FAILED "):
+                            text = line[len("FAILED "):]
+                            lines[0] = text
+                            break
+                exception_message = "\n".join(lines)
                 raise pytest.fail(exception_message, pytrace=False)
 
     return wrapper
