@@ -240,7 +240,14 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     # Convert and save processor
     tokenizer_tiktoken = AutoTokenizer.from_pretrained(llm_model_id, trust_remote_code=True)
     convert_tiktoken(tokenizer_tiktoken, output_dir)
-    tokenizer_converted = AutoTokenizer.from_pretrained(output_dir)
+    extra_special_tokens = extra_special_tokens = {
+        "image_token": "<image>",
+        "boi_token": "<|image start|>",
+        "eoi_token": "<|image end|>",
+        "image_wrapper_token": "<|image token|>",
+        "eof_token": "<|extra_201|>",
+    }
+    tokenizer_converted = AutoTokenizer.from_pretrained(output_dir, extra_special_tokens=extra_special_tokens)
     tokenizer_converted.padding_side = "left"
 
     image_processor = Emu3ImageProcessor.from_pretrained(vq_model_id)

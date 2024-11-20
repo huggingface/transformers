@@ -68,22 +68,25 @@ class Emu3Processor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
-    valid_kwargs = ["image_token"]
     image_processor_class = "Emu3ImageProcessor"
 
     def __init__(
         self,
         image_processor,
         tokenizer,
-        image_token: str = "<image>",
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = image_token  # image_token as temporarty placeholder to be replaced by vq-vae tokens
-        self.image_start_token = "<|image start|>"  # fixed tokens for start and end of image
-        self.image_end_token = "<|image end|>"
-        self.fake_token_around_image = "<|image token|>"  # wrapper token and every image starts with it
-        self.eof_token = "<|extra_201|>"
+        self.image_token = (
+            tokenizer.image_token
+        )  # image_token as temporarty placeholder to be replaced by vq-vae tokens
+        self.image_start_token = tokenizer.boi_token  # "<|image start|>" fixed tokens for start and end of image
+        self.image_end_token = tokenizer.eoi_token  # "<|image end|>"
+        self.fake_token_around_image = (
+            tokenizer.image_wrapper_token
+        )  # "<|image token|>"  wrapper token and every image starts with it
+        self.eof_token = tokenizer.eof_token  # "<|extra_201|>"
+        self.bos_token = tokenizer.bos_token
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -169,7 +172,7 @@ class Emu3Processor(ProcessorMixin):
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
-                    sample = f"<|extra_203|>{sample}"  # add BOS
+                    sample = f"{self.bos_token}{sample}"  # add BOS because PT tokenizer doesn't add it
                 prompt_strings.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
@@ -177,7 +180,7 @@ class Emu3Processor(ProcessorMixin):
         elif return_for_image_generation:
             height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
             image_prompt = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
-            text = [f"<|extra_203|>{sample}{image_prompt}" for sample in text]
+            text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
             image_features["image_sizes"] = [[height, width]] * len(text)
 
         # else just generate from text-only input, and we do no special treatment for text
