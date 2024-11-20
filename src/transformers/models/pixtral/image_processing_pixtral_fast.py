@@ -16,8 +16,6 @@
 
 from typing import Dict, List, Optional, Union
 
-import numpy as np
-
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
@@ -41,9 +39,9 @@ from ...utils import (
 )
 from .image_processing_pixtral import (
     BatchMixFeature,
-    make_list_of_images,
     convert_to_rgb,
     get_resize_output_image_size,
+    make_list_of_images,
 )
 
 
@@ -56,8 +54,6 @@ if is_vision_available():
     import PIL
 
 if is_torchvision_available():
-    from torchvision.io import read_image
-
     if is_vision_available():
         from ...image_utils import pil_torch_interpolation_mapping
 
@@ -65,6 +61,7 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+
 
 class PixtralImageProcessorFast(BaseImageProcessorFast):
     r"""
@@ -296,7 +293,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         # Extra checks for FastProcessor
         if return_tensors != "pt":
             raise ValueError("Only returning PyTorch tensors is currently supported.")
-        
+
         if data_format != ChannelDimension.FIRST:
             raise ValueError("Only channel first data format is currently supported.")
 

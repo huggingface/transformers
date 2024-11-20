@@ -14,11 +14,11 @@
 # limitations under the License.
 
 import random
-import unittest
 import time
-import requests
+import unittest
 
 import numpy as np
+import requests
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
@@ -188,7 +188,9 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0][0])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(
+                image_inputs_list[0][0]
+            )
             self.assertEqual(tuple(encoded_images[0][0].shape), expected_output_image_shape)
 
             # Test batched
@@ -210,7 +212,9 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs_list[0][0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0][0])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(
+                image_inputs_list[0][0]
+            )
             self.assertEqual(tuple(encoded_images[0][0].shape), expected_output_image_shape)
 
             # Test batched
