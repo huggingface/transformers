@@ -2405,11 +2405,14 @@ def run_test_using_subprocess(func):
 
                 lines = exception_message.split('\n')
                 if "= test session starts =" in lines[0]:
-                    for line in lines[1:]:
+                    text = ""
+                    for line in lines[1:-1]:
                         if line.startswith("FAILED "):
                             text = line[len("FAILED "):]
-                            lines[0] = f"(subprocess) " + text
-                            break
+                            text = "".join(text.split(" - ")[1:])
+                        elif len(text) > 0:
+                            text += f"\n{line}"
+                    lines[0] = f"(subprocess) " + text
                 exception_message = "\n".join(lines)
                 raise pytest.fail(exception_message, pytrace=False)
 
