@@ -884,14 +884,14 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         batch = self.tokenizer("Test batch ", return_tensors="pt").to(torch_device)
 
         # Step 4: Check if the gradient is not None
-        if torch.cuda.is_available():
+        if torch_device in {"xpu", "cpu"}:
+            # XPU and CPU finetune do not support autocast for now.
+            out = model.forward(**batch)
+            out.logits.norm().backward()
+        else:
             with torch.autocast(torch_device):
                 out = model.forward(**batch)
                 out.logits.norm().backward()
-        else:
-            # CPU and XPU finetune do not support autocast for now.
-            out = model.forward(**batch)
-            out.logits.norm().backward()
 
         for module in model.modules():
             if isinstance(module, LoRALayer):
