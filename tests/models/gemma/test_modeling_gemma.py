@@ -570,7 +570,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     
     @require_read_token
-    def test_model_7b_pipeline_f16_flex_attention(self):
+    def test_model_7b_pipeline_fp16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-7b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
@@ -589,7 +589,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
-
+    @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2b"
@@ -612,7 +612,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
 
     @require_read_token
-    def test_model_2b_pipeline_f16_flex_attention(self):
+    def test_model_2b_pipeline_fp16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
