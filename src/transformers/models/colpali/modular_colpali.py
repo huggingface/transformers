@@ -21,8 +21,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.models.paligemma.configuration_paligemma import PaliGemmaConfig
-from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
 from transformers.models.paligemma.processing_paligemma import (
     IMAGE_TOKEN,
     PaliGemmaProcessor,
@@ -33,6 +31,7 @@ from transformers.models.paligemma.processing_paligemma import (
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
+from ...modeling_utils import PretrainedConfig, PreTrainedModel
 from ...processing_utils import (
     ProcessingKwargs,
     Unpack,
@@ -49,6 +48,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..auto import AutoModel
 
 
 if is_flash_attn_2_available():
@@ -58,7 +58,7 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-class ColPaliConfig(PaliGemmaConfig):
+class ColPaliConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
     ColPaliForRetrieval according to the specified arguments, defining the model architecture.
@@ -100,28 +100,15 @@ class ColPaliConfig(PaliGemmaConfig):
 
     def __init__(
         self,
-        vision_config=None,
-        text_config=None,
-        ignore_index=-100,
-        image_token_index=256000,
-        vocab_size=257152,
-        projection_dim=2048,
-        hidden_size=2048,
+        vlm_backbone_config: PretrainedConfig,
         embedding_dim: int = 128,
         **kwargs,
     ):
-        super().__init__(
-            vision_config=vision_config,
-            text_config=text_config,
-            ignore_index=ignore_index,
-            image_token_index=image_token_index,
-            vocab_size=vocab_size,
-            projection_dim=projection_dim,
-            hidden_size=hidden_size,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+
         self.model_type = "colpali"
         self.is_composition = False
+        self.vlm_backbone_config = vlm_backbone_config
         self.embedding_dim = embedding_dim
 
     def ignore_index(self):
@@ -600,17 +587,19 @@ COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING = r"""
     - Cookbooks for learning to use the Hf version of ColPali, fine-tuning, and similarity maps generation can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
     """
 )
-class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
-    main_input_name: ClassVar[str] = "input_ids"  # transformers-related
+class ColPaliForRetrieval(PreTrainedModel):
+    main_input_name: ClassVar[str] = "input_ids"
 
     def __init__(self, config: ColPaliConfig):
-        super().__init__(config=config)
+        super().__init__(config)
+        self.config = config
+
+        self.model = AutoModel.from_config(config.vlm_backbone_config)
+        if self.model.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.model.language_model._tied_weights_keys]
 
         self.embedding_dim = self.config.embedding_dim
-        self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
-
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+        self.projection_layer = nn.Linear(self.config.vlm_backbone_config.text_config.hidden_size, self.embedding_dim)
 
         self.post_init()
 
@@ -618,98 +607,34 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
     @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class="ColPaliConfig")
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        num_logits_to_keep: int = 0,
+        **kwargs,
     ) -> Union[Tuple, ColPaliForRetrievalOutput]:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if "pixel_values" in kwargs:
+            kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        is_training = token_type_ids is not None and labels is not None
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
-
-        # Merge text and images
-        if pixel_values is not None:
-            image_outputs = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
-            selected_image_feature = image_outputs.last_hidden_state
-            image_features = self.multi_modal_projector(selected_image_feature)
-            image_features = image_features / (self.config.hidden_size**0.5)
-
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if inputs_embeds[special_image_mask].numel() != image_features.numel():
-                image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
-                raise ValueError(
-                    f"Number of images does not match number of special image tokens in the input text. "
-                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
-                    "tokens from image embeddings."
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        # Mask out pad-token-ids in labels for BC
-        if labels is not None and self.pad_token_id in labels:
-            logger.warning_once(
-                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. ",
-                "You have to mask out `pad_token_id` when preparing `labels`, this behavior will be removed in v.4.46.",
-            )
-            labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
-
-        causal_mask = self._update_causal_mask(
-            attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training
-        )
-
-        outputs = self.language_model(
-            attention_mask=causal_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
             output_hidden_states=True,
             return_dict=return_dict,
-            cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            **kwargs,
         )
 
         last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
-        proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
+        embeddings = self.projection_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
-        embeddings = proj / proj.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
+        embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
@@ -717,7 +642,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         if not return_dict:
             output = (embeddings,) + outputs[2:]
             output[2] = output[2] if output_hidden_states is not None else None
-            output[-1] = (image_features if pixel_values is not None else None,)
+            output[-1] = (outputs.image_hidden_states if pixel_values is not None else None,)
             return (loss,) + output if loss is not None else output
 
         return ColPaliForRetrievalOutput(
@@ -726,7 +651,7 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=outputs.image_hidden_states if pixel_values is not None else None,
         )
 
     def resize_token_embeddings(
