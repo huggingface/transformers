@@ -2408,7 +2408,7 @@ def run_test_using_subprocess(func):
                     for line in lines[1:]:
                         if line.startswith("FAILED "):
                             text = line[len("FAILED "):]
-                            lines[0] = text
+                            lines[0] = f"(subprocess) " + text
                             break
                 exception_message = "\n".join(lines)
                 raise pytest.fail(exception_message, pytrace=False)

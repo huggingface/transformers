@@ -1188,7 +1188,7 @@ if __name__ == "__main__":
             if failed:
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
-                        if "= test session starts =" in line:
+                        if "(subprocess) " in line:
                             continue
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")

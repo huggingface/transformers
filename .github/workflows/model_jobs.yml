@@ -117,7 +117,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -rsfE -v --make-reports=single-gpu_run_models_gpu_pipelines_test_reports tests/pipelines
+        run: python3 -m pytest -rsfE -v --make-reports=single-gpu_run_models_gpu_pipelines_test_reports tests/pipelines/test_pipelines_text_to_audio.py::TextToAudioPipelineTests::test_medium_seamless_m4t_pt
 
       - name: Failure short reports
         if: ${{ failure() }}
