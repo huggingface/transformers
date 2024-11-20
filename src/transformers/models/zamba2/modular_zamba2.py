@@ -22,7 +22,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -283,9 +282,8 @@ class Zamba2Config(PretrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
 
-class Zamba2RMSNorm(ZambaRMSNorm):
+class Zamba2RMSNormGated(MambaRMSNormGated):
     pass
-
 
 def count_mem_blocks_in_config(config: Zamba2Config):
     """
@@ -962,7 +960,7 @@ class Zamba2MambaMixer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = MambaRMSNormGated(self.intermediate_size, eps=1e-5)
+        self.norm = Zamba2RMSNormGated(self.intermediate_size, eps=1e-5)
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
@@ -1403,64 +1401,64 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         # self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
         # self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    # def forward(
-    #     self,
-    #     hidden_states: torch.Tensor,
-    #     original_hidden_states: torch.Tensor,
-    #     layer_idx: int,
-    #     attention_mask: Optional[torch.Tensor] = None,
-    #     position_ids: Optional[torch.LongTensor] = None,
-    #     past_key_value: Optional[Zamba2HybridDynamicCache] = None,
-    #     output_attentions: Optional[bool] = False,
-    #     use_cache: Optional[bool] = False,
-    #     cache_position: Optional[torch.LongTensor] = None,
-    #     **kwargs,
-    # ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-    #     """
-    #     Args:
-    #         hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
-    #         original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
-    #             This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
-    #             concatenated tensor is then used as input of the pre-attention RMSNorm
-    #             (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-    #         attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-    #             `(batch, sequence_length)` where padding elements are indicated by 0.
-    #         past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
-    #         output_attentions (`bool`, *optional*):
-    #             Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-    #             returned tensors for more detail.
-    #         use_cache (`bool`, *optional*):
-    #             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-    #             (see `past_key_values`).
-    #         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-    #             Indices depicting the position of the input sequence tokens in the sequence.
-    #     """
-    #     hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
-    #     hidden_states = self.input_layernorm(hidden_states)
-    #     hidden_states, self_attn_weights, present_key_value = self.self_attn(
-    #         hidden_states=hidden_states,
-    #         layer_idx=layer_idx,
-    #         attention_mask=attention_mask,
-    #         position_ids=position_ids,
-    #         past_key_value=past_key_value,
-    #         output_attentions=output_attentions,
-    #         use_cache=use_cache,
-    #         cache_position=cache_position,
-    #         **kwargs,
-    #     )
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        original_hidden_states: torch.Tensor,
+        layer_idx: int,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
+            original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
+                This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
+                concatenated tensor is then used as input of the pre-attention RMSNorm
+                (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+        """
+        hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            layer_idx=layer_idx,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
 
-    #     hidden_states = self.pre_ff_layernorm(hidden_states)
-    #     hidden_states = self.feed_forward(hidden_states, layer_idx)
+        hidden_states = self.pre_ff_layernorm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states, layer_idx)
 
-    #     outputs = (hidden_states,)
+        outputs = (hidden_states,)
 
-    #     if output_attentions:
-    #         outputs += (self_attn_weights,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
 
-    #     if use_cache:
-    #         outputs += (present_key_value,)
+        if use_cache:
+            outputs += (present_key_value,)
 
-    #     return outputs
+        return outputs
 
 
 class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):

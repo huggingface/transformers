@@ -43,7 +43,7 @@ from ...utils import (
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_zamba2 import Zamba2Config
-from ..mamba2.modeling_mamba2 import MambaRMSNormGated
+
 
 if is_mamba_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
@@ -61,24 +61,22 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Zamba2Config"
 
 
-class Zamba2RMSNorm(nn.Module):
+class Zamba2RMSNormGated(torch.nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
-        """
-        Zamba2RMSNorm is equivalent to T5LayerNorm
-        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
+
+        if gate is not None:
+            hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
 
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class Zamba2HybridDynamicCache(DynamicCache):
@@ -109,19 +107,6 @@ class Zamba2HybridDynamicCache(DynamicCache):
         self._modules = {}
         self._parameters = {}
         self._buffers = {}
-        for i in range(config.num_hidden_layers):
-            self.conv_states += [
-                torch.zeros(batch_size, self.intermediate_size, self.conv_kernel_size, device=device, dtype=dtype)
-            ]
-            cache_shape = (
-                batch_size,
-                self.n_mamba_heads,
-                self.intermediate_size // self.n_mamba_heads,
-                self.ssm_state_size,
-            )
-            self.ssm_states += [torch.zeros(cache_shape, device=device, dtype=dtype)]
-            if self.layers_block_type[i] == "hybrid":
-                self.transformer_layers.append(i)
 
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
@@ -826,7 +811,7 @@ class Zamba2MambaMixer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = MambaRMSNormGated(self.intermediate_size, eps=1e-5)
+        self.norm = Zamba2RMSNormGated(self.intermediate_size, eps=1e-5)
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
@@ -1253,6 +1238,26 @@ class Zamba2MLP(nn.Module):
         return output
 
 
+class Zamba2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Zamba2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 def count_mem_blocks_in_config(config: Zamba2Config):
     """
     Count number of shared blocks
@@ -1330,9 +1335,9 @@ class Zamba2AttentionDecoderLayer(nn.Module):
             cache_position=cache_position,
             **kwargs,
         )
-        # feed-forward (MLP)
+
         hidden_states = self.pre_ff_layernorm(hidden_states)
-        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.feed_forward(hidden_states, layer_idx)
 
         outputs = (hidden_states,)
 
