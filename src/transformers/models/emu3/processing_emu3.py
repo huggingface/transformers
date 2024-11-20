@@ -75,14 +75,10 @@ class Emu3Processor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = (
-            tokenizer.image_token
-        )  # image_token as temporarty placeholder to be replaced by vq-vae tokens
+        self.image_token = tokenizer.image_token  # image_token as placeholder to be replaced by vq-vae tokens
         self.image_start_token = tokenizer.boi_token  # "<|image start|>" fixed tokens for start and end of image
         self.image_end_token = tokenizer.eoi_token  # "<|image end|>"
-        self.fake_token_around_image = (
-            tokenizer.image_wrapper_token
-        )  # "<|image token|>"  wrapper token and every image starts with it
+        self.fake_token_around_image = tokenizer.image_wrapper_token  # "<|image token|>"  every image starts with it
         self.eof_token = tokenizer.eof_token  # "<|extra_201|>"
         self.bos_token = tokenizer.bos_token
         self.downsample_ratio = 8
