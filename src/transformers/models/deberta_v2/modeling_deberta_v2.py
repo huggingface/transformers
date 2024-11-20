@@ -130,7 +130,6 @@ def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
 
 
-
 @torch.jit.script
 def build_rpos(query_layer, key_layer, relative_pos, position_buckets: int, max_relative_positions: int):
     if key_layer.size(-2) != query_layer.size(-2):

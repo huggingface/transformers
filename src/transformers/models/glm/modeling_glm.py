@@ -59,9 +59,6 @@ from ...processing_utils import Unpack
 _CHECKPOINT_FOR_DOC = "dummy"
 
 
-_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
-
-
 class GlmRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
