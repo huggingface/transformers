@@ -232,13 +232,13 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         # TODO update organization
-        return VitPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple") if is_vision_available() else None
+        return VitPoseImageProcessor.from_pretrained("danelcsb/vitpose-base-simple") if is_vision_available() else None
 
     @slow
     def test_inference_pose_estimation(self):
         image_processor = self.default_image_processor
         # TODO update organization
-        model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+        model = VitPoseForPoseEstimation.from_pretrained("danelcsb/vitpose-base-simple")
 
         image = prepare_img()
         boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
@@ -279,7 +279,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     def test_batched_inference(self):
         image_processor = self.default_image_processor
         # TODO update organization
-        model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+        model = VitPoseForPoseEstimation.from_pretrained("danelcsb/vitpose-base-simple")
 
         image = prepare_img()
         boxes = [

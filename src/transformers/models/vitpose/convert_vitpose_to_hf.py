@@ -46,13 +46,13 @@ MODEL_TO_FILE_NAME_MAPPING = {
     "vitpose-base-simple": "vitpose-b-simple.pth",
     "vitpose-base": "vitpose-b.pth",
     "vitpose-base-coco-aic-mpii": "vitpose_base_coco_aic_mpii.pth",
-    "vitpose+-base": "vitpose+_base.pth",
+    "vitpose-plus-base": "vitpose+_base.pth",
 }
 
 
 def get_config(model_name):
-    num_experts = 6 if "+" in model_name else 1
-    part_features = 192 if "+" in model_name else 0
+    num_experts = 6 if "plus" in model_name else 1
+    part_features = 192 if "plus" in model_name else 0
 
     backbone_config = VitPoseBackboneConfig(out_indices=[12], num_experts=num_experts, part_features=part_features)
     # size of the architecture
@@ -189,14 +189,16 @@ def write_model(model_path, model_name, push_to_hub):
         new_key = new_keys[key]
         value = original_state_dict[key]
 
-        if re.search("qkv", new_key):
+        if re.search("associate_heads", new_key) or re.search("backbone.cls_token", new_key):
+            # This associated_heads is concept of auxiliary head so does not require in inference stage.
+            # backbone.cls_token is optional forward function for dynamically change of size, see detail in https://github.com/ViTAE-Transformer/ViTPose/issues/34
+            pass
+        elif re.search("qkv", new_key):
             state_dict[new_key.replace("self.qkv", "attention.query")] = value[:dim]
             state_dict[new_key.replace("self.qkv", "attention.key")] = value[dim : dim * 2]
             state_dict[new_key.replace("self.qkv", "attention.value")] = value[-dim:]
-
         elif re.search("head", new_key) and not config.use_simple_decoder:
             # Pattern for deconvolution layers
-            print(new_key)
             deconv_pattern = r"deconv_layers\.(0|3)\.weight"
             new_key = re.sub(deconv_pattern, lambda m: f"deconv{int(m.group(1))//3 + 1}.weight", new_key)
             # Pattern for batch normalization layers
@@ -291,7 +293,7 @@ def write_model(model_path, model_name, push_to_hub):
             torch.tensor([8.69966745e-01]),
             atol=5e-2,
         )
-    elif model_name == "vitpose+-base":
+    elif model_name == "vitpose-plus-base":
         assert torch.allclose(
             pose_results[1]["keypoints"][0],
             torch.tensor([3.98201294e02, 1.81728302e02]),
