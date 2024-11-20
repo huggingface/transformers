@@ -1891,9 +1891,7 @@ class GenerationTesterMixin:
             max_new_tokens = 20
 
             for dtype in (torch.float32, torch.float16):
-                config.torch_dtype = dtype
                 model = model_class(config).to(torch_device).to(dtype).eval()
-                print(model.dtype)
                 generation_kwargs = {
                     "max_new_tokens": max_new_tokens,
                     "return_dict_in_generate": True,  # Required to return `past_key_values`
