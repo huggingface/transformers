@@ -185,16 +185,16 @@ class GenerationTesterMixin:
         # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
         # to crash. On pretrained models this isn't a risk, as they are trained to not generate these tokens.
         if config is not None:
-            image_token_index = (
-                config.image_token_index
-                if getattr(config, "image_token_index", None) is not None
-                else getattr(config, "image_token_id", None)
-            )
-            video_token_index = config.video_token_index if hasattr(config, "video_token_index") else None
-            if image_token_index is not None and image_token_index < config.get_text_config().vocab_size:
-                logits_processor_kwargs["bad_words_ids"].append([image_token_index])
-            if video_token_index is not None and video_token_index < config.get_text_config().vocab_size:
-                logits_processor_kwargs["bad_words_ids"].append([video_token_index])
+            for key in [
+                "image_token_index",
+                "image_token_id",
+                "video_token_index",
+                "video_token_id",
+                "vision_start_token_id",
+            ]:
+                token_index = getattr(config, key, None)
+                if token_index is not None and token_index < config.get_text_config().vocab_size:
+                    logits_processor_kwargs["bad_words_ids"].append([token_index])
 
         return logits_processor_kwargs
 
@@ -1046,7 +1046,6 @@ class GenerationTesterMixin:
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
     @pytest.mark.generate
-    @unittest.skip("Started to break with https://github.com/huggingface/transformers/pull/33703")
     def test_beam_search_low_memory(self):
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
@@ -1496,7 +1495,7 @@ class GenerationTesterMixin:
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-5)
 
     @pytest.mark.generate
     def test_past_key_values_format(self):
@@ -4107,6 +4106,28 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model_inputs = model_inputs.to(model.device)
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
+
+    def test_assisted_generation_early_exit(self):
+        """
+        Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
+        manipulation, which will cause the test to fail if something goes wrong there.
+        """
+        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 8s and Bob has a pair"
+
+        prompt = "Alice and Bob"
+        checkpoint = "facebook/layerskip-llama3.2-1B"
+
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint).to(torch_device)
+        original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
+        self.assertEqual(original_decoded, [expected_output])
+
+        outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+        decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
+        self.assertEqual(decoded_assisted, [expected_output])
 
 
 @require_torch
