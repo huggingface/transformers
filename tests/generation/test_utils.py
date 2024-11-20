@@ -1905,18 +1905,18 @@ class GenerationTesterMixin:
 
                 # Check 1: The cache shapes must match the expected shapes
                 max_cache_len = seq_length + max_new_tokens
-                config = config.text_config if hasattr(config, "text_config") else config
+                text_config = config.text_config if hasattr(config, "text_config") else config
                 head_dim = (
-                    config.head_dim
-                    if hasattr(config, "head_dim")
-                    else config.hidden_size // config.num_attention_heads
+                    text_config.head_dim
+                    if hasattr(text_config, "head_dim")
+                    else text_config.hidden_size // text_config.num_attention_heads
                 )
                 num_key_value_heads = (
-                    config.num_attention_heads
-                    if getattr(config, "num_key_value_heads", None) is None
-                    else config.num_key_value_heads
+                    text_config.num_attention_heads
+                    if getattr(text_config, "num_key_value_heads", None) is None
+                    else text_config.num_key_value_heads
                 )
-                num_hidden_layers = config.num_hidden_layers
+                num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
                 self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
                 self.assertTrue(len(static_cache_generation.past_key_values.key_cache) == num_hidden_layers)
