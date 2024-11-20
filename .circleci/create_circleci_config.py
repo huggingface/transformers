@@ -69,6 +69,8 @@ class EmptyJob:
             steps.append(step)
             step = {"run": 'ls -la outputs'}
             steps.append(step)
+            step = {"run": 'ls -la outputs/reports'}
+            steps.append(step)
         return {
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
             "steps": steps,
@@ -387,11 +389,11 @@ PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 
-REGULAR_TESTS = [torch_and_tf_job] # fmt: skip
-EXAMPLES_TESTS = []
-PIPELINE_TESTS = []
-REPO_UTIL_TESTS = []
-DOC_TESTS = []
+# REGULAR_TESTS = [torch_and_tf_job] # fmt: skip
+# EXAMPLES_TESTS = []
+# PIPELINE_TESTS = []
+# REPO_UTIL_TESTS = []
+# DOC_TESTS = []
 
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
 
