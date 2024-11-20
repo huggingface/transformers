@@ -197,17 +197,9 @@ class PretrainedConfig(PushToHubMixin):
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
-        if key in ["tie_word_embeddings", "vocab_size", "is_encoder_decoder", "id_decoder"]:
-            text_config = self.get_text_config()
-            if not isinstance(text_config, self.__class__):
-                # text_config.__setattr__(key, value)
-                super().__setattr__(key, value)
-            else:
-                super().__setattr__(key, value)
-        else:
-            if key in super().__getattribute__("attribute_map"):
-                key = super().__getattribute__("attribute_map")[key]
-            super().__setattr__(key, value)
+        if key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        super().__setattr__(key, value)
 
     def __getattribute__(self, key):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
