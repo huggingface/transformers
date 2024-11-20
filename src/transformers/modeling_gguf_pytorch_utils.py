@@ -106,6 +106,17 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     if "qwen2moe" in architecture:
         updated_architecture = "qwen2_moe"
 
+    # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
+    # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
+    # If `use_parallel_residual=False`, ffn_norm will be present in the tensors
+    if "stablelm" in architecture:
+        attn_bias_name = {"attn_q.bias", "attn_k.bias", "attn_v.bias"}
+        ffn_norm_name = "ffn_norm"
+        qkv_bias = any(bias_name in tensor.name for tensor in reader.tensors for bias_name in attn_bias_name)
+        use_parallel_residual = any(ffn_norm_name in tensor.name for tensor in reader.tensors)
+        parsed_parameters["config"]["qkv_bias"] = qkv_bias
+        parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
+
     model_size = ""
     # extract the number of params from file name as architectures can differ ;
     # eg. for falcon : `...falcon-7b-...`
