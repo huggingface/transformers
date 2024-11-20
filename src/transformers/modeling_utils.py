@@ -226,6 +226,7 @@ def set_quantized_state():
     finally:
         _is_quantized = False
 
+
 # Skip recursive calls to deepspeed.zero.Init to avoid pinning errors.
 # This issue occurs with ZeRO stage 3 when using NVMe offloading.
 # For more details, refer to issue #34429.
@@ -4044,7 +4045,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()] + init_contexts
+            init_contexts = [
+                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                set_zero3_state(),
+            ] + init_contexts
         elif low_cpu_mem_usage:
             if not is_accelerate_available():
                 raise ImportError(
