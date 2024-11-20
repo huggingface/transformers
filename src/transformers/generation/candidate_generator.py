@@ -186,7 +186,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
 
-        if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and not isinstance(self, AssistedCandidateGeneratorDifferentTokenizers)
+        ):
             self.probs = []
             self.matches = []
 
@@ -278,7 +282,12 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
 
         # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
-        if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
+        # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and not isinstance(self, AssistedCandidateGeneratorDifferentTokenizers)
+        ):
             # update self.matches
             self.matches.extend([1] * num_matches)
             if len(self.probs) > len(self.matches):
