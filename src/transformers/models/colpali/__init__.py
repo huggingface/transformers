@@ -13,39 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
-
-
-_import_structure = {"configuration_colpali": ["ColPaliConfig"]}
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_colpali"] = [
-        "ColPaliForRetrieval",
-        "ColPaliPreTrainedModel",
-    ]
-    _import_structure["processing_colpali"] = ["ColPaliProcessor"]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_colpali import ColPaliConfig
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_colpali import ColPaliForRetrieval
-        from .processing_colpali import ColPaliProcessor
-
-
+    from .configuration_colpali import *
+    from .modeling_colpali import *
+    from .processing_colpali import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
