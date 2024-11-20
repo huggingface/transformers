@@ -315,12 +315,8 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = SamModelTester(self)
         common_properties = ["initializer_range"]
         self.config_tester = ConfigTester(
-            self,
-            config_class=SamConfig,
-            has_text_modality=False,
-            common_properties=common_properties
+            self, config_class=SamConfig, has_text_modality=False, common_properties=common_properties
         )
-
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -475,16 +471,10 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname,
-                    attn_implementation="sdpa"
-                )
+                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    attn_implementation="eager"
-                )
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
 
                 # Root model determines SDPA support
@@ -514,6 +504,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
 
 def prepare_image():
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
