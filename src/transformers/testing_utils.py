@@ -2414,7 +2414,8 @@ def run_test_using_subprocess(func):
                             break
                         elif len(text) > 0:
                             text += f"\n{line}"
-                    lines[0] = f"(subprocess) " + text
+                    text = f"(subprocess) " + text
+                    lines = [text] + lines
                 exception_message = "\n".join(lines)
                 raise pytest.fail(exception_message, pytrace=False)
 
