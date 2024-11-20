@@ -362,7 +362,7 @@ class Gemma2Attention(nn.Module):
 
         if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
             logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            attention_type = "eager"
+            attention_type = "flex_attention"
         else:
             attention_type = self.config._attn_implementation
 
@@ -385,7 +385,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         self.config._attn_implementation = "flash_attention_2"
         logger.warning_once(
             "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
+            "attribute of the `Gemma2Attention` class! It will be removed in v4.48"
         )
 
 
@@ -395,7 +395,7 @@ class Gemma2SdpaAttention(Gemma2Attention):
         self.config._attn_implementation = "sdpa"
         logger.warning_once(
             "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
+            "attribute of the `Gemma2Attention` class! It will be removed in v4.48"
         )
 
 
