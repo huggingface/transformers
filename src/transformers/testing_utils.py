@@ -2406,10 +2406,12 @@ def run_test_using_subprocess(func):
                 lines = exception_message.split('\n')
                 if "= test session starts =" in lines[0]:
                     text = ""
-                    for line in lines[1:-1]:
+                    for line in lines[1:]:
                         if line.startswith("FAILED "):
                             text = line[len("FAILED "):]
                             text = "".join(text.split(" - ")[1:])
+                        elif line.startswith("=") and line.endswith("=") and " failed in " in line:
+                            break
                         elif len(text) > 0:
                             text += f"\n{line}"
                     lines[0] = f"(subprocess) " + text
