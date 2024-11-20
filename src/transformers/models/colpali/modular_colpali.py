@@ -124,6 +124,9 @@ class ColPaliConfig(PaliGemmaConfig):
         self.is_composition = False
         self.embedding_dim = embedding_dim
 
+    def ignore_index(self):
+        raise AttributeError("Not needed for ColPali")
+
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {

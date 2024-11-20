@@ -20,8 +20,6 @@
 # limitations under the License.
 
 
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING
 
@@ -126,18 +124,6 @@ class ColPaliConfig(PretrainedConfig):
         self.model_type = "colpali"
         self.is_composition = False
         self.embedding_dim = embedding_dim
-
-    @property
-    def ignore_index(self):
-        warnings.warn(
-            "The `ignore_index` attribute is deprecated and will be removed in v4.47.",
-            FutureWarning,
-        )
-        return self._ignore_index
-
-    @ignore_index.setter
-    def ignore_index(self, value):
-        self._ignore_index = value
 
     def to_dict(self):
         output = super().to_dict()
