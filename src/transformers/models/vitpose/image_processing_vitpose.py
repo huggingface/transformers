@@ -595,6 +595,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         outputs: torch.Tensor,
         boxes: Union[List[List[List[float]]], np.ndarray],
         kernel_size: int = 11,
+        threshold: float = None,
         target_sizes: Union[TensorType, List[Tuple]] = None,
     ):
         """
@@ -608,6 +609,8 @@ class VitPoseImageProcessor(BaseImageProcessor):
                 box coordinates in COCO format (top_left_x, top_left_y, width, height).
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
+            threshold (`float`, *optional*, defaults to None):
+                Score threshold to keep object detection predictions.
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will be resize with the default value.
@@ -642,27 +645,27 @@ class VitPoseImageProcessor(BaseImageProcessor):
             outputs.heatmaps.cpu().numpy(), centers, scales, kernel=kernel_size
         )
 
-        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
-        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
-        all_preds[:, :, 0:2] = preds[:, :, 0:2]
-        all_preds[:, :, 2:3] = scores
+        all_boxes = np.zeros((batch_size, 4), dtype=np.float32)
         all_boxes[:, 0:2] = centers[:, 0:2]
         all_boxes[:, 2:4] = scales[:, 0:2]
-        all_boxes[:, 4] = np.prod(scales * self.normalize_factor, axis=1)
 
-        poses = torch.Tensor(all_preds)
+        poses = torch.Tensor(preds)
+        scores = torch.Tensor(scores)
         bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))
 
         results: List[List[Dict[str, torch.Tensor]]] = []
 
-        pose_bbox_pairs = zip(poses, bboxes_xyxy)
+        pose_bbox_pairs = zip(poses, scores, bboxes_xyxy)
 
         for batch_bbox in boxes:
             batch_results: List[Dict[str, torch.Tensor]] = []
             for _ in batch_bbox:
                 # Unpack the next pose and bbox_xyxy from the iterator
-                pose, bbox_xyxy = next(pose_bbox_pairs)
-                pose_result = {"keypoints": pose, "bbox": bbox_xyxy}
+                pose, score, bbox_xyxy = next(pose_bbox_pairs)
+                if threshold is not None:
+                    score_condition = (score > threshold).squeeze(1)
+                    pose, score = pose[score_condition], score[score_condition]
+                pose_result = {"keypoints": pose, "scores": score, "bbox": bbox_xyxy}
                 batch_results.append(pose_result)
             results.append(batch_results)
 

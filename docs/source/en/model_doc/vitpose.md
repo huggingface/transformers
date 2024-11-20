@@ -43,9 +43,6 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 - ViTPose is a so-called top-down keypoint detection model. This means that one first uses an object detector, like [RT-DETR](rt_detr.md), to detect people (or other instances) in an image. Next, ViTPose takes the cropped images as input and predicts the keypoints.
 
 ```py
-import math
-
-import cv2
 import numpy as np
 import requests
 import torch
@@ -111,9 +108,7 @@ with torch.no_grad():
 pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
 
 for pose_result in pose_results:
-    for keypoint in pose_result["keypoints"]:
-        x, y, score = keypoint
-        print(f"coordinate : [{x}, {y}], score : {score}")
+    print(pose_result)
 ```
 
 
@@ -135,11 +130,14 @@ annotated_frame = edge_annotator.annotate(
 
 ### Visualization for advanced user
 ```py
-def draw_points(image, keypoints, pose_keypoint_color, keypoint_score_threshold, radius, show_keypoint_weight):
+import math
+import cv2
+
+def draw_points(image, keypoints, scores, pose_keypoint_color, keypoint_score_threshold, radius, show_keypoint_weight):
     if pose_keypoint_color is not None:
         assert len(pose_keypoint_color) == len(keypoints)
-    for kid, kpt in enumerate(keypoints):
-        x_coord, y_coord, kpt_score = int(kpt[0]), int(kpt[1]), kpt[2]
+    for kid, (kpt, kpt_score) in enumerate(zip(keypoints, scores)):
+        x_coord, y_coord = int(kpt[0]), int(kpt[1])
         if kpt_score > keypoint_score_threshold:
             color = tuple(int(c) for c in pose_keypoint_color[kid])
             if show_keypoint_weight:
@@ -149,13 +147,13 @@ def draw_points(image, keypoints, pose_keypoint_color, keypoint_score_threshold,
             else:
                 cv2.circle(image, (int(x_coord), int(y_coord)), radius, color, -1)
 
-def draw_links(image, keypoints, keypoint_edges, link_colors, keypoint_score_threshold, thickness, show_keypoint_weight, stick_width = 2):
+def draw_links(image, keypoints, scores, keypoint_edges, link_colors, keypoint_score_threshold, thickness, show_keypoint_weight, stick_width = 2):
     height, width, _ = image.shape
     if keypoint_edges is not None and link_colors is not None:
         assert len(link_colors) == len(keypoint_edges)
         for sk_id, sk in enumerate(keypoint_edges):
-            x1, y1, score1 = (int(keypoints[sk[0], 0]), int(keypoints[sk[0], 1]), keypoints[sk[0], 2])
-            x2, y2, score2 = (int(keypoints[sk[1], 0]), int(keypoints[sk[1], 1]), keypoints[sk[1], 2])
+            x1, y1, score1 = (int(keypoints[sk[0], 0]), int(keypoints[sk[0], 1]), scores[sk[0]])
+            x2, y2, score2 = (int(keypoints[sk[1], 0]), int(keypoints[sk[1], 1]), scores[sk[1]])
             if (
                 x1 > 0
                 and x1 < width
@@ -183,11 +181,11 @@ def draw_links(image, keypoints, keypoint_edges, link_colors, keypoint_score_thr
                     transparency = max(0, min(1, 0.5 * (keypoints[sk[0], 2] + keypoints[sk[1], 2])))
                     cv2.addWeighted(image, transparency, image, 1 - transparency, 0, dst=image)
                 else:
-                    cv2.line(image, pos1, pos2, color, thickness=thickness)
+                    cv2.line(image, (x1, y1), (x2, y2), color, thickness=thickness)
 
 
 # Note: keypoint_edges and color palette are dataset-specific
-keypoint_edges = config.edges
+keypoint_edges = model.config.edges
 
 palette = np.array(
     [
@@ -217,17 +215,17 @@ palette = np.array(
 link_colors = palette[[0, 0, 0, 0, 7, 7, 7, 9, 9, 9, 9, 9, 16, 16, 16, 16, 16, 16, 16]]
 keypoint_colors = palette[[16, 16, 16, 16, 16, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 0, 0]]
 
-pose_results = [result["keypoints"] for result in pose_results]
 numpy_image = np.array(image)
 
-for keypoints in pose_result:
-    keypoints = np.array(keypoints, copy=False)
+for pose_result in pose_results:
+    scores = np.array(pose_result["scores"])
+    keypoints = np.array(pose_result["keypoints"])
 
     # draw each point on image
-    draw_points(numpy_image, keypoints, keypoint_colors, keypoint_score_threshold=0.3, radius=4, show_keypoint_weight=False)
+    draw_points(numpy_image, keypoints, scores, keypoint_colors, keypoint_score_threshold=0.3, radius=4, show_keypoint_weight=False)
 
     # draw links
-    draw_links(numpy_image, keypoints, keypoint_edges, link_colors, keypoint_score_threshold=0.3, thickness=1, show_keypoint_weight=False)
+    draw_links(numpy_image, keypoints, scores, keypoint_edges, link_colors, keypoint_score_threshold=0.3, thickness=1, show_keypoint_weight=False)
 
 pose_image = Image.fromarray(numpy_image)
 pose_image

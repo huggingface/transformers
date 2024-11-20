@@ -74,29 +74,27 @@ def get_config(model_name):
 
     use_simple_decoder = "simple" in model_name
 
-    edges = (
-        [
-            [15, 13],
-            [13, 11],
-            [16, 14],
-            [14, 12],
-            [11, 12],
-            [5, 11],
-            [6, 12],
-            [5, 6],
-            [5, 7],
-            [6, 8],
-            [7, 9],
-            [8, 10],
-            [1, 2],
-            [0, 1],
-            [0, 2],
-            [1, 3],
-            [2, 4],
-            [3, 5],
-            [4, 6],
-        ],
-    )
+    edges = [
+        [15, 13],
+        [13, 11],
+        [16, 14],
+        [14, 12],
+        [11, 12],
+        [5, 11],
+        [6, 12],
+        [5, 6],
+        [5, 7],
+        [6, 8],
+        [7, 9],
+        [8, 10],
+        [1, 2],
+        [0, 1],
+        [0, 2],
+        [1, 3],
+        [2, 4],
+        [3, 5],
+        [4, 6],
+    ]
     id2label = {
         0: "Nose",
         1: "L_Eye",
@@ -262,26 +260,46 @@ def write_model(model_path, model_name, push_to_hub):
 
     if model_name == "vitpose-base-simple":
         assert torch.allclose(
-            pose_results[1]["keypoints"][0, :3],
-            torch.tensor([3.98180511e02, 1.81808380e02, 8.66642594e-01]),
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.98180511e02, 1.81808380e02]),
+            atol=5e-2,
+        )
+        assert torch.allclose(
+            pose_results[1]["scores"][0],
+            torch.tensor([8.66642594e-01]),
             atol=5e-2,
         )
     elif model_name == "vitpose-base":
         assert torch.allclose(
-            pose_results[1]["keypoints"][0, :3],
-            torch.tensor([3.9807913e02, 1.8182812e02, 8.8235235e-01]),
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.9807913e02, 1.8182812e02]),
+            atol=5e-2,
+        )
+        assert torch.allclose(
+            pose_results[1]["scores"][0],
+            torch.tensor([8.8235235e-01]),
             atol=5e-2,
         )
     elif model_name == "vitpose-base-coco-aic-mpii":
         assert torch.allclose(
-            pose_results[1]["keypoints"][0, :3],
-            torch.tensor([3.98305542e02, 1.81741592e02, 8.69966745e-01]),
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.98305542e02, 1.81741592e02]),
+            atol=5e-2,
+        )
+        assert torch.allclose(
+            pose_results[1]["scores"][0],
+            torch.tensor([8.69966745e-01]),
             atol=5e-2,
         )
     elif model_name == "vitpose+-base":
         assert torch.allclose(
-            pose_results[1]["keypoints"][0, :3],
-            torch.tensor([3.98201294e02, 1.81728302e02, 8.75046968e-01]),
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.98201294e02, 1.81728302e02]),
+            atol=5e-2,
+        )
+        assert torch.allclose(
+            pose_results[1]["scores"][0],
+            torch.tensor([8.75046968e-01]),
             atol=5e-2,
         )
     else:
@@ -290,8 +308,8 @@ def write_model(model_path, model_name, push_to_hub):
 
     if push_to_hub:
         print(f"Pushing model and image processor for {model_name} to hub")
-        model.push_to_hub(f"nielsr/{model_name}")
-        image_processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"danelcsb/{model_name}")
+        image_processor.push_to_hub(f"danelcsb/{model_name}")
 
 
 def main():
