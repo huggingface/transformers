@@ -240,7 +240,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ViTModelIntegrationTest(unittest.TestCase):
+class TimmWrapperModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
         checkpoint = "timm/resnet18.a1_in1k"
