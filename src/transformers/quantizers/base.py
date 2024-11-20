@@ -225,6 +225,7 @@ class HfQuantizer(ABC):
 
     @property
     def is_qat_trainable(self) -> bool:
+        """Flag indicating whether the quantized model can carry out quantization aware training"""
         return False
 
     @abstractmethod
