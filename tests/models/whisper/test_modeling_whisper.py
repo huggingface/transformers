@@ -1775,7 +1775,78 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model.generate = types.MethodType(self.generate_patch(model.generate.__func__), model)
             model._generate_patched = True
         return super()._contrastive_generate(model, inputs_dict, **kwargs)
+    
+    # Whisper's generate method does return the decoder initial tokens.
+    # We need to adapt GenerationTesterMixin's test_generate_continue_from_past_key_values to account for this.
+    # Adapted from https://github.com/huggingface/transformers/blob/67890de3b86c81fb4775f41b4690b2abaf2a19cf/tests/generation/test_utils.py#L1720
+    def test_generate_continue_from_past_key_values(self):
+        # Tests that we can continue generating from past key values, returned from a previous `generate` call
+        for model_class in self.all_generative_model_classes:
 
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # Let's make it always:
+            # 1. use cache (for obvious reasons)
+            # 2. generate to max length (which can be achieved by setting the eos token to an invalid value), which
+            #    would make the test flaky (e.g. EOS is generated on iteration 1 on both generations, but the
+            #    continuation would force it to generate beyond an EOS token)
+            # 3. ignore `token_type_ids` for simplicity
+            # 4. ignore `forced_eos_token_id`, which requires further manipulation of the continuation inputs and is
+            #    active by default on some models
+            # 5. ignore `encoder_no_repeat_ngram_size`, which is set by default in some encoder-decoder models. When
+            #    we use their decoder as a stand-alone model, `encoder_no_repeat_ngram_size` actually prevents
+            #    repetition exclusively from the prompt. This test relies on comparing one call vs 2 calls
+            #    with cache, what is considered a prompt is different in the two cases.
+
+            if "token_type_ids" in inputs:
+                del inputs["token_type_ids"]
+
+            model = model_class(config).to(torch_device)
+            model.eval()
+            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
+            model.generation_config.forced_eos_token_id = None
+            model.generation_config.encoder_no_repeat_ngram_size = 0
+            model.generation_config.use_cache = True
+
+            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            outputs = model(**inputs)
+        
+            # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
+            outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
+
+            # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
+            # inputs may need to be tweaked across `generate` calls (like the attention mask).
+            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
+
+            outputs.sequences = torch.cat([inputs["decoder_input_ids"], outputs.sequences], dim=-1)
+            outputs_cached.sequences = torch.cat([inputs["decoder_input_ids"], outputs_cached.sequences], dim=-1)
+
+            # Continue from the tokens generated above, preparing the inputs accordingly
+            inputs["past_key_values"] = outputs_cached.past_key_values
+            new_attention_len = outputs_cached.sequences.shape[-1]
+            inputs["decoder_input_ids"] = outputs_cached.sequences
+            if "decoder_attention_mask" in inputs:
+                inputs["decoder_attention_mask"] = torch.nn.functional.pad(
+                    inputs["decoder_attention_mask"],
+                    (0, new_attention_len - inputs["decoder_attention_mask"].shape[1]),
+                    mode="constant",
+                    value=1,
+                )
+    
+            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
+            outputs_cached.sequences = torch.cat([inputs["decoder_input_ids"], outputs_cached.sequences], dim=-1)
+
+            # The two sets of generated text and past kv should be equal to each other
+            self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
+            for layer_idx in range(len(outputs_cached.past_key_values)):
+                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            outputs.past_key_values[layer_idx][kv_idx],
+                            outputs_cached.past_key_values[layer_idx][kv_idx],
+                        )
+                    )
+    
 
 @require_torch
 @require_torchaudio
