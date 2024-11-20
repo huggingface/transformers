@@ -43,7 +43,7 @@ from ...utils import (
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_zamba2 import Zamba2Config
-
+from ..mamba2.modeling_mamba2 import MambaRMSNormGated
 
 if is_mamba_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
