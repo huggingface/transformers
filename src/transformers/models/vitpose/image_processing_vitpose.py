@@ -620,7 +620,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         """
 
         # First compute centers and scales for each bounding box
-        batch_size = len(outputs.heatmaps)
+        batch_size, num_keypoints, _, _ = outputs.heatmaps.shape
 
         if target_sizes is not None:
             if batch_size != len(target_sizes):
@@ -651,6 +651,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
         poses = torch.Tensor(preds)
         scores = torch.Tensor(scores)
+        labels = torch.range(0, num_keypoints - 1)
         bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))
 
         results: List[List[Dict[str, torch.Tensor]]] = []
@@ -664,8 +665,8 @@ class VitPoseImageProcessor(BaseImageProcessor):
                 pose, score, bbox_xyxy = next(pose_bbox_pairs)
                 if threshold is not None:
                     score_condition = (score > threshold).squeeze(1)
-                    pose, score = pose[score_condition], score[score_condition]
-                pose_result = {"keypoints": pose, "scores": score, "bbox": bbox_xyxy}
+                    pose, score, labels = pose[score_condition], score[score_condition], labels[score_condition]
+                pose_result = {"keypoints": pose, "scores": score, "labels": labels, "bbox": bbox_xyxy}
                 batch_results.append(pose_result)
             results.append(batch_results)
 
