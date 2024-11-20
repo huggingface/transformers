@@ -1890,17 +1890,17 @@ class GenerationTesterMixin:
             seq_length = main_input.shape[-1]
             max_new_tokens = 20
 
-            model = model_class(config).to(torch_device).eval()
-            generation_kwargs = {
-                "max_new_tokens": max_new_tokens,
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
-                "output_scores": True,
-                "use_cache": True,
-            }
-
-            # Test different data type of static cache
             for dtype in (torch.float32, torch.float16):
-                model = model.to(dtype)
+                config.torch_dtype = dtype
+                model = model_class(config).to(torch_device).to(dtype).eval()
+                print(model.dtype)
+                generation_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "output_scores": True,
+                    "use_cache": True,
+                }
+
                 static_cache_generation = model.generate(
                     **generation_kwargs, **inputs_dict, cache_implementation="static"
                 )
