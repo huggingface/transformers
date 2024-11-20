@@ -587,49 +587,162 @@ class GenerationConfig(PushToHubMixin):
         """
 
         # Validation of individual attributes
-        integer_arguments = ["num_beams", "num_beam_groups", "top_k", "no_repeat_ngram_size"]
-        positive_arguments = [
-            "temperature",
-            "length_penalty",
-            "penalty_alpha",
-            "num_beams",
-            "min_length",
+        pos_int_args = [
+            "top_k",
+            "bos_token_id",
+            "forced_bos_token_id",
+            "max_new_tokens",
+            "min_new_tokens",
             "max_length",
-            "num_beam_groups",
+            "min_length",
             "no_repeat_ngram_size",
+            "encoder_no_repeat_ngram_size",
         ]
-        probability_arguments = ["top_p", "typical_p", "min_p", "epsilon_cutoff", "eta_cutoff"]
 
-        for arg in integer_arguments:
+        probability_args = ["top_p", "typical_p", "min_p", "epsilon_cutoff", "eta_cutoff"]
+
+        float_pos_args = [
+            "temperature",
+            "penalty_alpha",
+            "diversity_penalty",
+            "max_time",
+            "repetition_penalty",
+            "encoder_repetition_penalty",
+        ]
+
+        at_least_one_args = ["num_return_sequences", "num_beams", "num_beam_groups"]
+
+        int_or_list_int_args = [
+            "suppress_tokens",
+            "begin_suppress_tokens",
+            "forced_eos_token_id",
+            "eos_token_id",
+            "decoder_start_token_id",
+        ]
+
+        nested_lists_args = ["bad_words_ids", "force_words_ids"]
+
+        for arg in pos_int_args:
             value = getattr(self, arg)
-            if value is not None and not isinstance(value, int):
-                raise ValueError(f"`{arg}` must be an integer, but got {value} of type {type(value).__name__}.")
+            if value is not None and (not isinstance(value, int) or value < 0):
+                raise ValueError(f"`{arg}` must be a positive integer, but got {value}.")
 
-        for arg in positive_arguments:
+        for arg in probability_args:
             value = getattr(self, arg)
-            if value is not None and value < 0:
-                raise ValueError(f"`{arg}` must be a positive number, but got {value}.")
+            if value is not None and (not isinstance(value, float) or not (0.0 <= value <= 1.0)):
+                raise ValueError(f"`{arg}` must be a float within the range [0, 1], but got {value}.")
 
-        for arg in probability_arguments:
+        for arg in float_pos_args:
             value = getattr(self, arg)
-            if value is not None and (value > 1 or value < 0.0):
-                raise ValueError(f"`{arg}` must be within the range [0, 1], but got {value}.")
+            if value is not None and (not isinstance(value, float) or value < 0):
+                raise ValueError(f"`{arg}` must be a positive float, but got {value}.")
 
-        if not isinstance(self.length_penalty, (int, float)):
+        for arg in at_least_one_args:
+            value = getattr(self, arg)
+            if value is not None and (not isinstance(value, int) or (value < 1)):
+                raise ValueError(f"`{arg}` must be integer of 1 or greater, but got {value}.")
+
+        for arg in int_or_list_int_args:
+            value = getattr(self, arg)
+            if value is not None and not (
+                isinstance(value, int) or (isinstance(value, list) and all(isinstance(e, int) for e in value))
+            ):
+                raise ValueError(f"`{arg}` must be either an integer or a list of integers, but got {value}.")
+
+        if not isinstance(self.length_penalty, float):
             raise ValueError(
-                f"`length_penalty` can be a positive or negative number, but got {self.length_penalty} of type {type(self.length_penalty).__name__}."
+                f"`length_penalty` must be a float (positive or negative), but got {self.length_penalty}."
             )
 
         if self.early_stopping not in {True, False, "never"}:
-            raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
-        if self.max_new_tokens is not None and self.max_new_tokens <= 0:
-            raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+            raise ValueError(f"`early_stopping` must be a boolean or 'never', but got {self.early_stopping}.")
+
         if self.pad_token_id is not None and self.pad_token_id < 0:
             warnings.warn(
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
                 "generating, if there is padding. Please set `pad_token_id` explicitly as "
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
+
+        if self.stop_strings is not None:
+            stop_strings = self.stop_strings
+            if not (
+                isinstance(stop_strings, str)
+                or (isinstance(stop_strings, list) and all(isinstance(e, str) for e in stop_strings))
+            ):
+                raise ValueError(
+                    f"`stop_strings` must be either an string or a list of strings, but got {stop_strings}."
+                )
+
+        if self.guidance_scale is not None:
+            if not isinstance(self.guidance_scale, float) or self.guidance_scale <= 1.0:
+                raise ValueError(
+                    f"`guidance_scale` must be a float greater than 1 to enable classifier free guidance (CFG), but got {self.guidance_scale}."
+                )
+
+        if self.exponential_decay_length_penalty is not None:
+            value = self.exponential_decay_length_penalty
+            if isinstance(value, list):
+                value = tuple(value)
+            if not isinstance(value, tuple) or len(value) != 2:
+                raise ValueError(
+                    f"`exponential_decay_length_penalty` must be a tuple of two elements (int, float), but got {value}."
+                )
+            if not isinstance(value[0], int) or value[0] < 0:
+                raise ValueError(
+                    f"The first element of `exponential_decay_length_penalty` is `start_index`, must be a positive integer, but got {value[0]}."
+                )
+            if not isinstance(value[1], float) or value[1] < 0:
+                raise ValueError(
+                    f"The second element of `exponential_decay_length_penalty` is `decay_factor`, must be a positive float, but got {value[1]}."
+                )
+
+        if self.dola_layers is not None:
+            dola_layers = self.dola_layers
+            if isinstance(dola_layers, str):
+                if dola_layers not in {"low", "high"}:
+                    raise ValueError(
+                        f"`dola_layers` must be 'low' or 'high' when provided as a string, but got '{dola_layers}'."
+                    )
+            elif isinstance(dola_layers, list):
+                if not all(isinstance(layer, int) and layer >= 0 for layer in dola_layers):
+                    raise ValueError(f"`dola_layers` must be a list of positive integers, but got {dola_layers}.")
+            else:
+                raise ValueError(
+                    f"`dola_layers` must be either a string ('low', 'high') or a list of positive integers, but got {dola_layers}."
+                )
+
+        for arg in nested_lists_args:
+            value = getattr(self, arg)
+            if value is not None:
+                if not isinstance(value, list) or len(value) == 0:
+                    raise ValueError(f"`{arg}` must be a non-empty list, but got {value}.")
+
+                if arg == "bad_words_ids":
+                    if any(
+                        not isinstance(inner_list, list)
+                        or any(not isinstance(token_id, int) or token_id < 0 for token_id in inner_list)
+                        for inner_list in value
+                    ):
+                        raise ValueError(
+                            f"Each element in `{arg}` must be a list of positive integers, but got {value}."
+                        )
+
+                elif arg == "force_words_ids":
+                    if any(
+                        not isinstance(inner_list, list)
+                        or not (
+                            all(
+                                isinstance(sub_list, list) and all(isinstance(token_id, int) for token_id in sub_list)
+                                for sub_list in inner_list
+                            )
+                            or all(isinstance(token_id, int) for token_id in inner_list)
+                        )
+                        for inner_list in value
+                    ):
+                        raise ValueError(
+                            f"`{arg}` must be either a `List[List[List[int]]]` or `List[List[int]]`, but got {value}."
+                        )
 
         # Validation of attribute relations:
         fix_location = ""
