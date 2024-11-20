@@ -306,6 +306,10 @@ def write_model(model_path, model_name, push_to_hub):
         raise ValueError("Model not supported")
     print("Conversion successfully done.")
 
+    # save the model to a local directory
+    model.save_pretrained(model_path)
+    image_processor.save_pretrained(model_path)
+    
     if push_to_hub:
         print(f"Pushing model and image processor for {model_name} to hub")
         model.push_to_hub(f"danelcsb/{model_name}")
