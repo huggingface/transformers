@@ -159,7 +159,7 @@ class MistralConverter:
 
 def convert_mistral_tokenizer(model_name = "mistralai/Pixtral-Large-Instruct-2411"):
     from transformers import LlamaTokenizer
-    tokenizer = LlamaTokenizer("/fsx/arthur/pixtral-large/tokenizer.model.v7m1")
+    tokenizer = LlamaTokenizer("/home/matt/Downloads/tokenizer.model.v7m1")
     tokenizer.model_input_names = ["input_ids", "attention_mask"]
     return tokenizer
 
