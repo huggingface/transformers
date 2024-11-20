@@ -21,8 +21,11 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import LlamaTokenizer, MistralConfig, MistralForCausalLM
+
+
 try:
     from transformers import LlamaTokenizerFast
+
     tokenizer_class = LlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
@@ -67,14 +70,6 @@ def map_old_key_to_new(old_key):
     raise ValueError(f"Key: {old_key} could not be mapped (check the mapping).")
 
 
-def get_concat_dim(key):
-    """Return the dimension to concatenate the weights on."""
-    concat_dim_1 = [r"model.embed_tokens.weight", r"model.layers.(\d+).self_attn.o_proj.weight", r"model.layers.(\d+).mlp.down_proj.weight"]
-    if any(re.search(pattern, key) for pattern in concat_dim_1):
-        return 1
-    return 0
-
-
 def read_json(path):
     with open(path, "r") as f:
         return json.load(f)
@@ -112,6 +107,18 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
 
         new_dict[new_key] = tensor
     return new_dict
+
+
+def get_concat_dim(key):
+    """Return the dimension to concatenate the weights on."""
+    concat_dim_1 = [
+        r"model.embed_tokens.weight",
+        r"model.layers.(\d+).self_attn.o_proj.weight",
+        r"model.layers.(\d+).mlp.down_proj.weight",
+    ]
+    if any(re.search(pattern, key) for pattern in concat_dim_1):
+        return 1
+    return 0
 
 
 def convert_state_dict_sharded(loaded_shards: list[dict], config: MistralConfig):
@@ -180,7 +187,9 @@ def convert_config(original_config: dict, max_position_embeddings: int):
 
     # These are not always defined depending on `params.json`
     new_config_kwargs["sliding_window"] = original_config.get("sliding_window", None)
-    new_config_kwargs["num_key_value_heads"] = original_config.get("n_kv_heads", new_config_kwargs["num_attention_heads"])
+    new_config_kwargs["num_key_value_heads"] = original_config.get(
+        "n_kv_heads", new_config_kwargs["num_attention_heads"]
+    )
     new_config_kwargs["rope_theta"] = original_config.get("rope_theta", 10000.0)
 
     # This is never provided in `params.json`, we provide it manually
@@ -211,11 +220,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     else:
         shards = [file for file in os.listdir(input_dir) if re.match(r"consolidated.\d+.pth", file)]
         shards = sorted(shards, key=lambda x: int(x.split(".")[1]))
-        loaded_shards = [
-            torch.load(os.path.join(input_dir, file), map_location="cpu") for file in shards
-        ]
+        loaded_shards = [torch.load(os.path.join(input_dir, file), map_location="cpu") for file in shards]
         full_state_dict = convert_state_dict_sharded(loaded_shards, config)
-    
+
     # Load weights into model and resave them
     with torch.device("meta"):
         model = MistralForCausalLM(config)
