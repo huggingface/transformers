@@ -541,6 +541,13 @@ class PixtralImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class PixtralImageProcessorFast(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class PoolFormerFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
