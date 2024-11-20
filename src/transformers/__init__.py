@@ -1226,7 +1226,7 @@ else:
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
-    _import_structure["models.pixtral"].append("PixtralImageProcessor")
+    _import_structure["models.pixtral"].extend(["PixtralImageProcessor", "PixtralImageProcessorFast"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
@@ -6157,7 +6157,7 @@ if TYPE_CHECKING:
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
-        from .models.pixtral import PixtralImageProcessor
+        from .models.pixtral import PixtralImageProcessor, PixtralImageProcessorFast
         from .models.poolformer import (
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,

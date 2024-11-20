@@ -40,6 +40,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_pixtral"] = ["PixtralImageProcessor"]
+    _import_structure["image_processing_pixtral_fast"] = ["PixtralImageProcessorFast"]
 
 
 if TYPE_CHECKING:
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_pixtral import PixtralImageProcessor
+        from .image_processing_pixtral_fast import PixtralImageProcessorFast
 
 else:
     import sys
