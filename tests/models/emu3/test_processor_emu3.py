@@ -35,7 +35,16 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = Emu3ImageProcessor()
-        tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+        extra_special_tokens = extra_special_tokens = {
+            "image_token": "<image>",
+            "boi_token": "<|image start|>",
+            "eoi_token": "<|image end|>",
+            "image_wrapper_token": "<|image token|>",
+            "eof_token": "<|extra_201|>",
+        }
+        tokenizer = GPT2TokenizerFast.from_pretrained(
+            "openai-community/gpt2", extra_special_tokens=extra_special_tokens
+        )
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
         processor = self.processor_class(
