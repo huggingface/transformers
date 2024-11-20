@@ -1978,7 +1978,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 [1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284, 7062, 465],
                 [5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256, 50256, 50256],
                 [679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236, 878, 514],
-                [679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 7073, 287] 
+                [679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 7073, 287]
             ]
 
         )
@@ -2152,7 +2152,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = np.concatenate(self._load_datasamples(4))
         input_features = processor(
-            input_speech, return_tensors="pt", sampling_rate=16_000,
+            input_speech,
+            return_tensors="pt",
+            sampling_rate=16_000,
         ).input_features
         input_features = input_features.to(torch_device)
 
