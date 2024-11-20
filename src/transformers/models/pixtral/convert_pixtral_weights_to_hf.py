@@ -270,7 +270,7 @@ def convert_mistral_model(input_dir, output_dir):
 
     new_dict = convert_dictionnary(full_original_state_dict, vision_config, text_config)
     with torch.device("meta"):
-        model = LlavaForConditionalGeneration(config, torch_dtype=torch.bfloat16)
+        model = LlavaForConditionalGeneration(config)
     model.load_state_dict(new_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
     config_json = config.to_dict()
