@@ -132,8 +132,10 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
 
         if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
             raise ValueError(
-                "Cannot set `output_hidden_states` for this timm models, consider using different "
-                "architecture or updating timm package."
+                "The 'output_hidden_states' option cannot be set for this timm model. "
+                "To enable this feature, the 'forward_intermediates' method must be implemented "
+                "in the timm model (available in timm versions > 1.*). Please consider using a "
+                "different architecture or updating the timm package to a compatible version."
             )
 
         pixel_values = pixel_values.to(self.device, self.dtype)
