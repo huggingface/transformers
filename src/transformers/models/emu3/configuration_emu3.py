@@ -294,3 +294,6 @@ class Emu3Config(PretrainedConfig):
         self.vocabulary_map = vocabulary_map
 
         super().__init__(**kwargs)
+
+
+__all__ = ["Emu3Config", "Emu3TextConfig", "Emu3VQVAEConfig"]

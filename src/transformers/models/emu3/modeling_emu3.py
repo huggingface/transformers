@@ -145,31 +145,6 @@ class Emu3RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class Emu3LinearScalingRotaryEmbedding(Emu3RotaryEmbedding):
-    """Emu3RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`Emu3LinearScalingRotaryEmbedding` is deprecated an will be removed in v4.46. Please use "
-            "`Emu3RotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
-        )
-        kwargs["rope_type"] = "linear"
-        super().__init__(*args, **kwargs)
-
-
-class Emu3DynamicNTKScalingRotaryEmbedding(Emu3RotaryEmbedding):
-    """Emu3RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`Emu3DynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.46. Please use "
-            "`Emu3RotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
-            "__init__)."
-        )
-        kwargs["rope_type"] = "dynamic"
-        super().__init__(*args, **kwargs)
-
-
 class Emu3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -2227,3 +2202,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             }
         )
         return model_inputs
+
+
+__all__ = ["Emu3ForConditionalGeneration", "Emu3ForCausalLM", "Emu3TextModel", "Emu3PreTrainedModel", "Emu3VQVAE"]
