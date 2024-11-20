@@ -1716,8 +1716,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         text_outputs = outputs.text_model_output
         vision_outputs = outputs.vision_model_output
 
-        batch_size, num_patches_h, num_patches_w, hidden_dim = feature_map.shape
-        image_feats = torch.reshape(feature_map, (batch_size, num_patches_h * num_patches_w, hidden_dim))
+        batch_size, num_patches_height, num_patches_width, hidden_dim = feature_map.shape
+        image_feats = torch.reshape(feature_map, (batch_size, num_patches_height * num_patches_width, hidden_dim))
 
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
         max_text_queries = input_ids.shape[0] // batch_size
