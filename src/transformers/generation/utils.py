@@ -1019,10 +1019,6 @@ class GenerationMixin:
                 "You have explicitly specified `forced_decoder_ids`. Please remove the `forced_decoder_ids` argument "
                 "in favour of `input_ids` or `decoder_input_ids` respectively.",
             )
-        if generation_config.watermarking_config is not None:
-            processors.append(
-                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
-            )
 
         # TODO (joao): find a strategy to specify the order of the processors
         processors = self._merge_criteria_processor_list(processors, logits_processor)
@@ -1074,6 +1070,12 @@ class GenerationMixin:
                         epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
                     )
                 )
+
+        # Watermarking should be after all logits processing is finished (see #34630)
+        if generation_config.watermarking_config is not None:
+            processors.append(
+                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
+            )
 
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
