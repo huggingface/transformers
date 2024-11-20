@@ -299,6 +299,10 @@ _import_structure = {
         "CodeGenTokenizer",
     ],
     "models.cohere": ["CohereConfig"],
+    "models.colpali": [
+        "ColPaliConfig",
+        "ColPaliProcessor",
+    ],
     "models.conditional_detr": ["ConditionalDetrConfig"],
     "models.convbert": [
         "ConvBertConfig",
@@ -648,10 +652,6 @@ _import_structure = {
         "OwlViTVisionConfig",
     ],
     "models.paligemma": ["PaliGemmaConfig"],
-    "models.colpali": [
-        "ColPaliConfig",
-        "ColPaliProcessor",
-    ],
     "models.patchtsmixer": ["PatchTSMixerConfig"],
     "models.patchtst": ["PatchTSTConfig"],
     "models.pegasus": [
@@ -6631,7 +6631,6 @@ if TYPE_CHECKING:
         )
         from .models.colpali import (
             ColPaliForRetrieval,
-            ColPaliProcessor,
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
