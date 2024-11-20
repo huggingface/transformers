@@ -61,7 +61,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, return_for_image_generation=True, return_tensors="pt")
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "image_sizes"])
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 24)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 8)
 
         # when `return_for_image_generation` is set, we raise an error that image should not be provided
         with self.assertRaises(ValueError):

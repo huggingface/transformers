@@ -146,6 +146,10 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] Emu3VQVAEConfig
 
+## Emu3TextConfig
+
+[[autodoc]] Emu3TextConfig
+
 ## Emu3Processor
 
 [[autodoc]] Emu3Processor
