@@ -185,7 +185,7 @@ class CircleCIJob:
             {"attach_workspace": {"at": "outputs"}},
             {"run": 'ls -la outputs'},
             {"run": 'echo $CIRCLE_NODE_INDEX'},
-            {"run": 'mv reports/tests_torch_and_tf reports/tests_torch_and_tf_$CIRCLE_NODE_INDEX'},
+            {"run": f'mv reports/tests_{self.name} reports/tests_{self.name}_$CIRCLE_NODE_INDEX'},
             {"run": {"name": "Move reports", "command": "cp -r reports outputs"}},
             {"run": 'ls -la outputs'},
             {"run": 'ls -la outputs/reports'},
