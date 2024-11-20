@@ -439,10 +439,10 @@ class GemmaDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Gemma2MLP(config)
-        self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = GemmaAttention(config=config, layer_idx=layer_idx)
+        self.mlp = GemmaMLP(config)
+        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     
     def forward(
