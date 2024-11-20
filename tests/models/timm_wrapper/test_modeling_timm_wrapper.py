@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import inspect
+import tempfile
 import unittest
 
 from transformers.testing_utils import (
@@ -24,7 +25,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_torch_available, is_vision_available
+from transformers.utils.import_utils import is_timm_available, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -35,6 +36,10 @@ if is_torch_available():
     import torch
 
     from transformers import TimmWrapperConfig, TimmWrapperForImageClassification, TimmWrapperModel
+
+
+if is_timm_available():
+    import timm
 
 
 if is_vision_available():
@@ -296,7 +301,6 @@ class ViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_transformers_model_equivalent_to_timm(self):
         # check that wrapper logits are the same as timm model logits
-        import timm
 
         # some popular ones
         model_names = [
@@ -331,3 +335,30 @@ class ViTModelIntegrationTest(unittest.TestCase):
                 # check logits are the same
                 diff = (outputs.logits - timm_outputs).max().item()
                 self.assertLess(diff, 1e-4)
+
+    @slow
+    def test_save_load_to_timm(self):
+        # test that timm model can be loaded to transformers, saved and then loaded back into timm
+
+        model = TimmWrapperForImageClassification.from_pretrained(
+            "timm/resnet18.a1_in1k", num_labels=10, ignore_mismatched_sizes=True
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # there is no direct way to load timm model from folder, use the same config + path to weights
+            timm_model = timm.create_model(
+                "resnet18", num_classes=10, checkpoint_path=f"{tmpdirname}/model.safetensors"
+            )
+
+        # check that all weights are the same after reload
+        different_weights = []
+        for (name1, param1), (name2, param2) in zip(
+            model.timm_model.named_parameters(), timm_model.named_parameters()
+        ):
+            if param1.shape != param2.shape or not torch.equal(param1, param2):
+                different_weights.append((name1, name2))
+
+        if different_weights:
+            self.fail(f"Found different weights after reloading: {different_weights}")
