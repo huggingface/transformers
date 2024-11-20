@@ -55,8 +55,6 @@ STATE_DICT_MAPPING = {
 }
 # fmt: on
 
-NUM_SHARDS = {"7B": 1}
-
 
 def map_old_key_to_new(old_key):
     """Map of a key of the original state dict to the equivalent key in HF format"""
@@ -198,21 +196,18 @@ def convert_config(original_config: dict, max_position_embeddings: int):
 
 def convert_and_write_model(input_dir: str, output_dir: str, max_position_embeddings: int, modules_are_split: bool):
     """Convert the model and save it (this implicitly save the config as well)."""
-    # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
-    if not os.path.isfile(os.path.join(input_dir, "params.json")):
-        input_dir = os.path.join(input_dir, model_size)
-
     params = read_json(os.path.join(input_dir, "params.json"))
     config = convert_config(params, max_position_embeddings)
 
     full_state_dict = {}
+    # The model may be split between different files, but a single nn.Module is always fully present in a single file
     if not modules_are_split:
-        # Load and convert weights
         shards = [file for file in os.listdir(input_dir) if file.endswith(".safetensors")]
         for shard_file in shards:
             original_state_dict = load_file(os.path.join(input_dir, shard_file))
             new_dict = convert_state_dict(original_state_dict, config)
             full_state_dict.update(new_dict)
+    # A single nn.Module is split between different checkpoint files
     else:
         shards = [file for file in os.listdir(input_dir) if re.match(r"consolidated.\d+.pth", file)]
         shards = sorted(shards, key=lambda x: int(x.split(".")[1]))
