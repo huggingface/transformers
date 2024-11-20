@@ -317,6 +317,12 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
     return attn_output, None
 
 
+GEMMA_ATTENTION_FUNCTION = {
+    "flash_attention_2": flash_attention_forward,
+    "flex_attention": flex_attention_forward,
+    "eager": eager_attention_forward,
+    "sdpa": sdpa_attention_forward,
+}
 
 
 class GemmaAttention(nn.Module):
@@ -387,6 +393,7 @@ class GemmaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+
             logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
             attention_type = "eager"
         else:
@@ -426,12 +433,6 @@ class GemmaSdpaAttention(GemmaAttention):
 
 
 
-GEMMA_ATTENTION_FUNCTION = {
-    "flash_attention_2": flash_attention_forward,
-    "flex_attention": flex_attention_forward,
-    "eager": eager_attention_forward,
-    "sdpa": sdpa_attention_forward,
-}
 
 
 class GemmaDecoderLayer(nn.Module):
