@@ -20,14 +20,15 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers import PretrainedConfig
-from transformers.models.dinov2.modeling_dinov2 import (
+from ...configuration_utils import PretrainedConfig  # Moving up two levels
+from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2Backbone,
     Dinov2Encoder,
     Dinov2ForImageClassification,
     Dinov2Model,
     Dinov2PatchEmbeddings,
 )
+
 
 from ...modeling_outputs import BackboneOutput
 from ...utils import logging
