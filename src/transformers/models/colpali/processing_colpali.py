@@ -20,7 +20,7 @@
 # limitations under the License.
 
 
-from typing import ClassVar, List, Optional, Tuple, Union
+from typing import ClassVar, List, Optional, Union
 
 import torch
 
@@ -430,22 +430,3 @@ class ColPaliProcessor(ProcessorMixin):
             scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
 
         return torch.cat(scores, dim=0)
-
-    def get_n_patches(
-        self,
-        image_size: Tuple[int, int],  # for API consistency wrt to colpali-engine's interpretability module
-        patch_size: int,
-    ) -> Tuple[int, int]:
-        """
-        Return the number of patches (n_patches_x, n_patches_y) for the give image along the two image axis.
-        """
-        n_patches_x = self.image_processor.size["width"] // patch_size
-        n_patches_y = self.image_processor.size["height"] // patch_size
-
-        return n_patches_x, n_patches_y
-
-    def get_image_mask(self, batch_images: BatchFeature) -> torch.Tensor:
-        """
-        Return an image mask that indicates which input tokens correspond to visual tokens.
-        """
-        return batch_images.input_ids == self.image_token_id

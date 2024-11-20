@@ -429,25 +429,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
         return torch.cat(scores, dim=0)
 
-    def get_n_patches(
-        self,
-        image_size: Tuple[int, int],  # for API consistency wrt to colpali-engine's interpretability module
-        patch_size: int,
-    ) -> Tuple[int, int]:
-        """
-        Return the number of patches (n_patches_x, n_patches_y) for the give image along the two image axis.
-        """
-        n_patches_x = self.image_processor.size["width"] // patch_size
-        n_patches_y = self.image_processor.size["height"] // patch_size
-
-        return n_patches_x, n_patches_y
-
-    def get_image_mask(self, batch_images: BatchFeature) -> torch.Tensor:
-        """
-        Return an image mask that indicates which input tokens correspond to visual tokens.
-        """
-        return batch_images.input_ids == self.image_token_id
-
 
 @dataclass
 class ColPaliForRetrievalOutput(ModelOutput):
@@ -765,10 +746,3 @@ class ColPaliForRetrieval(PaliGemmaForConditionalGeneration):
         self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
-
-    @property
-    def patch_size(self) -> int:
-        """
-        Get the patch size of the backbone Vision Language Model (VLM).
-        """
-        return self.vision_tower.config.patch_size
