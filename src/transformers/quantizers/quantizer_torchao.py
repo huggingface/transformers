@@ -74,10 +74,13 @@ class TorchAoHfQuantizer(HfQuantizer):
                 else:
                     self.offload = True
         if self.pre_quantized:
-            torch_version = version.parse(importlib.metadata.version("torch"))
-            if torch_version < version.parse("2.5.0"):
-                raise RuntimeError(
-                        f"In order to use torchao prequantized model, you need to have torch>=2.5.0. However, the current version is {torch_version}"
+            weights_only = kwargs.get("weights_only", None)
+            if weights_only:
+                torch_version = version.parse(importlib.metadata.version("torch"))
+                if torch_version < version.parse("2.5.0"):
+                    raise RuntimeError(
+                        f"In order to use torchao pre-quantized model, you need to have torch>=2.5.0. However, the current version is {torch_version}."
+                        f" You can also set with `weights_only=False` in `from_pretrained` if you don't want to update torch"
                     )
 
     def update_torch_dtype(self, torch_dtype):
