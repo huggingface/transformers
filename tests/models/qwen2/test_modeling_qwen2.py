@@ -458,7 +458,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_450m_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
+        EXPECTED_TEXT_COMPLETION = (
+            """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
+        )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto")
@@ -526,7 +528,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
+        EXPECTED_TEXT_COMPLETION = (
+            """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
+        )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
 
@@ -545,7 +549,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16)
-        assistant_model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16)
+        assistant_model = Qwen2ForCausalLM.from_pretrained(
+            "Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16
+        )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -573,7 +579,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
         qwen_model = "Qwen/Qwen2-0.5B"
 
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"]
+        EXPECTED_TEXT_COMPLETION = [
+            "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
+        ]
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
