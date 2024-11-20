@@ -126,8 +126,9 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 
 
 @torch.jit.script
-def scaled_size_sqrt(query_layer, scale_factor: int):
+def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+
 
 
 @torch.jit.script
