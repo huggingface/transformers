@@ -104,9 +104,25 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="TimmWrapper doesn't have num_hidden_layers attribute")
     def test_hidden_states_output(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            # check all hidden states
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+            self.assertTrue(
+                len(outputs.hidden_states) == 5, f"expected 5 hidden states, but got {len(outputs.hidden_states)}"
+            )
+
+            # check we can select hidden states byy indices
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=[-2, -1])
+            self.assertTrue(
+                len(outputs.hidden_states) == 2, f"expected 2 hidden states, but got {len(outputs.hidden_states)}"
+            )
 
     @unittest.skip(reason="TimmWrapper models doesn't have inputs_embeds")
     def test_inputs_embeds(self):
@@ -132,7 +148,7 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_is_small(self):
         pass
 
-    # OVerriding as output_hidden_states and output_attentions are not supported by TimmWrapper and model is not trainable
+    # Overriding as output_attentions is not supported by TimmWrapper
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
