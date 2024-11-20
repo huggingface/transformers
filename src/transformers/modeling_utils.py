@@ -1843,7 +1843,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
-        if getattr(self.config.get_text_config(), "tie_word_embeddings", True):
+        if getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", True):
             output_embeddings = self.get_output_embeddings()
             if output_embeddings is not None:
                 self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
@@ -2085,7 +2085,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 new_num_tokens = new_embeddings.weight.shape[0]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
-        if self.get_output_embeddings() is not None and not self.config.get_text_config().tie_word_embeddings:
+        if (
+            self.get_output_embeddings() is not None
+            and not self.config.get_text_config(decoder=True).tie_word_embeddings
+        ):
             old_lm_head = self.get_output_embeddings()
             if isinstance(old_lm_head, torch.nn.Embedding):
                 new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens, mean_resizing=mean_resizing)
@@ -4443,8 +4446,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 not_initialized_submodules = set_initialized_submodules(model, _loaded_keys)
                 # If we're about to tie the output embeds to the input embeds we don't need to init them
                 if (
-                    hasattr(model.config.get_text_config(), "tie_word_embeddings")
-                    and model.config.get_text_config().tie_word_embeddings
+                    hasattr(model.config.get_text_config(decoder=True), "tie_word_embeddings")
+                    and model.config.get_text_config(decoder=True).tie_word_embeddings
                 ):
                     output_embeddings = model.get_output_embeddings()
                     if output_embeddings is not None:
