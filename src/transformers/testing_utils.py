@@ -2385,6 +2385,7 @@ def run_test_using_subprocess(func):
 
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
+                env["CI"] = "true"
 
                 # If not subclass of `unitTest.TestCase` and `pytestconfig` is used: try to grab and use the arguments
                 if "pytestconfig" in kwargs:
