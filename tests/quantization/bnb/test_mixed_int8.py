@@ -868,9 +868,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         for param in model.parameters():
             param.requires_grad = False  # freeze the model - train adapters later
             # cast all non INT8 parameters to fp32
-            if (
-                (param.dtype == torch.float16) or (param.dtype == torch.bfloat16)
-            ) and param.__class__.__name__ != "Params4bit":
+            if param.dtype in (torch.float16, torch.bfloat16) and param.__class__.__name__ != "Params4bit":
                 param.data = param.data.to(torch.float32)
 
         # Step 2: add adapters
