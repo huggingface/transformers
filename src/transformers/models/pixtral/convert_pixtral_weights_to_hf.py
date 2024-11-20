@@ -157,30 +157,17 @@ class MistralConverter:
         return tokenizer
 
 
-def convert_mistral_tokenizer(model_name = "mistralai/Pixtral-Large-Instruct-2411"):
+def convert_mistral_tokenizer(model_file):
     from transformers import LlamaTokenizer
-    tokenizer = LlamaTokenizer("/home/matt/Downloads/tokenizer.model.v7m1")
-    tokenizer.model_input_names = ["input_ids", "attention_mask"]
-    return tokenizer
-
-
-    vocab = tokenizer.instruct_tokenizer.tokenizer._tekken_token2id_nospecial
-    all_special = [
-        token.value if hasattr(token, "value") else token
-        for token in tokenizer.instruct_tokenizer.tokenizer._all_special_tokens
-    ]
-    specials_tokens = {token: all_special.index(token) for token in all_special}
-    specials_tokens.update(vocab)
-    vocab = specials_tokens
-    tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
-        bos_token="<s>",
-        unk_token="<unk>",
-        eos_token="</s>",
-    )
-    tokenizer.model_input_names = ["input_ids", "attention_mask"]
-
-    return tokenizer
+    mistral_tokenizer = MistralTokenizer.from_file(model_file)
+    vocab = mistral_tokenizer.instruct_tokenizer.tokenizer.vocab()
+    control_token_ids = mistral_tokenizer.instruct_tokenizer.tokenizer._control_tokens
+    all_special = [vocab[id] for id in control_token_ids]
+    hf_tokenizer = LlamaTokenizer(model_file)
+    # Do I need to exclude tokens that are already special?
+    hf_tokenizer.add_special_tokens({"additional_special_tokens": all_special})
+    hf_tokenizer.model_input_names = ["input_ids", "attention_mask"]
+    return hf_tokenizer
 
 
 def permute_for_rope(value, n_heads, config):
@@ -300,10 +287,14 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
+    parser.add_argument(
+        "--tokenizer_file",
+        help="Location of the specific tokenizer model file to use."
+    )
 
     args = parser.parse_args()
     convert_mistral_model(args.input_dir, args.output_dir)
-    tokenizer = convert_mistral_tokenizer()
+    tokenizer = convert_mistral_tokenizer(args.tokenizer_file)
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
     processor.save_pretrained(args.output_dir)
