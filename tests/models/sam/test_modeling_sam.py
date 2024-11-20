@@ -315,14 +315,14 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = SamModelTester(self)
         common_properties = ["initializer_range"]
         self.config_tester = ConfigTester(
-            self, 
+            self,
             config_class=SamConfig,
             has_text_modality=False,
             common_properties=common_properties
         )
-    
 
-    def test_config(self): 
+
+    def test_config(self):
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
@@ -476,13 +476,13 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(
-                    tmpdirname, 
+                    tmpdirname,
                     attn_implementation="sdpa"
                 )
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 model_eager = model_class.from_pretrained(
-                    tmpdirname, 
+                    tmpdirname,
                     attn_implementation="eager"
                 )
                 model_eager = model_eager.eval().to(torch_device)
@@ -495,7 +495,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.assertTrue(model_sdpa.vision_encoder.config._attn_implementation == attn_impl)
                 self.assertTrue(model_sdpa.mask_decoder.config._attn_implementation == attn_impl)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager") 
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.vision_encoder.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.mask_decoder.config._attn_implementation == "eager")
 
