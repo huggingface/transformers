@@ -16,11 +16,19 @@
 import inspect
 import unittest
 
-from transformers.testing_utils import require_timm, require_torch, torch_device
-from transformers.utils.import_utils import is_torch_available
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils.import_utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -28,7 +36,11 @@ if is_torch_available():
 
     from transformers import TimmWrapperConfig, TimmWrapperForImageClassification, TimmWrapperModel
 
-from ...test_pipeline_mixin import PipelineTesterMixin
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import TimmWrapperImageProcessor
 
 
 class TimmWrapperModelTester:
@@ -116,13 +128,19 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self.assertTrue(
                 len(outputs.hidden_states) == 5, f"expected 5 hidden states, but got {len(outputs.hidden_states)}"
             )
+            expected_shapes = [[16, 16], [8, 8], [4, 4], [2, 2], [1, 1]]
+            resulted_shapes = [list(h.shape[2:]) for h in outputs.hidden_states]
+            self.assertListEqual(expected_shapes, resulted_shapes)
 
-            # check we can select hidden states byy indices
+            # check we can select hidden states by indices
             with torch.no_grad():
                 outputs = model(**inputs_dict, output_hidden_states=[-2, -1])
             self.assertTrue(
                 len(outputs.hidden_states) == 2, f"expected 2 hidden states, but got {len(outputs.hidden_states)}"
             )
+            expected_shapes = [[2, 2], [1, 1]]
+            resulted_shapes = [list(h.shape[2:]) for h in outputs.hidden_states]
+            self.assertListEqual(expected_shapes, resulted_shapes)
 
     @unittest.skip(reason="TimmWrapper models doesn't have inputs_embeds")
     def test_inputs_embeds(self):
@@ -207,3 +225,109 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
+@require_torch
+@require_vision
+class ViTModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_image_classification_head(self):
+        checkpoint = "timm/resnet18.a1_in1k"
+        model = TimmWrapperForImageClassification.from_pretrained(checkpoint, device_map=torch_device).eval()
+        image_processor = TimmWrapperImageProcessor.from_pretrained(checkpoint)
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the shape and logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_label = 281  # tabby cat
+        self.assertEqual(torch.argmax(outputs.logits).item(), expected_label)
+
+        expected_slice = torch.tensor([-11.2618, -9.6192, -10.3205]).to(torch_device)
+        resulted_slice = outputs.logits[0, :3]
+        is_close = torch.allclose(resulted_slice, expected_slice, atol=1e-4)
+        self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
+
+    @slow
+    @require_bitsandbytes
+    def test_inference_image_classification_quantized(self):
+        from transformers import BitsAndBytesConfig
+
+        checkpoint = "timm/vit_small_patch16_384.augreg_in21k_ft_in1k"
+
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        model = TimmWrapperForImageClassification.from_pretrained(
+            checkpoint, quantization_config=quantization_config, device_map=torch_device
+        ).eval()
+        image_processor = TimmWrapperImageProcessor.from_pretrained(checkpoint)
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the shape and logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_label = 281  # tabby cat
+        self.assertEqual(torch.argmax(outputs.logits).item(), expected_label)
+
+        expected_slice = torch.tensor([-2.4043, 1.4492, -0.5127]).to(outputs.logits.dtype)
+        resulted_slice = outputs.logits[0, :3].cpu()
+        is_close = torch.allclose(resulted_slice, expected_slice, atol=1e-3)
+        self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
+
+    @slow
+    def test_transformers_model_equivalent_to_timm(self):
+        # check that wrapper logits are the same as timm model logits
+        import timm
+
+        # some popular ones
+        model_names = [
+            "vit_small_patch16_384.augreg_in21k_ft_in1k",
+            "resnet50.a1_in1k",
+            "tf_mobilenetv3_large_minimal_100.in1k",
+            "swin_tiny_patch4_window7_224.ms_in1k",
+            "ese_vovnet19b_dw.ra_in1k",
+            "hrnet_w18.ms_aug_in1k",
+        ]
+        image = prepare_img()
+
+        for model_name in model_names:
+            checkpoint = f"timm/{model_name}"
+
+            with self.subTest(msg=model_name):
+                # prepare inputs
+                image_processor = TimmWrapperImageProcessor.from_pretrained(checkpoint)
+                pixel_values = image_processor(images=image).pixel_values.to(torch_device)
+
+                # load models
+                model = TimmWrapperForImageClassification.from_pretrained(checkpoint, device_map=torch_device).eval()
+                timm_model = timm.create_model(model_name, pretrained=True).to(torch_device).eval()
+
+                with torch.inference_mode():
+                    outputs = model(pixel_values)
+                    timm_outputs = timm_model(pixel_values)
+
+                # check shape is the same
+                self.assertEqual(outputs.logits.shape, timm_outputs.shape)
+
+                # check logits are the same
+                diff = (outputs.logits - timm_outputs).max().item()
+                self.assertLess(diff, 1e-4)
