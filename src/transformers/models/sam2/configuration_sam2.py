@@ -157,13 +157,27 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        in_dim=256,
-        out_dim=64,
+        hidden_size=256,
+        output_channels=64,
+        mask_downsampler_embed_dim=256,
+        mask_downsampler_kernel_size=4,
+        mask_downsampler_stride=4,
+        mask_downsampler_padding=0,
+        mask_downsampler_total_stride=16,
+        mask_downsampler_hidden_act="gelu",
+        memory_fuser_num_layers=2,
+        memory_fuser_embed_dim=256,
+        memory_fuser_input_projection=False,
+        memory_fuser_num_layers=2,
+        memory_fuser_kernel_size=7,
+        memory_fuser_padding=3,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.in_dim = in_dim
-        self.out_dim = out_dim
+        assert mask_downsampler_stride**int(math.log2(mask_downsampler_total_stride) // math.log2(mask_downsampler_stride)) == mask_downsampler_total_stride
+
+        self.hidden_size = hidden_size
+        self.output_channels = output_channels
 
 
 class Sam2MaskDecoderConfig(PretrainedConfig):
