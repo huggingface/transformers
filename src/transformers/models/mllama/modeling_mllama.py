@@ -1845,7 +1845,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         super().__init__(config.get_text_config())
         self.text_config = config.get_text_config()
         self.vocab_size = self.text_config.vocab_size
-        self.model = MllamaTextModel._from_config(self.text_config, attn_implementation=config._attn_implementation)
+        self.model = MllamaTextModel._from_config(self.text_config)
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)
 
         self.post_init()
@@ -1982,6 +1982,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         self.vision_model = MllamaVisionModel._from_config(config.vision_config)
         self.language_model = MllamaForCausalLM._from_config(config.text_config)
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
         self.multi_modal_projector = nn.Linear(
             config.vision_config.vision_output_dim,
             config.text_config.hidden_size,
@@ -2006,9 +2009,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    def tie_weights(self):
-        return self.language_model.tie_weights()
 
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="MllamaConfig")
