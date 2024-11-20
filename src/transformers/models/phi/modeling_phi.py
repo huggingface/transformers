@@ -257,9 +257,10 @@ class PhiAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.rope_theta = config.rope_theta
+        self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
         self.is_causal = True
 
-        if self.hidden_size % self.num_heads != 0:
+        if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
@@ -268,9 +269,6 @@ class PhiAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
-
-        self.rotary_emb = PhiRotaryEmbedding(config=self.config)
-        self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
         self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
 
         self.qk_layernorm = config.qk_layernorm
@@ -281,6 +279,8 @@ class PhiAttention(nn.Module):
             self.k_layernorm = nn.LayerNorm(
                 config.hidden_size // self.num_heads, eps=config.layer_norm_eps, elementwise_affine=True
             )
+
+        self.rotary_emb = PhiRotaryEmbedding(config=self.config)
 
     def forward(
         self,
@@ -843,7 +843,10 @@ class PhiModel(PhiPreTrainedModel):
             [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = PhiRotaryEmbedding(config=config)
+
         self.gradient_checkpointing = False
+        if getattr(config, "pretraining_tp", 1) != 1:
+            logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -1109,6 +1112,7 @@ class PhiModel(PhiPreTrainedModel):
 
 class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1185,7 +1189,6 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         'This is an example script .\n\n\n\nfrom typing import List\n\ndef find_most_common_letter(words: List[str'
         ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1339,7 +1342,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
     PHI_START_DOCSTRING,
 )
 class PhiForTokenClassification(PhiPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = PhiModel(config)

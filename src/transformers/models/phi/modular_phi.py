@@ -37,7 +37,7 @@ from ...utils import (
     logging,
 )
 from ..clip.modeling_clip import CLIPMLP
-from ..gemma.modeling_gemma import GemmaAttention, GemmaForCausalLM
+from ..gemma.modeling_gemma import GemmaForCausalLM
 from ..llama.modeling_llama import (
     LlamaDynamicNTKScalingRotaryEmbedding,
     LlamaForSequenceClassification,
@@ -249,16 +249,35 @@ class PhiMLP(CLIPMLP):
     pass
 
 
-class PhiAttention(GemmaAttention):
+class PhiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: PhiConfig, layer_idx: Optional[int] = None):
-        super().__init__(config, layer_idx)
-        del self.o_proj
-        del self.scaling
-        del self.max_position_embeddings
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
+        self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.rope_theta = config.rope_theta
         self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
+        self.is_causal = True
+
+        if (self.head_dim * self.num_heads) != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_heads`: {self.num_heads})."
+            )
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
@@ -907,45 +926,20 @@ class PhiForCausalLM(GemmaForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         'This is an example script .\n\n\n\nfrom typing import List\n\ndef find_most_common_letter(words: List[str'
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        return super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-        )
-
-        hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            num_logits_to_keep=num_logits_to_keep,
+            **loss_kwargs,
         )
 
 
@@ -954,7 +948,7 @@ class PhiForSequenceClassification(LlamaForSequenceClassification):
 
 
 class PhiForTokenClassification(LlamaForTokenClassification):
-    def __init__(self, config):
+    def __init__(self, config: PhiConfig):
         super().__init__(config)
         del self.score
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
