@@ -112,9 +112,12 @@ class GemmaConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         bos_token_id=2,
+    
         tie_word_embeddings=True,
         rope_theta=10000.0,
+
         attention_bias=False,
+
         attention_dropout=0.0,
         **kwargs,
     ):
@@ -134,6 +137,7 @@ class GemmaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        
 
         super().__init__(
             pad_token_id=pad_token_id,

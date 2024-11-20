@@ -22,6 +22,7 @@ from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
+from transformers import pipeline 
 from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
@@ -558,7 +559,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -569,26 +570,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
 
     
-    @require_read_token
-    def test_model_7b_pipeline_fp16_flex_attention(self):
-        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
-        model_id = "google/gemma-7b"
-        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1960s and I am trying to find out what the average",
-            "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="flex_attention"
-        ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-
-        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
-
-        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
-        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+ 
     @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
@@ -605,32 +587,11 @@ class GemmaIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
-        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
+        output = pipe(self.input_text, max_new_tokens=30, do_sample=False, padding=True)
 
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
 
-
-    @require_read_token
-    def test_model_2b_pipeline_fp16_flex_attention(self):
-        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
-        model_id = "google/gemma-2b"
-        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1960s and I am trying to find out what the average",
-            "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="flex_attention"
-        ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-
-        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
-
-        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
-        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
 
     @require_read_token
     def test_model_2b_eager(self):

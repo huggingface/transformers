@@ -41,8 +41,9 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal,
-    is_torch_greater_or_equal
+    is_torch_greater_or_equal,
     logging,
     replace_return_docstrings,
 )
@@ -208,12 +209,8 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * config.scaling
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) 
 
-    if config.attn_logit_softcapping is not None:
-        attn_weights = attn_weights / config.attn_logit_softcapping
-        attn_weights = torch.tanh(attn_weights)
-        attn_weights = attn_weights * config.attn_logit_softcapping
     if mask is not None:  # no matter the length, we just slice it
         causal_mask = mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
@@ -253,31 +250,21 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
         mask,
         seq_len,
         dropout=dropout_rate,
-        softmax_scale=config.scaling,
         is_causal=config.is_causal,
         sliding_window=config.sliding_window,
         use_top_left_mask=config._flash_attn_uses_top_left_mask,
-        softcap=config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
     )
 
     return attn_output, None
 
 
-def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
-    def tanh_softcap(score, b, h, q_idx, kv_idx):
-        soft_cap = config.attn_logit_softcapping
-        score = soft_cap * torch.tanh(score / soft_cap)
-        if mask is not None:
-            return score + mask[b][0][q_idx][kv_idx]
-        return score
 
+def flex_attention_forward(config, query, key, value,output_attentions=False, **_kwargs):
     attn_output = flex_attention(
         query,
         key,
         value,
-        score_mod=tanh_softcap,
         enable_gqa=True,
-        scale=config.scaling,
         return_lse=output_attentions,
     )
     if not output_attentions:
@@ -312,7 +299,6 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
         attn_mask=causal_mask,
         dropout_p=config.attention_dropout if config.training else 0.0,
         is_causal=is_causal,
-        scale=config.scaling,
     )
     return attn_output, None
 
@@ -342,7 +328,6 @@ class GemmaAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.scaling = 1 / math.sqrt(config.head_dim)
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
@@ -417,7 +402,7 @@ class GemmaFlashAttention2(GemmaAttention):
         super().__init__(config, layer_idx)
         self.config._attn_implementation = "flash_attention_2"
         logger.warning_once(
-            "The `GemmaFlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
+            "The `GemmaFlashAttention` class is deprecated in favor of simply modifying the `config._attn_implementation`"
             "attribute of the `GemmaAttention` class! It will be removed in v4.48"
         )
 
@@ -427,7 +412,7 @@ class GemmaSdpaAttention(GemmaAttention):
         super().__init__(config, layer_idx)
         self.config._attn_implementation = "sdpa"
         logger.warning_once(
-            "The `GemmaFlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
+            "The `GemmaFlashAttention` class is deprecated in favor of simply modifying the `config._attn_implementation`"
             "attribute of the `GemmaAttention` class! It will be removed in v4.48"
         )
 
@@ -455,6 +440,7 @@ class GemmaDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         
         residual = hidden_states
@@ -488,6 +474,7 @@ class GemmaDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
 GEMMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
