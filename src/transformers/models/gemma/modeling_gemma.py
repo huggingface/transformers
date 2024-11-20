@@ -41,10 +41,12 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_greater_or_equal,
+    is_flash_attn_greater_or_equal,
+    is_torch_greater_or_equal
     logging,
     replace_return_docstrings,
 )
+
 from .configuration_gemma import GemmaConfig
 
 if is_torch_greater_or_equal("2.5"):
@@ -315,12 +317,6 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
     return attn_output, None
 
 
-GEMMA_ATTENTION_CLASSES = {
-    "flash_attention_2": flash_attention_forward,
-    "flex_attention": flex_attention_forward,
-    "eager": eager_attention_forward,
-    "sdpa": sdpa_attention_forward,
-}
 
 
 class GemmaAttention(nn.Module):
@@ -340,9 +336,8 @@ class GemmaAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.scaling = config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
-        self.attn_logit_softcapping = config.attn_logit_softcapping
+        self.scaling = 1 / math.sqrt(config.head_dim)
+
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -387,7 +382,6 @@ class GemmaAttention(nn.Module):
             cache_kwargs = {
                 "sin": sin,
                 "cos": cos,
-                "sliding_window": self.sliding_window,
                 "cache_position": cache_position,
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -431,21 +425,26 @@ class GemmaSdpaAttention(GemmaAttention):
         )
 
 
+
+GEMMA_ATTENTION_FUNCTION = {
+    "flash_attention_2": flash_attention_forward,
+    "flex_attention": flex_attention_forward,
+    "eager": eager_attention_forward,
+    "sdpa": sdpa_attention_forward,
+}
+
+
 class GemmaDecoderLayer(nn.Module):
     def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.is_sliding = not bool(layer_idx % 2)
-        self.self_attn = GemmaAttention(config=config, layer_idx=layer_idx)
-        self.mlp = GemmaMLP(config)
-        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
+        self.mlp = Gemma2MLP(config)
+        self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.pre_feedforward_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.sliding_window = config.sliding_window
-
+    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -456,22 +455,8 @@ class GemmaDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            # Flash-attn is a 2D tensor
-            if self.config._attn_implementation == "flash_attention_2":
-                if past_key_value is not None:  # when decoding
-                    attention_mask = attention_mask[:, -self.sliding_window :]
-            else:
-                min_dtype = torch.finfo(hidden_states.dtype).min
-                sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
-                )
-                attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-                if attention_mask.shape[-1] <= 1:  # when decoding
-                    attention_mask = attention_mask[:, :, :, -self.sliding_window :]
-
+        
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -483,14 +468,14 @@ class GemmaDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
-        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
-        hidden_states = self.pre_feedforward_layernorm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -502,9 +487,6 @@ class GemmaDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
-
-
 GEMMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
