@@ -1226,8 +1226,8 @@ class StaticCache(Cache):
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
             # operation, that avoids copies and uses less memory.
             try:
-                k_out.index_copy_(2, cache_position, key_states)
-                v_out.index_copy_(2, cache_position, value_states)
+                k_out.index_copy_(2, cache_position, key_states.to(k_out.dtype))
+                v_out.index_copy_(2, cache_position, value_states.to(v_out.dtype))
             except NotImplementedError:
                 # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
                 k_out[:, :, cache_position] = key_states

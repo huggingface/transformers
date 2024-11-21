@@ -233,8 +233,8 @@ class GPTJAttention(nn.Module):
             key = apply_rotary_pos_emb(key, sin, cos)
             query = apply_rotary_pos_emb(query, sin, cos)
 
-        key = key.permute(0, 2, 1, 3).to(value.dtype)
-        query = query.permute(0, 2, 1, 3).to(value.dtype)
+        key = key.permute(0, 2, 1, 3)
+        query = query.permute(0, 2, 1, 3)
 
         if layer_past is not None:
             cache_kwargs = {
