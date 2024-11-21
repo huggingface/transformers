@@ -986,6 +986,7 @@ class RelationDetrDecoderLayer(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
+        self_attention_mask=None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -1002,11 +1003,12 @@ class RelationDetrDecoderLayer(nn.Module):
                 Spatial shapes.
             level_start_index (`torch.LongTensor`, *optional*):
                 Level start index.
+            self_attention_mask (`torch.FloatTensor`):
+                Self attention mask of size `(batch, 1, target_len, target_len)` where padding elements are indicated
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
+                `(batch, 1, target_len, d_model)` where padding elements are indicated.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1016,7 +1018,7 @@ class RelationDetrDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=encoder_attention_mask,
+            attention_mask=self_attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
@@ -1033,6 +1035,7 @@ class RelationDetrDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             position_embeddings=position_embeddings,
+            attention_mask=encoder_attention_mask,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -1191,6 +1194,13 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RelationDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
+        self.memory_fusion = nn.Sequential(
+            nn.Linear(config.d_model * (config.encoder_layers + 1), config.d_model),
+            nn.ReLU(inplace=True),
+            nn.Linear(config.d_model, config.d_model),
+            nn.LayerNorm(config.d_model),
+        )
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1279,11 +1289,10 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         if reference_points is None:
             reference_points = self.get_reference_points(spatial_shapes_tuple, valid_ratios, device=inputs_embeds.device)
 
-        encoder_states = () if output_hidden_states else None
+        encoder_states = ()
         all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+            encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
@@ -1313,8 +1322,13 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+        encoder_states = encoder_states + (hidden_states,)
+
+        hidden_states = torch.cat(encoder_states, dim=-1)
+        hidden_states = self.memory_fusion(hidden_states)
+
+        if not output_hidden_states:
+            encoder_states = None
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
@@ -1474,6 +1488,7 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
         self,
         inputs_embeds=None,
         encoder_hidden_states=None,
+        self_attention_mask=None,
         encoder_attention_mask=None,
         reference_points=None,
         spatial_shapes=None,
@@ -1537,7 +1552,7 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
 
         valid_ratio_scale = torch.cat([valid_ratios, valid_ratios], -1)[:, None]
 
-        position_relation = encoder_attention_mask
+        position_relation = self_attention_mask
         src_boxes = reference_points
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.detach()[:, :, None] * valid_ratio_scale
@@ -1558,19 +1573,21 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
                     spatial_shapes,
                     spatial_shapes_list,
                     level_start_index,
-                    encoder_hidden_states,
                     position_relation,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
                     output_attentions,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
                     reference_points=reference_points_input,
                     spatial_shapes=spatial_shapes,
                     spatial_shapes_list=spatial_shapes_list,
                     level_start_index=level_start_index,
+                    self_attention_mask=position_relation,
+                    encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=position_relation,
                     output_attentions=output_attentions,
                 )
@@ -1588,8 +1605,9 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
 
             if not skip_relation:
                 pos_relation = self.position_relation_embedding(src_boxes, outputs_coord).flatten(0, 1)
-                if encoder_attention_mask is not None:
-                    pos_relation.masked_fill_(encoder_attention_mask, float("-inf"))
+                # note that True is valid, False is invalid, which is opposite to the official implementation
+                if self_attention_mask is not None:
+                    pos_relation.masked_fill_(~self_attention_mask, float("-inf"))
                 src_boxes = outputs_coord
 
             # hack implementation for iterative bounding box refinement
@@ -1893,7 +1911,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
+        self_attention_mask: Optional[torch.FloatTensor] = None,
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1998,7 +2016,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         topk_coords = topk_coords_logits.sigmoid()
 
         # get target and reference points
-        reference_points = topk_coords_logits.detach()
+        reference_points = topk_coords.detach()
         target = self.target_embed.weight.expand(batch_size, -1, -1)
 
         if self.training:
@@ -2027,7 +2045,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=decoder_attention_mask,
+            self_attention_mask=self_attention_mask,
+            encoder_attention_mask=mask_flatten,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -2042,7 +2061,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             hybrid_outputs = self.decoder(
                 inputs_embeds=hybrid_target,
                 encoder_hidden_states=encoder_outputs[0],
-                encoder_attention_mask=decoder_attention_mask,
+                self_attention_mask=self_attention_mask,
+                encoder_attention_mask=mask_flatten,
                 reference_points=hybrid_reference_points,
                 spatial_shapes=spatial_shapes,
                 spatial_shapes_list=spatial_shapes_list,
@@ -2576,20 +2596,20 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             noised_embeddings = self.denoising_generator(gt_labels_list, gt_boxes_list)
             noised_label_query = noised_embeddings.noised_label_query if return_dict else noised_embeddings[0]
             noised_box_query = noised_embeddings.noised_box_query if return_dict else noised_embeddings[1]
-            decoder_attention_mask = noised_embeddings.attn_mask if return_dict else noised_embeddings[2]
-            decoder_attention_mask = ~decoder_attention_mask  # note multi-head attention mask is opposite to that of torchvision
+            self_attention_mask = noised_embeddings.attn_mask if return_dict else noised_embeddings[2]
+            self_attention_mask = ~self_attention_mask  # note multi-head attention mask is opposite to that of torchvision
             denoising_groups = noised_embeddings.denoising_groups if return_dict else noised_embeddings[3]
             max_gt_num_per_image = noised_embeddings.max_gt_num_per_image if return_dict else noised_embeddings[4]
         else:
             noised_label_query = noised_box_query = None
-            decoder_attention_mask = denoising_groups = max_gt_num_per_image = None
+            self_attention_mask = denoising_groups = max_gt_num_per_image = None
 
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
-            decoder_attention_mask=decoder_attention_mask,
+            self_attention_mask=self_attention_mask,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -2603,8 +2623,9 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         outputs_class = outputs.dec_outputs_class if return_dict else outputs[4]
         outputs_coord = outputs.dec_outputs_coord if return_dict else outputs[5]
 
-        logits = outputs_class[-1]
-        pred_boxes = outputs_coord[-1]
+        # layer is at the second dimension
+        logits = outputs_class[:, -1]
+        pred_boxes = outputs_coord[:, -1]
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
