@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_daily_ci
+      - run_daily_ci_11_20
 
 jobs:
   model-ci:
