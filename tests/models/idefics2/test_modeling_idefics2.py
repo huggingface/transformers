@@ -365,7 +365,9 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if ("SdpaAttention" in class_name or "SdpaSelfAttention" in class_name) or (
+                        hasattr(submodule, "_uses_attention_functions") and submodule._uses_attention_functions
+                    ):
                         has_sdpa = True
                         break
                 if not has_sdpa and model_sdpa.config.model_type != "falcon":
