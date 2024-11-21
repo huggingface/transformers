@@ -44,7 +44,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
+    is_torch_greater_or_equal,
     logging,
     replace_return_docstrings,
 )
@@ -53,6 +53,9 @@ from .configuration_mistral import MistralConfig
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
+
+if is_torch_greater_or_equal("2.5"):
+    from torch.nn.attention.flex_attention import flex_attention
 
 logger = logging.get_logger(__name__)
 
@@ -173,6 +176,122 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def eager_attention_forward(config, query, key, value, mask, **_kwargs):
+    key_states = repeat_kv(key, config.num_key_value_groups)
+    value_states = repeat_kv(value, config.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) / math.sqrt(config.head_dim)
+
+    if mask is not None:  # no matter the length, we just slice it
+        causal_mask = mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    # upcast attention to fp32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+
+    bsz = _kwargs["batch_size"]
+    q_len = _kwargs["query_length"]
+    if attn_output.size() != (bsz, config.num_heads, q_len, config.head_dim):
+        raise ValueError(
+            f"`attn_output` should be of size {(bsz, config.num_heads, q_len, config.head_dim)}, but is"
+            f" {attn_output.size()}"
+        )
+
+    return attn_output, attn_weights
+
+
+def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
+    # repeat k/v heads if n_kv_heads < n_heads
+    key_states = repeat_kv(key, config.num_key_value_groups)
+    value_states = repeat_kv(value, config.num_key_value_groups)
+
+    # Reashape to the expected shape for Flash Attention
+    query_states = query.transpose(1, 2)
+    key_states = key_states.transpose(1, 2)
+    value_states = value_states.transpose(1, 2)
+
+    dropout_rate = 0.0 if not config.training else config.attention_dropout
+    input_dtype = query_states.dtype
+    if input_dtype == torch.float32:
+        query_states = query_states.to(target_dtype)
+        key_states = key_states.to(target_dtype)
+        value_states = value_states.to(target_dtype)
+
+    q_len = _kwargs["query_length"]
+    position_ids = _kwargs["positions_ids"]
+    attn_output = _flash_attention_forward(
+        query_states,
+        key_states,
+        value_states,
+        mask,
+        q_len,
+        position_ids=position_ids,
+        dropout=dropout_rate,
+        sliding_window=getattr(config, "sliding_window", None),
+        use_top_left_mask=config._flash_attn_uses_top_left_mask,
+        is_causal=config.is_causal,
+    )
+
+    return attn_output, None
+
+
+def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
+    attn_output = flex_attention(
+        query,
+        key,
+        value,
+        enable_gqa=True,
+        scale=config.scaling,
+        return_lse=output_attentions,
+    )
+    if not output_attentions:
+        return attn_output, None
+    else:
+        return attn_output[0], attn_output[1]
+
+
+def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
+    key_states = repeat_kv(key, config.num_key_value_groups)
+    value_states = repeat_kv(value, config.num_key_value_groups)
+
+    causal_mask = mask
+    if mask is not None:
+        causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+    # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+    # Reference: https://github.com/pytorch/pytorch/issues/112577.
+    if query.device.type == "cuda" and causal_mask is not None:
+        query = query.contiguous()
+        key_states = key_states.contiguous()
+        value_states = value_states.contiguous()
+
+    q_len = _kwargs["query_length"]
+    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+    is_causal = True if causal_mask is None and q_len > 1 else False
+
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+        query,
+        key_states,
+        value_states,
+        attn_mask=causal_mask,
+        dropout_p=config.attention_dropout if config.training else 0.0,
+        is_causal=is_causal,
+    )
+
+    return attn_output, None
+
+
+MISTRAL_ATTENTION_FUNCTION = {
+    "flash_attention_2": flash_attention_forward,
+    "flex_attention": flex_attention_forward,
+    "eager": eager_attention_forward,
+    "sdpa": sdpa_attention_forward,
+}
+
+
 class MistralAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -199,6 +318,7 @@ class MistralAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
+        self._attn_implementation = config._attn_implementation
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -221,6 +341,13 @@ class MistralAttention(nn.Module):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if self._attn_implementation == "flash_attention_2" and isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at "
+                "https://github.com/huggingface/transformers"
+            )
+
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -236,31 +363,33 @@ class MistralAttention(nn.Module):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {"sin": sin, "cos": cos}
+            if self._attn_implementation != "flash_attention_2":
+                cache_kwargs["cache_position"] = cache_position
+
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        if output_attentions and self._attn_implementation in ("sdpa", "flash_attention_2"):
+            logger.warning_once("Setting `attention_type` to `eager` because `output_attentions=True`")
+            attention_type = "eager"
+        else:
+            attention_type = self._attn_implementation
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        _kwargs = {"batch_size": bsz, "query_length": q_len}
+        if self._attn_implementation == "flash_attention_2":
+            _kwargs["position_ids"] = position_ids
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
+        attn_output, attn_weights = MISTRAL_ATTENTION_FUNCTION[attention_type](
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            output_attentions=output_attentions,
+            **_kwargs,
+        )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
@@ -271,210 +400,23 @@ class MistralAttention(nn.Module):
 
 
 class MistralFlashAttention2(MistralAttention):
-    """
-    Mistral flash attention module. This module inherits from `MistralAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-    ):
-        if isinstance(past_key_value, StaticCache):
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        output_attentions = False
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += cache_position[0]
-
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        # Reashape to the expected shape for Flash Attention
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self.config, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
+    def __init__(self, config: MistralConfig, layer_idx: Optional[int] = None):
+        super().__init__(config, layer_idx)
+        self.config._attn_implementation = "flash_attention_2"
+        logger.warning_once(
+            "The `MistralFlashAttention2` class is deprecated in favor of simply modifying the "
+            "`config._attn_implementation` attribute of the `MistralAttention` class! It will be removed in v4.48."
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim).contiguous()
-        attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
-
-
-# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Mistral
-# TODO(joao): add me back asap :)
 class MistralSdpaAttention(MistralAttention):
-    """
-    Mistral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `MistralAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    # Adapted from MistralAttention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "MistralModel is using MistralSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
+    def __init__(self, config: MistralConfig, layer_idx: Optional[int] = None):
+        super().__init__(config, layer_idx)
+        self.config._attn_implementation = "sdpa"
+        logger.warning_once(
+            "The `MistralSdpaAttention` class is deprecated in favor of simply modifying the "
+            "`config._attn_implementation` attribute of the `MistralAttention` class! It will be removed in v4.48."
         )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None, past_key_value
-
-
-MISTRAL_ATTENTION_CLASSES = {
-    "eager": MistralAttention,
-    "flash_attention_2": MistralFlashAttention2,
-    "sdpa": MistralSdpaAttention,
-}
 
 
 # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Mistral, LLAMA->MISTRAL
@@ -484,7 +426,7 @@ class MistralDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

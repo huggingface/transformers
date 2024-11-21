@@ -423,6 +423,10 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Mistral flash attention does not support right padding")
 
+    @unittest.skip(reason="Mistral now supports different attention mechanisms through functions instead of classes")
+    def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
+
 
 @require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
@@ -475,6 +479,26 @@ class MistralIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1", device_map={"": torch_device}, load_in_4bit=True
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    @require_bitsandbytes
+    def test_model_7b_generation_with_flex_attention(self):
+        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,"
+
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1",
+            device_map={"": torch_device},
+            load_in_4bit=True,
+            attn_implementation="flex_attention",
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
