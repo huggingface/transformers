@@ -255,7 +255,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "heuristic",
             "heuristic_transient",
         }:
-            if num_matches == int(self.num_assistant_tokens):
+            # len(scores[0])-1 is the number of candidates according to the target tokenizer.
+            if num_matches == len(scores[0]) - 1:
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
@@ -670,6 +671,62 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         return
 
 
+class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
+    """
+    `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
+    candidates through the use of **the model itself**, exiting early. Can only be used with models that support early
+    exit, e.g., `facebook/layerskip-llama3.2-1B`.
+
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+        assistant_model (`PreTrainedModel`):
+            The original model. This model must support early exit (i.e. is trained to compute logits in earlier
+            layers).
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+        logits_processor (`LogitsProcessorList`):
+            An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+            used to modify the prediction scores of the language modeling head applied at each generation step.
+        model_kwargs (`Dict`):
+            The keyword arguments that will be passed to the main model, and are used as base inputs for the assistant
+            model as well.
+        inputs_tensor (`torch.Tensor`, *optional*):
+            The model input tensor. In encoder-decoder models, this is the encoder input.
+    """
+
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+        model_kwargs: Dict,
+        inputs_tensor: Optional[torch.Tensor] = None,
+        logits_processor: "LogitsProcessorList" = None,
+    ):
+        super().__init__(
+            input_ids=input_ids,
+            assistant_model=assistant_model,
+            generation_config=generation_config,
+            model_kwargs=model_kwargs,
+            inputs_tensor=inputs_tensor,
+            logits_processor=logits_processor,
+        )
+        # We have to move early exit out of the generation config, otherwise the assistant will also call `generate`
+        # with early exit
+        self.assistant_early_exit = self.generation_config.assistant_early_exit
+        self.generation_config.assistant_early_exit = None
+
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+        # Temporarily sets the number of hidden layers to the early exit value
+        base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
+        original_num_hidden_layers = base_model.config.num_hidden_layers
+        base_model.config.num_hidden_layers = self.assistant_early_exit
+        candidate_ids, candidate_logits = super().get_candidates(input_ids)
+        base_model.config.num_hidden_layers = original_num_hidden_layers
+        return candidate_ids, candidate_logits
+
+
 def _crop_past_key_values(model, past_key_values, max_length):
     """Crops the past key values up to a certain maximum length."""
     new_past = []
@@ -726,14 +783,23 @@ def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_en
     elif mask_length_diff > 0:
         model_kwargs[mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], mask_length_diff))], dim=-1)
 
+    # Handle cross attention models
     if "cross_attention_mask" in model_kwargs:
-        # Mllama case is special and has another mask for cross attention model
+        # Mllama case
         cross_mask = model_kwargs["cross_attention_mask"]
         if mask_length_diff < 0:
             model_kwargs["cross_attention_mask"] = cross_mask[:, :mask_length_diff]
         elif mask_length_diff > 0:
             new_mask = cross_mask[:, -1:, :, :].repeat(1, mask_length_diff, 1, 1)
             model_kwargs["cross_attention_mask"] = torch.cat([cross_mask, new_mask], dim=1)
+    elif "image_attention_mask" in model_kwargs:
+        # IDEFICS case
+        cross_mask = model_kwargs["image_attention_mask"]
+        if mask_length_diff < 0:
+            model_kwargs["image_attention_mask"] = cross_mask[:, :mask_length_diff]
+        elif mask_length_diff > 0:
+            new_mask = cross_mask[:, -1:, :].repeat(1, mask_length_diff, 1)
+            model_kwargs["image_attention_mask"] = torch.cat([cross_mask, new_mask], dim=1)
 
     return model_kwargs
 

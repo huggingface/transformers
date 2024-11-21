@@ -112,7 +112,6 @@ _coloredlogs_available = _is_package_available("coloredlogs")
 # `importlib.metadata.util` doesn't work with `opencv-python-headless`.
 _cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
-_decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
 # We need to check both `faiss` and `faiss-cpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
@@ -187,7 +186,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
-_torchvision_available = _is_package_available("torchvision")
+_torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
 _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
@@ -361,6 +360,14 @@ def is_torch_sdpa_available():
 
 def is_torchvision_available():
     return _torchvision_available
+
+
+def is_torchvision_v2_available():
+    if not is_torchvision_available():
+        return False
+
+    # NOTE: We require torchvision>=0.15 as v2 transforms are available from this version: https://pytorch.org/vision/stable/transforms.html#v1-or-v2-which-one-should-i-use
+    return version.parse(_torchvision_version) >= version.parse("0.15")
 
 
 def is_galore_torch_available():
@@ -677,25 +684,27 @@ def is_torch_npu_available(check_device=False):
 
 @lru_cache()
 def is_torch_mlu_available(check_device=False):
-    "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
+    """
+    Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
+    uninitialized.
+    """
     if not _torch_available or importlib.util.find_spec("torch_mlu") is None:
         return False
 
     import torch
     import torch_mlu  # noqa: F401
 
-    from ..dependency_versions_table import deps
+    pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
+    try:
+        os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
+        available = torch.mlu.is_available()
+    finally:
+        if pytorch_cndev_based_mlu_check_previous_value:
+            os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
+        else:
+            os.environ.pop("PYTORCH_CNDEV_BASED_MLU_CHECK", None)
 
-    deps["deepspeed"] = "deepspeed-mlu>=0.10.1"
-
-    if check_device:
-        try:
-            # Will raise a RuntimeError if no MLU is found
-            _ = torch.mlu.device_count()
-            return torch.mlu.is_available()
-        except RuntimeError:
-            return False
-    return hasattr(torch, "mlu") and torch.mlu.is_available()
+    return available
 
 
 @lru_cache()
@@ -920,6 +929,14 @@ def is_flash_attn_greater_or_equal(library_version: str):
         return False
 
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
+
+
+@lru_cache()
+def is_torch_greater_or_equal(library_version: str):
+    if not _is_package_available("torch"):
+        return False
+
+    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():
@@ -1171,10 +1188,6 @@ def torch_only_method(fn):
 
 def is_ccl_available():
     return _is_ccl_available
-
-
-def is_decord_available():
-    return _decord_available
 
 
 def is_sudachi_available():
@@ -1547,10 +1560,6 @@ PRETTY_MIDI_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
-DECORD_IMPORT_ERROR = """
-{0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
-decord`. Please note that you may need to restart your runtime after installation.
-"""
 
 CYTHON_IMPORT_ERROR = """
 {0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
@@ -1612,7 +1621,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
-        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
@@ -1751,9 +1759,7 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._modules:
-            value = self._get_module(name)
-        elif name in self._object_missing_backend.keys():
+        if name in self._object_missing_backend.keys():
             missing_backends = self._object_missing_backend[name]
 
             class Placeholder(metaclass=DummyObject):
@@ -1769,6 +1775,8 @@ class _LazyModule(ModuleType):
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
+        elif name in self._modules:
+            value = self._get_module(name)
         else:
             raise AttributeError(f"module {self.__name__} has no attribute {name}")
 
@@ -1952,6 +1960,13 @@ def create_import_structure_from_path(module_path):
     # files, but this is not supported at this time.
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
+
+    # Modular files should not be imported
+    def find_substring(substring, list_):
+        return any(substring in x for x in list_)
+
+    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
+        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
 
     module_requirements = {}
     for module_name in adjacent_modules:

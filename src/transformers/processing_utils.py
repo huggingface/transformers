@@ -875,7 +875,12 @@ class ProcessorMixin(PushToHubMixin):
             # kwargs is a flat dictionary
             for key in kwargs:
                 if key not in used_keys:
-                    output_kwargs["common_kwargs"][key] = kwargs[key]
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                        output_kwargs["common_kwargs"][key] = kwargs[key]
+                    else:
+                        logger.warning_once(
+                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                        )
 
         # all modality-specific kwargs are updated with common kwargs
         for modality in output_kwargs:
@@ -1101,6 +1106,20 @@ class ProcessorMixin(PushToHubMixin):
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of a vlm to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
 
 def _validate_images_text_input_order(images, text):

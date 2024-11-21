@@ -151,9 +151,11 @@ def get_resize_output_image_size(
 def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
     """
     Convert a single image or a list of images to a list of numpy arrays.
+
     Args:
         images (`ImageInput`):
             A single image or a list of images.
+
     Returns:
         A list of numpy arrays.
     """
@@ -168,6 +170,7 @@ def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
         isinstance(images, (list, tuple))
         and len(images) > 0
         and isinstance(images[0], (list, tuple))
+        and len(images[0]) > 0
         and is_valid_image(images[0][0])
     ):
         pass
