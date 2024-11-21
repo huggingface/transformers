@@ -26,9 +26,9 @@ from transformers.testing_utils import (
     require_aqlm,
     require_torch_gpu,
     require_torch_multi_gpu,
+    skip_if_aqlm_inference_not_fixed,
     slow,
     torch_device,
-    skip_if_aqlm_inference_not_fixed
 )
 from transformers.utils import is_accelerate_available, is_aqlm_available, is_torch_available
 
@@ -173,7 +173,7 @@ class AqlmTest(unittest.TestCase):
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-    
+
     @skip_if_aqlm_inference_not_fixed
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
