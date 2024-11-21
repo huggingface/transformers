@@ -713,7 +713,7 @@ _import_structure = {
         "RoFormerTokenizer",
     ],
     "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
-    "models.rtdetrv2": ["RTDetrv2Config", "RTDetrv2ResNetConfig"],
+    "models.rt_detr_v2": ["RTDetrV2Config", "RTDetrV2ResNetConfig"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
@@ -3270,13 +3270,13 @@ else:
             "RTDetrResNetPreTrainedModel",
         ]
     )
-    _import_structure["models.rtdetrv2"].extend(
+    _import_structure["models.rt_detr_v2"].extend(
         [
-            "RTDetrv2ForObjectDetection",
-            "RTDetrv2Model",
-            "RTDetrv2PreTrainedModel",
-            "RTDetrv2ResNetBackbone",
-            "RTDetrv2ResNetPreTrainedModel",
+            "RTDetrV2ForObjectDetection",
+            "RTDetrV2Model",
+            "RTDetrV2PreTrainedModel",
+            "RTDetrV2ResNetBackbone",
+            "RTDetrV2ResNetPreTrainedModel",
         ]
     )
     _import_structure["models.rwkv"].extend(
@@ -5626,9 +5626,9 @@ if TYPE_CHECKING:
         RTDetrConfig,
         RTDetrResNetConfig,
     )
-    from .models.rtdetrv2 import (
-        RTDetrv2Config,
-        RTDetrv2ResNetConfig,
+    from .models.rt_detr_v2 import (
+        RTDetrV2Config,
+        RTDetrV2ResNetConfig,
     )
     from .models.rwkv import RwkvConfig
     from .models.sam import (
@@ -7812,12 +7812,12 @@ if TYPE_CHECKING:
             RTDetrResNetBackbone,
             RTDetrResNetPreTrainedModel,
         )
-        from .models.rtdetrv2 import (
-            RTDetrv2ForObjectDetection,
-            RTDetrv2Model,
-            RTDetrv2PreTrainedModel,
-            RTDetrv2ResNetBackbone,
-            RTDetrv2ResNetPreTrainedModel,
+        from .models.rt_detr_v2 import (
+            RTDetrV2ForObjectDetection,
+            RTDetrV2Model,
+            RTDetrV2PreTrainedModel,
+            RTDetrV2ResNetBackbone,
+            RTDetrV2ResNetPreTrainedModel,
         )
         from .models.rwkv import (
             RwkvForCausalLM,

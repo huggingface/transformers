@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RTDetrv2
+# RTDetrV2
 
 ## Overview
 
-The RTDetrv2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The RTDetrV2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -33,25 +33,25 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## RTDetrv2Config
+## RTDetrV2Config
 
-[[autodoc]] RTDetrv2Config
+[[autodoc]] RTDetrV2Config
 
-## RTDetrv2ResNetConfig
+## RTDetrV2ResNetConfig
 
-[[autodoc]] RTDetrv2ResNetConfig
+[[autodoc]] RTDetrV2ResNetConfig
 
-## RTDetrv2Model
+## RTDetrV2Model
 
-[[autodoc]] RTDetrv2Model
+[[autodoc]] RTDetrV2Model
     - forward
 
-## RTDetrv2ForObjectDetection
+## RTDetrV2ForObjectDetection
 
-[[autodoc]] RTDetrv2ForObjectDetection
+[[autodoc]] RTDetrV2ForObjectDetection
     - forward
 
-## RTDetrv2ResNetBackbone
+## RTDetrV2ResNetBackbone
 
-[[autodoc]] RTDetrv2ResNetBackbone
+[[autodoc]] RTDetrV2ResNetBackbone
     - forward
