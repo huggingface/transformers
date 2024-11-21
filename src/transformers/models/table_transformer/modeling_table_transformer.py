@@ -555,7 +555,7 @@ class TableTransformerEncoderLayer(nn.Module):
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = TableTransformerAttention(
+        self.self_attn = DETR_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -629,7 +629,7 @@ class TableTransformerDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = TableTransformerAttention(
+        self.self_attn = DETR_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -639,7 +639,7 @@ class TableTransformerDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = TableTransformerAttention(
+        self.encoder_attn = DETR_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -954,6 +954,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        self._use_sdpa = config._attn_implementation == "sdpa"
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1018,17 +1019,27 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         combined_attention_mask = None
 
         if attention_mask is not None and combined_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+            if self._use_sdpa and not output_attentions:
+                combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+            else:
+                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+                combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
+                    attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+            if self._use_sdpa and not output_attentions:
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+            else:
+                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
