@@ -747,7 +747,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-        
+
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
             images_list = [
