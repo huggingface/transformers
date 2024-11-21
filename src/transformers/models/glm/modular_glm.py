@@ -68,7 +68,7 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, rotary_percent=1.0):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -85,10 +85,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, rot
             k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
             cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
             the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-        rotary_percent (`float`, *optional*, defaults to 0.5):
-            Controls the portion of `q` and `k` that rotary embeddings are applied to. If 0.5, only the first half of
-            `q` and `k` will have rotary embeddings applied. If 1, the entire tensor will be rotated.
-
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
@@ -96,13 +92,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, rot
     sin = sin.unsqueeze(unsqueeze_dim)
 
     # Interleave them instead of usual shape
-
-    cos = cos[..., : int(cos.shape[-1] * rotary_percent)].repeat_interleave(2, dim=-1)
-    sin = sin[..., : int(sin.shape[-1] * rotary_percent)].repeat_interleave(2, dim=-1)
+    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
+    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
 
     # Keep half for later concatenation
-    q, q_pass = q[..., : int(q.shape[-1] * rotary_percent)], q[..., int(q.shape[-1] * rotary_percent) :]
-    k, k_pass = k[..., : int(k.shape[-1] * rotary_percent)], k[..., int(k.shape[-1] * rotary_percent) :]
+    q, q_pass = q[..., : q.shape[-1] // 2], q[..., q.shape[-1] // 2 :]
+    k, k_pass = k[..., : k.shape[-1] // 2], k[..., k.shape[-1] // 2 :]
 
     # Apply rotary embeddings on the first half
     q_embed = (q * cos) + (rotate_half(q) * sin)
