@@ -43,7 +43,7 @@ Model Hubの組み込みバージョニングはgitおよび[git-lfs](https://gi
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # タグ名、またはブランチ名、またはコミットハッシュ
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # タグ名、またはブランチ名、またはコミットハッシュ
 ... )
 ```
 

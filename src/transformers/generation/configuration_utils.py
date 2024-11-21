@@ -172,7 +172,15 @@ class GenerationConfig(PushToHubMixin):
             speed up decoding.
         cache_implementation (`str`, *optional*, default to `None`):
             Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
-            {ALL_CACHE_IMPLEMENTATIONS}. We support other cache types, but they must be manually instantiated and
+
+            - `"static"`: [`StaticCache`]
+            - `"offloaded_static"`: [`OffloadedStaticCache`]
+            - `"sliding_window"`: [`SlidingWindowCache`]
+            - `"hybrid"`: [`HybridCache`]
+            - `"mamba"`: [`MambaCache`]
+            - `"quantized"`: [`QuantizedCache`]
+
+            We support other cache types, but they must be manually instantiated and
             passed to `generate` through the `past_key_values` argument. See our
             [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
@@ -345,10 +353,13 @@ class GenerationConfig(PushToHubMixin):
             than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
             (defined by `num_assistant_tokens`) is not yet reached. It is an unsupervised version of the dynamic speculation lookahead
             from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
-        prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
+        prompt_lookup_num_tokens (`int`, *optional*):
             The number of tokens to be output as candidate tokens.
-        max_matching_ngram_size (`int`, *optional*, default to `None`):
+        max_matching_ngram_size (`int`, *optional*):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
+        assistant_early_exit(`int`, *optional*):
+            If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
+            models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
 
         > Wild card
 
@@ -446,10 +457,9 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 20)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "constant")
         self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", 0.4)
-
-        # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
+        self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -526,7 +536,11 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.BEAM_SEARCH
 
         # Assisted generation may extend some generation modes
-        if assistant_model is not None or self.prompt_lookup_num_tokens is not None:
+        if (
+            assistant_model is not None
+            or self.prompt_lookup_num_tokens is not None
+            or self.assistant_early_exit is not None
+        ):
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
@@ -1471,8 +1485,8 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     ```python
     >>> from transformers import AutoModelForCausalLM, AutoTokenizer, SynthIDTextWatermarkingConfig
 
-    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b-it')
-    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b-it')
+    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b', padding_side="left")
+    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b')
 
     >>> # SynthID Text configuration
     >>> watermarking_config = SynthIDTextWatermarkingConfig(
@@ -1481,11 +1495,11 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     ... )
 
     >>> # Generation with watermarking
-    >>> tokenized_prompts = tokenizer(["your prompts here"])
+    >>> tokenized_prompts = tokenizer(["Once upon a time, "], return_tensors="pt", padding=True)
     >>> output_sequences = model.generate(
-    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True,
+    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True, max_new_tokens=10
     ... )
-    >>> watermarked_text = tokenizer.batch_decode(output_sequences)
+    >>> watermarked_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
     ```
     """
 

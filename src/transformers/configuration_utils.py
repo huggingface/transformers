@@ -71,6 +71,8 @@ class PretrainedConfig(PushToHubMixin):
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
       naming of attributes.
+    - **base_model_tp_plan** (`Dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
+      parallel plan applied to the sub-module when `model.tensor_parallel` is called.
 
     Common attributes (present in all subclasses):
 
@@ -190,8 +192,11 @@ class PretrainedConfig(PushToHubMixin):
     """
 
     model_type: str = ""
+    base_config_key: str = ""
+    sub_configs: Dict[str, "PretrainedConfig"] = {}
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
+    base_model_tp_plan: Optional[Dict[str, Any]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -543,11 +548,22 @@ class PretrainedConfig(PushToHubMixin):
         cls._set_token_in_kwargs(kwargs, token)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if cls.base_config_key and cls.base_config_key in config_dict:
+            config_dict = config_dict[cls.base_config_key]
+
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
+            # sometimes the config has no `base_config_key` if the config is used in several composite models
+            # e.g. LlamaConfig. In that case we try to see if there is match in `model_type` before raising a warning
+            for k, v in config_dict.items():
+                if isinstance(v, dict) and v.get("model_type") == cls.model_type:
+                    config_dict = v
+
+            # raise warning only if we still can't see a match in `model_type`
+            if config_dict["model_type"] != cls.model_type:
+                logger.warning(
+                    f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                    f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+                )
 
         return cls.from_dict(config_dict, **kwargs)
 
@@ -835,6 +851,9 @@ class PretrainedConfig(PushToHubMixin):
 
         if "_attn_implementation_internal" in serializable_config_dict:
             del serializable_config_dict["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_tp_plan"]
 
         return serializable_config_dict
 
@@ -854,6 +873,9 @@ class PretrainedConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_attn_implementation_internal" in output:
             del output["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in output:
+            del output["base_model_tp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
