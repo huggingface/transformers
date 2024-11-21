@@ -173,7 +173,8 @@ class AqlmTest(unittest.TestCase):
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
+    
+    @skip_if_aqlm_inference_not_fixed
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
         """
