@@ -13,7 +13,6 @@
 # limitations under the License.
 "VPTQ (Vector Post-Training Quantization) integration file"
 
-
 import torch.nn as nn
 from accelerate import init_empty_weights
 from vptq import VQuantLinear
@@ -48,15 +47,17 @@ def replace_with_vptq_linear(
 
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
 
-
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
         current_key_name.append(name)
         layer_name = ".".join(current_key_name)
 
-        if (isinstance(module, nn.Linear) and layer_name in quantization_config.config_for_layers
-            and layer_name not in modules_to_not_convert):
+        if (
+            isinstance(module, nn.Linear)
+            and layer_name in quantization_config.config_for_layers
+            and layer_name not in modules_to_not_convert
+        ):
             layer_params = quantization_config.config_for_layers[layer_name]
             with init_empty_weights():
                 in_features = module.in_features
