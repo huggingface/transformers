@@ -899,6 +899,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **loss_kwargs,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutputV2]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
