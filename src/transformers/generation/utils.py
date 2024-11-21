@@ -3240,7 +3240,6 @@ class GenerationMixin:
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
-
             if i == 0:
                 outputs = self(**model_inputs, return_dict=True)
                 i += 1
