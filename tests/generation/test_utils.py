@@ -1382,19 +1382,22 @@ class GenerationTesterMixin:
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            text_config = config.get_text_config()
 
             # We want to test only encoder-decoder models
-            if not config.is_encoder_decoder:
+            if not text_config.is_encoder_decoder:
                 continue
             model = model_class(config).to(torch_device)
 
             head_masking = {
-                "head_mask": torch.zeros(config.encoder_layers, config.encoder_attention_heads, device=torch_device),
+                "head_mask": torch.zeros(
+                    text_config.encoder_layers, text_config.encoder_attention_heads, device=torch_device
+                ),
                 "decoder_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
+                    text_config.decoder_layers, text_config.decoder_attention_heads, device=torch_device
                 ),
                 "cross_attn_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
+                    text_config.decoder_layers, text_config.decoder_attention_heads, device=torch_device
                 ),
             }
 
