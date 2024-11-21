@@ -138,6 +138,7 @@ class DepthProConfig(PretrainedConfig):
         scaled_images_feature_dims = [1024, 1024, 512],
         use_batch_norm_in_decoder=False,
         use_fov_model=False,
+        num_fov_head_layers=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -168,6 +169,7 @@ class DepthProConfig(PretrainedConfig):
         self.reshape_hidden_states = reshape_hidden_states
         self.use_batch_norm_in_decoder = use_batch_norm_in_decoder
         self.use_fov_model = use_fov_model
+        self.num_fov_head_layers = num_fov_head_layers
         self.intermediate_hook_ids = intermediate_hook_ids
         self.intermediate_feature_dims = intermediate_feature_dims
         self.scaled_images_ratios = scaled_images_ratios

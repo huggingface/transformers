@@ -610,6 +610,97 @@ class DepthProUpsampleBlock(nn.Module):
         projected = self.proj(features)
         return self.upsample_blocks(projected)
 
+
+def interpolate(pixel_values, scale_factor):
+    return nn.functional.interpolate(
+        pixel_values,
+        size=None,
+        scale_factor=scale_factor,
+        mode="bilinear",
+        align_corners=False,
+    )
+
+def patch(pixel_values, patch_size, overlap_ratio):
+    """Creates Patches from Batch."""
+    B, C, W, H = pixel_values.shape
+
+    if W == H == patch_size:
+        # create patches only if scaled image is not already equal to patch size
+        return pixel_values
+
+    stride = int(patch_size * (1 - overlap_ratio))
+
+    # (B, C, W, H)
+    patches = torch.nn.functional.unfold(
+        pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride)
+    )
+    # patches.shape (B, patch_size**2 * C, num_patches)
+    patches = patches.permute(2, 0, 1)
+    # patches.shape (num_patches, B, patch_size**2 * C)
+    patches = patches.reshape(-1, C, patch_size, patch_size)
+    # patches.shape (B * num_patches, C, patch_size, patch_size)
+
+    return patches
+
+def reshape_feature(hidden_states, width, height):
+    """Discard class token and reshape 1D feature map to a 2D grid."""
+    B, _, C = hidden_states.shape
+    # (B, WH+1, C)
+    hidden_states = hidden_states[:, 1:, :] # remove class token
+    # (B, WH, C)
+    hidden_states = hidden_states.reshape(B, width, height, C)
+    # (B, W, H, C)
+    hidden_states = hidden_states.permute(0, 3, 1, 2)
+    # (B, C, W, H)
+    return hidden_states
+
+def merge(patches, batch_size, merge_out_size):
+    """Recreates Batch from Patches."""
+    num_patches, num_channels, out_size, out_size = patches.shape
+
+    if num_patches == batch_size:
+        # merge only if the patches were created from scaled image
+        # patches are not created when scaled image size is equal to patch size
+        return patches
+
+    box_size = int(math.sqrt(num_patches // batch_size))
+    """
+    merge_out_size = (box_size - 2) * (out_size - 2 * padding) + (2) * (out_size - padding)
+    padding = (merge_out_size - box_size * out_size) / (6 - 2 * box_size)
+    """
+    padding = ( box_size * out_size - merge_out_size ) // ( 2 * box_size - 2 )
+
+    i = 0
+    boxes = []
+    for h in range(box_size):
+        boxes_in_row = []
+        for w in range(box_size):
+            box = patches[batch_size * i : batch_size * (i + 1)]
+
+            if h != 0:
+                # remove pad from height if box is not at top border
+                box = box[..., padding:, :]
+            if w != 0:
+                # remove pad from width if box is not at left border
+                box = box[..., :, padding:]
+            if h != box_size - 1:
+                # remove pad from height if box is not at bottom border
+                box = box[..., :box.shape[-2]-padding, :]
+            if w != box_size - 1:
+                # remove pad from width if box is not at right border
+                box = box[..., :, :box.shape[-1]-padding]
+
+            boxes_in_row.append(box)
+            i += 1
+
+        boxes_in_row = torch.cat(boxes_in_row, dim=-1)
+        boxes.append(boxes_in_row)
+
+    boxes = torch.cat(boxes, dim=-2)
+    boxes = boxes[..., :merge_out_size, :merge_out_size]
+    return boxes
+
+
 class DepthProEncoder(nn.Module):
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
@@ -700,96 +791,6 @@ class DepthProEncoder(nn.Module):
             bias=True,
         )
 
-    def _interpolate(self, pixel_values, scale_factor):
-        if scale_factor == 1:
-            return pixel_values
-        return nn.functional.interpolate(
-            pixel_values,
-            size=None,
-            scale_factor=scale_factor,
-            mode="bilinear",
-            align_corners=False,
-        )
-
-    def _patch(self, pixel_values, overlap_ratio):
-        if pixel_values.shape[-1] == self.config.patch_size:
-            # create patches only if scaled image is not already equal to patch size
-            return pixel_values
-
-        patch_size = self.config.patch_size
-        stride = int(patch_size * (1 - overlap_ratio))
-
-        # pixel_values.shape (B, config.num_channels, config.image_size, config.image_size)
-        patches = torch.nn.functional.unfold(
-            pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride)
-        )
-        # patches.shape (B, -1, num_patches)
-        patches = patches.permute(2, 0, 1)
-        # patches.shape (num_patches, B, -1)
-        patches = patches.reshape(-1, self.config.num_channels, patch_size, patch_size)
-        # patches.shape (B * num_patches, config.num_channels, config.patch_size, config.patch_size)
-
-        return patches
-
-    def _reshape_feature(
-        self, hidden_states: torch.Tensor, width, height, cls_token_offset=1
-    ):
-        """Discard class token and reshape 1D feature map to a 2D grid."""
-        b, hw, c = hidden_states.shape
-
-        # Remove class token.
-        if cls_token_offset > 0:
-            hidden_states = hidden_states[:, cls_token_offset:, :]
-
-        # Shape: (batch, height, width, dim) -> (batch, dim, height, width)
-        hidden_states = hidden_states.reshape(b, height, width, c).permute(0, 3, 1, 2)
-        return hidden_states
-
-    def _merge(self, x: torch.Tensor, batch_size: int, merge_out_size: int) -> torch.Tensor:
-        if batch_size == x.shape[0]:
-            # merge only if the patches were created from this scaled image
-            # pathces are not created when scaled image size is equal to patch size
-            return x
-
-        # x.shape (num_patches, config.num_channels, self.out_size, self.out_size)
-        box_size = int(math.sqrt(x.shape[0] // batch_size))
-
-        """
-        merge_out_size = (box_size - 2) * (out_size - 2 * padding) + (2) * (out_size - padding)
-        padding = (merge_out_size - box_size * out_size) / (6 - 2 * box_size)
-        """
-        padding = ( box_size * self.out_size - merge_out_size ) // ( 2 * box_size - 2 )
-
-        i = 0
-        boxes = []
-        for h in range(box_size):
-            boxes_in_row = []
-            for w in range(box_size):
-                box = x[batch_size * i : batch_size * (i + 1)]
-
-                if h != 0:
-                    # remove pad from height if box is not at top border
-                    box = box[..., padding:, :]
-                if w != 0:
-                    # remove pad from width if box is not at left border
-                    box = box[..., :, padding:]
-                if h != box_size - 1:
-                    # remove pad from height if box is not at bottom border
-                    box = box[..., :box.shape[-2]-padding, :]
-                if w != box_size - 1:
-                    # remove pad from width if box is not at right border
-                    box = box[..., :, :box.shape[-1]-padding]
-
-                boxes_in_row.append(box)
-                i += 1
-
-            boxes_in_row = torch.cat(boxes_in_row, dim=-1)
-            boxes.append(boxes_in_row)
-
-        boxes = torch.cat(boxes, dim=-2)
-        boxes = boxes[..., :merge_out_size, :merge_out_size]
-        return boxes
-
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -825,14 +826,15 @@ class DepthProEncoder(nn.Module):
 
         scaled_images = []
         for ratio in self.scaled_images_ratios:
-            scaled_images.append(self._interpolate(pixel_values, ratio))
+            scaled_images.append(interpolate(pixel_values, ratio))
             # (B, config.num_channels, config.image_size * ratio, config.image_size * ratio)
 
         # STEP 2: create patches
 
         for i in range(self.n_scaled_images):
-            scaled_images[i] = self._patch(
+            scaled_images[i] = patch(
                 scaled_images[i],
+                patch_size=self.config.patch_size,
                 overlap_ratio=self.scaled_images_overlap_ratios[i],
             )
         scaled_images_num_patches = [len(i) for i in scaled_images]
@@ -870,12 +872,12 @@ class DepthProEncoder(nn.Module):
             # (scaled_images_num_patches[i], self.seq_len+1, config.hidden_size)
 
             # b. reshape back to image like
-            features = self._reshape_feature(
+            features = reshape_feature(
                 hidden_state, self.out_size, self.out_size
             ) # (scaled_images_num_patches[i], config.num_channels, self.out_size, self.out_size)
 
             # c. merge patches back together
-            features = self._merge(
+            features = merge(
                 features, batch_size=B, merge_out_size=self.out_size*2**i
             ) # (B, config.hidden_size, self.out_size*2**i, self.out_size*2**i)
 
@@ -897,14 +899,14 @@ class DepthProEncoder(nn.Module):
             # (scaled_images_num_patches[-1], self.seq_len+1, config.hidden_size)
 
             # b. reshape back to image like
-            features = self._reshape_feature(
+            features = reshape_feature(
                 hidden_state,
                 self.out_size,
                 self.out_size,
             ) # (scaled_images_num_patches[-1], config.hidden_size, self.out_size, self.out_size)
 
             # c. merge patches back together
-            features = self._merge(
+            features = merge(
                 features, batch_size=B, merge_out_size=self.out_size*2**(self.n_scaled_images-1),
             ) # (B, config.hidden_size, self.out_size*2**(self.n_scaled_images-1), self.out_size*2**(self.n_scaled_images-1))
 
@@ -920,12 +922,12 @@ class DepthProEncoder(nn.Module):
         hidden_state = image_encodings.last_hidden_state # (scaled_images_num_patches[0], self.seq_len+1, config.hidden_size)
 
         # b. reshape back to image like
-        image_features = self._reshape_feature(
+        image_features = reshape_feature(
             hidden_state, self.out_size, self.out_size
         ) # (scaled_images_num_patches[0], config.hidden_size, self.out_size, self.out_size)
 
         # c. merge patches back together
-        image_features = self._merge(
+        image_features = merge(
             image_features, batch_size=B, merge_out_size=self.out_size*2**(0),
         ) # (B, config.hidden_size, self.out_size*2**(self.n_scaled_images-1), self.out_size*2**(self.n_scaled_images-1))
 
@@ -1206,18 +1208,39 @@ class DepthProFOVModel(nn.Module):
         self.hidden_size = config.hidden_size
         self.decoder_hidden_size = config.decoder_hidden_size
 
+        self.out_size = config.patch_size // config.patch_embeddings_size
+
         self.encoder = DepthProViT(config)
         self.encoder_neck = nn.Linear(self.hidden_size, self.decoder_hidden_size // 2)
         self.global_neck = nn.Sequential(
             nn.Conv2d(self.decoder_hidden_size, self.decoder_hidden_size // 2, kernel_size=3, stride=2, padding=1),
             nn.ReLU(True)
         )
-        self.head = nn.Sequential(
-            nn.Conv2d(self.decoder_hidden_size // 2, self.decoder_hidden_size // 4, kernel_size=3, stride=2, padding=1), 
-            nn.ReLU(True),
-            nn.Conv2d(self.decoder_hidden_size // 4, self.decoder_hidden_size // 8, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(self.decoder_hidden_size // 8, 1, kernel_size=6, stride=1, padding=0),
+
+        if config.decoder_hidden_size // 2**config.num_fov_head_layers == 0:
+            raise ValueError(
+                f"decoder_hidden_size={config.decoder_hidden_size} should be consistent with config.num_fov_head_layers={config.num_fov_head_layers} "
+                "i.e config.decoder_hidden_size // 2**config.num_fov_head_layers > 0"
+            )
+
+        # create initial head layers
+        self.head = nn.Sequential()
+        for i in range(config.num_fov_head_layers):
+            self.head.append(
+                nn.Conv2d(self.decoder_hidden_size // 2**(i+1), self.decoder_hidden_size // 2**(i+2), kernel_size=3, stride=2, padding=1)
+            )
+            self.head.append(nn.ReLU(True))
+        # calculate expected shapes to finally generate a scalar output from final head layer
+        final_in_channels = self.decoder_hidden_size // 2**(config.num_fov_head_layers+1)
+        final_kernal_size = int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
+        self.head.append(
+            nn.Conv2d(
+                in_channels=final_in_channels,
+                out_channels=1,
+                kernel_size=final_kernal_size,
+                stride=1,
+                padding=0
+            )
         )
 
     def forward(
@@ -1235,34 +1258,40 @@ class DepthProFOVModel(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        pixel_values = nn.functional.interpolate(
+        B, C, W, H = pixel_values.shape
+
+        # follow the steps same as with image features in DepthProEncoder
+        pixel_values = interpolate(
             pixel_values,
-            size=None,
-            scale_factor=0.25,
-            mode="bilinear",
-            align_corners=False,
+            scale_factor=self.config.scaled_images_ratios[0], # same ratio as lowest ratioed image
+        )
+        patches = patch(
+            pixel_values,
+            patch_size=self.config.patch_size,
+            overlap_ratio=self.config.scaled_images_overlap_ratios[0],
         )
         encoder_outputs = self.encoder(
-            pixel_values,
+            patches,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
         last_hidden_state = encoder_outputs[0]
-
         last_hidden_state = self.encoder_neck(last_hidden_state)
-
-        last_hidden_state = last_hidden_state[:, 1:] # ignore cls_token
-        last_hidden_state = last_hidden_state.permute(0, 2, 1)
+        last_hidden_state = reshape_feature(
+            last_hidden_state,
+            width=self.out_size,
+            height=self.out_size
+        )
+        last_hidden_state = merge(
+            last_hidden_state,
+            batch_size=B,
+            merge_out_size=self.out_size,
+        )
 
         global_features = self.global_neck(global_features)
 
-        ic(last_hidden_state.shape)
-        ic(global_features.shape)
-
-
-        last_hidden_state = last_hidden_state.reshape_as(global_features)
         last_hidden_state = last_hidden_state + global_features
         fov_output = self.head(last_hidden_state)
         fov_output = fov_output.reshape(1)
