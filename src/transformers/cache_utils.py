@@ -1177,7 +1177,7 @@ class StaticCache(Cache):
                 torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
-        self.seen_tokens = torch.zeros(config.num_hidden_layers, dtype=torch.int32, device=layer_device)
+        self.layer_seen_tokens = torch.zeros(config.num_hidden_layers, dtype=torch.int32, device=layer_device)
 
     def update(
         self,
@@ -1209,7 +1209,7 @@ class StaticCache(Cache):
 
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
-
+        self.layer_seen_tokens[layer_idx] += key_states.shape
         if cache_position is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
@@ -1222,10 +1222,8 @@ class StaticCache(Cache):
             #     v_out.index_copy_(2, cache_position, value_states)
             # except NotImplementedError:
                 # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
-            k_out[:, :, : self.seen_tokens[layer_idx]] = key_states
-            v_out[:, :, : self.seen_tokens[layer_idx]] = value_states
-
-        self.seen_tokens[layer_idx] += key_states.shape
+            k_out[:, :, : self.layer_seen_tokens[layer_idx]] = key_states
+            v_out[:, :, : self.layer_seen_tokens[layer_idx]] = value_states
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
