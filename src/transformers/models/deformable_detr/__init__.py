@@ -14,7 +14,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -29,6 +35,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_deformable_detr"] = ["DeformableDetrFeatureExtractor"]
     _import_structure["image_processing_deformable_detr"] = ["DeformableDetrImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["image_processing_deformable_detr_fast"] = ["DeformableDetrImageProcessorFast"]
 
 try:
@@ -55,6 +68,13 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_deformable_detr import DeformableDetrFeatureExtractor
         from .image_processing_deformable_detr import DeformableDetrImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .image_processing_deformable_detr_fast import DeformableDetrImageProcessorFast
 
     try:

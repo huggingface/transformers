@@ -14,7 +14,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
 
 _import_structure = {"configuration_rt_detr": ["RTDetrConfig"], "configuration_rt_detr_resnet": ["RTDetrResNetConfig"]}
@@ -26,6 +32,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_rt_detr"] = ["RTDetrImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["image_processing_rt_detr_fast"] = ["RTDetrImageProcessorFast"]
 
 try:
@@ -56,6 +69,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_rt_detr import RTDetrImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .image_processing_rt_detr_fast import RTDetrImageProcessorFast
 
     try:
