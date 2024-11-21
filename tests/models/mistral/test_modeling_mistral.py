@@ -423,10 +423,6 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Mistral flash attention does not support right padding")
 
-    @unittest.skip(reason="Mistral now supports different attention mechanisms through functions instead of classes")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
 
 @require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
