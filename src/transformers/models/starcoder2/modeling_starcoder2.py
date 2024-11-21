@@ -251,8 +251,6 @@ class Starcoder2Attention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.use_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=self.use_bias)
 
-        self.rotary_emb = Starcoder2RotaryEmbedding(config=self.config)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
