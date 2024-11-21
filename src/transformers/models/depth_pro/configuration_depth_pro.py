@@ -59,6 +59,7 @@ class DepthProConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 224):
+            TODO: image_size / 2**n_decoder_blocks = patch_size / patch_embeddings_size
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
@@ -130,13 +131,11 @@ class DepthProConfig(PretrainedConfig):
         out_indices=None,
         apply_layernorm=True,
         reshape_hidden_states=True,
-        patch_encoder_hook_ids = [5, 11],
+        intermediate_hook_ids = [11, 5],
         intermediate_feature_dims = [256, 256],
-        high_res_feature_dims = 512,
-        med_res_feature_dims = 1024,
-        low_res_feature_dims = 1024,
-        image_feature_dims = 1024,
-        global_feature_dims = 1024,
+        scaled_images_ratios = [0.25, 0.5, 1],
+        scaled_images_overlap_ratios = [0.0, 0.5, 0.25],
+        scaled_images_feature_dims = [1024, 1024, 512],
         use_batch_norm_in_decoder=False,
         use_fov_model=False,
         **kwargs,
@@ -167,12 +166,10 @@ class DepthProConfig(PretrainedConfig):
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
-        self.patch_encoder_hook_ids = patch_encoder_hook_ids
         self.use_batch_norm_in_decoder = use_batch_norm_in_decoder
         self.use_fov_model = use_fov_model
+        self.intermediate_hook_ids = intermediate_hook_ids
         self.intermediate_feature_dims = intermediate_feature_dims
-        self.high_res_feature_dims = high_res_feature_dims
-        self.med_res_feature_dims = med_res_feature_dims
-        self.low_res_feature_dims = low_res_feature_dims
-        self.image_feature_dims = image_feature_dims
-        self.global_feature_dims = global_feature_dims
+        self.scaled_images_ratios = scaled_images_ratios
+        self.scaled_images_overlap_ratios = scaled_images_overlap_ratios
+        self.scaled_images_feature_dims = scaled_images_feature_dims
