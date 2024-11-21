@@ -46,7 +46,7 @@ if is_torch_available():
         Zamba2Model,
     )
     from transformers.models.zamba2.modeling_zamba2 import (
-        Zamba2DynamicCache,
+        Zamba2HybridDynamicCache,
     )
 
 
@@ -221,7 +221,7 @@ class Zamba2ModelTester:
 
         # first forward pass
         # Attention: Zamba2 needs the cache to be initialized to return a cache!
-        past_key_values = Zamba2DynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
+        past_key_values = Zamba2HybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,

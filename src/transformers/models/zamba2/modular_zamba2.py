@@ -15,13 +15,12 @@
 # limitations under the License.
 import math
 from itertools import cycle
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -35,22 +34,23 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
 )
+from ..llama.modeling_llama import apply_rotary_pos_emb
+from ..mamba2.modeling_mamba2 import MambaRMSNormGated, pad_tensor_by_size, reshape_into_chunks, segment_sum
 from ..zamba.modeling_zamba import (
     ZambaAttention,
+    ZambaAttentionDecoderLayer,
     ZambaForCausalLM,
     ZambaForSequenceClassification,
-    ZambaMambaDecoderLayer,
-    ZambaModel,
-    ZambaRMSNorm,
-    ZambaMLP,
-    ZambaAttentionDecoderLayer,
-    ZambaHybridLayer,
-    ZambaPreTrainedModel,
     ZambaHybridDynamicCache,
+    ZambaHybridLayer,
+    ZambaMambaDecoderLayer,
+    ZambaMLP,
+    ZambaModel,
+    ZambaPreTrainedModel,
+    ZambaRMSNorm,
     repeat_kv,
 )
-from ..mamba2.modeling_mamba2 import MambaRMSNormGated, pad_tensor_by_size, reshape_into_chunks, segment_sum
-from ..llama.modeling_llama import rotate_half, apply_rotary_pos_emb
+
 
 if is_mamba_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
@@ -425,7 +425,11 @@ class Zamba2Attention(ZambaAttention):
     """
 
     def __init__(
-        self, config: Zamba2Config, layer_idx: Optional[int] = None, num_fwd_mem_blocks: int = None, block_id: int = None
+        self,
+        config: Zamba2Config,
+        layer_idx: Optional[int] = None,
+        num_fwd_mem_blocks: int = None,
+        block_id: int = None,
     ):
         super().__init__(config, layer_idx)
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
@@ -1235,6 +1239,7 @@ class Zamba2MLP(ZambaMLP):
         def gated_act_fn(x):
             x = torch.chunk(x, 2, dim=-1)
             return self.act_fn(x[0]) * x[1]
+
         self.gated_act_fn = gated_act_fn
 
         del self.gate_proj
@@ -1356,7 +1361,9 @@ class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
 
 
 class Zamba2HybridLayer(ZambaHybridLayer):
-    def __init__(self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer):
+    def __init__(
+        self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
+    ):
         super().__init__(shared_transformer, linear, mamba)
         del self.shared_transf
         self.shared_transformer = shared_transformer
@@ -1624,10 +1631,14 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and lora_id % config.num_mem_blocks == block.block_id:
                                 tied_keys_lora.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_lora_A_list." + str(lora_id) + ".weight"
+                                    "shared_transformer.feed_forward.gate_up_proj_lora_A_list."
+                                    + str(lora_id)
+                                    + ".weight"
                                 )
                                 tied_keys_lora.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_lora_B_list." + str(lora_id) + ".weight"
+                                    "shared_transformer.feed_forward.gate_up_proj_lora_B_list."
+                                    + str(lora_id)
+                                    + ".weight"
                                 )
                             lora_id += 1
                         self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_lora]
@@ -1707,7 +1718,9 @@ class Zamba2ForCausalLM(ZambaForCausalLM, Zamba2PreTrainedModel, GenerationMixin
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
         else:
-            past_key_values = Zamba2HybridDynamicCache(self.config, input_ids.shape[0], dtype=self.dtype, device=self.device)
+            past_key_values = Zamba2HybridDynamicCache(
+                self.config, input_ids.shape[0], dtype=self.dtype, device=self.device
+            )
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation

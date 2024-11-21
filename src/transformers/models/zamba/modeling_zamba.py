@@ -145,7 +145,12 @@ class ZambaHybridDynamicCache(DynamicCache):
             self.conv_states += [
                 torch.zeros(batch_size, self.intermediate_size, self.conv_kernel_size, device=device, dtype=dtype)
             ]
-            cache_shape = (batch_size, self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads, self.ssm_state_size)
+            cache_shape = (
+                batch_size,
+                self.n_mamba_heads,
+                self.intermediate_size // self.n_mamba_heads,
+                self.ssm_state_size,
+            )
             self.ssm_states += [torch.zeros(cache_shape, device=device, dtype=dtype)]
             if self.layers_block_type[i] == "hybrid":
                 self.transformer_layers.append(i)
@@ -194,12 +199,10 @@ class ZambaHybridDynamicCache(DynamicCache):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.to_legacy_cache
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         raise NotImplementedError("ZambaHybridDynamicCache does not have a legacy cache equivalent.")
 
     @classmethod
-    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.from_legacy_cache
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         raise NotImplementedError("ZambaHybridDynamicCache does not have a legacy cache equivalent.")
 
