@@ -244,7 +244,9 @@ class GlmAttention(nn.Module):
 
         cos, sin = position_embeddings
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor
+        )
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -323,7 +325,9 @@ class GlmFlashAttention2(GlmAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -435,7 +439,9 @@ class GlmSdpaAttention(GlmAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -775,7 +781,9 @@ class GlmModel(GlmPreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1],device=inputs_embeds.device,
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
