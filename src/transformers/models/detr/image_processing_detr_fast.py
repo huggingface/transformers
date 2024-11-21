@@ -347,7 +347,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample: [Union[PILImageResampling, F.InterpolationMode]] = PILImageResampling.BILINEAR,
+        resample: Union[PILImageResampling, "F.InterpolationMode"] = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -416,7 +416,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600,
+        created using from_dict and kwargs e.g. `DetrImageProcessorFast.from_pretrained(checkpoint, size=600,
         max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
@@ -462,7 +462,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: F.InterpolationMode = F.InterpolationMode.BILINEAR,
+        interpolation: "F.InterpolationMode" = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -485,6 +485,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -517,7 +518,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         orig_size: Tuple[int, int],
         target_size: Tuple[int, int],
         threshold: float = 0.5,
-        interpolation: F.InterpolationMode = F.InterpolationMode.NEAREST,
+        interpolation: "F.InterpolationMode" = None,
     ):
         """
         Resizes an annotation to a target size.
@@ -534,6 +535,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             resample (`InterpolationMode`, defaults to `InterpolationMode.NEAREST`):
                 The resampling filter to use when resizing the masks.
         """
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}
@@ -680,7 +682,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        resample: Optional[Union[PILImageResampling, F.InterpolationMode]] = None,
+        resample: Optional[Union[PILImageResampling, "F.InterpolationMode"]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
         do_normalize: Optional[bool] = None,
@@ -861,6 +863,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             input_data_format = infer_channel_dimension_format(images[0])
         if input_data_format == ChannelDimension.LAST:
             images = [image.permute(2, 0, 1).contiguous() for image in images]
+            input_data_format = ChannelDimension.FIRST
 
         if do_rescale and do_normalize:
             # fused rescale and normalize

@@ -1690,8 +1690,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 final_message = chat[-1]["content"]
                 if isinstance(final_message, (list, tuple)):
                     final_message = final_message[-1]["text"]
-                final_message = final_message.strip()
-                rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
+                try:
+                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
+                except:  # noqa: E722
+                    # Some chat templates like Llama-3.1 trim messages before rendering, so we must do the same here.
+                    final_message = final_message.strip()
+                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
             rendered.append(rendered_chat)
 
         if not is_batched:
@@ -1722,7 +1726,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             if start_token is None:
                                 # start_token is out of bounds maybe due to truncation.
                                 break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids)):
+                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks if is_batched else assistant_masks[0]
