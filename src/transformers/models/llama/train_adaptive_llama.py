@@ -80,7 +80,7 @@ class AdaptiveLlamaTrainer(Trainer):
         )
 
         # TODO Lambda for inversed outputs?
-        loss = outputs.loss + outputs_inversed.loss / 10
+        loss = outputs.loss + (outputs_inversed.loss / 10)
 
         log_info = {
             "debug/straight_loss": loss.detach().item(),
@@ -90,6 +90,24 @@ class AdaptiveLlamaTrainer(Trainer):
         self.log(log_info)
 
         return (loss, outputs) if return_outputs else loss
+
+    def training_step(self, model: AdaptiveLlamaForCausalLM, *args, **kwargs):
+        result = super().training_step(model, *args, **kwargs)
+
+        merger_mpl_grad = model.model.adaptive_down[0].fan_in_mlp.weight.grad.norm(2)
+
+        assert merger_mpl_grad is not None, "merger_mpl_grad is expected to be not none"
+
+        # if merger_mpl_grad > 5:
+        #     breakpoint()
+
+        extra_log = dict()
+        extra_log["train/merger_mpl_grad_norm"] = merger_mpl_grad.detach().item()
+
+        self.log(extra_log)
+
+        return result
+
 
 
 if __name__ == "__main__":
@@ -121,7 +139,7 @@ if __name__ == "__main__":
         num_train_epochs=10,
         weight_decay=0.01,
         eval_strategy="epoch",
-        save_strategy="no",
+        save_strategy="epoch",
         push_to_hub=False,
         optim="adamw_torch",
         report_to="wandb",

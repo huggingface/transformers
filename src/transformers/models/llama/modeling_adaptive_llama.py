@@ -69,6 +69,8 @@ from dataclasses import dataclass
 
 from enum import Enum
 
+from torch.distributions.categorical import Categorical
+
 @dataclass
 class AdaptiveBaseModelOutputWithPast(BaseModelOutputWithPast):
     mean_merged_tokens: Optional[int] = None
@@ -122,7 +124,12 @@ class AdaptiveFanInFunction(torch.autograd.Function):
         batch_size = hidden_state.shape[0]
         merged_segments_lengths_in_batch = torch.zeros([batch_size], device=hidden_state.device, dtype=torch.long)
 
+        # [ bs, seq_len - 1 ]
         merging_map = merging_log_probas.max(dim=-1).indices
+
+        # Sampling from this distribution is not allowed
+        # due to inverse merging map step
+        # merging_map = Categorical(logits=merging_log_probas).sample()
         if invert_merging_maps_grad:
             # Reverse the order of an n-D tensor along given axis in dims.
             merging_map = 1 - merging_map
@@ -226,7 +233,7 @@ class AdaptiveFanInFunction(torch.autograd.Function):
         merged_attention_mask = torch.arange(max_seq_len_after_merge, device=merged_attention_outputs.device).unsqueeze(0).repeat(batch_size, 1)
         merged_attention_mask = merged_attention_mask < merged_segments_lengths_in_batch.unsqueeze(1)
 
-        ctx.save_for_backward(hidden_state_input_clone, merging_log_probas, merging_map, merged_embeddings_counts, special_embeddings_mask)
+        ctx.save_for_backward(hidden_state_input_clone, merging_log_probas, merging_map, merged_embeddings_counts, merged_special_embeddings_mask)
 
         return merged_attention_outputs, merged_attention_mask, merged_embeddings_counts, merged_special_embeddings_mask
 
@@ -235,7 +242,7 @@ class AdaptiveFanInFunction(torch.autograd.Function):
 
         # print("in custom backward merged_attention_outputs", merged_attention_outputs_grad.shape)
 
-        input_hidden_state, input_merging_log_probas, merging_map, merged_embeddings_counts, input_special_embeddings_mask = ctx.saved_tensors
+        input_hidden_state, input_merging_log_probas, merging_map, merged_embeddings_counts, merged_special_embeddings_mask = ctx.saved_tensors
 
         # [ bs, seq_len - 1, 2 ]
         merging_log_probas_gradients = torch.zeros_like(input_merging_log_probas)
@@ -254,24 +261,27 @@ class AdaptiveFanInFunction(torch.autograd.Function):
                 if num_tokens == 0:
                     break
 
+                # could be as bos as eos token
+                is_special = merged_special_embeddings_mask[batch_i, seq_len_i].item()
+                if is_special == 1:
+                    gradients_seq_len_i += 1
+                    continue
+
                 # [ hidden_size ]
                 normed_gradient_value = merged_attention_outputs_grad[batch_i, seq_len_i] / num_tokens
                 for _ in range(num_tokens):
                     input_hidden_state_gradients[batch_i, gradients_seq_len_i] = normed_gradient_value
 
                     if gradients_seq_len_i < merging_log_probas_gradients.shape[1]:
-                        # TODO по-хорошему, надо посмотреть градиенты, как было бы, если бы мы не смерджили эти токены
                         merging_map_desicision_index = merging_map[batch_i, gradients_seq_len_i].item()
                         merging_log_probas_gradients[batch_i, gradients_seq_len_i, merging_map_desicision_index] = normed_gradient_value.sum() * input_merging_log_probas[batch_i, gradients_seq_len_i, merging_map_desicision_index]
-                    elif gradients_seq_len_i == merging_log_probas_gradients.shape[1]:
-                        # merging_log_probas_gradients has minus one length
-                        pass
                     else:
+                    # elif gradients_seq_len_i == merging_log_probas_gradients.shape[1]:
+                    #     # merging_log_probas_gradients has minus one length
+                    #     pass
                         raise ValueError("merging_log_probas_gradients seq_len mismatch")
 
                     gradients_seq_len_i += 1
-
-        input_hidden_state_gradients[input_special_embeddings_mask.bool()] = 0
 
         return input_hidden_state_gradients, None, None, merging_log_probas_gradients, None
 
@@ -914,7 +924,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         all_loop_down_attention_mask.append(loop_down_attention_mask)
 
         #     print("Total count of merged tokens:", [ (x > 1).sum() for x in all_loop_down_merged_embeddings_counts if x is not None ])
-        mean_merged_tokens = sum([ (x > 1).sum() for x in all_loop_down_merged_embeddings_counts if x is not None ])
+        mean_merged_tokens = sum([ (x > 1).sum() for x in all_loop_down_merged_embeddings_counts if x is not None ]).item()
 
         # all_loop_down_causal_mask.append(loop_down_causal_mask)
         # all_loop_down_position_embeddings.append(loop_down_position_embeddings)
