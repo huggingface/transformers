@@ -55,6 +55,7 @@ class GlmRMSNorm(nn.Module):
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
+
 class GlmRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -122,7 +123,7 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, partial_rotary_factor=1.0):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, partial_rotary_factor=0.5):
     """
     Applies Rotary Position Embedding to the query and key tensors.
     partial_rotary_factor controls the proportion of dimensions to apply the embedding to.
@@ -131,27 +132,20 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, par
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    rotary_dim = int(cos.shape[-1] * partial_rotary_factor)
 
-    cos = cos[..., :rotary_dim]
-    sin = sin[..., :rotary_dim]
+    rotary_dim = int(q.shape[-1] * partial_rotary_factor)
+    q, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
-    repeat_times = int(1 / partial_rotary_factor)  # 1.0 -> 1, 0.5 -> 2, 0.25 -> 4
-    cos = cos.repeat_interleave(repeat_times, dim=-1)
-    sin = sin.repeat_interleave(repeat_times, dim=-1)
+    # Apply rotary embeddings to the rotary portion
+    q = (q * cos[..., :rotary_dim]) + (rotate_half(q) * sin[..., :rotary_dim])
+    k = (k * cos[..., :rotary_dim]) + (rotate_half(k) * sin[..., :rotary_dim])
 
-    rotary_dim_qk = int(q.shape[-1] * partial_rotary_factor)
+    # Concatenate back the rotary and non-rotary portions
+    q_embed = torch.cat([q, q_pass], dim=-1)
+    k_embed = torch.cat([k, k_pass], dim=-1)
 
-    q_rot, q_pass = q[..., :rotary_dim_qk], q[..., rotary_dim_qk:]
-    k_rot, k_pass = k[..., :rotary_dim_qk], k[..., rotary_dim_qk:]
-
-    q_rot = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_rot = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    q = torch.cat([q_rot, q_pass], dim=-1)
-    k = torch.cat([k_rot, k_pass], dim=-1)
-
-    return q, k
+    return q_embed, k_embed
 
 
 class GlmAttention(nn.Module):
@@ -701,8 +695,9 @@ class GlmModel(GlmPreTrainedModel):
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.partial_rotary_factor = config.partial_rotary_factor
         self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim // 2,
+            dim=config.head_dim * self.partial_rotary_factor,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
         )
