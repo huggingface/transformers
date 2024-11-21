@@ -2,11 +2,11 @@ import pytest
 
 import torch
 
-from .configuration_llama import LlamaConfig
-from .modeling_adaptive_llama import AdaptiveFanIn, AdaptiveFanOut, AdaptiveFanInOutput, AdaptiveFanOutOutput, AdaptiveLlamaModel
+from transformers.models.llama.configuration_llama import LlamaConfig
+from transformers.models.llama.modeling_adaptive_llama import AdaptiveFanIn, AdaptiveFanOut, AdaptiveFanInOutput, AdaptiveFanOutOutput, AdaptiveLlamaModel
 
 def test_adaptive_fan_in_no_merge():
-    config = LlamaConfig(hidden_size=256)
+    config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
     afin = AdaptiveFanIn(config)
 
@@ -30,7 +30,7 @@ def test_adaptive_fan_in_no_merge():
 
 
 def test_adaptive_fan_in_all_merge():
-    config = LlamaConfig(hidden_size=256)
+    config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
     afin = AdaptiveFanIn(config)
 
@@ -56,7 +56,7 @@ def test_adaptive_fan_in_all_merge():
     return
 
 def test_adaptive_fan_in_all_but_first_merge():
-    config = LlamaConfig(hidden_size=256)
+    config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
     afin = AdaptiveFanIn(config)
 
@@ -88,7 +88,7 @@ def test_adaptive_fan_in_all_but_first_merge():
 
 
 def test_adaptive_fan_out():
-    config = LlamaConfig(hidden_size=256)
+    config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
     afout = AdaptiveFanOut(config)
 
     batch_size, seq_len, residual_seq_len = 3, 7, 12
@@ -125,7 +125,7 @@ def test_adaptive_fan_out():
 
 
 def test_adaptive_fan_in_fan_out():
-    config = LlamaConfig(hidden_size=256)
+    config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
     afin = AdaptiveFanIn(config)
     afout = AdaptiveFanOut(config)
@@ -161,7 +161,7 @@ def test_adaptive_fan_in_fan_out():
 
 
 def test_adaptive_llama_e2e():
-    config = LlamaConfig(hidden_size=256, attn_implementation='eager')
+    config = LlamaConfig(hidden_size=256, num_hidden_layers=2, attn_implementation='eager')
 
     allama_model = AdaptiveLlamaModel(config)
     batch_size, seq_len = 3, 6
@@ -174,3 +174,30 @@ def test_adaptive_llama_e2e():
     llama_output = allama_model.forward(inputs_embeds=hidden_states, attention_mask=attention_mask, special_embeddings_mask=special_embeddings_mask, use_cache=False)
 
     assert llama_output.last_hidden_state.shape == hidden_states.shape
+
+def test_adaptive_llama_gradient_accumulation_with_different_merging_map():
+    config = LlamaConfig(hidden_size=256, num_hidden_layers=2, attn_implementation='eager')
+
+    allama_model = AdaptiveLlamaModel(config)
+    batch_size, seq_len = 3, 6
+    hidden_states = torch.rand([ batch_size, seq_len, config.hidden_size ], requires_grad=True)
+    attention_mask = torch.ones([batch_size, seq_len])
+    special_embeddings_mask = torch.zeros([batch_size, seq_len])
+    special_embeddings_mask[:, 0] = 1
+    special_embeddings_mask[:, -1] = 1
+
+    llama_output = allama_model.forward(inputs_embeds=hidden_states, attention_mask=attention_mask, special_embeddings_mask=special_embeddings_mask, use_cache=False)
+
+    llama_output.last_hidden_state.backward(torch.rand_like(llama_output.last_hidden_state))
+
+    first_grad_norm = allama_model.adaptive_down[0].fan_in_mlp.weight.grad.detach().clone()
+
+    llama_output_inverted = allama_model.forward(inputs_embeds=hidden_states, attention_mask=attention_mask, special_embeddings_mask=special_embeddings_mask, use_cache=False, invert_merging_maps=True)
+
+    llama_output_inverted.last_hidden_state.backward(torch.rand_like(llama_output_inverted.last_hidden_state))
+
+    second_grad_norm = allama_model.adaptive_down[0].fan_in_mlp.weight.grad.detach().clone()
+
+    assert llama_output.last_hidden_state.shape == hidden_states.shape
+
+    return

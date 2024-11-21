@@ -69,6 +69,14 @@ from dataclasses import dataclass
 
 from enum import Enum
 
+@dataclass
+class AdaptiveBaseModelOutputWithPast(BaseModelOutputWithPast):
+    mean_merged_tokens: Optional[int] = None
+
+@dataclass
+class AdaptiveCausalLMOutputWithPast(CausalLMOutputWithPast):
+    mean_merged_tokens: Optional[int] = None
+
 class AdaptiveMode(Enum):
     FAN_IN = "fan_in"
     FAN_OUT = "fan_out"
@@ -98,7 +106,7 @@ class AdaptiveFanOutOutput:
 
 class AdaptiveFanInFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask, merging_log_probas: torch.Tensor):
+    def forward(ctx, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask, merging_log_probas: torch.Tensor, invert_merging_maps_grad: bool):
         # assert hidden_state.requires_grad
         # assert merging_log_probas.requires_grad is not None
 
@@ -115,6 +123,9 @@ class AdaptiveFanInFunction(torch.autograd.Function):
         merged_segments_lengths_in_batch = torch.zeros([batch_size], device=hidden_state.device, dtype=torch.long)
 
         merging_map = merging_log_probas.max(dim=-1).indices
+        if invert_merging_maps_grad:
+            # Reverse the order of an n-D tensor along given axis in dims.
+            merging_map = 1 - merging_map
 
         for batch_i in range(batch_size):
             current_merged_embeddings_index = 1 # consider bos token
@@ -222,11 +233,14 @@ class AdaptiveFanInFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, merged_attention_outputs_grad, merged_attention_mask_grad, merged_embeddings_counts_grad, merged_special_embeddings_mask_grad):
 
-        print("in custom backward merged_attention_outputs", merged_attention_outputs_grad.shape)
+        # print("in custom backward merged_attention_outputs", merged_attention_outputs_grad.shape)
 
         input_hidden_state, input_merging_log_probas, merging_map, merged_embeddings_counts, input_special_embeddings_mask = ctx.saved_tensors
 
+        # [ bs, seq_len - 1, 2 ]
         merging_log_probas_gradients = torch.zeros_like(input_merging_log_probas)
+
+        # [ bs, seq_len, hidden_size ]
         input_hidden_state_gradients = torch.zeros_like(input_hidden_state)
 
         assert merged_attention_outputs_grad.shape[0] == input_hidden_state_gradients.shape[0]
@@ -246,9 +260,9 @@ class AdaptiveFanInFunction(torch.autograd.Function):
                     input_hidden_state_gradients[batch_i, gradients_seq_len_i] = normed_gradient_value
 
                     if gradients_seq_len_i < merging_log_probas_gradients.shape[1]:
-                        # todo по-хорошему, надо посмотреть градиенты, как было бы, если бы мы не смерджили эти токены
+                        # TODO по-хорошему, надо посмотреть градиенты, как было бы, если бы мы не смерджили эти токены
                         merging_map_desicision_index = merging_map[batch_i, gradients_seq_len_i].item()
-                        merging_log_probas_gradients[batch_i, gradients_seq_len_i, merging_map_desicision_index] = normed_gradient_value.sum()
+                        merging_log_probas_gradients[batch_i, gradients_seq_len_i, merging_map_desicision_index] = normed_gradient_value.sum() * input_merging_log_probas[batch_i, gradients_seq_len_i, merging_map_desicision_index]
                     elif gradients_seq_len_i == merging_log_probas_gradients.shape[1]:
                         # merging_log_probas_gradients has minus one length
                         pass
@@ -259,7 +273,7 @@ class AdaptiveFanInFunction(torch.autograd.Function):
 
         input_hidden_state_gradients[input_special_embeddings_mask.bool()] = 0
 
-        return input_hidden_state_gradients, None, None, merging_log_probas_gradients
+        return input_hidden_state_gradients, None, None, merging_log_probas_gradients, None
 
 
 class AdaptiveFanIn(nn.Module):
@@ -268,7 +282,7 @@ class AdaptiveFanIn(nn.Module):
         self.hidden_size = config.hidden_size
         self.fan_in_mlp = nn.Linear(self.hidden_size * 2, 2)
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask: torch.Tensor, merging_log_probas: torch.Tensor=None) -> AdaptiveFanInOutput:
+    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask: torch.Tensor, merging_log_probas: torch.Tensor=None, invert_merging_maps: bool=False) -> AdaptiveFanInOutput:
         # TODO attention mask transforms
         # TODO return mirroring layer merging informarion to restore
 
@@ -289,15 +303,22 @@ class AdaptiveFanIn(nn.Module):
             merging_log_probas = self.fan_in_mlp(attn_output_pairs)
 
         # merging_log_probas[special_embeddings_mask[:, :-1]] = 0
-
-        merged_attention_outputs, merged_attention_mask, merged_embeddings_counts, merged_special_embeddings_mask = AdaptiveFanInFunction.apply(hidden_state, attention_mask, special_embeddings_mask, merging_log_probas)
-
-        res = AdaptiveFanInOutput(
-            hidden_state=merged_attention_outputs,
-            attention_mask=merged_attention_mask,
-            merged_embeddings_counts=merged_embeddings_counts,
-            special_embeddings_mask=merged_special_embeddings_mask,
-        )
+        dummy = False
+        if dummy:
+            res = AdaptiveFanInOutput(
+                hidden_state=hidden_state,
+                attention_mask=attention_mask,
+                merged_embeddings_counts=attention_mask,
+                special_embeddings_mask=special_embeddings_mask,
+            )
+        else:
+            merged_attention_outputs, merged_attention_mask, merged_embeddings_counts, merged_special_embeddings_mask = AdaptiveFanInFunction.apply(hidden_state, attention_mask, special_embeddings_mask, merging_log_probas, invert_merging_maps)
+            res = AdaptiveFanInOutput(
+                hidden_state=merged_attention_outputs,
+                attention_mask=merged_attention_mask,
+                merged_embeddings_counts=merged_embeddings_counts,
+                special_embeddings_mask=merged_special_embeddings_mask,
+            )
 
         return res
 
@@ -331,7 +352,7 @@ class AdaptiveFanOut(nn.Module):
         seq_len = residual_attention_mask.shape[1]
         assert seq_len >= new_seq_len, 'residual seq len cant be less then input_embeddings seq_len'
 
-        restored_hidden_states = torch.zeros_like(residual_hidden_states)
+        restored_hidden_states = torch.zeros_like(residual_hidden_states) + residual_hidden_states
         for batch_i in range(attention_mask.shape[0]):
             restored_seq_len = 0
             for seq_len_i in range(new_seq_len):
@@ -340,19 +361,17 @@ class AdaptiveFanOut(nn.Module):
                     break
 
                 current_hidden_state = hidden_states[batch_i, seq_len_i]
-                for _ in range(num_repeats):
-                    restored_hidden_states[batch_i, restored_seq_len] += current_hidden_state
-                    restored_seq_len += 1
 
-        # TODO restore hidden states with no data leackage
-        # TODO Что делать, если объединяется больше одного токена?
-        #       - сохранять схлопнутый эмбэддинг только для последнего эмб
-        #       а все предыдущие предсказывать один за другим
-        # TODO Но как тогда сделать мерджинг произвольного количества эмб
-        #       на разных слоях?
-        # TODO Однослойный рекуррентный трансформер?
-        # TODO Сделать не поверх, а параллельно с надстройкой на единичные токены
+                restored_idx = restored_seq_len + num_repeats - 1
+                restored_hidden_states[batch_i, restored_idx] += current_hidden_state
+                restored_seq_len += num_repeats
+
+        # DONE restore hidden states with no data leackage
+        #       Будем сохранять резидуал только для последнего токена
+
+        # TODO Но как тогда сделать мерджинг произвольного количества эмб на разных слоях?
         # TODO посмотреть RWKW и RetNet - https://datasecrets.ru/articles/19
+
         assert restored_hidden_states.shape == residual_hidden_states.shape
 
         return AdaptiveFanOutOutput(hidden_state=restored_hidden_states)
@@ -740,6 +759,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         special_embeddings_mask: Optional[torch.Tensor] = None,
+        invert_merging_maps: bool = False,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -748,7 +768,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, AdaptiveBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -860,6 +880,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
                 hidden_state=hidden_states,
                 attention_mask=loop_down_attention_mask,
                 special_embeddings_mask=loop_down_special_embeddings_mask,
+                invert_merging_maps=invert_merging_maps,
             )
 
             hidden_states = adaptive_down_output.hidden_state
@@ -892,14 +913,15 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         all_loop_down_merged_embeddings_counts.append(loop_down_merged_embeddings_counts)
         all_loop_down_attention_mask.append(loop_down_attention_mask)
 
+        #     print("Total count of merged tokens:", [ (x > 1).sum() for x in all_loop_down_merged_embeddings_counts if x is not None ])
+        mean_merged_tokens = sum([ (x > 1).sum() for x in all_loop_down_merged_embeddings_counts if x is not None ])
+
         # all_loop_down_causal_mask.append(loop_down_causal_mask)
         # all_loop_down_position_embeddings.append(loop_down_position_embeddings)
 
         # DO NOT ADD LAST HIDDEN STATE
         # it is already exists in hidden_states variable
         # all_loop_down_hidden_states.append(hidden_states)
-
-        hidden_states = self.norm(hidden_states)
 
         for i, decoder_layer in enumerate(self.layers_up):
             if output_hidden_states:
@@ -971,11 +993,12 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
 
-        return BaseModelOutputWithPast(
+        return AdaptiveBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            mean_merged_tokens=mean_merged_tokens
         )
 
     def _update_causal_mask(
@@ -1129,12 +1152,14 @@ class AdaptiveLlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    # @replace_return_docstrings(output_type=AdaptiveCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        special_embeddings_mask: Optional[torch.Tensor] = None,
+        invert_merging_maps: bool = False,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1145,7 +1170,7 @@ class AdaptiveLlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, AdaptiveCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1176,6 +1201,9 @@ class AdaptiveLlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
+
+        use_cache = False
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1186,6 +1214,8 @@ class AdaptiveLlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            special_embeddings_mask=special_embeddings_mask,
+            invert_merging_maps=invert_merging_maps,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1224,11 +1254,12 @@ class AdaptiveLlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return AdaptiveCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            mean_merged_tokens=outputs.mean_merged_tokens
         )
 
