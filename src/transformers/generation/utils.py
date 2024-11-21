@@ -32,6 +32,7 @@ from ..cache_utils import (
     OffloadedCache,
     QuantizedCacheConfig,
     StaticCache,
+    PagedAttentionCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -1650,6 +1651,11 @@ class GenerationMixin:
                 "dtype": cache_dtype,
                 "layer_device_map": layer_device_map,
             }
+            if cache_implementation == "paged":
+                if hasattr(self.config, "n_pages"):
+                    cache_kwargs["n_pages"] = self.config.n_pages
+                if hasattr(self.config, "page_size"):
+                    cache_kwargs["page_size"] = self.config.page_size
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
@@ -1779,6 +1785,8 @@ class GenerationMixin:
                 model_kwargs[cache_name] = cache_class(cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
+            elif generation_config.cache_implementation == "paged":
+                model_kwargs[cache_name] = PagedAttentionCache(10, 64)
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
@@ -3217,7 +3225,8 @@ class GenerationMixin:
             # prepare variable output controls (note: some models won't accept all output controls)
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
+            if self.config._attn_implementation == "paged_attention":
+                self._set_paged_attention_mod(model_inputs['past_key_values'], model_inputs['input_ids'].shape[0], model_inputs['input_ids'].shape[1], input_ids.device)
             # forward pass to get next token
             outputs = self(**model_inputs, return_dict=True)
 

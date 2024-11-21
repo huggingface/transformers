@@ -59,6 +59,7 @@ if is_torch_available():
         SlidingWindowCache,
         StaticCache,
         StaticCacheConfig,
+        PagedAttentionCache,
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
@@ -70,6 +71,7 @@ if is_torch_available():
         "sliding_window": SlidingWindowCache,
         "hybrid": HybridCache,
         "mamba": MambaCache,
+        "paged": PagedAttentionCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys())

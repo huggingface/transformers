@@ -751,25 +751,8 @@ class LlamaPagedAttention(LlamaAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        from torch.nn.attention.flex_attention import flex_attention, create_block_mask
-        def noop(score, b, h, q_idx, kv_idx):
-            return score
-        def causal_mask(score, b, h, q_idx, kv_idx):
-            return torch.where(q_idx >= kv_idx, score, -float("inf"))
-
-        def generate_causal_offset(offset: torch.Tensor):
-            def causal_offset_mask(b, h, q_idx, kv_idx):
-                return (offset + q_idx) >= kv_idx
-
-            return causal_offset_mask
-
-        mod = generate_causal_offset(
-            torch.tensor(past_key_value.get_seq_length(), device=query_states.device, dtype=torch.int32)
-        )
-        block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=query_states.device, BLOCK_SIZE=past_key_value.paged_attentions[self.layer_idx].page_size)
-        block_mask = past_key_value.paged_attentions[self.layer_idx].convert_logical_block_mask(block_mask)
-        score_mod = past_key_value.paged_attentions[self.layer_idx].get_score_mod(causal_mask if q_len > 1 else noop)
-        attn_output = flex_attention(query_states, key_states, value_states, block_mask=block_mask, score_mod=score_mod, return_lse=output_attentions)
+        from torch.nn.attention.flex_attention import flex_attention
+        attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_masks[self.layer_idx], score_mod=past_key_value.score_mods[self.layer_idx], return_lse=output_attentions)
         attn_weights = None
         if output_attentions:
             attn_output = attn_output[0]
@@ -1307,6 +1290,35 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model
+
+    def _set_paged_attention_mod(self, past_key_value, bsz, q_len, device):
+        from torch.nn.attention.flex_attention import create_block_mask
+        def noop(score, b, h, q_idx, kv_idx):
+            return score
+        def causal_mask(score, b, h, q_idx, kv_idx):
+            return torch.where(q_idx >= kv_idx, score, -float("inf"))
+
+        def generate_causal_offset(offset: torch.Tensor):
+            def causal_offset_mask(b, h, q_idx, kv_idx):
+                return (offset + q_idx) >= kv_idx
+
+            return causal_offset_mask
+        if past_key_value.get_seq_length() == 0:
+            mod = generate_causal_offset(
+                torch.tensor(q_len, device=device, dtype=torch.int32)
+            )
+        else:
+            mod = generate_causal_offset(
+                torch.tensor(past_key_value.get_seq_length(), device=device, dtype=torch.int32)
+            )
+        past_key_value.block_masks = []
+        past_key_value.score_mods = []
+        for i in range(len(past_key_value.paged_attentions)):
+            block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[i].page_size)
+            block_mask = past_key_value.paged_attentions[i].convert_logical_block_mask(block_mask)
+            past_key_value.block_masks.append(block_mask)
+            score_mod = past_key_value.paged_attentions[i].get_score_mod(causal_mask if q_len > 1 else noop)
+            past_key_value.score_mods.append(score_mod)
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

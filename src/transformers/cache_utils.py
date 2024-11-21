@@ -2123,14 +2123,30 @@ class OffloadedStaticCache(StaticCache):
 
 
 class PagedAttentionCache(Cache):
-    def __init__(self, n_pages, page_size=128):
+    def __init__(self, config, batch_size, max_cache_len, device, dtype, layer_device_map, n_pages=None, page_size=128):
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.paged_attentions = []
         self.key_cache = []
         self.value_cache = []
         self.page_size = page_size
-        self.n_pages = n_pages
+        if n_pages is not None:
+            self.n_pages = n_pages
+        else:
+            self.n_pages = (max_cache_len + page_size - 1) // page_size * batch_size
+        self.block_masks = []
+        self.score_mods = []
+        KV_H = config.num_key_value_heads
+        QK_D = config.hidden_size // config.num_attention_heads
+        V_D = QK_D
+        from torch.nn.attention.experimental._paged_attention import PagedAttention
+        for i in range(config.num_hidden_layers):
+            max_cached_seq_len = self.n_pages * self.page_size
+            self.paged_attentions.append(PagedAttention(self.n_pages, self.page_size, batch_size, device=device))
+            self.key_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, QK_D, device=device, dtype=dtype))
+            self.value_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, V_D, device=device, dtype=dtype))
+            self.batch_reserve(self.paged_attentions[i], torch.tensor([max_cache_len for _ in range(batch_size)]))
+
 
     def batch_reserve(self, paged_attention, target_seq_len):
         (B,) = target_seq_len.shape
@@ -2145,16 +2161,7 @@ class PagedAttentionCache(Cache):
         if layer_idx == 0:
             self._seen_tokens += key_states.shape[-2]
         KV_B, KV_H, KV_S, QK_D = key_states.shape
-        _, _, _, V_D = value_states.shape
         device = key_states.device
-        dtype = key_states.dtype
-        from torch.nn.attention.experimental._paged_attention import PagedAttention
-        if len(self.paged_attentions) <= layer_idx:
-            max_cached_seq_len = self.n_pages * self.page_size
-            self.paged_attentions.append(PagedAttention(self.n_pages, self.page_size, KV_B, device=device))
-            self.key_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, QK_D, device=device, dtype=dtype))
-            self.value_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, V_D, device=device, dtype=dtype))
-        self.batch_reserve(self.paged_attentions[layer_idx], torch.tensor([cache_kwargs['cache_position'][-1]+1 for _ in range(KV_B)]))
         batch_idx = torch.arange(KV_B, device=device, dtype=torch.int32)
         self.paged_attentions[layer_idx].assign(batch_idx, cache_kwargs['cache_position'], key_states, value_states, self.key_cache[layer_idx], self.value_cache[layer_idx])
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
