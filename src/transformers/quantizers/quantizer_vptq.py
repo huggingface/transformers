@@ -13,8 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING, Optional
 
-from packaging import version
-
 from .base import HfQuantizer
 
 
