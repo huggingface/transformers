@@ -142,9 +142,24 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, partial_rotary_factor=0.5):
-    """
-    Applies Rotary Position Embedding to the query and key tensors.
-    partial_rotary_factor controls the proportion of dimensions to apply the embedding to.
+    """Applies Rotary Position Embedding to the query and key tensors.
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor by which the rotary embedding.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
 
     cos = cos.unsqueeze(unsqueeze_dim)
@@ -233,13 +248,7 @@ class GlmAttention(nn.Module):
 
         cos, sin = position_embeddings
 
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states,
-            key_states,
-            cos,
-            sin,
-            partial_rotary_factor=self.partial_rotary_factor,
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor)
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -318,13 +327,7 @@ class GlmFlashAttention2(GlmAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states,
-            key_states,
-            cos,
-            sin,
-            partial_rotary_factor=self.partial_rotary_factor,
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -436,13 +439,7 @@ class GlmSdpaAttention(GlmAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states,
-            key_states,
-            cos,
-            sin,
-            partial_rotary_factor=self.partial_rotary_factor,
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -708,6 +705,7 @@ class GlmModel(GlmPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -782,9 +780,7 @@ class GlmModel(GlmPreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
+                past_seen_tokens,past_seen_tokens + inputs_embeds.shape[1],device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -797,6 +793,7 @@ class GlmModel(GlmPreTrainedModel):
             output_attentions,
         )
         hidden_states = inputs_embeds
+
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
@@ -1193,12 +1190,7 @@ class GlmForSequenceClassification(GlmPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                pooled_logits=pooled_logits,
-                config=self.config,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
