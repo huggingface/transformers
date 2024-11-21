@@ -322,9 +322,9 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            # Object Detection model returns pred_logits and pred_boxes
+            # Object Detection model returns pred_logits and pred_boxes and input_ids
             if model_class.__name__ == "GroundingDinoForObjectDetection":
-                correct_outlen += 2
+                correct_outlen += 3
 
             self.assertEqual(out_len, correct_outlen)
 
