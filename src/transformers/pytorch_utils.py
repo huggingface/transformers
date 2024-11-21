@@ -21,7 +21,7 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_xla_available, logging
+from .utils import is_torch_xla_available, logging, is_torch_greater_or_equal
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -40,7 +40,7 @@ is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse
 is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
 
 
-if is_torch_greater_or_equal_than_2_5:
+if is_torch_greater_or_equal("2.5"):
     from torch.distributed.tensor import Replicate
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
