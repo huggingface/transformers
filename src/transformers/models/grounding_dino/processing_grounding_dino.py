@@ -25,6 +25,7 @@ from ...image_utils import AnnotationFormat, ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
+from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
 if is_torch_available():
@@ -58,6 +59,40 @@ def get_phrases_from_posmap(posmaps, input_ids):
         token_ids.append([input_ids[i] for i in non_zero_idx])
 
     return token_ids
+
+
+def _is_merged_candidate_labels_text(text: str) -> bool:
+    """
+    Check if the text is a merged candidate labels text. The general rule for constructing
+    candidate labels string is to separate the text labels with a dot. For example, "cat. dog."
+    """
+    if isinstance(text, str) and "." in text:
+        return True
+    return False
+
+
+def _is_list_of_candidate_labels(text) -> bool:
+    """Check that text is list/tuple of strings and each string is a candidate label and not merged candidate labels text."""
+    if isinstance(text, (list, tuple)):
+        return all(isinstance(t, str) and not _is_merged_candidate_labels_text(t) for t in text)
+    return False
+
+
+def _is_batched_list_of_candidate_labels(text) -> bool:
+    """Check that text is batch of list/tuple of strings and each string is a candidate label and not merged candidate labels text."""
+    if isinstance(text, (list, tuple)):
+        return all(_is_list_of_candidate_labels(t) for t in text)
+    return False
+
+
+def _merge_candidate_labels_text(text: List[str]) -> str:
+    """
+    Merge candidate labels text into a single string. Ensure all labels are lowercase.
+    For example, ["A cat", "a dog"] -> "a cat. a dog."
+    """
+    labels = [t.strip().lower() for t in text]  # ensure lowercase
+    merged_labels_str = ". ".join(labels) + "."  # join with dot and add a dot at the end
+    return merged_labels_str
 
 
 class GroundingDinoImagesKwargs(ImagesKwargs, total=False):
@@ -120,7 +155,15 @@ class GroundingDinoProcessor(ProcessorMixin):
         This method uses [`GroundingDinoImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
-        Please refer to the docstring of the above two methods for more information.
+        Args:
+            images (`ImageInput`, `List[ImageInput]`, *optional*):
+                The image or batch of images to be processed. The image might be either PIL image, numpy array or a torch tensor.
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
+                Candidate labels to be detected on the image. The text might be one of the following:
+                - A list of candidate labels (strings) to be detected on the image (e.g. ["a cat", "a dog"]).
+                - A batch of candidate labels to be detected on the batch of images (e.g. [["a cat", "a dog"], ["a car", "a person"]]).
+                - A merged candidate labels string to be detected on the image, separated by "." (e.g. "a cat. a dog.").
+                - A batch of merged candidate labels text to be detected on the batch of images (e.g. ["a cat. a dog.", "a car. a person."]).
         """
         if images is None and text is None:
             raise ValueError("You must specify either text or images.")
@@ -138,6 +181,7 @@ class GroundingDinoProcessor(ProcessorMixin):
             encoding_image_processor = BatchFeature()
 
         if text is not None:
+            text = self._preprocess_input_text(text)
             text_encoding = self.tokenizer(
                 text=text,
                 **output_kwargs["text_kwargs"],
@@ -148,6 +192,20 @@ class GroundingDinoProcessor(ProcessorMixin):
         text_encoding.update(encoding_image_processor)
 
         return text_encoding
+
+    def _preprocess_input_text(self, text):
+        """
+        Preprocess input text to ensure that labels are in the correct format for the model.
+        If the text is a list of candidate labels, merge the candidate labels into a single string.
+        For example, ["a cat", "a dog"] -> "a cat. a dog.".
+        """
+
+        if _is_list_of_candidate_labels(text):
+            text = _merge_candidate_labels_text(text)
+        elif _is_batched_list_of_candidate_labels(text):
+            text = [_merge_candidate_labels_text(sample) for sample in text]
+
+        return text
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
@@ -174,11 +232,11 @@ class GroundingDinoProcessor(ProcessorMixin):
 
     def post_process_grounded_object_detection(
         self,
-        outputs,
-        input_ids,
+        outputs: GroundingDinoObjectDetectionOutput,
+        input_ids: Optional[TensorType] = None,
         box_threshold: float = 0.25,
         text_threshold: float = 0.25,
-        target_sizes: Union[TensorType, List[Tuple]] = None,
+        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -187,8 +245,8 @@ class GroundingDinoProcessor(ProcessorMixin):
         Args:
             outputs ([`GroundingDinoObjectDetectionOutput`]):
                 Raw outputs of the model.
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                The token ids of the input text.
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                The token ids of the input text. If not provided will be taken from the model output.
             box_threshold (`float`, *optional*, defaults to 0.25):
                 Score threshold to keep object detection predictions.
             text_threshold (`float`, *optional*, defaults to 0.25):
@@ -201,6 +259,7 @@ class GroundingDinoProcessor(ProcessorMixin):
             in the batch as predicted by the model.
         """
         logits, boxes = outputs.logits, outputs.pred_boxes
+        input_ids = input_ids if input_ids is not None else outputs.input_ids
 
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
