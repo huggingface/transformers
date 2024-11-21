@@ -188,15 +188,13 @@ def get_model_table_from_auto_modules() -> str:
     """
     # Dictionary model names to config.
     config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
-    # print("config_maping_names", config_maping_names)
     model_name_to_config = {
         name: config_maping_names[code]
         for code, name in transformers_module.MODEL_NAMES_MAPPING.items()
         if code in config_maping_names
     }
-    # print("model_name_to_config", model_name_to_config)
     model_name_to_prefix = {name: config.replace("Config", "") for name, config in model_name_to_config.items()}
-    # print("model_name_to_prefix", model_name_to_prefix)
+
     # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
     pt_models = collections.defaultdict(bool)
     tf_models = collections.defaultdict(bool)
