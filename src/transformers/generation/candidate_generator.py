@@ -15,6 +15,7 @@
 
 import copy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+import gc
 
 import numpy as np
 import torch
@@ -179,6 +180,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
+        
+        if "mamba" in self.assistant_model.__class__.__name__.lower():
+            # This is the mamba model used as assistant for draft generation.
+            # Initialize the snapshots.
+            self.assistant_kwargs["cache_snapshots"] = []
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -259,6 +265,46 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+
+        if "mamba" in self.assistant_model.__class__.__name__.lower():
+            # This is the mamba model used as assistant for draft generation.
+            # We now need to roll back state of the mamba to the state of the last accepted token.
+            # This is full match, the current cache params in the model are valid.
+            # Only destroy the previous snapshots, the next calls to generation, we save
+            # New snapshots.
+            print("saeed")
+            print(num_matches)
+            print(self.assistant_kwargs["cache_snapshots"])
+            print("\n")
+            for idx, snapshot in enumerate(self.assistant_kwargs["cache_snapshots"]):
+                if idx != num_matches:
+                    del snapshot
+                else:
+                    snapshot_to_revive = snapshot
+                    conv_state, ssm_state, cache_position = snapshot_to_revive
+                    
+                    current_cache_position = self.assistant_kwargs["cache_position"]
+                    current_cache_position.zero_()
+                    current_cache_position.add_(cache_position)
+                    
+                    current_cache_params = self.assistant_kwargs["cache_params"]
+                    current_cache_params.reset()
+                    current_cache_params.conv_states.add_(conv_state)
+                    current_cache_params.ssm_states.add_(ssm_state)
+
+                    del conv_state
+                    del ssm_state
+                    del cache_position
+                    del snapshot_to_revive
+                    del snapshot
+ 
+            torch.cuda.empty_cache()
+            gc.collect()
+            self.assistant_kwargs["cache_snapshots"] = []
+                
+                
+                
+
 
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):

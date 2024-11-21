@@ -1865,6 +1865,92 @@ class MambaCache:
         self.ssm_states.zero_()
 
 
+class MambaCacheCircularStack:
+    """For using mamba as the draft model in speculative decoding."""
+    def __init__(self,
+                 config: PretrainedConfig,
+                 capacity: int = 1,
+                 batch_size: int = None,
+                 dtype: torch.dtype = torch.float16,
+                 device: Optional[Union[torch.device, str]] = None,
+                 max_batch_size: Optional[int] = None):
+
+        self.capacity = capacity
+        self.items = [MambaCache(config=config,
+                                 batch_size=batch_size,
+                                 dtype=dtype,
+                                 device=device,
+                                 max_batch_size=max_batch_size)] * capacity
+        self.head = -1  # Only head index is needed
+        self.size = 0
+
+    def push(self, item):
+        if self.is_full():
+            self.head = (self.head + 1) % self.capacity # Overwrite oldest if full
+        else:
+            self.head = (self.head + 1) % self.capacity # Normal push
+            self.size += 1 # Only increment size if not full (overwriting keeps size same)
+        self.items[self.head] = item
+
+
+    def pop(self):
+        if self.is_empty():
+            return None
+        item = self.items[self.head]
+        self.items[self.head] = None  # Help garbage collection
+        self.size -= 1
+        if self.size > 0:
+            self.head = (self.head - 1 + self.capacity) % self.capacity # Only decrement head if not already empty
+        else: # Reset to initial state if stack becomes empty after pop
+            self.head = -1
+
+        return item
+
+    def peek(self):
+        if self.is_empty():
+            return None
+        return self.items[self.head]
+
+    def is_empty(self):
+        return self.size == 0
+
+
+    def is_full(self):
+        return self.size == self.capacity
+
+    def __len__(self):
+        return self.size
+
+    def rollback(self, k): # Roll back k steps
+        if k > self.size:
+            raise IndexError("Rollback too far")
+
+
+        if k == self.size: # Special case, everything will be removed. Just clear.
+            for i in range(self.capacity): # Clear the entire stack efficiently
+                self.items[i] = None
+            self.head = -1
+            self.size = 0
+            return
+
+
+        new_head = (self.head - k + self.capacity) % self.capacity # Find the new head after rollback
+
+        start = (self.head + 1) % self.capacity # Start clearing after the current head
+        end = (new_head + 1) % self.capacity  # Stop before new head
+
+        for i in range(self.capacity):
+            curr_idx = (start + i) % self.capacity # Correctly handle wrap-around when clearing
+            if curr_idx == end:
+                break
+
+            self.items[curr_idx] = None
+
+
+        self.head = new_head
+        self.size -= k
+
+
 class OffloadedStaticCache(StaticCache):
     """
     Static cache class to be used with `torch.compile(model)` that offloads to the CPU or

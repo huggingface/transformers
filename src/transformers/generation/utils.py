@@ -2167,11 +2167,17 @@ class GenerationMixin:
             if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]:
                 raise ValueError("assisted generate is not supported with Static cache classes`")
             if self._is_stateful:
-                # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
-                # which is not possible with stateful models (they can't reset to a previous subset of generated text)
-                raise ValueError(
-                    f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
-                )
+                to_raise_error = True
+                if hasattr(self, "_supports_draft_generation_caching"):
+                    if self._supports_draft_generation_caching:
+                        to_raise_error = False
+
+                if to_raise_error:
+                    # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
+                    # which is not possible with stateful models (they can't reset to a previous subset of generated text)
+                    raise ValueError(
+                        f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
+                    )
 
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(

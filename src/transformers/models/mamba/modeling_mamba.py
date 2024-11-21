@@ -1,3 +1,5 @@
+# Modified by Saeed Najafi (snajafi@ualberta.ca)
+
 # coding=utf-8
 # Copyright 2024 state-spaces/mamba org and HuggingFace Inc. team.
 #
@@ -169,11 +171,11 @@ class MambaMixer(nn.Module):
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
             if cache_params is not None and cache_position[0] > 0:
                 hidden_states = causal_conv1d_update(
-                    hidden_states.squeeze(-1),
-                    cache_params.conv_states[self.layer_idx],
-                    conv_weights,
-                    self.conv1d.bias,
-                    self.activation,
+                        hidden_states.squeeze(-1),
+                        cache_params.conv_states[self.layer_idx],
+                        conv_weights,
+                        self.conv1d.bias,
+                        self.activation,
                 )
                 hidden_states = hidden_states.unsqueeze(-1)
             else:
@@ -386,6 +388,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MambaBlock", "MambaMixer"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    _supports_draft_generation_caching = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -705,6 +708,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None,
         **kwargs,
     ):
         # Overwitten -- uses `cache_params` as opposed to `past_key_values`
@@ -734,6 +738,15 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
+
+        # Save the current cache params and cache positions before new generation.
+        if (cache_snapshots is not None) and (cache_params is not None) and (cache_position is not None):
+            # Save the current states as an extra snapshot.
+            snapshot = (cache_params.conv_states.detach().clone(),
+                        cache_params.ssm_states.detach().clone(),
+                        cache_position.detach().clone())
+            # This is change by reference.
+            cache_snapshots.append(snapshot)
 
         model_inputs.update(
             {
