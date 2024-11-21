@@ -45,6 +45,7 @@ class GlmConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
