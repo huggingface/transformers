@@ -48,7 +48,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModel
+from ..auto import CONFIG_MAPPING, AutoModel
 
 
 if is_flash_attn_2_available():
@@ -61,30 +61,18 @@ logger = logging.get_logger(__name__)
 class ColPaliConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
-    ColPaliForRetrieval according to the specified arguments, defining the model architecture.
+    ColPaliForRetrieval according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the colpali-v1.3.
+    e.g. [vidore/colpali-v1.3](https://huggingface.co/vidore/colpali-v1.3)
 
     The ColPali config is very similar to [`PaligemmaConfig`], but with an extra attribute defining the embedding dimension.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
-        vision_config (`PaliGemmaVisionConfig`,  *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 256000):
-            The image token index to encode the image prompt.
-        vocab_size (`int`, *optional*, defaults to 257152):
-            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the multimodal projection space.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden layer of the Language model.
+        vlm_backbone_config (`PaligemmaConfig`, *optional*):
+            Configuration of the VLM backbone model.
         embedding_dim (`int`, *optional*, defaults to 128):
             Dimension of the multi-vector embeddings produced by the model.
 
@@ -100,16 +88,19 @@ class ColPaliConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vlm_backbone_config: PretrainedConfig,
+        vlm_backbone_config: PretrainedConfig = None,
         embedding_dim: int = 128,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        self.model_type = "colpali"
-        self.is_composition = False
-        self.vlm_backbone_config = vlm_backbone_config
+        if isinstance(vlm_backbone_config, dict):
+            vlm_backbone_config["model_type"] = (
+                vlm_backbone_config["model_type"] if "model_type" in vlm_backbone_config else "paligemma"
+            )
+            vlm_backbone_config = CONFIG_MAPPING[vlm_backbone_config["model_type"]](**vlm_backbone_config)
+        elif vlm_backbone_config is None:
+            vlm_backbone_config = CONFIG_MAPPING["paligemma"]()
         self.embedding_dim = embedding_dim
+        super().__init__(**kwargs)
 
     def ignore_index(self):
         raise AttributeError("Not needed for ColPali")
@@ -529,44 +520,6 @@ COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING = r"""
             Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
             `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
             token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
-    ```python
-    import torch
-    from PIL import Image
-
-    from transformers import ColPaliForRetrieval, ColPaliProcessor
-
-    model_name = "vidore/colpali-v1.2-hf"
-
-    model = ColPaliForRetrieval.from_pretrained(
-        model_name,
-        torch_dtype=torch.bfloat16,
-        device_map="cuda:0",  # or "mps" if on Apple Silicon
-    ).eval()
-
-    processor = ColPaliProcessor.from_pretrained(model_name)
-
-    # Your inputs
-    images = [
-        Image.new("RGB", (32, 32), color="white"),
-        Image.new("RGB", (16, 16), color="black"),
-    ]
-    queries = [
-        "What is the organizational structure for our R&D department?",
-        "Can you provide a breakdown of last year’s financial performance?",
-    ]
-
-    # Process the inputs
-    batch_images = processor(images=images).to(model.device)
-    batch_queries = processor(text=queries).to(model.device)
-
-    # Forward pass
-    with torch.no_grad():
-        image_embeddings = model(**batch_images)
-        query_embeddings = model(**batch_queries)
-
-    scores = processor.score_retrieval(query_embeddings, image_embeddings)
-    ```
 """
 
 
@@ -614,6 +567,48 @@ class ColPaliForRetrieval(PreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, ColPaliForRetrievalOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        import torch
+        from PIL import Image
+
+        from transformers import ColPaliForRetrieval, ColPaliProcessor
+
+        model_name = "vidore/colpali-v1.2-hf"
+
+        model = ColPaliForRetrieval.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="cuda:0",  # or "mps" if on Apple Silicon
+        ).eval()
+
+        processor = ColPaliProcessor.from_pretrained(model_name)
+
+        # Your inputs
+        images = [
+            Image.new("RGB", (32, 32), color="white"),
+            Image.new("RGB", (16, 16), color="black"),
+        ]
+        queries = [
+            "What is the organizational structure for our R&D department?",
+            "Can you provide a breakdown of last year’s financial performance?",
+        ]
+
+        # Process the inputs
+        batch_images = processor(images=images).to(model.device)
+        batch_queries = processor(text=queries).to(model.device)
+
+        # Forward pass
+        with torch.no_grad():
+            image_embeddings = model(**batch_images)
+            query_embeddings = model(**batch_queries)
+
+        scores = processor.score_retrieval(query_embeddings, image_embeddings)
+        ```"""
         if "pixel_values" in kwargs:
             kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
 
@@ -671,3 +666,10 @@ class ColPaliForRetrieval(PreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
+
+
+__all__ = [
+    "ColPaliConfig",
+    "ColPaliForRetrieval",
+    "ColPaliProcessor",
+]

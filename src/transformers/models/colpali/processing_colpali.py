@@ -430,3 +430,6 @@ class ColPaliProcessor(ProcessorMixin):
             scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
 
         return torch.cat(scores, dim=0)
+
+
+__all__ = ["ColPaliProcessor"]

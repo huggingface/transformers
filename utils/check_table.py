@@ -87,7 +87,7 @@ def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> str
 _re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 _re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 # Will match any TF or Flax model too so need to be in an else branch after the two previous regexes.
-_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
+_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration|ForRetrieval)")
 
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -188,13 +188,15 @@ def get_model_table_from_auto_modules() -> str:
     """
     # Dictionary model names to config.
     config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    # print("config_maping_names", config_maping_names)
     model_name_to_config = {
         name: config_maping_names[code]
         for code, name in transformers_module.MODEL_NAMES_MAPPING.items()
         if code in config_maping_names
     }
+    # print("model_name_to_config", model_name_to_config)
     model_name_to_prefix = {name: config.replace("Config", "") for name, config in model_name_to_config.items()}
-
+    # print("model_name_to_prefix", model_name_to_prefix)
     # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
     pt_models = collections.defaultdict(bool)
     tf_models = collections.defaultdict(bool)

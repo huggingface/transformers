@@ -778,6 +778,9 @@ MODEL_FOR_PRETRAINING_MAPPING = None
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = None
 
 
+MODEL_FOR_RETRIEVAL_MAPPING = None
+
+
 MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = None
 
 
@@ -2203,13 +2206,6 @@ class CoherePreTrainedModel(metaclass=DummyObject):
 
 
 class ColPaliForRetrieval(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ColPaliProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

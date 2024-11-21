@@ -21,35 +21,24 @@
 
 
 from ...modeling_utils import PretrainedConfig
+from ..auto import CONFIG_MAPPING
 
 
 class ColPaliConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
-    ColPaliForRetrieval according to the specified arguments, defining the model architecture.
+    ColPaliForRetrieval according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the colpali-v1.3.
+    e.g. [vidore/colpali-v1.3](https://huggingface.co/vidore/colpali-v1.3)
 
     The ColPali config is very similar to [`PaligemmaConfig`], but with an extra attribute defining the embedding dimension.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
-        vision_config (`PaliGemmaVisionConfig`,  *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 256000):
-            The image token index to encode the image prompt.
-        vocab_size (`int`, *optional*, defaults to 257152):
-            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the multimodal projection space.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden layer of the Language model.
+        vlm_backbone_config (`PaligemmaConfig`, *optional*):
+            Configuration of the VLM backbone model.
         embedding_dim (`int`, *optional*, defaults to 128):
             Dimension of the multi-vector embeddings produced by the model.
 
@@ -65,16 +54,22 @@ class ColPaliConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vlm_backbone_config: PretrainedConfig,
+        vlm_backbone_config: PretrainedConfig = None,
         embedding_dim: int = 128,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        self.model_type = "colpali"
-        self.is_composition = False
-        self.vlm_backbone_config = vlm_backbone_config
+        if isinstance(vlm_backbone_config, dict):
+            vlm_backbone_config["model_type"] = (
+                vlm_backbone_config["model_type"] if "model_type" in vlm_backbone_config else "paligemma"
+            )
+            vlm_backbone_config = CONFIG_MAPPING[vlm_backbone_config["model_type"]](**vlm_backbone_config)
+        elif vlm_backbone_config is None:
+            vlm_backbone_config = CONFIG_MAPPING["paligemma"]()
         self.embedding_dim = embedding_dim
+        super().__init__(**kwargs)
 
     def ignore_index(self):
         raise AttributeError("Not needed for ColPali")
+
+
+__all__ = ["ColPaliConfig"]
