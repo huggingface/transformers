@@ -42,7 +42,7 @@ jobs:
       - name: Get target commit
         working-directory: /transformers/utils
         run: |
-          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"]); print(commit)')" >> $GITHUB_ENV
+          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'commit = "eed11f34abe558c76590366a21316318e5f820ed"; print(commit)')" >> $GITHUB_ENV
 
       - name: Checkout to `start_sha`
         working-directory: /transformers
