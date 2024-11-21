@@ -59,7 +59,7 @@ class DepthProConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 224):
-            TODO: image_size / 2**n_decoder_blocks = patch_size / patch_embeddings_size
+            TODO: image_size / 2**n_fusion_blocks = patch_size / patch_embeddings_size
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
@@ -110,7 +110,7 @@ class DepthProConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=1024,
-        decoder_hidden_size=256,
+        fusion_hidden_size=256,
         num_hidden_layers=24,
         num_attention_heads=16,
         mlp_ratio=4,
@@ -136,7 +136,7 @@ class DepthProConfig(PretrainedConfig):
         scaled_images_ratios = [0.25, 0.5, 1],
         scaled_images_overlap_ratios = [0.0, 0.5, 0.25],
         scaled_images_feature_dims = [1024, 1024, 512],
-        use_batch_norm_in_decoder=False,
+        use_batch_norm_in_fusion=False,
         use_fov_model=False,
         num_fov_head_layers=2,
         **kwargs,
@@ -144,7 +144,7 @@ class DepthProConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
-        self.decoder_hidden_size = decoder_hidden_size
+        self.fusion_hidden_size = fusion_hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
@@ -167,7 +167,7 @@ class DepthProConfig(PretrainedConfig):
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
-        self.use_batch_norm_in_decoder = use_batch_norm_in_decoder
+        self.use_batch_norm_in_fusion = use_batch_norm_in_fusion
         self.use_fov_model = use_fov_model
         self.num_fov_head_layers = num_fov_head_layers
         self.intermediate_hook_ids = intermediate_hook_ids

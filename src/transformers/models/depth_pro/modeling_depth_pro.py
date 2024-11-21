@@ -706,7 +706,7 @@ class DepthProEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.decoder_hidden_size = config.decoder_hidden_size
+        self.fusion_hidden_size = config.fusion_hidden_size
 
         self.intermediate_hook_ids = config.intermediate_hook_ids
         self.intermediate_feature_dims = config.intermediate_feature_dims
@@ -762,7 +762,7 @@ class DepthProEncoder(nn.Module):
         # upsampling intermediate features - (1-2) in diagram
         self.upsample_intermediate = nn.ModuleList()
         for i, feature_dims in enumerate(self.intermediate_feature_dims):
-            intermediate_dims = self.decoder_hidden_size if i == 0 else feature_dims
+            intermediate_dims = self.fusion_hidden_size if i == 0 else feature_dims
             upsample_block = DepthProUpsampleBlock(
                 input_dims=config.hidden_size,
                 intermediate_dims=intermediate_dims,
@@ -939,7 +939,7 @@ class DepthProEncoder(nn.Module):
         scaled_images_features[0] = torch.cat((scaled_images_features[0], image_features), dim=1)
         scaled_images_features[0] = self.fuse_image_with_low_res(scaled_images_features[0])
 
-        # STEP 8: return these features in order of increasing size as what decoder expects
+        # STEP 8: return these features in order of increasing size as what fusion expects
         last_hidden_state = [
             # (B, self.scaled_images_feature_dims[i], self.out_size*2**(i+1), self.out_size*2**(i+1))
             *scaled_images_features, 
@@ -1094,8 +1094,8 @@ class DepthProResidualLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.use_batch_norm = config.use_batch_norm_in_decoder
-        self.hidden_size = config.decoder_hidden_size
+        self.use_batch_norm = config.use_batch_norm_in_fusion
+        self.hidden_size = config.fusion_hidden_size
 
         self.activation1 = nn.ReLU()
         self.convolution1 = nn.Conv2d(
@@ -1151,15 +1151,15 @@ class DepthProFeatureFusionLayer(nn.Module):
 
         if self.use_deconv:
             self.deconv = nn.ConvTranspose2d(
-                in_channels=config.decoder_hidden_size,
-                out_channels=config.decoder_hidden_size,
+                in_channels=config.fusion_hidden_size,
+                out_channels=config.fusion_hidden_size,
                 kernel_size=2,
                 stride=2,
                 padding=0,
                 bias=False,
             )
 
-        self.projection = nn.Conv2d(config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=1, bias=True)
+        self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
         self.skip_add = nn.quantized.FloatFunctional()
 
     def forward(self, hidden_state, residual=None):
@@ -1206,32 +1206,32 @@ class DepthProFOVModel(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.decoder_hidden_size = config.decoder_hidden_size
+        self.fusion_hidden_size = config.fusion_hidden_size
 
         self.out_size = config.patch_size // config.patch_embeddings_size
 
         self.encoder = DepthProViT(config)
-        self.encoder_neck = nn.Linear(self.hidden_size, self.decoder_hidden_size // 2)
+        self.encoder_neck = nn.Linear(self.hidden_size, self.fusion_hidden_size // 2)
         self.global_neck = nn.Sequential(
-            nn.Conv2d(self.decoder_hidden_size, self.decoder_hidden_size // 2, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1),
             nn.ReLU(True)
         )
 
-        if config.decoder_hidden_size // 2**config.num_fov_head_layers == 0:
+        if config.fusion_hidden_size // 2**config.num_fov_head_layers == 0:
             raise ValueError(
-                f"decoder_hidden_size={config.decoder_hidden_size} should be consistent with config.num_fov_head_layers={config.num_fov_head_layers} "
-                "i.e config.decoder_hidden_size // 2**config.num_fov_head_layers > 0"
+                f"fusion_hidden_size={config.fusion_hidden_size} should be consistent with config.num_fov_head_layers={config.num_fov_head_layers} "
+                "i.e config.fusion_hidden_size // 2**config.num_fov_head_layers > 0"
             )
 
         # create initial head layers
         self.head = nn.Sequential()
         for i in range(config.num_fov_head_layers):
             self.head.append(
-                nn.Conv2d(self.decoder_hidden_size // 2**(i+1), self.decoder_hidden_size // 2**(i+2), kernel_size=3, stride=2, padding=1)
+                nn.Conv2d(self.fusion_hidden_size // 2**(i+1), self.fusion_hidden_size // 2**(i+2), kernel_size=3, stride=2, padding=1)
             )
             self.head.append(nn.ReLU(True))
         # calculate expected shapes to finally generate a scalar output from final head layer
-        final_in_channels = self.decoder_hidden_size // 2**(config.num_fov_head_layers+1)
+        final_in_channels = self.fusion_hidden_size // 2**(config.num_fov_head_layers+1)
         final_kernal_size = int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
         self.head.append(
             nn.Conv2d(
@@ -1311,7 +1311,7 @@ class DepthProDepthEstimationHead(nn.Module):
     """
     The DepthProDepthEstimationHead module serves as the output head for depth estimation tasks.
     This module comprises a sequence of convolutional and transposed convolutional layers
-    that process the feature map from the decoder to produce a single-channel depth map.
+    that process the feature map from the fusion to produce a single-channel depth map.
     Key operations include dimensionality reduction and upsampling to match the input resolution.
     """
 
@@ -1319,7 +1319,7 @@ class DepthProDepthEstimationHead(nn.Module):
         super().__init__()
         self.config = config
 
-        features = config.decoder_hidden_size
+        features = config.fusion_hidden_size
         self.head = nn.Sequential(
             nn.Conv2d(features, features//2, kernel_size=3, stride=1, padding=1),
             nn.ConvTranspose2d(
@@ -1369,14 +1369,14 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         combined_feature_dims = config.scaled_images_feature_dims + config.intermediate_feature_dims
         self.projections = nn.ModuleList()
         for i, in_channels in enumerate(combined_feature_dims):
-            if i == len(combined_feature_dims)-1 and in_channels == config.decoder_hidden_size:
+            if i == len(combined_feature_dims)-1 and in_channels == config.fusion_hidden_size:
                 # projection for last layer can be ignored if input and output channels already match
                 self.projections.append(nn.Identity())
             else:
                 self.projections.append(
                     nn.Conv2d(
                         in_channels=in_channels,
-                        out_channels=config.decoder_hidden_size,
+                        out_channels=config.fusion_hidden_size,
                         kernel_size=3,
                         stride=1,
                         padding=1,
@@ -1385,8 +1385,8 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
                 )
 
         # dpt (vit) like fusion stage
-        self.num_decoder_layers = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
-        self.fusion_stage = DepthProFeatureFusionStage(config, num_layers=self.num_decoder_layers)
+        self.num_fusion_layers = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
+        self.fusion_stage = DepthProFeatureFusionStage(config, num_layers=self.num_fusion_layers)
 
         # depth estimation head
         self.head = DepthProDepthEstimationHead(config)
