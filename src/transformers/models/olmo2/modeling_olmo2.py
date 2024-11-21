@@ -87,10 +87,8 @@ class Olmo2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo2
-# TODO(joao): add me back asap :)
-class Olmo2LinearScalingRotaryEmbedding(Olmo2RotaryEmbedding):
-    """Olmo2RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+class Olmo1124LinearScalingRotaryEmbedding(Olmo1124RotaryEmbedding):
+    """Olmo1124RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
@@ -99,10 +97,8 @@ class Olmo2LinearScalingRotaryEmbedding(Olmo2RotaryEmbedding):
         return cos, sin
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo2
-# TODO(joao): add me back asap :)
-class Olmo2DynamicNTKScalingRotaryEmbedding(Olmo2RotaryEmbedding):
-    """Olmo2RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+class Olmo1124DynamicNTKScalingRotaryEmbedding(Olmo1124RotaryEmbedding):
+    """Olmo1124RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
