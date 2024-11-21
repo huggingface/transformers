@@ -157,6 +157,7 @@ def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str:
             new_node = new_node.value
         return new_node.value + "." + name
 
+
 # Transformer class to replace ClassB.call_to_method and ClassB().call_to_method with super().call_to_method
 class ReplaceMethodCallTransformer(cst.CSTTransformer):
     def __init__(self, all_bases: Set[str]):
@@ -170,7 +171,9 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
             and m.matches(original_node.attr, m.Name())
         ):
             # Replace with super().call_to_method
-            return updated_node.with_changes(value=cst.Call(cst.Name("super")),)
+            return updated_node.with_changes(
+                value=cst.Call(cst.Name("super")),
+            )
         # Handle ClassB().call_to_method or module.ClassB().call_to_method
         elif (
             m.matches(original_node.value, m.Call())
@@ -193,7 +196,10 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
             )
             or
             # Match ClassB.func_a(...)
-            (m.matches(original_node.func.value, m.Name() | m.Attribute()) and get_full_attribute_name(original_node.func.value) in self.all_bases)
+            (
+                m.matches(original_node.func.value, m.Name() | m.Attribute())
+                and get_full_attribute_name(original_node.func.value) in self.all_bases
+            )
         ):
             # Check if the first argument is 'self', and remove it
             if len(original_node.args) > 0 and m.matches(original_node.args[0].value, m.Name("self")):
