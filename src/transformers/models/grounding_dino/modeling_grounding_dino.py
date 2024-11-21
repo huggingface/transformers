@@ -331,6 +331,8 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Encoded candidate labels sequence. Used in processor to post process object detection result.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -351,6 +353,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    input_ids: Optional[torch.LongTensor] = None
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->GroundingDino
@@ -2641,13 +2644,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             )
 
         if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
-            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
-
-            return tuple_outputs
+            auxiliary_outputs = auxiliary_outputs if auxiliary_outputs is not None else []
+            output = [loss, loss_dict, logits, pred_boxes, *auxiliary_outputs, *outputs, input_ids]
+            output = tuple(out for out in output if out is not None)
+            return output
 
         dict_outputs = GroundingDinoObjectDetectionOutput(
             loss=loss,
@@ -2668,6 +2668,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            input_ids=input_ids,
         )
 
         return dict_outputs
