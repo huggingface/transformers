@@ -17,7 +17,7 @@ Processor class for Grounding DINO.
 """
 
 import pathlib
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -25,11 +25,13 @@ from ...image_utils import AnnotationFormat, ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
-from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
 if is_torch_available():
     import torch
+
+if TYPE_CHECKING:
+    from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
 AnnotationType = Dict[str, Union[int, str, List[Dict]]]
