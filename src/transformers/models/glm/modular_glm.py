@@ -68,7 +68,7 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, partial_rotary_factor=0.5):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -85,6 +85,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
             k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
             cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
             the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor by which the rotary embedding.
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
@@ -95,11 +96,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
     sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
 
-    # Keep half for later concatenation
-    q, q_pass = q[..., : q.shape[-1] // 2], q[..., q.shape[-1] // 2 :]
-    k, k_pass = k[..., : k.shape[-1] // 2], k[..., k.shape[-1] // 2 :]
+    # Keep half or full tensor for later concatenation
+    rotary_dim = int(q.shape[-1] * partial_rotary_factor)
+    q, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
-    # Apply rotary embeddings on the first half
+    # Apply rotary embeddings on the first half or full tensor
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
 
@@ -114,6 +116,7 @@ class GlmAttention(GraniteAttention):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)
+        self.partial_rotary_factor = config.partial_rotary_factor
 
 
 class GlmFlashAttention2(GlmAttention, GraniteFlashAttention2):
@@ -151,8 +154,11 @@ class GlmModel(GlmPreTrainedModel, LlamaModel):
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.partial_rotary_factor = config.partial_rotary_factor
         self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
+            dim=config.head_dim * config.partial_rotary_factor,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
         )
         self.gradient_checkpointing = False
 

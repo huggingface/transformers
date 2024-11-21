@@ -207,7 +207,6 @@ class GlmAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.is_causal = True
         self.scaling = 1 / math.sqrt(self.head_dim)
-        self.partial_rotary_factor = config.partial_rotary_factor
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -219,6 +218,7 @@ class GlmAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.partial_rotary_factor = config.partial_rotary_factor
 
     def forward(
         self,
@@ -243,10 +243,10 @@ class GlmAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor
         )
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -713,15 +713,15 @@ class GlmModel(GlmPreTrainedModel):
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.partial_rotary_factor = config.partial_rotary_factor
         self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim * self.partial_rotary_factor,
+            dim=config.head_dim * config.partial_rotary_factor,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
         )
         self.gradient_checkpointing = False
         if getattr(config, "pretraining_tp", 1) != 1:
             logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
+        self.partial_rotary_factor = config.partial_rotary_factor
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -783,9 +783,7 @@ class GlmModel(GlmPreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
