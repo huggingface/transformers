@@ -206,8 +206,8 @@
       title: 다중 CPU에서 훈련하기
     - local: perf_train_tpu_tf
       title: TensorFlow로 TPU에서 훈련하기
-    - local: in_translation
-      title: (번역중) PyTorch training on Apple silicon
+    - local: perf_train_special
+      title: Apple 실리콘에서 PyTorch 학습
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
     - local: hpo_train
@@ -326,8 +326,8 @@
         title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
-      - local: in_translation
-        title: (번역중) BERT
+      - local: model_doc/bert
+        title: BERT
       - local: in_translation
         title: (번역중) BertGeneration
       - local: model_doc/bert-japanese
@@ -358,8 +358,8 @@
         title: (번역중) CodeGen
       - local: model_doc/cohere
         title: Cohere
-      - local: in_translation
-        title: (번역중) ConvBERT
+      - local: model_doc/convbert
+        title: ConvBERT
       - local: in_translation
         title: (번역중) CPM
       - local: in_translation
@@ -448,8 +448,8 @@
         title: Mamba
       - local: model_doc/mamba2
         title: Mamba2
-      - local: in_translation
-        title: (번역중) MarianMT
+      - local: model_doc/marian
+        title: MarianMT
       - local: in_translation
         title: (번역중) MarkupLM
       - local: in_translation
@@ -677,6 +677,10 @@
       title: (번역중) 오디오 모델
     - isExpanded: false
       sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: in_translation
+        title: (번역중) VideoMAE
       - local: model_doc/vivit
         title: ViViT
       title: (번역중) 비디오 모델

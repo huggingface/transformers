@@ -219,7 +219,11 @@ class IdeficsProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
-        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if hasattr(tokenizer, "image_token")
+            else tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        )
 
         self.default_image_dims = (
             self.image_processor.image_num_channels,

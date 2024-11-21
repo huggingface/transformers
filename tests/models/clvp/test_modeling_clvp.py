@@ -414,7 +414,13 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
-        self.clvp_config_tester = ConfigTester(self, config_class=ClvpConfig, hidden_size=32)
+        common_properties = ["projection_dim", "logit_scale_init_value"]
+        self.clvp_config_tester = ConfigTester(
+            self, config_class=ClvpConfig, has_text_modality=False, common_properties=common_properties, hidden_size=32
+        )
+
+    def test_config(self):
+        self.clvp_config_tester.run_common_tests()
 
     def tearDown(self):
         super().tearDown()
