@@ -290,14 +290,16 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
-            classes (Union[List[str], List[List[str]]]): The input classes names.
-            score_threshold (float, defaults to 0.3): Only return detections with a confidence score exceeding this
-                threshold.
-            nms_threshold (float, defaults to 0.5):  The threshold to use for box non-maximum suppression. Value in [0, 1].
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*, defaults to None):
+            classes (Union[List[str], List[List[str]]]):
+                The input classes names.
+            score_threshold (float, defaults to 0.3):
+                Only return detections with a confidence score exceeding this threshold.
+            nms_threshold (float, defaults to 0.5):
+                The threshold to use for box non-maximum suppression. Value in [0, 1].
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-            max_num_det (int, *optional*, defaults to None): The maximum number of detections to return.
+            max_num_det (`int`, *optional*): The maximum number of detections to return.
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
