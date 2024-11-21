@@ -1785,8 +1785,6 @@ class GenerationMixin:
                 model_kwargs[cache_name] = cache_class(cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
-            elif generation_config.cache_implementation == "paged":
-                model_kwargs[cache_name] = PagedAttentionCache(10, 64)
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
