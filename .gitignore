@@ -53,6 +53,9 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+llama_for_sequential_numbers/
+
+
 .hypothesis/
 .pytest_cache/
 

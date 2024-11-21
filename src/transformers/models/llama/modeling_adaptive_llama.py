@@ -125,11 +125,11 @@ class AdaptiveFanInFunction(torch.autograd.Function):
         merged_segments_lengths_in_batch = torch.zeros([batch_size], device=hidden_state.device, dtype=torch.long)
 
         # [ bs, seq_len - 1 ]
-        merging_map = merging_log_probas.max(dim=-1).indices
+        # merging_map = merging_log_probas.max(dim=-1).indices
 
         # Sampling from this distribution is not allowed
         # due to inverse merging map step
-        # merging_map = Categorical(logits=merging_log_probas).sample()
+        merging_map = Categorical(logits=merging_log_probas).sample()
         if invert_merging_maps_grad:
             # Reverse the order of an n-D tensor along given axis in dims.
             merging_map = 1 - merging_map
@@ -261,17 +261,18 @@ class AdaptiveFanInFunction(torch.autograd.Function):
                 if num_tokens == 0:
                     break
 
+                # [ hidden_size ]
+                normed_gradient_value = merged_attention_outputs_grad[batch_i, seq_len_i] / num_tokens
+
                 # could be as bos as eos token
                 is_special = merged_special_embeddings_mask[batch_i, seq_len_i].item()
                 if is_special == 1:
+                    input_hidden_state_gradients[batch_i, gradients_seq_len_i] = normed_gradient_value
                     gradients_seq_len_i += 1
                     continue
 
-                # [ hidden_size ]
-                normed_gradient_value = merged_attention_outputs_grad[batch_i, seq_len_i] / num_tokens
                 for _ in range(num_tokens):
                     input_hidden_state_gradients[batch_i, gradients_seq_len_i] = normed_gradient_value
-
                     if gradients_seq_len_i < merging_log_probas_gradients.shape[1]:
                         merging_map_desicision_index = merging_map[batch_i, gradients_seq_len_i].item()
                         merging_log_probas_gradients[batch_i, gradients_seq_len_i, merging_map_desicision_index] = normed_gradient_value.sum() * input_merging_log_probas[batch_i, gradients_seq_len_i, merging_map_desicision_index]
