@@ -35,11 +35,6 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: ci_results_run_models_gpu
-          path: /transformers/ci_results_run_models_gpu
-
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
@@ -72,7 +67,9 @@ jobs:
 
       - name: Check failed tests
         working-directory: /transformers
-        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_run_models_gpu/new_model_failures.json --output_file new_model_failures_with_bad_commit.json
+        run: |
+          curl -o new_model_failures.json https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/main/2024-11-20/ci_results_run_models_gpu/new_model_failures.json
+          python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file new_model_failures.json --output_file new_model_failures_with_bad_commit.json
 
       - name: Show results
         working-directory: /transformers
