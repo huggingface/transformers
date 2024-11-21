@@ -262,11 +262,12 @@ def convert_mistral_model(input_dir, output_dir):
         for file in safetensors_files:
             loaded_dict = safe_load_file(f"{input_dir}/{file}")
             full_original_state_dict.update(loaded_dict)
-    if "multi_modal_projector.linear_1.bias" not in full_original_state_dict:
-        full_original_state_dict["multi_modal_projector.linear_1.bias"] = torch.zeros(text_config.hidden_size)
-
-    if "multi_modal_projector.linear_2.bias" not in full_original_state_dict:
-        full_original_state_dict["multi_modal_projector.linear_2.bias"] = torch.zeros(text_config.hidden_size)
+    if "multi_modal_projector.linear_1.bias" not in full_original_state_dict and "multi_modal_projector.linear_2.bias" in full_original_state_dict:
+        config.multimodal_projector_bias = False
+    elif "multi_modal_projector.linear_1.bias" not in full_original_state_dict:
+        full_original_state_dict["multi_modal_projector.linear_1.bias"] = torch.zeros(text_config.hidden_size, dtype=full_original_state_dict["multi_modal_projector.linear_1.weight"].dtype)
+    elif "multi_modal_projector.linear_2.bias" not in full_original_state_dict:
+        full_original_state_dict["multi_modal_projector.linear_2.bias"] = torch.zeros(text_config.hidden_size, dtype=full_original_state_dict["multi_modal_projector.linear_1.weight"].dtype)
 
     new_dict = convert_dictionnary(full_original_state_dict, vision_config, text_config)
     with torch.device("meta"):

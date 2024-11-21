@@ -85,6 +85,7 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_seq_length=576,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -127,5 +128,6 @@ class LlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         super().__init__(**kwargs)
