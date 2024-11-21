@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     pad,
     resize,
@@ -475,6 +475,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(batch_images[0][0])
 
         original_image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        size = get_size_dict(size)  # for BC
 
         if do_resize:
             batch_images = [
