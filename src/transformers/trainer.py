@@ -1725,6 +1725,9 @@ class Trainer:
         if self.is_deepspeed_enabled:
             if self.args.deepspeed is None:
                 raise ValueError("For sweeps with deepspeed, `args.deepspeed` must be set")
+
+            self.accelerator.free_memory()
+
             # Rebuild the deepspeed config to reflect the updated training parameters
             from accelerate.utils import DeepSpeedPlugin
 
@@ -1748,7 +1751,7 @@ class Trainer:
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            if not trial.study._is_multi_objective():
+            if hasattr(trial, "study") and not trial.study._is_multi_objective():
                 trial.report(self.objective, step)
                 if trial.should_prune():
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
