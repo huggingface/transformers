@@ -269,9 +269,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if "mamba" in self.assistant_model.__class__.__name__.lower():
             # This is the mamba model used as assistant for draft generation.
             # We now need to roll back state of the mamba to the state of the last accepted token.
-            # This is full match, the current cache params in the model are valid.
-            # Only destroy the previous snapshots, the next calls to generation, we save
-            # New snapshots.
             print("saeed")
             print(num_matches)
             print(self.assistant_kwargs["cache_snapshots"])
