@@ -55,42 +55,32 @@ class GlmRMSNorm(nn.Module):
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
-
 class GlmRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, rotary_percent=0.5, device=None):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        self.rotary_percent = rotary_percent
-        self.dim = dim * rotary_percent
+
+        self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
 
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, device=device, dtype=torch.float32) / self.dim))
-        self.register_buffer("inv_freq", inv_freq)
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
+        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
-    def forward(self, x, position_ids=None):
-        batch_size, seq_len, head_dim = x.shape
-        device = x.device
-        dtype = x.dtype
-
-        seq_idx = torch.arange(0, self.max_position_embeddings, device=device).float()
-        idx_theta = torch.outer(seq_idx, self.inv_freq)
-
-        if position_ids is not None:
-            idx_theta = idx_theta[position_ids[0]]
-        else:
-            idx_theta = idx_theta[:seq_len]
-        if self.rotary_percent == 0.5:
-            idx_theta = torch.cat([idx_theta, idx_theta], dim=-1)  # for glm-4-9b
-
-        device_type = device.type
+    @torch.no_grad()
+    def forward(self, x, position_ids, seq_len=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        self.inv_freq.to(x.device)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            cos = torch.cos(idx_theta).to(dtype=dtype)
-            sin = torch.sin(idx_theta).to(dtype=dtype)
-
-        cos = cos[None, :, :].expand(batch_size, seq_len, -1)
-        sin = sin[None, :, :].expand(batch_size, seq_len, -1)
-
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -132,31 +122,36 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, rotary_percent=0.5):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, partial_rotary_factor=1.0):
     """
     Applies Rotary Position Embedding to the query and key tensors.
-    rotary_percent is for glm-4-9b(0.5) or glm-edge(1.0)
+    partial_rotary_factor controls the proportion of dimensions to apply the embedding to.
     """
+
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    # Interleave them instead of usual shape
-    cos = cos[..., : int(cos.shape[-1] * rotary_percent)].repeat_interleave(2, dim=-1)
-    sin = sin[..., : int(sin.shape[-1] * rotary_percent)].repeat_interleave(2, dim=-1)
+    rotary_dim = int(cos.shape[-1] * partial_rotary_factor)
 
-    # Keep rotary_percent(half or not) for later concatenation
-    rotary_dim = int(q.shape[-1] * rotary_percent)
-    q, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+    cos = cos[..., :rotary_dim]
+    sin = sin[..., :rotary_dim]
 
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    repeat_times = int(1 / partial_rotary_factor)  # 1.0 -> 1, 0.5 -> 2, 0.25 -> 4
+    cos = cos.repeat_interleave(repeat_times, dim=-1)
+    sin = sin.repeat_interleave(repeat_times, dim=-1)
 
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
+    rotary_dim_qk = int(q.shape[-1] * partial_rotary_factor)
+
+    q_rot, q_pass = q[..., :rotary_dim_qk], q[..., rotary_dim_qk:]
+    k_rot, k_pass = k[..., :rotary_dim_qk], k[..., rotary_dim_qk:]
+
+    q_rot = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_rot = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    q = torch.cat([q_rot, q_pass], dim=-1)
+    k = torch.cat([k_rot, k_pass], dim=-1)
+
+    return q, k
 
 
 class GlmAttention(nn.Module):
@@ -181,7 +176,7 @@ class GlmAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.is_causal = True
         self.scaling = 1 / math.sqrt(self.head_dim)
-        self.rotary_percent = config.rotary_percent if hasattr(config, "rotary_percent") else 0.5
+        self.partial_rotary_factor = config.partial_rotary_factor
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -231,7 +226,7 @@ class GlmAttention(nn.Module):
             key_states,
             cos,
             sin,
-            rotary_percent=self.rotary_percent,
+            partial_rotary_factor=self.partial_rotary_factor,
         )
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -316,7 +311,7 @@ class GlmFlashAttention2(GlmAttention):
             key_states,
             cos,
             sin,
-            rotary_percent=self.rotary_percent,
+            partial_rotary_factor=self.partial_rotary_factor,
         )
 
         if past_key_value is not None:
@@ -434,7 +429,7 @@ class GlmSdpaAttention(GlmAttention):
             key_states,
             cos,
             sin,
-            rotary_percent=self.rotary_percent,
+            partial_rotary_factor=self.partial_rotary_factor,
         )
 
         if past_key_value is not None:
@@ -701,17 +696,15 @@ class GlmModel(GlmPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.rotary_percent = config.rotary_percent if hasattr(config, "rotary_percent") else 0.5
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim,
+            dim=config.head_dim // 2,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
-            rotary_percent=self.rotary_percent,
         )
         self.gradient_checkpointing = False
 

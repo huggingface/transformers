@@ -93,6 +93,7 @@ class GlmConfig(PretrainedConfig):
         num_hidden_layers=40,
         num_attention_heads=32,
         num_key_value_heads=2,
+        partial_rotary_factor=0.5,
         head_dim=128,
         hidden_act="silu",
         attention_dropout=0.0,
@@ -114,6 +115,7 @@ class GlmConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.partial_rotary_factor = partial_rotary_factor
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
