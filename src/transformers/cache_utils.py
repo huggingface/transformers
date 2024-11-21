@@ -1209,7 +1209,7 @@ class StaticCache(Cache):
 
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
-        self.layer_seen_tokens[layer_idx] += key_states.shape[2]
+
         if cache_position is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
@@ -1222,10 +1222,16 @@ class StaticCache(Cache):
             #     v_out.index_copy_(2, cache_position, value_states)
             # except NotImplementedError:
                 # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
-            k_out[:, :, : self.layer_seen_tokens[layer_idx]] = key_states
-            v_out[:, :, : self.layer_seen_tokens[layer_idx]] = value_states
-        return k_out, v_out
+            if key_states.shape[2] == 1:
+                length = self.layer_seen_tokens[layer_idx]
+                k_out[:, :, length] = key_states[:,:,0,...]
+                v_out[:, :, length] = value_states[:,:,0,...]
+                self.layer_seen_tokens[layer_idx] += key_states.shape[2]
+            else:
+                k_out[:, :, : key_states.shape[2]] = key_states
+                v_out[:, :, : key_states.shape[2]] = value_states
 
+        return k_out, v_out
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model."""
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
