@@ -26,7 +26,6 @@ from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     is_flash_attn_greater_or_equal_2_10,
@@ -285,6 +284,11 @@ class Zamba2Config(PretrainedConfig):
 class Zamba2RMSNormGated(MambaRMSNormGated):
     pass
 
+
+class Zamba2RMSNorm(ZambaRMSNorm):
+    pass
+
+
 def count_mem_blocks_in_config(config: Zamba2Config):
     """
     Count number of shared blocks
@@ -309,60 +313,6 @@ def layer_type_list(config: Zamba2Config):
     return ll
 
 
-# # Helper methods for segment sum computation
-
-
-# def pad_tensor_by_size(input_tensor: torch.Tensor, pad_size: int):
-#     """
-#     Padding x tensor with `pad_size` on the seq_len dim (dim=1)
-
-#     Assumes that we only have tensors of either size 4 or 3
-#     """
-#     pad_shape = (0, 0, 0, 0, 0, pad_size, 0, 0) if input_tensor.ndim == 4 else (0, 0, 0, pad_size, 0, 0)
-
-#     return torch.nn.functional.pad(input_tensor, pad_shape, mode="constant", value=0)
-
-
-# def reshape_into_chunks(input_tensor, pad_size, chunk_size):
-#     """
-#     Padding input_tensor with `pad_size` on the seq_len dim (dim=1) and
-#     simultaneously splitting it into chunk sequences.
-
-#     Assumes that we only have tensors of either size 4 or 3
-#     """
-#     # [bsz, seq_len, ...] -> [bsz, seq_len multiple of chunk_size, ...]
-#     input_tensor = pad_tensor_by_size(input_tensor, pad_size)
-
-#     if input_tensor.ndim == 3:
-#         # [bsz, seq_len multiple of chunk_size, num_heads] -> [bsz, -1, chunk_size, num_heads]
-#         return input_tensor.reshape(input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2])
-#     else:
-#         # [bsz, seq_len multiple of chunk_size, num_heads, head_dim or state_size] -> [bsz, -1, chunk_size, num_heads, head_dim or state_size]
-#         return input_tensor.reshape(
-#             input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2], input_tensor.shape[3]
-#         )
-
-
-# def segment_sum(input_tensor):
-#     """
-#     More stable segment sum calculation. Uses cumulative sums and masking instead of direct subtractions.
-#     """
-#     chunk_size = input_tensor.size(-1)
-#     # 1. expand input tensor to have an additional dimension and repeat along that dimension
-#     # [..., chunk_size] -> [..., chunk_size, chunk_size]
-#     input_tensor = input_tensor[..., None].expand(*input_tensor.size(), chunk_size)
-#     # 2. create a lower triangular mask with the diagonal set to 0 to 0 out elements above diag
-#     mask = torch.tril(torch.ones(chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool), diagonal=-1)
-#     input_tensor = input_tensor.masked_fill(~mask, 0)
-#     # 3. compute actual cumsum
-#     tensor_segsum = torch.cumsum(input_tensor, dim=-2)
-
-#     # 4. apply mask to keep only the lower triangular part of the cumulative sum result (incl diagonal this time)
-#     mask = torch.tril(torch.ones(chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool), diagonal=0)
-#     tensor_segsum = tensor_segsum.masked_fill(~mask, -torch.inf)
-#     return tensor_segsum
-
-
 class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
@@ -380,20 +330,17 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
     def __init__(
         self, config: Zamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
     ):
-        super().__init__(config, batch_size, dtype, device)
-        # self.dtype = dtype
-        # self.layers_block_type = config.layers_block_type
-        # self.has_previous_state = False
-        # self.intermediate_size = int(config.mamba_expand * config.hidden_size)
-        # ssm_state_size = config.mamba_d_state
-        # conv_kernel_size = config.mamba_d_conv
-        # self.n_mamba_heads = config.n_mamba_heads
-        # self.transformer_layers = []
-        # self._modules = {}
-        # self._parameters = {}
-        # self._buffers = {}
-        del self.conv_states
-        del self.ssm_states
+        self.dtype = dtype
+        self.layers_block_type = config.layers_block_type
+        self.has_previous_state = False
+        self.intermediate_size = int(config.mamba_expand * config.hidden_size)
+        self.ssm_state_size = config.mamba_d_state
+        self.conv_kernel_size = config.mamba_d_conv
+        self.n_mamba_heads = config.n_mamba_heads
+        self.transformer_layers = []
+        self._modules = {}
+        self._parameters = {}
+        self._buffers = {}
         self.conv_states = {
             i: torch.zeros(
                 batch_size,
@@ -410,11 +357,11 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
             )
             for i in range(config.num_hidden_layers)
         }
-        # for i in range(config.num_hidden_layers):
-        #     if self.layers_block_type[i] == "hybrid":
-        #         self.transformer_layers.append(i)
-        # self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        # self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        for i in range(config.num_hidden_layers):
+            if self.layers_block_type[i] == "hybrid":
+                self.transformer_layers.append(i)
+        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
 
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
@@ -431,61 +378,6 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
     def reset(self):
         self.conv_states.zero_()
         self.ssm_states.zero_()
-
-    # # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.update
-    # def update(
-    #     self,
-    #     key_states: torch.Tensor,
-    #     value_states: torch.Tensor,
-    #     layer_idx: int,
-    #     cache_kwargs: Optional[Dict[str, Any]] = None,
-    # ) -> Tuple[torch.Tensor, torch.Tensor]:
-    #     # Update the cache
-    #     if self.key_cache[layer_idx].shape[-1] == 0:
-    #         self.key_cache[layer_idx] = key_states
-    #         self.value_cache[layer_idx] = value_states
-    #     else:
-    #         self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
-    #         self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
-
-    #     return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    # # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.reorder_cache
-    # def reorder_cache(self, beam_idx: torch.LongTensor):
-    #     """Reorders the cache for beam search, given the selected beam indices."""
-    #     for layer_idx in range(len(self.key_cache)):
-    #         device = self.key_cache[layer_idx].device
-    #         self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-    #         device = self.value_cache[layer_idx].device
-    #         self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
-
-    #         device = self.conv_states[layer_idx].device
-    #         self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
-    #         device = self.ssm_states[layer_idx].device
-    #         self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
-
-    # # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
-    # def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-    #     """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-    #     # take any layer that contains cache and not empty tensor
-    #     layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
-    #     if len(self.key_cache) <= layer_idx:
-    #         return 0
-    #     return self.key_cache[layer_idx].shape[-2]
-
-
-
-
-    ### check the two methods below
-    # def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-    #     raise NotImplementedError("Zamba2HybridDynamicCache does not have a legacy cache equivalent.")
-
-    # @classmethod
-    # def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-    #     raise NotImplementedError("Zamba2HybridDynamicCache does not have a legacy cache equivalent.")
-
-
-ALL_LAYERNORM_LAYERS.append(Zamba2RMSNorm)
 
 
 class Zamba2RotaryEmbedding(nn.Module):
@@ -1337,9 +1229,6 @@ class Zamba2MLP(ZambaMLP):
         """
         super().__init__(config)
         self.config = config
-        # self.hidden_size = config.hidden_size
-        # self.intermediate_size = config.intermediate_size
-        # self.act_fn = ACT2FN[config.hidden_act]
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
 
@@ -1398,8 +1287,6 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
             config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id
         )
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
-        # self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
-        # self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1473,8 +1360,6 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         super().__init__(shared_transformer, linear, mamba)
         del self.shared_transf
         self.shared_transformer = shared_transformer
-        # self.linear = linear
-        # self.mamba_decoder = mamba
 
     def forward(
         self,
@@ -1565,42 +1450,6 @@ ZAMBA2_START_DOCSTRING = r"""
     "The bare Zamba2 Model outputting raw hidden-states without any specific head on top.",
     ZAMBA2_START_DOCSTRING,
 )
-# class Zamba2PreTrainedModel(PreTrainedModel):
-#     config_class = Zamba2Config
-#     base_model_prefix = "model"
-#     supports_gradient_checkpointing = True
-#     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
-#     _skip_keys_device_placement = "past_key_values"
-#     _supports_flash_attn_2 = True
-#     _supports_sdpa = False
-#     _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
-#     _is_stateful = True
-
-#     def _init_weights(self, module):
-#         std = self.config.initializer_range
-#         if isinstance(module, (nn.Linear, nn.Conv1d)):
-#             module.weight.data.normal_(mean=0.0, std=std)
-#             if module.bias is not None:
-#                 module.bias.data.zero_()
-#         elif isinstance(module, nn.Embedding):
-#             module.weight.data.normal_(mean=0.0, std=std)
-#             if module.padding_idx is not None:
-#                 module.weight.data[module.padding_idx].zero_()
-#         elif isinstance(module, Zamba2MambaMixer):
-#             module.A_log._no_weight_decay = True
-#             module.D._no_weight_decay = True
-
-#             dt = torch.exp(
-#                 torch.rand(self.config.n_mamba_heads)
-#                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
-#                 + math.log(self.config.time_step_min)
-#             ).clamp(min=self.config.time_step_floor)
-#             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-#             inv_dt = dt + torch.log(-torch.expm1(-dt))
-
-#             with torch.no_grad():
-#                 module.dt_bias.copy_(inv_dt)
-#             module.dt_bias._no_reinit = True
 class Zamba2PreTrainedModel(ZambaPreTrainedModel):
     config_class = Zamba2Config
     _supports_flash_attn_2 = True

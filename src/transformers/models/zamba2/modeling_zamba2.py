@@ -79,6 +79,26 @@ class Zamba2RMSNormGated(torch.nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
+class Zamba2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Zamba2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 class Zamba2HybridDynamicCache(DynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
@@ -98,8 +118,8 @@ class Zamba2HybridDynamicCache(DynamicCache):
     ):
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
-        self.has_previous_state = False  # only used by mamba
-        self.intermediate_size = config.mamba_expand * config.hidden_size
+        self.has_previous_state = False
+        self.intermediate_size = int(config.mamba_expand * config.hidden_size)
         self.ssm_state_size = config.mamba_d_state
         self.conv_kernel_size = config.mamba_d_conv
         self.n_mamba_heads = config.n_mamba_heads
@@ -107,9 +127,6 @@ class Zamba2HybridDynamicCache(DynamicCache):
         self._modules = {}
         self._parameters = {}
         self._buffers = {}
-
-        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.conv_states = {
             i: torch.zeros(
                 batch_size,
@@ -126,11 +143,11 @@ class Zamba2HybridDynamicCache(DynamicCache):
             )
             for i in range(config.num_hidden_layers)
         }
-        # for i in range(config.num_hidden_layers):
-        #     if self.layers_block_type[i] == "hybrid":
-        #         self.transformer_layers.append(i)
-        # self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        # self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        for i in range(config.num_hidden_layers):
+            if self.layers_block_type[i] == "hybrid":
+                self.transformer_layers.append(i)
+        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
 
     def update(
         self,
@@ -1191,9 +1208,6 @@ class Zamba2MLP(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
         self.config = config
-        # self.hidden_size = config.hidden_size
-        # self.intermediate_size = config.intermediate_size
-        # self.act_fn = ACT2FN[config.hidden_act]
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
 
@@ -1238,26 +1252,6 @@ class Zamba2MLP(nn.Module):
         return output
 
 
-class Zamba2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Zamba2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 def count_mem_blocks_in_config(config: Zamba2Config):
     """
     Count number of shared blocks
@@ -1287,8 +1281,6 @@ class Zamba2AttentionDecoderLayer(nn.Module):
             config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id
         )
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
-        # self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
-        # self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1426,8 +1418,6 @@ class Zamba2HybridLayer(nn.Module):
         self.linear = linear
         self.mamba_decoder = mamba
         self.shared_transformer = shared_transformer
-        # self.linear = linear
-        # self.mamba_decoder = mamba
 
     def forward(
         self,
