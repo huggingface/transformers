@@ -146,8 +146,8 @@ def is_call_to_super(node, func_name):
 
 
 def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
-    """Get the full name of an Attribute or Name node (e.g. `x.y.z` for an Attribute). If the successive value of
-    an Attribute are not Name nodes, return `None`."""
+    """Get the full name of an Attribute or Name node (e.g. `"nn.Module"` for an Attribute representing it). If the
+    successive value of an Attribute are not Name nodes, return `None`."""
     if m.matches(node, m.Name()):
         return node.value
     elif m.matches(node, m.Attribute()):
