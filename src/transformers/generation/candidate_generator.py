@@ -831,10 +831,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             SuppressTokensLogitsProcessor(
                 suppress_tokens=suppress_input_ids,
                 device=assistant_model.device,
-            ),
-            LogitNormalization(),
+            )
         )
-        super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
+        logits_processor.append(LogitNormalization())
+        super().__init__(input_ids, assistant_model, target_tokenizer, assistant_tokenizer, generation_config, model_kwargs, inputs_tensor, logits_processor)
         self._prev_target_seq_len: int = 0
         self._prev_assistant_ids: torch.LongTensor | None = None
 
@@ -860,7 +860,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             # Convert target_new_ids to string
             target_new_toks = self.target_tokenizer.batch_decode(target_new_ids, skip_special_tokens=False)
             # Convert the string to assistant_new_ids
-            assistant_new_ids = self.assistant_tokenizer.encode(target_new_toks, add_special_tokens=False)
+            assistant_new_ids = self.assistant_tokenizer.encode(target_new_toks[0], add_special_tokens=False)
             if self._prev_assistant_ids is None:
                 self._prev_assistant_ids = assistant_new_ids
             else:
@@ -868,6 +868,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             return self._prev_assistant_ids
 
         input_ids = get_assistant_input_ids(input_ids)
+        # Ensure input_ids is a 2D tensor
+        if isinstance(input_ids, list):
+            input_ids = torch.tensor(input_ids).unsqueeze(0)
         input_ids = input_ids.to(self.assistant_model.device)
 
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
@@ -885,11 +888,12 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
                 self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1
             )  # the assistant does not have the token after the last match, hence the -1
-
-            self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder
-            )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, new_cur_len)
+
+        # we need to update the attention mask to reflect the new input_ids length
+        self.assistant_kwargs = _prepare_attention_mask(
+            self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder
+        )
 
         # 2. Forecast next N tokens using the assistant model.
         assistant_generation_kwargs = {
@@ -908,7 +912,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
-        candidate_ids.apply_(lambda x: self._assistant_to_target_input_ids[x.item()])
+        device = candidate_ids.device
+        candidate_ids = candidate_ids.cpu()
+        candidate_ids.apply_(lambda x: self._assistant_to_target_input_ids[x])
+        candidate_ids = candidate_ids.to(device)
         return candidate_ids, candidate_logits
 
 
