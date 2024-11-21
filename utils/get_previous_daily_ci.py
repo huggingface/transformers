@@ -38,7 +38,7 @@ def get_last_daily_ci_runs(token):
     #         workflow_run_id = workflow_run["id"]
     #         break
 
-    return "11905188524"
+    return "11955291316"
 
 
 def get_last_daily_ci_run_commit(token):
