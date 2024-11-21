@@ -903,7 +903,6 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"ConditionalDetrConvEncoder", r"ConditionalDetrEncoderLayer", r"ConditionalDetrDecoderLayer"]
-    _supports_sdpa = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1006,7 +1005,6 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         self.layers = nn.ModuleList([ConditionalDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # in the original ConditionalDETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
@@ -1058,11 +1056,8 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            if self._use_sdpa and not output_attentions:
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            else:
-                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None

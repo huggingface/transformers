@@ -958,7 +958,6 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
-        self._use_sdpa = config._attn_implementation == "sdpa"
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1023,27 +1022,17 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         combined_attention_mask = None
 
         if attention_mask is not None and combined_attention_mask is not None:
-            if self._use_sdpa and not output_attentions:
-                combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask_for_sdpa(
-                    attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-            else:
-                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-                combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
-                    attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self._use_sdpa and not output_attentions:
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-            else:
-                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            encoder_attention_mask = _prepare_4d_attention_mask(
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
