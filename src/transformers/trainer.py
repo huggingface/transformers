@@ -1671,21 +1671,21 @@ class Trainer:
         except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
             return len(dataloader) * self.args.per_device_train_batch_size
 
-    def num_tokens(self, train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
+    @staticmethod
+    def num_tokens(train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
         """
         Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
         """
         train_tokens = 0
         try:
-            for step, batch in enumerate(train_dl):
+            for batch in train_dl:
                 tokens = batch["input_ids"].numel()
                 if max_steps is not None:
                     return tokens * max_steps
                 train_tokens += tokens
-            return train_tokens
         except KeyError:
             logger.warning("Cannot get num_tokens from dataloader")
-            return train_tokens
+        return train_tokens
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """HP search setup code"""
@@ -1725,6 +1725,9 @@ class Trainer:
         if self.is_deepspeed_enabled:
             if self.args.deepspeed is None:
                 raise ValueError("For sweeps with deepspeed, `args.deepspeed` must be set")
+
+            self.accelerator.free_memory()
+
             # Rebuild the deepspeed config to reflect the updated training parameters
             from accelerate.utils import DeepSpeedPlugin
 
@@ -1748,7 +1751,7 @@ class Trainer:
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            if not trial.study._is_multi_objective():
+            if hasattr(trial, "study") and not trial.study._is_multi_objective():
                 trial.report(self.objective, step)
                 if trial.should_prune():
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
@@ -2439,7 +2442,6 @@ class Trainer:
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = num_examples % args.gradient_accumulation_steps
-            num_items_in_batch = None
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
             update_step = -1
@@ -2562,7 +2564,9 @@ class Trainer:
                         self.state.global_step += 1
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-                        self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+                        self._maybe_log_save_evaluate(
+                            tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time
+                        )
                     else:
                         self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
@@ -2587,7 +2591,7 @@ class Trainer:
                 self.control.should_training_stop = True
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+            self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time)
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_xla_available():
@@ -2992,7 +2996,7 @@ class Trainer:
                 ) from exc
         return metrics
 
-    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
+    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time):
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
             if is_torch_xla_available():
                 xm.mark_step()
@@ -3014,7 +3018,7 @@ class Trainer:
             self._globalstep_last_logged = self.state.global_step
             self.store_flos()
 
-            self.log(logs)
+            self.log(logs, start_time)
 
         metrics = None
         if self.control.should_evaluate:
@@ -3517,7 +3521,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float], start_time: Optional[float] = None) -> None:
         """
         Log `logs` on the various objects watching training.
 
@@ -3526,11 +3530,15 @@ class Trainer:
         Args:
             logs (`Dict[str, float]`):
                 The values to log.
+            start_time (`Optional[float]`):
+                The start of training.
         """
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
         if self.args.include_num_input_tokens_seen:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
+            if start_time is not None:
+                speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen)
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
