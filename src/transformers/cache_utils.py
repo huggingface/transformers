@@ -1177,6 +1177,7 @@ class StaticCache(Cache):
                 torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+        self.seen_tokens = torch.zeros(config.num_hidden_layers, dtype=torch.int32, device=layer_device)
 
     def update(
         self,
@@ -1216,14 +1217,15 @@ class StaticCache(Cache):
             # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
             # operation, that avoids copies and uses less memory.
-            try:
-                k_out.index_copy_(2, cache_position, key_states)
-                v_out.index_copy_(2, cache_position, value_states)
-            except NotImplementedError:
+            # try:
+            #     k_out.index_copy_(2, cache_position, key_states)
+            #     v_out.index_copy_(2, cache_position, value_states)
+            # except NotImplementedError:
                 # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
-                k_out[:, :, cache_position] = key_states
-                v_out[:, :, cache_position] = value_states
+            k_out[:, :, : self.seen_tokens[layer_idx]] = key_states
+            v_out[:, :, : self.seen_tokens[layer_idx]] = value_states
 
+        self.seen_tokens[layer_idx] += key_states.shape
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
