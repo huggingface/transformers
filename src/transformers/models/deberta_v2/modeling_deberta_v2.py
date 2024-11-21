@@ -192,7 +192,7 @@ class DisentangledSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x, attention_heads):
+    def transpose_for_scores(self, x, attention_heads) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (attention_heads, -1)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3).contiguous().view(-1, x.size(1), x.size(-1))
