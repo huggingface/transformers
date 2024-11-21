@@ -174,13 +174,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, par
     q, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
     k, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
-    # Apply rotary embeddings to the rotary portion
-    q = (q * cos[..., :rotary_dim]) + (rotate_half(q) * sin[..., :rotary_dim])
-    k = (k * cos[..., :rotary_dim]) + (rotate_half(k) * sin[..., :rotary_dim])
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
 
-    # Concatenate back the rotary and non-rotary portions
-    q_embed = torch.cat([q, q_pass], dim=-1)
-    k_embed = torch.cat([k, k_pass], dim=-1)
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
 
     return q_embed, k_embed
 
