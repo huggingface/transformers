@@ -292,12 +292,19 @@ def main():
         "--tokenizer_file",
         help="Location of the specific tokenizer model file to use."
     )
+    parser.add_argument(
+        "--chat_template_file",
+        help="Optional file containing a raw chat template. Will be set as the processor's chat template.",
+        required=False,
+    )
 
     args = parser.parse_args()
     convert_mistral_model(args.input_dir, args.output_dir)
     tokenizer = convert_mistral_tokenizer(args.tokenizer_file)
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
+    if args.chat_template_file:
+        processor.chat_template = open(args.chat_template_file).read()
     processor.save_pretrained(args.output_dir)
 
 
