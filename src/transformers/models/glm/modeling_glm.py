@@ -48,9 +48,10 @@ from ...utils import (
 )
 from .configuration_glm import GlmConfig
 
+
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
 _CONFIG_FOR_DOC = "GlmConfig"
 
 
@@ -212,16 +213,8 @@ class GlmAttention(nn.Module):
             )
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(
-            self.hidden_size,
-            self.num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
-        )
-        self.v_proj = nn.Linear(
-            self.hidden_size,
-            self.num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
-        )
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
     def forward(
@@ -786,14 +779,11 @@ class GlmModel(GlmPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask,
-            inputs_embeds,
-            cache_position,
-            past_key_values,
-            output_attentions,
-        )
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+)
         hidden_states = inputs_embeds
 
+        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
@@ -961,11 +951,7 @@ class GlmModel(GlmPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length),
-                fill_value=min_dtype,
-                dtype=dtype,
-                device=device,
-            )
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
             causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
