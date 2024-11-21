@@ -29,9 +29,9 @@ class RTDetrv2Config(RTDetrConfig):
     def __init__(self, 
                  decoder_n_levels=3,  # default value
                  decoder_offset_scale=0.5,  # default value
-                 **kwargs):
+                 **super_kwargs):
         # init the base RTDetrConfig class with additional parameters
-        super().__init__(**kwargs)
+        super().__init__(**super_kwargs)
         
         # add the new attributes with the given values or defaults
         self.decoder_n_levels = decoder_n_levels
