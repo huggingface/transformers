@@ -2393,6 +2393,10 @@ def run_test_using_subprocess(func):
 
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
+                # This prevents the entries in `short test summary info` given by the subprocess being truncated. so the
+                # full information can be passed to the parent pytest process.
+                # See: https://docs.pytest.org/en/stable/explanation/ci.html
+                env["CI"] = "true"
 
                 # If not subclass of `unitTest.TestCase` and `pytestconfig` is used: try to grab and use the arguments
                 if "pytestconfig" in kwargs:
@@ -2410,6 +2414,22 @@ def run_test_using_subprocess(func):
                 subprocess.run(command, env=env, check=True, capture_output=True)
             except subprocess.CalledProcessError as e:
                 exception_message = e.stdout.decode()
+                lines = exception_message.split("\n")
+                # Add a first line with more informative information instead of just `= test session starts =`.
+                # This makes the `short test summary info` section more useful.
+                if "= test session starts =" in lines[0]:
+                    text = ""
+                    for line in lines[1:]:
+                        if line.startswith("FAILED "):
+                            text = line[len("FAILED ") :]
+                            text = "".join(text.split(" - ")[1:])
+                        elif line.startswith("=") and line.endswith("=") and " failed in " in line:
+                            break
+                        elif len(text) > 0:
+                            text += f"\n{line}"
+                    text = "(subprocess) " + text
+                    lines = [text] + lines
+                exception_message = "\n".join(lines)
                 raise pytest.fail(exception_message, pytrace=False)
 
     return wrapper
