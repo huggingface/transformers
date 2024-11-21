@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - skip_if_aqlm_inference_not_fixed
+      - skipping_aqlm_non_working_tests
 
 jobs:
   # model-ci:
