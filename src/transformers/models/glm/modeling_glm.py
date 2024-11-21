@@ -179,7 +179,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, par
 
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
     k_embed = torch.cat([k_embed, k_pass], dim=-1)
-
     return q_embed, k_embed
 
 
