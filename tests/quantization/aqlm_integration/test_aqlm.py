@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
     torch_device,
+    skip_if_aqlm_inference_not_fixed
 )
 from transformers.utils import is_accelerate_available, is_aqlm_available, is_torch_available
 
@@ -142,6 +143,7 @@ class AqlmTest(unittest.TestCase):
 
         self.assertEqual(nb_linears - 1, nb_aqlm_linear)
 
+    @skip_if_aqlm_inference_not_fixed
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -158,6 +160,7 @@ class AqlmTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
+    @skip_if_aqlm_inference_not_fixed
     def test_save_pretrained(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded

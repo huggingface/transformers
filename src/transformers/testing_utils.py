@@ -345,6 +345,13 @@ def tooslow(test_case):
     """
     return unittest.skip(reason="test is too slow")(test_case)
 
+def skip_if_aqlm_inference_not_fixed(test_case) :
+    """
+    Decorator marking tests for inference using aqlm models.
+
+    These tests will  be skipped till the  issue from aqlm side is resolved
+    """
+    return unittest.skip(reason="inference doesn't work with quantized aqlm models with recent torch versions")(test_case)
 
 def skip_if_not_implemented(test_func):
     @functools.wraps(test_func)
