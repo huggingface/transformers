@@ -17,7 +17,7 @@ import gc
 import tempfile
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, VptqConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, VptqConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_torch_gpu,
@@ -26,11 +26,14 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available
+from transformers.utils import is_accelerate_available, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+if is_accelerate_available():
+    from accelerate import init_empty_weights
 
 
 class VptqConfigTest(unittest.TestCase):
@@ -118,3 +121,69 @@ class VptqTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_quantized_model_conversion(self):
+        """
+        Simple test that checks if the quantized model has been converted properly
+        """
+        from vptq import VQuantLinear
+
+        from transformers.integrations import replace_with_vptq_linear
+
+        model_id = "facebook/opt-350m"
+        config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
+        modules_to_not_convert = ["lm_head"]
+        names = [
+            "decoder.layers.{layer_idx}.self_attn.q_proj",
+            "decoder.layers.{layer_idx}.self_attn.k_proj",
+            "decoder.layers.{layer_idx}.self_attn.v_proj",
+            "decoder.layers.{layer_idx}.self_attn.out_proj",
+            "decoder.layers.{layer_idx}.fc1",
+            "decoder.layers.{layer_idx}.fc2",
+        ]
+        value = {
+            "enable_norm": True,
+            "enable_perm": True,
+            "group_num": 1,
+            "group_size": 128,
+            "indices_as_float": False,
+            "num_centroids": [-1, 128],
+            "num_res_centroids": [-1, 128],
+            "outlier_size": 0,
+            "vector_lens": [-1, 12],
+        }
+        layer_configs = {}
+        for i in range(23):
+            for name in names:
+                layer_configs[name.format(layer_idx=i)] = value
+            modules_to_not_convert.append("decoder.layers.{layer_idx}.fc1".format(layer_idx=i))
+
+        quantization_config = VptqConfig(config_for_layers=layer_configs)
+
+        with init_empty_weights():
+            model = AutoModelForCausalLM(config)
+
+        nb_linears = 0
+        for module in model.modules():
+            if isinstance(module, torch.nn.Linear):
+                nb_linears += 1
+
+        model = replace_with_vptq_linear(model, quantization_config=quantization_config)
+        nb_vptq_linear = 0
+        for module in model.modules():
+            if isinstance(module, VQuantLinear):
+                nb_vptq_linear += 1
+
+        self.assertEqual(nb_linears - 1, nb_vptq_linear)
+
+        # Try with `linear_weights_not_to_quantize`
+        with init_empty_weights():
+            model = AutoModelForCausalLM(config)
+        quantization_config = VptqConfig(modules_to_not_convert=modules_to_not_convert)
+        model = replace_with_vptq_linear(model, quantization_config=quantization_config)
+        nb_vptq_linear = 0
+        for module in model.modules():
+            if isinstance(module, VQuantLinear):
+                nb_vptq_linear += 1
+
+        self.assertEqual(nb_linears - 25, nb_vptq_linear)

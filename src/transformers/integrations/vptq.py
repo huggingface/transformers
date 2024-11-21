@@ -13,16 +13,16 @@
 # limitations under the License.
 "VPTQ (Vector Post-Training Quantization) integration file"
 
-from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_torch_available, is_vptq_available
 
-
-if is_torch_available():
-    import torch.nn as nn
+import torch.nn as nn
+from accelerate import init_empty_weights
+from vptq import VQuantLinear
 
 
 def replace_with_vptq_linear(
     model,
     quantization_config=None,
+    modules_to_not_convert=None,
     current_key_name=None,
     has_been_replaced=False,
 ):
@@ -36,22 +36,18 @@ def replace_with_vptq_linear(
             The model to convert, can be any `torch.nn.Module` instance.
         quantization_config (`VptqConfig`):
             The quantization config object that contains the quantization parameters.
+        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+            Names of the modules to not convert in `VQuantLinear`. In practice we keep the `lm_head` in full precision
+            for numerical stability reasons.
         current_key_name (`list`, *optional*):
             A list that contains the current key name. This is used for recursion and should not be passed by the user.
         has_been_replaced (`bool`, *optional*):
             A boolean that indicates if the conversion has been successful or not. This is used for recursion and
             should not be passed by the user.
     """
-    if not is_vptq_available():
-        raise ValueError("VPTQ is not available. Please install it with `pip install vptq`")
 
-    if not is_accelerate_available():
-        raise ValueError(
-            f"VPTQ requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
-        )
+    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
 
-    from accelerate import init_empty_weights
-    from vptq import VQuantLinear
 
     for name, module in model.named_children():
         if current_key_name is None:
@@ -59,7 +55,8 @@ def replace_with_vptq_linear(
         current_key_name.append(name)
         layer_name = ".".join(current_key_name)
 
-        if isinstance(module, nn.Linear) and layer_name in quantization_config.config_for_layers:
+        if (isinstance(module, nn.Linear) and layer_name in quantization_config.config_for_layers
+            and layer_name not in modules_to_not_convert):
             layer_params = quantization_config.config_for_layers[layer_name]
             with init_empty_weights():
                 in_features = module.in_features
@@ -77,7 +74,7 @@ def replace_with_vptq_linear(
                     indices_as_float=layer_params["indices_as_float"],
                     enable_norm=layer_params["enable_norm"],
                     enable_perm=layer_params["enable_perm"],
-                    is_indice_packed=layer_params["is_indice_packed"],
+                    is_indice_packed=True,
                     enable_proxy_error=False,
                     bias=module.bias is not None,
                 )
@@ -89,6 +86,7 @@ def replace_with_vptq_linear(
             _, has_been_replaced = replace_with_vptq_linear(
                 module,
                 quantization_config=quantization_config,
+                modules_to_not_convert=modules_to_not_convert,
                 current_key_name=current_key_name,
                 has_been_replaced=has_been_replaced,
             )

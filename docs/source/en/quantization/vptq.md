@@ -19,6 +19,7 @@ rendered properly in your Markdown viewer.
 > [!TIP]
 > Try VPTQ on [Hugging Face](https://huggingface.co/spaces/microsoft/VPTQ)!
 > Try VPTQ on [Google Colab](https://colab.research.google.com/github/microsoft/VPTQ/blob/main/notebooks/vptq_example.ipynb)!
+> Know more about VPTQ on [ArXiv](https://arxiv.org/pdf/2409.17066)!
 
 Vector Post-Training Quantization ([VPTQ](https://github.com/microsoft/VPTQ)) is a novel Post-Training Quantization method that leverages Vector Quantization to high accuracy on LLMs at an extremely low bit-width (<2-bit). VPTQ can compress 70B, even the 405B model, to 1-2 bits without retraining and maintain high accuracy.
 

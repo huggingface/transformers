@@ -21,7 +21,6 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations import replace_with_vptq_linear
 from ..utils import is_accelerate_available, is_torch_available, is_vptq_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
@@ -51,9 +50,7 @@ class VptqHfQuantizer(HfQuantizer):
 
         if not is_vptq_available():
             raise ImportError("Using `vptq` quantization requires VPTQ: `pip install vptq`")
-        import vptq
 
-        assert version.Version(vptq.__version__) >= version.Version("0.0.4"), "vptq is avaiable since 0.0.4"
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -63,10 +60,7 @@ class VptqHfQuantizer(HfQuantizer):
                     "CUDA available. Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
                 )
             else:
-                torch_dtype = torch.float32
-                logger.info(
-                    "CUDA is unavailable. Assuming VPTQ inference on CPU and loading the model in `torch.float32`. To overwrite it, set `torch_dtype` manually."
-                )
+                raise RuntimeError("No GPU found. Please wait for the next release of VPTQ to use CPU inference")
         return torch_dtype
 
     def _process_model_before_weight_loading(
@@ -74,9 +68,18 @@ class VptqHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        """
+        we don't have param like modules_to_not_convert to indicate which layers should not be quantized
+        because `quantization_config` include the layers that should be quantized
+        """
+        from ..integrations import replace_with_vptq_linear
+
+        modules_to_not_convert = kwargs.get("modules_to_not_convert", None)
+
         replace_with_vptq_linear(
             model,
             quantization_config=self.quantization_config,
+            modules_to_not_convert=modules_to_not_convert,
         )
         model.config.quantization_config = self.quantization_config
 
