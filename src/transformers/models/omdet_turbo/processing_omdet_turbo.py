@@ -299,7 +299,8 @@ class OmDetTurboProcessor(ProcessorMixin):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-            max_num_det (`int`, *optional*): The maximum number of detections to return.
+            max_num_det (`int`, *optional*):
+                The maximum number of detections to return.
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
