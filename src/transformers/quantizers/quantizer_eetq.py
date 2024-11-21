@@ -64,6 +64,8 @@ class EetqHfQuantizer(HfQuantizer):
                     "You are using a version of EETQ that is incompatible with the current transformers version. "
                     "Either downgrade transformers to <= v4.46.3 or, if available, upgrade EETQ to > v1.0.0."
                 ) from exc
+            else:
+                raise
 
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
