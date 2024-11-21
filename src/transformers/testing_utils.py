@@ -352,9 +352,9 @@ def skip_if_aqlm_inference_not_fixed(test_case):
 
     These tests will  be skipped till the  issue from aqlm side is resolved
     """
-    return unittest.skip(reason="inference doesn't work with quantized aqlm models with recent torch versions")(
-        test_case
-    )
+    return unittest.skip(
+        reason="inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions"
+    )(test_case)
 
 
 def skip_if_not_implemented(test_func):
