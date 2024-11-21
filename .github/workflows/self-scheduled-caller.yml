@@ -65,7 +65,6 @@ jobs:
   #     ci_event: Daily CI
   #     working-directory-prefix: /workspace
   #   secrets: inherit
-
   quantization-ci:
     name: Quantization CI
     uses: ./.github/workflows/self-scheduled.yml
