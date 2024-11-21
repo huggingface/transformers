@@ -400,9 +400,9 @@ STARCODER2_ATTENTION_CLASSES = {
 }
 
 
-class Starcoder2DecoderLayer(Qwen2DecoderLayer):
+class Starcoder2DecoderLayer(Qwen2DecoderLayer, nn.Module):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
-        super().__init__()  # no-unravel: we cannot use Qwen2's __init__ as it contains a warning we don't want
+        nn.Module.__init__(self)  # we cannot use Qwen2's __init__ as it contains a warning we don't want
         self.hidden_size = config.hidden_size
 
         self.self_attn = STARCODER2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
