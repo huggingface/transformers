@@ -947,39 +947,6 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
-        # (1264 // 16), (1024 // 16) -> num_patches (79, 64)
-        expected_box_bias = torch.tensor(
-            [
-                [-4.1369, -4.3489, -4.1369, -4.3489],
-                [-3.4309, -4.3489, -4.1369, -4.3489],
-                [-3.0102, -4.3489, -4.1369, -4.3489],
-            ]
-        )
-        self.assertTrue(torch.allclose(model.box_bias[:3, :4], expected_box_bias, atol=1e-4))
-
-        processor.image_processor.size = {"height": 1024, "width": 1268}
-        image = prepare_img()
-        inputs = processor(
-            text=[["a photo of a cat", "a photo of a dog"]],
-            images=image,
-            max_length=16,
-            padding="max_length",
-            return_tensors="pt",
-        ).to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs, interpolate_pos_encoding=True)
-
-        expected_box_bias = torch.tensor(
-            [
-                [-4.3489, -4.1369, -4.3489, -4.1369],
-                [-3.6468, -4.1369, -4.3489, -4.1369],
-                [-3.2296, -4.1369, -4.3489, -4.1369],
-            ]
-        )
-        self.assertTrue(torch.allclose(model.box_bias[:3, :4], expected_box_bias, atol=1e-4))
-
-        processor.image_processor.size = {"height": 1264, "width": 1024}
         query_image = prepare_img()
         inputs = processor(
             images=image,

@@ -940,38 +940,6 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
-        # (1264 // 32), (1024 // 32) -> num_patches (39, 32)
-        expected_box_bias = torch.tensor(
-            [
-                [-3.4309, -3.6338, -3.4309, -3.6338],
-                [-2.7066, -3.6338, -3.4309, -3.6338],
-                [-2.2677, -3.6338, -3.4309, -3.6338],
-            ]
-        )
-        self.assertTrue(torch.allclose(model.box_bias[:3, :4], expected_box_bias, atol=1e-4))
-
-        processor.image_processor.size = {"height": 1024, "width": 1268}
-        image = prepare_img()
-        inputs = processor(
-            text=[["a photo of a cat", "a photo of a dog"]],
-            images=image,
-            max_length=16,
-            padding="max_length",
-            return_tensors="pt",
-        ).to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs, interpolate_pos_encoding=True)
-
-        expected_box_bias = torch.tensor(
-            [
-                [-3.6338, -3.4309, -3.6338, -3.4309],
-                [-2.9159, -3.4309, -3.6338, -3.4309],
-                [-2.4837, -3.4309, -3.6338, -3.4309],
-            ]
-        )
-        self.assertTrue(torch.allclose(model.box_bias[:3, :4], expected_box_bias, atol=1e-4))
-
         query_image = prepare_img()
         inputs = processor(
             images=image,

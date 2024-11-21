@@ -287,6 +287,7 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -1380,6 +1381,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self,
         image_feats: torch.FloatTensor,
         feature_map: torch.FloatTensor,
+        interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         """
         Args:
@@ -1387,6 +1389,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
                 Features extracted from the image, returned by the `image_text_embedder` method.
             feature_map:
                 A spatial re-arrangement of image_features, also returned by the `image_text_embedder` method.
+            interpolate_pos_encoding:
+                Whether to interpolate the pre-trained position encodings.
         Returns:
             pred_boxes:
                 List of predicted boxes (cxcywh normalized to 0, 1) nested within a dictionary.
@@ -1396,6 +1400,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
         box_bias = self.box_bias.to(feature_map.device)
+        if interpolate_pos_encoding:
+            _, num_patches_height, num_patches_width, _ = feature_map.shape
+            dynamic_box_bias = self.compute_box_bias(num_patches_height, num_patches_width)
+            box_bias = dynamic_box_bias.to(feature_map.device)
         pred_boxes += box_bias
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
@@ -1439,10 +1447,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             return_dict=True,
         )
 
-        _, _, height, width = pixel_values.shape
-        self.num_patches_height = height // self.config.vision_config.patch_size
-        self.num_patches_width = width // self.config.vision_config.patch_size
-        self.box_bias = self.compute_box_bias(self.num_patches_height, self.num_patches_width)
+        num_patches_height = self.num_patches_height
+        num_patches_width = self.num_patches_width
+        if interpolate_pos_encoding:
+            _, _, height, width = pixel_values.shape
+            num_patches_height = height // self.config.vision_config.patch_size
+            num_patches_width = width // self.config.vision_config.patch_size
 
         # Get image embeddings
         last_hidden_state = outputs.vision_model_output[0]
@@ -1458,8 +1468,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches_height, num_patches_width, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            self.num_patches_height,
-            self.num_patches_width,
+            num_patches_height,
+            num_patches_width,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1479,10 +1489,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
         )
 
-        _, _, height, width = pixel_values.shape
-        self.num_patches_height = height // self.config.vision_config.patch_size
-        self.num_patches_width = width // self.config.vision_config.patch_size
-        self.box_bias = self.compute_box_bias(self.num_patches_height, self.num_patches_width)
+        num_patches_height = self.num_patches_height
+        num_patches_width = self.num_patches_width
+        if interpolate_pos_encoding:
+            _, _, height, width = pixel_values.shape
+            num_patches_height = height // self.config.vision_config.patch_size
+            num_patches_width = width // self.config.vision_config.patch_size
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
         last_hidden_state = vision_outputs[0]
@@ -1498,8 +1510,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches_height, num_patches_width, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            self.num_patches_height,
-            self.num_patches_width,
+            num_patches_height,
+            num_patches_width,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1507,10 +1519,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return (image_embeds, vision_outputs)
 
     def embed_image_query(
-        self, query_image_features: torch.FloatTensor, query_feature_map: torch.FloatTensor
+        self,
+        query_image_features: torch.FloatTensor,
+        query_feature_map: torch.FloatTensor,
+        interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         _, class_embeds = self.class_predictor(query_image_features)
-        pred_boxes = self.box_predictor(query_image_features, query_feature_map)
+        pred_boxes = self.box_predictor(query_image_features, query_feature_map, interpolate_pos_encoding)
         pred_boxes_as_corners = center_to_corners_format(pred_boxes)
 
         # Loop over query images
@@ -1616,13 +1631,15 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_feature_map, (batch_size, num_patches_height * num_patches_width, hidden_dim)
         )
         # Get top class embedding and best box index for each query image in batch
-        query_embeds, best_box_indices, query_pred_boxes = self.embed_image_query(query_image_feats, query_feature_map)
+        query_embeds, best_box_indices, query_pred_boxes = self.embed_image_query(
+            query_image_feats, query_feature_map, interpolate_pos_encoding
+        )
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats=image_feats, query_embeds=query_embeds)
 
         # Predict object boxes
-        target_pred_boxes = self.box_predictor(image_feats, feature_map)
+        target_pred_boxes = self.box_predictor(image_feats, feature_map, interpolate_pos_encoding)
 
         if not return_dict:
             output = (
@@ -1731,7 +1748,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
 
         # Predict object boxes
-        pred_boxes = self.box_predictor(image_feats, feature_map)
+        pred_boxes = self.box_predictor(image_feats, feature_map, interpolate_pos_encoding)
 
         if not return_dict:
             output = (
