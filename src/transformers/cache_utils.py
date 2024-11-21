@@ -1209,7 +1209,7 @@ class StaticCache(Cache):
 
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
-        self.layer_seen_tokens[layer_idx] += key_states.shape
+        self.layer_seen_tokens[layer_idx] += key_states.shape[2]
         if cache_position is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
