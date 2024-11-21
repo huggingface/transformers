@@ -1143,7 +1143,17 @@ def require_eetq(test_case):
     """
     Decorator marking a test that requires eetq
     """
-    return unittest.skipUnless(is_eetq_available(), "test requires eetq")(test_case)
+    eetq_available = is_eetq_available()
+    if eetq_available:
+        try:
+            from eetq import EetqLinear  # noqa: F401
+        except ImportError as exc:
+            if "shard_checkpoint" in str(exc):
+                # EETQ is currently broken with the latest transformers because it tries to import the removed
+                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
+                # TODO: Remove once eetq releases a fix and this release is used in CI
+                eetq_available = False
+    return unittest.skipUnless(eetq_available, "test requires eetq")(test_case)
 
 
 def require_av(test_case):
