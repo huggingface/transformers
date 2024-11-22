@@ -22,6 +22,10 @@ The Aria model was proposed in [Aria: An Open Multimodal Native Mixture-of-Exper
 
 Aria is an open multimodal-native model with best-in-class performance across a wide range of multimodal, language, and coding tasks. It has a Mixture-of-Experts architecture, with respectively 3.9B and 3.5B activated parameters per visual token and text token. 
 
+The abstract from the paper is the following:
+
+*Information comes in diverse modalities. Multimodal native AI models are essential to integrate real-world information and deliver comprehensive understanding. While proprietary multimodal native models exist, their lack of openness imposes obstacles for adoptions, let alone adaptations. To fill this gap, we introduce Aria, an open multimodal native model with best-in-class performance across a wide range of multimodal, language, and coding tasks. Aria is a mixture-of-expert model with 3.9B and 3.5B activated parameters per visual token and text token, respectively. It outperforms Pixtral-12B and Llama3.2-11B, and is competitive against the best proprietary models on various multimodal tasks. We pre-train Aria from scratch following a 4-stage pipeline, which progressively equips the model with strong capabilities in language understanding, multimodal understanding, long context window, and instruction following. We open-source the model weights along with a codebase that facilitates easy adoptions and adaptations of Aria in real-world applications.*
+
 This model was contributed by [m-ric](https://huggingface.co/m-ric).
 The original code can be found [here](https://github.com/rhymes-ai/Aria).
 
@@ -33,8 +37,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers.models.aria.processing_aria import AriaProcessor
-from transformers.models.aria.modeling_aria import AriaForConditionalGeneration
+from transformers import AriaProcessor, AriaForConditionalGeneration
 
 model_id_or_path = "rhymes-ai/Aria"
 
@@ -42,9 +45,7 @@ model = AriaForConditionalGeneration.from_pretrained(
     model_id_or_path, device_map="auto", torch_dtype=torch.bfloat16
 )
 
-processor = AriaProcessor.from_pretrained(
-    model_id_or_path, tokenizer_path=model_id_or_path,
-)
+processor = AriaProcessor.from_pretrained(model_id_or_path)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
@@ -52,7 +53,7 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"text": None, "type": "image"},
+            {"type": "image"},
             {"text": "what is the image?", "type": "text"},
         ],
     }
@@ -60,8 +61,7 @@ messages = [
 
 text = processor.apply_chat_template(messages, add_generation_prompt=True)
 inputs = processor(text=text, images=image, return_tensors="pt")
-inputs["pixel_values"] = inputs["pixel_values"].to(model.dtype)
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
+inputs.to(model.device)
 
 output = model.generate(
     **inputs,

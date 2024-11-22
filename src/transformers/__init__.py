@@ -1402,6 +1402,7 @@ else:
         [
             "AriaForConditionalGeneration",
             "AriaPreTrainedModel",
+            "AriaTextForCausalLM",
             "AriaTextModel",
         ]
     )
