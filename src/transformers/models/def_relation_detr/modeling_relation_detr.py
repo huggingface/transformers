@@ -2671,10 +2671,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             enc_topk_coords = outputs.enc_outputs_coord if return_dict else outputs[-6]
 
             loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits=logits,
                 labels=labels,
-                device=self.device,
-                pred_boxes=pred_boxes,
                 config=self.config,
                 outputs_class=outputs_class,
                 outputs_coord=outputs_coord,
@@ -2688,13 +2685,14 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
                 hybrid_outputs_coord = outputs.hybrid_outputs_coord if return_dict else outputs[-6]
                 hybrid_enc_topk_logits = outputs.hybrid_enc_outputs_class if return_dict else outputs[-2]
                 hybrid_enc_topk_coords = outputs.hybrid_enc_outputs_coord if return_dict else outputs[-1]
-                hybrid_logits = hybrid_outputs_class[-1]
-                hybrid_pred_boxes = hybrid_outputs_coord[-1]
+                hybrid_labels = copy.deepcopy(labels)
+                for label in hybrid_labels:
+                    if "boxes" in label:
+                        label["boxes"] = label["boxes"].repeat(self.config.hybrid_assign, 1)
+                    if "class_labels" in label:
+                        label["class_labels"] = label["class_labels"].repeat(self.config.hybrid_assign)
                 hybrid_loss, hybrid_loss_dict, _ = self.loss_function(
-                    logits=hybrid_logits,
-                    labels=labels,
-                    device=self.device,
-                    pred_boxes=hybrid_pred_boxes,
+                    labels=hybrid_labels,
                     config=self.config,
                     outputs_class=hybrid_outputs_class,
                     outputs_coord=hybrid_outputs_coord,
@@ -2702,6 +2700,8 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
                     enc_topk_bboxes=hybrid_enc_topk_coords,
                     denoising_meta_values=None,
                 )
+                loss = loss + hybrid_loss
+                loss_dict.update({k + "_hybrid": v for k, v in hybrid_loss_dict.items()})
 
         if not return_dict:
             if auxiliary_outputs is not None:

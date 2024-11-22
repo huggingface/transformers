@@ -157,6 +157,7 @@ class RelationDetrConfig(PretrainedConfig):
         num_channels=3,
         num_queries=900,
         hybrid_queries=1500,
+        hybrid_assign=6,
         denoising_nums=100,
         label_noise_prob=0.5,
         box_noise_scale=1.0,
@@ -234,6 +235,7 @@ class RelationDetrConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.num_queries = num_queries
         self.hybrid_queries = hybrid_queries
+        self.hybrid_assign = hybrid_assign
         self.denoising_nums = denoising_nums
         self.label_noise_prob = label_noise_prob
         self.box_noise_scale = box_noise_scale
