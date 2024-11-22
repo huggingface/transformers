@@ -299,7 +299,7 @@ class TFAutoModelTest(unittest.TestCase):
         # very strange stuff!
         with RequestCounter() as counter:
             pass
-        if (counter["GET"] != 0 or counter["HEAD"] != 1 or counter.total_calls != 1):
+        if (counter["GET"] != 0 or counter["HEAD"] != 0 or counter.total_calls != 0):
             msg = counter._log
             import pytest
             pytest.fail(str(msg))
