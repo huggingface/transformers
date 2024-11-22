@@ -6158,7 +6158,7 @@ if TYPE_CHECKING:
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
-        from .models.pixtral import PixtralImageProcessor, PixtralImageProcessorFast
+        from .models.pixtral import PixtralImageProcessor
         from .models.poolformer import (
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
@@ -6189,6 +6189,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.pixtral import PixtralImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     # Modeling

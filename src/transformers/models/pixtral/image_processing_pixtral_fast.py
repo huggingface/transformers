@@ -209,7 +209,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
-    ) -> PIL.Image.Image:
+    ) -> BatchMixFeature:
         """
         Preprocess an image or batch of images.
 
