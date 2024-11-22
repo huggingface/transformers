@@ -2138,10 +2138,8 @@ class PagedAttentionCache(Cache):
         QK_D = config.hidden_size // config.num_attention_heads
         V_D = QK_D
         from torch.nn.attention.experimental._paged_attention import PagedAttention
-        from torch.nn.attention.flex_attention import create_block_mask
+        from torch.nn.attention.flex_attention import create_block_mask, noop_mask
 
-        def causal_mask(b, h, q_idx, kv_idx):
-            return q_idx >= kv_idx
         for i in range(config.num_hidden_layers):
             max_cached_seq_len = self.n_pages * self.page_size
             self.paged_attentions.append(PagedAttention(self.n_pages, self.page_size, batch_size, device=device))
@@ -2149,7 +2147,8 @@ class PagedAttentionCache(Cache):
             self.value_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, V_D, device=device, dtype=dtype))
             self.batch_reserve(self.paged_attentions[i], torch.tensor([max_cache_len for _ in range(batch_size)]))
 
-        self.block_mask = create_block_mask(causal_mask, 1, 1, max_cached_seq_len, max_cached_seq_len, device=device)
+        block_mask = create_block_mask(noop_mask, batch_size, 1, max_cached_seq_len, max_cached_seq_len, device=device, BLOCK_SIZE=page_size)
+        self.block_mask = self.paged_attentions[0].convert_logical_block_mask(block_mask)
         self.score_mods = []
         self.score_mods.append(None)
         self.score_mods.append(None)
