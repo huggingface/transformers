@@ -213,6 +213,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        # `decoder_input_ids` is not valid for TableTransformer so we remove it from the inputs if it exists
         inputs_dict.pop("decoder_input_ids", None)
 
         if return_labels:

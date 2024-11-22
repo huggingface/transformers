@@ -174,14 +174,6 @@ model = DetrModel.from_pretrained("facebook/detr-resnet-50", attn_implementation
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
 
-On a local benchmark (NVIDIA GeForce RTX 2060-8GB, PyTorch 2.3.1, OS Ubuntu 20.04) with `float16` and the 
-`facebook/detr-resnet-50` model with a simple head, we saw the following speedups during training and inference.
-
-#### Training
-
-
-
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DETR.
