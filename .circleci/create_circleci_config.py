@@ -446,7 +446,7 @@ def create_circleci_config(folder=None):
         elif job is waiter_job:
             _jobs.append(job.job_name)
         elif job is final_collection_job:
-            _jobs.append({job.job_name: {"requires": [first_collection_job.job_name, jobs[0].job_name, waiter_job.job_name]}})
+            _jobs.append({job.job_name: {"requires": [first_collection_job.job_name, jobs[1].job_name, waiter_job.job_name]}})
         else:
             _jobs.append({job.job_name: {"requires": [first_collection_job.job_name]}})
 
