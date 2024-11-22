@@ -1811,10 +1811,6 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         self.hybrid_num_proposals = config.hybrid_queries
         self.num_labels = config.num_labels
 
-        # model structure
-        self.encoder = RelationDetrEncoder(config)
-        self.decoder = RelationDetrDecoder(config)
-
         self.post_init()
 
     def init_weights(self):
@@ -1831,10 +1827,10 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-    
+
     def get_decoder(self):
         return self.decoder
-    
+
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(False)
@@ -1842,7 +1838,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
     def unfreeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
-            
+
     @staticmethod
     def flatten_multi_level(multi_level_elements):
         multi_level_elements = torch.cat(
@@ -1989,12 +1985,12 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
-        
+
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
         sources, masks, position_embeddings_list = self.get_multi_levels(pixel_values, pixel_mask)
-        
+
         source_flatten = self.flatten_multi_level(sources)
         mask_flatten = self.flatten_multi_level(masks)
         lvl_pos_embed_flatten = self.get_lvl_pos_embed(position_embeddings_list)
@@ -2090,6 +2086,10 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
+        outputs_classes = decoder_outputs.pred_logits if return_dict else decoder_outputs[0]
+        outputs_coords = decoder_outputs.pred_boxes if return_dict else decoder_outputs[1]
+        decoder_mediate_outputs = tuple(decoder_outputs[2:])
+
         if self.training:
             hybrid_outputs = self.decoder(
                 inputs_embeds=hybrid_target,
@@ -2106,41 +2106,52 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
                 return_dict=return_dict,
                 skip_relation=True,
             )
+            hybrid_outputs_classes = hybrid_outputs.pred_logits if return_dict else hybrid_outputs[0]
+            hybrid_outputs_coords = hybrid_outputs.pred_boxes if return_dict else hybrid_outputs[1]
+            hybrid_mediate_output = tuple(hybrid_outputs[2:])
         else:
-            hybrid_outputs = RelationDetrDecoderOutput() if return_dict else ()
+            hybrid_outputs_classes = hybrid_outputs_coords = None
+            hybrid_mediate_output = RelationDetrDecoderOutput() if return_dict else ()
 
         if not return_dict:
-            enc_outputs = tuple(value for value in [topk_class, topk_coords] if value is not None)
-            tuple_outputs = (reference_points,) + decoder_outputs + encoder_outputs + enc_outputs 
-            tuple_outputs += hybrid_outputs + tuple(value for value in [hybrid_enc_class, hybrid_enc_coord] if value is not None)
+            # The variable number of outputs from decoder may change the index of some necessary elements, 
+            # so put these elements at the start and end of the tuple for correct indexing.
+            # Other optional results are at the middle of the tuple.
+            outputs = (reference_points, outputs_classes, outputs_coords, topk_class, topk_coords)
+            hybrid_outputs = tuple(
+                value
+                for value in [
+                    hybrid_outputs_classes,
+                    hybrid_outputs_coords,
+                    hybrid_enc_class,
+                    hybrid_enc_coord,
+                ]
+                if value is not None
+            )
+            tuple_outputs = outputs + decoder_mediate_outputs + encoder_outputs + hybrid_mediate_output + hybrid_outputs
 
             return tuple_outputs
 
         return RelationDetrModelOutput(
-            # reference_points
             init_reference_points=reference_points,
-            # decoder_outputs
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
-            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
-            dec_outputs_class=decoder_outputs.pred_logits,
-            dec_outputs_coord=decoder_outputs.pred_boxes,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            # encoder_outputs
+            dec_outputs_class=outputs_classes,
+            dec_outputs_coord=outputs_coords,
+            enc_outputs_class=topk_class,
+            enc_outputs_coord=topk_coords,
+            last_hidden_state=decoder_mediate_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_mediate_outputs.intermediate_hidden_states,
+            intermediate_reference_points=decoder_mediate_outputs.intermediate_reference_points,
+            decoder_hidden_states=decoder_mediate_outputs.hidden_states,
+            decoder_attentions=decoder_mediate_outputs.attentions,
+            cross_attentions=decoder_mediate_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            # enc_outputs
-            enc_outputs_class=topk_class,
-            enc_outputs_coord=topk_coords,
-            # hybrid_outputs
-            hybrid_outputs_class=hybrid_outputs.pred_logits,
-            hybrid_outputs_coord=hybrid_outputs.pred_boxes,
-            hybrid_hidden_states=hybrid_outputs.hidden_states,
-            hybrid_attentions=hybrid_outputs.attentions,
-            hybrid_cross_attentions=hybrid_outputs.cross_attentions,
+            hybrid_hidden_states=hybrid_mediate_output.hidden_states,
+            hybrid_attentions=hybrid_mediate_output.attentions,
+            hybrid_cross_attentions=hybrid_mediate_output.cross_attentions,
+            hybrid_outputs_class=hybrid_outputs_classes,
+            hybrid_outputs_coord=hybrid_outputs_coords,
             hybrid_enc_outputs_class=hybrid_enc_class,
             hybrid_enc_outputs_coord=hybrid_enc_coord,
         )
@@ -2559,6 +2570,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             denoising_nums=config.denoising_nums,
             label_noise_prob=config.label_noise_prob,
             box_noise_scale=config.box_noise_scale,
+            return_dict=config.use_return_dict,
         )
 
         # Initialize weights and apply final processing
@@ -2658,8 +2670,8 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             noised_box_query=noised_box_query,
         )
 
-        outputs_class = outputs.dec_outputs_class if return_dict else outputs[4]
-        outputs_coord = outputs.dec_outputs_coord if return_dict else outputs[5]
+        outputs_class = outputs.dec_outputs_class if return_dict else outputs[1]
+        outputs_coord = outputs.dec_outputs_coord if return_dict else outputs[2]
 
         # layer is at the second dimension
         logits = outputs_class[:, -1]
@@ -2667,8 +2679,8 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
-            enc_topk_logits = outputs.enc_outputs_class if return_dict else outputs[-7]
-            enc_topk_coords = outputs.enc_outputs_coord if return_dict else outputs[-6]
+            enc_topk_logits = outputs.enc_outputs_class if return_dict else outputs[3]
+            enc_topk_coords = outputs.enc_outputs_coord if return_dict else outputs[4]
 
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 labels=labels,
@@ -2681,8 +2693,8 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             )
 
             if self.training:
-                hybrid_outputs_class = outputs.hybrid_outputs_class if return_dict else outputs[-7]
-                hybrid_outputs_coord = outputs.hybrid_outputs_coord if return_dict else outputs[-6]
+                hybrid_outputs_class = outputs.hybrid_outputs_class if return_dict else outputs[-4]
+                hybrid_outputs_coord = outputs.hybrid_outputs_coord if return_dict else outputs[-3]
                 hybrid_enc_topk_logits = outputs.hybrid_enc_outputs_class if return_dict else outputs[-2]
                 hybrid_enc_topk_coords = outputs.hybrid_enc_outputs_coord if return_dict else outputs[-1]
                 hybrid_labels = copy.deepcopy(labels)
