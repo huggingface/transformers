@@ -460,6 +460,9 @@ class GenerationConfig(PushToHubMixin):
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
+        ## assistant generation for different tokenizers, the windows size for assistant/target model
+        self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", 10)
+        self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
