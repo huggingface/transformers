@@ -50,9 +50,6 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    import PIL
-
 if is_torchvision_available():
     if is_vision_available():
         from ...image_utils import pil_torch_interpolation_mapping
