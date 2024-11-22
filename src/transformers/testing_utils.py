@@ -2266,19 +2266,31 @@ class RequestCounter:
     """
 
     def __enter__(self):
+
+        def foo(func):
+            def wrap(*args, **kwargs):
+                import inspect
+                stack = inspect.stack()
+                output = func(*args, **kwargs)
+                self._cll_outputs.append((output, stack))
+                return output
+
+            return wrap
+
         self._counter = defaultdict(int)
         self._log = defaultdict(list)
-        self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=urllib3.connectionpool.log.debug)
+        self._cll_outputs = list()
+        self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=foo(urllib3.connectionpool.log.debug))
         self.mock = self.patcher.start()
         return self
 
     def __exit__(self, *args, **kwargs) -> None:
-        for call in self.mock.call_args_list:
+        for idx, call in enumerate(self.mock.call_args_list):
             log = call.args[0] % call.args[1:]
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
                 if method in log:
                     self._counter[method] += 1
-                    self._log[method].append((method, call, log))
+                    self._log[method].append((method, call, log, self._cll_outputs[idx]))
                     break
         self.patcher.stop()
 
