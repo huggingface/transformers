@@ -22,7 +22,7 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -550,8 +550,82 @@ class TableTransformerAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrSdpaAttention with Detr->TableTransformer
+class TableTransformerSdpaAttention(TableTransformerAttention):
+    def forward(
+        self,
+        hidden_states: Tensor,
+        attention_mask: Tensor | None = None,
+        object_queries: Tensor | None = None,
+        key_value_states: Tensor | None = None,
+        spatial_position_embeddings: Tensor | None = None,
+        output_attentions: bool = False,
+    ) -> Tuple[Tensor | None | Tuple[Tensor]]:
+        if output_attentions:
+            logger.warning_once(
+                "TableTransformerModel is using TableTransformerSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None."
+                " Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
+                ' This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                attention_mask,
+                object_queries,
+                key_value_states,
+                spatial_position_embeddings,
+                output_attentions,
+            )
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+        batch_size, target_len, embed_dim = hidden_states.size()
+
+        # add position embeddings to the hidden states before projecting to queries and keys
+        if object_queries is not None:
+            hidden_states_original = hidden_states
+            hidden_states = self.with_pos_embed(hidden_states, object_queries)
+
+        # add key-value position embeddings to the key value states
+        if spatial_position_embeddings is not None:
+            key_value_states_original = key_value_states
+            key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scaling
+        # get key, value proj
+        if is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, batch_size)
+            value_states = self._shape(self.v_proj(key_value_states_original), -1, batch_size)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
+            value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
+
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=False,
+        )
+        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
+        attn_output = self.out_proj(attn_output)
+        return attn_output, None
+
+
 TABLE_TRANSFORMER_ATTENTION_CLASSES = {
     "eager": TableTransformerAttention,
+    "sdpa": TableTransformerSdpaAttention,
 }
 
 
@@ -744,6 +818,7 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
         r"TableTransformerEncoderLayer",
         r"TableTransformerDecoderLayer",
     ]
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -841,6 +916,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         self.layers = nn.ModuleList([TableTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
 
         self.layernorm = nn.LayerNorm(config.d_model)
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -890,8 +966,11 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            if self._use_sdpa and not output_attentions:
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
+            else:
+                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -933,6 +1012,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         )
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerDecoder(TableTransformerPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TableTransformerDecoderLayer`].
@@ -958,6 +1038,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        self._use_sdpa = config._attn_implementation == "sdpa"
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1022,17 +1103,27 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         combined_attention_mask = None
 
         if attention_mask is not None and combined_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+            if self._use_sdpa and not output_attentions:
+                combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+            else:
+                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+                combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
+                    attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+            if self._use_sdpa and not output_attentions:
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+            else:
+                # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None

@@ -292,6 +292,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
 * [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
 * [SpeechEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/speech_encoder_decoder#transformers.SpeechEncoderDecoderModel)
+* [TableTransformer](https://huggingface.co/docs/transformers/model_doc/table-transformer#transformers.TableTransformerModel)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VisionEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/vision_encoder_decoder#transformers.VisionEncoderDecoderModel)

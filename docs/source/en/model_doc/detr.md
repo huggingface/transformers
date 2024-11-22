@@ -156,6 +156,32 @@ outputs of the model using one of the postprocessing methods of [`~transformers.
 be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like
 mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the [original repository](https://github.com/facebookresearch/detr). See the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) for more info regarding evaluation.
 
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```
+from transformers import DetrModel
+model = DetrModel.from_pretrained("facebook/detr-resnet-50", attn_implementation="sdpa", torch_dtype=torch.float16)
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (NVIDIA GeForce RTX 2060-8GB, PyTorch 2.3.1, OS Ubuntu 20.04) with `float16` and the 
+`facebook/detr-resnet-50` model with a simple head, we saw the following speedups during training and inference.
+
+#### Training
+
+
+
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DETR.
