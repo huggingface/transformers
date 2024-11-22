@@ -21,7 +21,7 @@ import copy
 import json
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
@@ -326,20 +326,17 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return encoding_dict, encodings
 
-    def convert_tokens_to_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
+    def convert_tokens_to_ids(self, tokens: Union[str, Iterable[str]]) -> Union[int, List[int]]:
         """
-        Converts a token string (or a sequence of tokens) in a single integer id (or a sequence of ids), using the
+        Converts a token string (or a sequence of tokens) in a single integer id (or a Iterable of ids), using the
         vocabulary.
 
         Args:
-            tokens (`str` or `List[str]`): One or several token(s) to convert to token id(s).
+            tokens (`str` or `Iterable[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
             `int` or `List[int]`: The token id or list of token ids.
         """
-        if tokens is None:
-            return None
-
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
@@ -866,13 +863,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_list.remove("additional_special_tokens")
         for token in special_tokens_list:
-            # Get the private one to avoid unnecessary warnings.
-            if getattr(self, f"_{token}") is not None:
+            if getattr(self, token) is not None:
                 special_token = getattr(self, token)
                 if special_tokens_map is not None and special_token in special_tokens_map:
                     special_token = special_tokens_map[special_token]
 
-                special_token_full = getattr(self, f"_{token}")
+                special_token_full = self._special_tokens_map.get(token, None)
                 if isinstance(special_token_full, AddedToken):
                     # Create an added token with the same parameters except the content
                     kwargs[token] = AddedToken(

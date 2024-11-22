@@ -325,8 +325,9 @@ class ExtensionsTrieTest(unittest.TestCase):
     def test_no_extension_match(self):
         trie = ExtensionsTrie()
         # Test searching for a prefix that doesn't match any key
-        with self.assertRaises(KeyError):
-            trie.extensions("unknown")
+        values = trie.extensions("unknown")
+
+        self.assertEqual(len(values), 0)
 
     def test_update_value(self):
         trie = ExtensionsTrie()

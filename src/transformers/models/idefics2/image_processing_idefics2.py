@@ -99,6 +99,7 @@ def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
         isinstance(images, (list, tuple))
         and len(images) > 0
         and isinstance(images[0], (list, tuple))
+        and len(images[0]) > 0
         and is_valid_image(images[0][0])
     ):
         pass

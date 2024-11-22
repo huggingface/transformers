@@ -18,6 +18,7 @@ import unittest
 
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -384,3 +385,50 @@ class DPTModelIntegrationTest(unittest.TestCase):
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((480, 480))
         self.assertEqual(segmentation[0].shape, expected_shape)
+
+    def test_post_processing_depth_estimation(self):
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        predicted_depth = image_processor.post_process_depth_estimation(outputs=outputs)[0]["predicted_depth"]
+        expected_shape = torch.Size((384, 384))
+        self.assertTrue(predicted_depth.shape == expected_shape)
+
+        predicted_depth_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])
+        predicted_depth_l = predicted_depth_l[0]["predicted_depth"]
+        expected_shape = torch.Size((500, 500))
+        self.assertTrue(predicted_depth_l.shape == expected_shape)
+
+        output_enlarged = torch.nn.functional.interpolate(
+            predicted_depth.unsqueeze(0).unsqueeze(1), size=(500, 500), mode="bicubic", align_corners=False
+        ).squeeze()
+        self.assertTrue(output_enlarged.shape == expected_shape)
+        self.assertTrue(torch.allclose(predicted_depth_l, output_enlarged, rtol=1e-3))
+
+    def test_export(self):
+        for strict in [True, False]:
+            with self.subTest(strict=strict):
+                if not is_torch_greater_or_equal_than_2_4:
+                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
+                model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device).eval()
+                image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
+                image = prepare_img()
+                inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+                exported_program = torch.export.export(
+                    model,
+                    args=(inputs["pixel_values"],),
+                    strict=strict,
+                )
+                with torch.no_grad():
+                    eager_outputs = model(**inputs)
+                    exported_outputs = exported_program.module().forward(inputs["pixel_values"])
+                self.assertEqual(eager_outputs.logits.shape, exported_outputs.logits.shape)
+                self.assertTrue(torch.allclose(eager_outputs.logits, exported_outputs.logits, atol=1e-4))

@@ -206,8 +206,8 @@
       title: 다중 CPU에서 훈련하기
     - local: perf_train_tpu_tf
       title: TensorFlow로 TPU에서 훈련하기
-    - local: in_translation
-      title: (번역중) PyTorch training on Apple silicon
+    - local: perf_train_special
+      title: Apple 실리콘에서 PyTorch 학습
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
     - local: hpo_train
@@ -276,20 +276,20 @@
       title: 자동 클래스
     - local: in_translation
       title: (번역중) Backbones
-    - local: in_translation
-      title: (번역중) Callbacks
+    - local: main_classes/callback
+      title: 콜백
     - local: main_classes/configuration
       title: 구성
-    - local: in_translation
-      title: (번역중) Data Collator
-    - local: in_translation
-      title: (번역중) Keras callbacks
+    - local: main_classes/data_collator
+      title: 데이터 콜레이터
+    - local: main_classes/keras_callbacks
+      title: 케라스 콜백
     - local: main_classes/logging
       title: 로깅
-    - local: in_translation
-      title: (번역중) Models
-    - local: in_translation
-      title: (번역중) Text Generation
+    - local: main_classes/model
+      title: Models
+    - local: main_classes/text_generation
+      title: 텍스트 생성
     - local: main_classes/onnx
       title: ONNX
     - local: in_translation
@@ -308,6 +308,8 @@
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: 특성 추출기
     - local: in_translation
@@ -318,18 +320,18 @@
       sections:
       - local: in_translation
         title: (번역중) ALBERT
-      - local: in_translation
-        title: (번역중) BART
-      - local: in_translation
-        title: (번역중) BARThez
-      - local: in_translation
-        title: (번역중) BARTpho
-      - local: in_translation
-        title: (번역중) BERT
+      - local: model_doc/bart
+        title: BART
+      - local: model_doc/barthez
+        title: BARThez
+      - local: model_doc/bartpho
+        title: BARTpho
+      - local: model_doc/bert
+        title: BERT
       - local: in_translation
         title: (번역중) BertGeneration
-      - local: in_translation
-        title: (번역중) BertJapanese
+      - local: model_doc/bert-japanese
+        title: 일본어 Bert
       - local: model_doc/bertweet
         title: Bertweet
       - local: in_translation
@@ -356,8 +358,8 @@
         title: (번역중) CodeGen
       - local: model_doc/cohere
         title: Cohere
-      - local: in_translation
-        title: (번역중) ConvBERT
+      - local: model_doc/convbert
+        title: ConvBERT
       - local: in_translation
         title: (번역중) CPM
       - local: in_translation
@@ -366,8 +368,8 @@
         title: (번역중) CTRL
       - local: model_doc/dbrx
         title: DBRX
-      - local: in_translation
-        title: (번역중) DeBERTa
+      - local: model_doc/deberta
+        title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
       - local: in_translation
@@ -400,6 +402,8 @@
         title: (번역중) Funnel Transformer
       - local: model_doc/gemma
         title: Gemma
+      - local: model_doc/gemma2
+        title: Gemma2
       - local: model_doc/openai-gpt
         title: GPT
       - local: in_translation
@@ -442,8 +446,10 @@
         title: (번역중) M2M100
       - local: model_doc/mamba
         title: Mamba
-      - local: in_translation
-        title: (번역중) MarianMT
+      - local: model_doc/mamba2
+        title: Mamba2
+      - local: model_doc/marian
+        title: MarianMT
       - local: in_translation
         title: (번역중) MarkupLM
       - local: in_translation
@@ -671,14 +677,23 @@
       title: (번역중) 오디오 모델
     - isExpanded: false
       sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: in_translation
+        title: (번역중) VideoMAE
+      - local: model_doc/vivit
+        title: ViViT
+      title: (번역중) 비디오 모델
+    - isExpanded: false
+      sections:
       - local: in_translation
         title: (번역중) ALIGN
       - local: in_translation
         title: (번역중) AltCLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
       - local: model_doc/blip
         title: BLIP
-      - local: in_translation
-        title: (번역중) BLIP-2
       - local: in_translation
         title: (번역중) BridgeTower
       - local: model_doc/chameleon
@@ -752,41 +767,39 @@
       sections:
       - local: in_translation
         title: (번역중) Decision Transformer
-      - local: in_translation
-        title: (번역중) Trajectory Transformer
+      - local: model_doc/trajectory_transformer
+        title: 궤적 트랜스포머
       title: (번역중) 강화학습 모델
     - isExpanded: false
       sections:
       - local: model_doc/autoformer
         title: Autoformer
-      - local: in_translation
-        title: (번역중) Informer
+      - local: model_doc/informer
+        title: Informer
       - local: model_doc/patchtsmixer
         title: PatchTSMixer
-      - local: in_translation
-        title: (번역중) Time Series Transformer
+      - local: model_doc/patchtst
+        title: PatchTST
+      - local: model_doc/time_series_transformer
+        title: 시계열 트랜스포머
       title: 시계열 모델
     - isExpanded: false
       sections:
-      - local: in_translation
-        title: (번역중) Graphormer
-      title: (번역중) Graph models
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: 그래프 모델
     title: (번역중) 모델
   - sections:
-    - local: in_translation
-      title: (번역중) Custom Layers and Utilities
-    - local: in_translation
-      title: (번역중) Utilities for pipelines
-    - local: internal/tokenization_utils
-      title: 토크나이저를 위한 유틸리티
+    - local: internal/modeling_utils
+      title: 사용자 정의 레이어 및 유틸리티
     - local: internal/pipelines_utils
       title: 파이프라인을 위한 유틸리티
     - local: internal/tokenization_utils
       title: 토크나이저를 위한 유틸리티
-    - local: in_translation
-      title: (번역중) Utilities for Trainer
-    - local: in_translation
-      title: (번역중) Utilities for Generation
+    - local: internal/trainer_utils
+      title: Trainer를 위한 유틸리티
+    - local: internal/generation_utils
+      title: 생성을 위한 유틸리티
     - local: internal/image_processing_utils
       title: 이미지 프로세서를 위한 유틸리티
     - local: internal/audio_utils

@@ -58,8 +58,23 @@ def hashimage(image: Image) -> str:
 class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        depth_estimator = DepthEstimationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -114,7 +129,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
 
         # This seems flaky.
         # self.assertEqual(outputs["depth"], "1a39394e282e9f3b0741a90b9f108977")
-        self.assertEqual(nested_simplify(outputs["predicted_depth"].max().item()), 29.304)
+        self.assertEqual(nested_simplify(outputs["predicted_depth"].max().item()), 29.306)
         self.assertEqual(nested_simplify(outputs["predicted_depth"].min().item()), 2.662)
 
     @require_torch

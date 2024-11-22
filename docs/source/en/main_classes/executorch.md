@@ -27,7 +27,7 @@ ExecuTorch introduces well defined entry points to perform model, device, and/or
 
 An integration point is being developed to ensure that 🤗 Transformers can be exported using `torch.export`. The goal of this integration is not only to enable export but also to ensure that the exported artifact can be further lowered and optimized to run efficiently in `ExecuTorch`, particularly for mobile and edge use cases.
 
-[[autodoc]] integrations.executorch.TorchExportableModuleWithStaticCache
+[[autodoc]] TorchExportableModuleWithStaticCache
     - forward
 
-[[autodoc]] integrations.executorch.convert_and_export_with_cache
+[[autodoc]] convert_and_export_with_cache
