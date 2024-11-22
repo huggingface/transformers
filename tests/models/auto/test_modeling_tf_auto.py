@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     RequestCounter,
+    is_flaky,
     require_tensorflow_probability,
     require_tf,
     slow,
@@ -292,6 +293,7 @@ class TFAutoModelTest(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
             _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
 
+    @is_flaky(max_attempts=2, wait_before_retry=1)
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
         _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
