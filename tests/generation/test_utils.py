@@ -3746,7 +3746,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             do_sample=False,
             max_new_tokens=max_new_tokens_item,
             assistant_model=draft_model,
-            target_tokenizer=target_tokenizer,
+            tokenizer=target_tokenizer,
             assistant_tokenizer=assistant_tokenizer,
         )
 
