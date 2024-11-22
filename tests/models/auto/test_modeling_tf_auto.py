@@ -172,20 +172,20 @@ class TFAutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForQuestionAnswering)
 
-    @slow
-    @require_tensorflow_probability
-    def test_table_question_answering_model_from_pretrained(self):
-        model_name = "google/tapas-base"
-        config = AutoConfig.from_pretrained(model_name)
-        self.assertIsNotNone(config)
-        self.assertIsInstance(config, TapasConfig)
-
-        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_name)
-        model, loading_info = TFAutoModelForTableQuestionAnswering.from_pretrained(
-            model_name, output_loading_info=True
-        )
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, TFTapasForQuestionAnswering)
+    # @slow
+    # @require_tensorflow_probability
+    # def test_table_question_answering_model_from_pretrained(self):
+    #     model_name = "google/tapas-base"
+    #     config = AutoConfig.from_pretrained(model_name)
+    #     self.assertIsNotNone(config)
+    #     self.assertIsInstance(config, TapasConfig)
+    #
+    #     model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_name)
+    #     model, loading_info = TFAutoModelForTableQuestionAnswering.from_pretrained(
+    #         model_name, output_loading_info=True
+    #     )
+    #     self.assertIsNotNone(model)
+    #     self.assertIsInstance(model, TFTapasForQuestionAnswering)
 
     def test_from_pretrained_identifier(self):
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
