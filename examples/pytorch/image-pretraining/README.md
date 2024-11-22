@@ -160,7 +160,7 @@ python run_mae.py \
     --remove_unused_columns False \
     --label_names pixel_values \
     --mask_ratio 0.75 \
-    --norm_pix_loss \
+    --norm_pix_loss False\
     --do_train \
     --do_eval \
     --base_learning_rate 1.5e-4 \
