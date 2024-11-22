@@ -360,6 +360,14 @@ class GenerationConfig(PushToHubMixin):
         assistant_early_exit(`int`, *optional*):
             If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
             models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
+        assistant_lookbehind(`int`, *optional*, defaults to 10):
+            If set to a positive integer, the re-encodeing process will additionally consider the last `assistant_lookbehind` assistant tokens
+            to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
+            See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        target_lookbehind(`int`, *optional*, defaults to 10):
+            If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
+            to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
+            See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
 
         > Wild card
 
