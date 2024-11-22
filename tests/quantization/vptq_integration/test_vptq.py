@@ -181,12 +181,13 @@ class VptqTest(unittest.TestCase):
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(config)
         quantization_config = VptqConfig(config_for_layers=layer_configs)
-        model, _ = replace_with_vptq_linear(model, quantization_config=quantization_config,
-                                            modules_to_not_convert=modules_to_not_convert)
+        model, _ = replace_with_vptq_linear(
+            model, quantization_config=quantization_config, modules_to_not_convert=modules_to_not_convert
+        )
         nb_vptq_linear = 0
         for module in model.modules():
             if isinstance(module, VQuantLinear):
                 nb_vptq_linear += 1
-        # 25 comes from 24 decoder.layers.{layer_idx}.fc1 
+        # 25 comes from 24 decoder.layers.{layer_idx}.fc1
         # and the last lm_head
         self.assertEqual(nb_linears - 25, nb_vptq_linear)
