@@ -592,7 +592,7 @@ class TableTransformerSdpaAttention(TableTransformerAttention):
             key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(hidden_states)
         # get key, value proj
         if is_cross_attention:
             # cross_attentions
@@ -615,6 +615,7 @@ class TableTransformerSdpaAttention(TableTransformerAttention):
             attn_mask=attention_mask,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=False,
+            scale=self.scaling,
         )
         attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
