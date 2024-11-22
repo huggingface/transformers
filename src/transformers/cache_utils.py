@@ -1219,8 +1219,8 @@ class StaticCache(Cache):
         v_out = self.value_cache[layer_idx]
 
         if cache_position is None:
-            k_out.copy_(key_states)
-            v_out.copy_(value_states)
+            k_out.copy_(key_states.to(k_out.dtype))
+            v_out.copy_(value_states.to(v_out.dtype))
         else:
             # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
@@ -1230,8 +1230,8 @@ class StaticCache(Cache):
                 v_out.index_copy_(2, cache_position, value_states.to(v_out.dtype))
             except NotImplementedError:
                 # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
-                k_out[:, :, cache_position] = key_states
-                v_out[:, :, cache_position] = value_states
+                k_out[:, :, cache_position] = key_states.to(k_out.dtype)
+                v_out[:, :, cache_position] = value_states.to(v_out.dtype)
 
         return k_out, v_out
 
