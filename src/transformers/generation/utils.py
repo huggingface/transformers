@@ -151,7 +151,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
-    cache_params: Optional[MambaCache] = None,
+    cache_params: Optional[MambaCache] = None
 
 
 @dataclass
@@ -1568,7 +1568,7 @@ class GenerationMixin:
             print("Implementing this function.")
 
             # Cache position should be a tensor.
-            cache_position = input_ids.size()[1]
+            cache_position = torch.tensor([input_ids.size()[1]], device=input_ids.device, dtype=input_ids.dtype)
             
         else:
             cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
@@ -3336,6 +3336,7 @@ class GenerationMixin:
                     past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
+                return_cache_params = model_kwargs.get("cache_params")
                 return GenerateDecoderOnlyOutput(
                     sequences=input_ids,
                     scores=scores,
@@ -3343,7 +3344,7 @@ class GenerationMixin:
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                     past_key_values=model_kwargs.get("past_key_values"),
-                    cache_params=model_kwargs.get("cache_params", None),
+                    cache_params=return_cache_params if (return_cache_params is not None) else None,
                 )
         else:
             return input_ids

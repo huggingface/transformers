@@ -188,7 +188,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if self.is_mamba:
             # This is the mamba model used as assistant for draft generation.
             # Initialize the snapshots.
-            self.assistant_model.cache_snapshots = []
+            self.assistant_model.backbone.cache_snapshots = []
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -279,31 +279,23 @@ class AssistedCandidateGenerator(CandidateGenerator):
             print("saeed")
             print(self.assistant_kwargs.keys())
             print(num_matches.item())
-            print("len of snapshots:", len(self.assistant_model.cache_snapshots))
+            print("len of snapshots:", len(self.assistant_model.backbone.cache_snapshots))
             print("\n")
-            for idx, snapshot in enumerate(self.assistant_model.cache_snapshots):
-                if idx != num_matches:
-                    del snapshot
-                else:
+            for idx, snapshot in enumerate(self.assistant_model.backbone.cache_snapshots):
+                if idx == num_matches:
                     snapshot_to_revive = snapshot
                     conv_state, ssm_state = snapshot_to_revive
-
                     # Do in-place changes.
                     current_cache_params = self.assistant_kwargs["cache_params"]
                     current_cache_params.reset()
                     current_cache_params.conv_states.add_(conv_state)
                     current_cache_params.ssm_states.add_(ssm_state)
 
-                    del conv_state
-                    del ssm_state
-                    del snapshot_to_revive
-                    del snapshot
- 
+            del self.assistant_model.backbone.cache_snapshots
             torch.cuda.empty_cache()
             gc.collect()
             # reset the snapshots.
-            self.assistant_model.cache_snapshots = []
-                
+            self.assistant_model.backbone.cache_snapshots = []
                 
                 
 
@@ -597,6 +589,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
+        if self.is_mamba:
+            self.assistant_kwargs["cache_params"] = assistant_output.cache_params
         self.prev_tokens = assistant_output.sequences
 
         # 4. Prepare variables for output

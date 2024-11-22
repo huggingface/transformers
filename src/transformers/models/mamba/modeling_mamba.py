@@ -550,7 +550,7 @@ class MambaModel(MambaPreTrainedModel):
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
-
+        self.cache_snapshots: List[Tuple[torch.Tensor, torch.Tensor]] = None
         self.gradient_checkpointing = False
         self.norm_f = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
@@ -616,6 +616,15 @@ class MambaModel(MambaPreTrainedModel):
                     "you don't have to pass a `cache_params` if you are in prefilling stage because in that case it will "
                     "be initialized for you automatically"
                 )
+
+            # Push the current cache params before new generation into the snapshot array.
+            # If we reach here, the cache_params is not None and it has been initialized.
+            if self.cache_snapshots is not None:
+                # Save the current states as an extra snapshot.
+                snapshot = (cache_params.conv_states.detach().clone(),
+                            cache_params.ssm_states.detach().clone())
+                self.cache_snapshots.append(snapshot)
+
         else:
             cache_params = None
 
@@ -666,9 +675,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.backbone = MambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.cache_snapshots: List[Tuple[torch.Tensor, torch.Tensor]] = None
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -716,6 +722,8 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         # Overwitten -- uses `cache_params` as opposed to `past_key_values`
 
         print("I am inside mamba code for input generation.")
+        if cache_position is not None:
+            print("cache_position:", cache_position)
         if use_cache:
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
@@ -737,17 +745,15 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
-            # Push the current cache params before new generation into the snapshot array.
-            if (self.cache_snapshots is not None) and (cache_params is not None):
-                # Save the current states as an extra snapshot.
-                snapshot = (cache_params.conv_states.detach().clone(),
-                            cache_params.ssm_states.detach().clone())
-                self.cache_snapshots.append(snapshot)
+            print(input_ids)
+
+            
 
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
+
         model_inputs.update(
             {
                 "cache_params": cache_params,
