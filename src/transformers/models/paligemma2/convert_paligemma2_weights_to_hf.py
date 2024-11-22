@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 
 # TODO add sequence length variations here
 
-PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896", "27b-224", "27b-448"]
+PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896", "27b-224", "27b-448", "27b-896"]
 VARIANT_CONFIGS = {
     "2b": {
         "num_positions": 256,
