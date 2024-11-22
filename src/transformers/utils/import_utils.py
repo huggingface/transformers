@@ -1002,8 +1002,18 @@ def is_compressed_tensors_available():
 
 
 def is_auto_gptq_available():
-    return _auto_gptq_available
+    if not _auto_gptq_available:
+        return _auto_gptq_available
 
+    try:
+        from auto_gptq import exllama_set_max_input_length
+    except ImportError as exc:
+        if "shard_checkpoint" in str(exc):
+            # auto_gptq requires eetq and it is currently broken with newer transformers versions because it tries to import shard_checkpoint
+            # see https://github.com/NetEase-FuXi/EETQ/issues/34
+            # TODO: Remove once eetq releasees a fix and this release is used in CI
+            return False
+    return _auto_gptq_available
 
 def is_eetq_available():
     return _eetq_available
