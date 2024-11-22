@@ -40,12 +40,9 @@ rendered properly in your Markdown viewer.
 >>> model = EncoderDecoderModel(config=config)
 ```
 
-## 사전 학습된 인코더와 디코더로 `EncoderDecoderModel` 초기화[[Initialising `EncoderDecoderModel` from a pretrained encoder and a pretrained decoder.]]
+## 사전 학습된 인코더와 디코더로 `EncoderDecoderModel` 초기화하기[[Initialising `EncoderDecoderModel` from a pretrained encoder and a pretrained decoder.]]
 
-[`EncoderDecoderModel`]은 사전 학습된 인코더 체크포인트와 사전 학습된 디코더 체크포인트를 사용해 초기화할 수 있습니다. BERT와 같은 모든 사전 학습된 자동 인코딩(auto-encoding) 모델은 인코더로 활용할 수 있으며, GPT2와 같은 자가 회귀(autoregressive) 모델이나 BART의 디코더와 같이 사전 학습된 시퀀스-투-시퀀스 디코더 모델을 디코더로 사용할 수 있습니다.
-
-사전 학습된 인코더와 디코더 체크포인트를 이용해 [`EncoderDecoderModel`]을 초기화하려면, 모델을 다운스트림 작업에 대해 미세 조정(fine-tuning)해야 합니다. 이에 대한 자세한 내용은 [the *Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에 설명되어 있습니다.
-이 작업을 위해 `EncoderDecoderModel` 클래스는 [`EncoderDecoderModel.from_encoder_decoder_pretrained`] 메서드를 제공합니다.
+[`EncoderDecoderModel`]은 사전 학습된 인코더 체크포인트와 사전 학습된 디코더 체크포인트를 사용해 초기화할 수 있습니다. BERT와 같은 모든 사전 학습된 자동 인코딩(auto-encoding) 모델은 인코더로 활용할 수 있으며, GPT2와 같은 자가 회귀(autoregressive) 모델이나 BART의 디코더와 같이 사전 학습된 시퀀스-투-시퀀스 디코더 모델을 디코더로 사용할 수 있습니다. 디코더로 선택한 아키텍처에 따라 교차 어텐션(cross-attention) 레이어가 무작위로 초기화될 수 있습니다. 사전 학습된 인코더와 디코더 체크포인트를 이용해 [`EncoderDecoderModel`]을 초기화하려면, 모델을 다운스트림 작업에 대해 미세 조정(fine-tuning)해야 합니다. 이에 대한 자세한 내용은 [the *Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에 설명되어 있습니다. 이 작업을 위해 `EncoderDecoderModel` 클래스는 [`EncoderDecoderModel.from_encoder_decoder_pretrained`] 메서드를 제공합니다.
 
 
 ```python
@@ -59,7 +56,6 @@ rendered properly in your Markdown viewer.
 
 `EncoderDecoderModel` 클래스의 미세 조정(fine-tuned)된 체크포인트를 불러오려면, Transformers의 다른 모델 아키텍처와 마찬가지로 [`EncoderDecoderModel`]에서 제공하는 `from_pretrained(...)`를 사용할 수 있습니다.
 
-To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
 추론을 수행하려면 [`generate`] 메서드를 활용하여 텍스트를 자동 회귀(autoregressive) 방식으로 생성할 수 있습니다. 이 메서드는 탐욕 디코딩(greedy decoding), 빔 서치(beam search), 다항 샘플링(multinomial sampling) 등 다양한 디코딩 방식을 지원합니다.
 
 ```python
