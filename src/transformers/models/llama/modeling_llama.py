@@ -738,22 +738,36 @@ class LlamaPagedAttention(LlamaAttention):
             cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if q_len > 1:
+            causal_mask = attention_mask
+            if attention_mask is not None:
+                causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+            is_causal = True if causal_mask is None and q_len > 1 else False
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=causal_mask,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+                is_causal=is_causal,
+            )
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        from torch.nn.attention.flex_attention import flex_attention
-        idx = 1 if q_len == 1 else 0
-        attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask, score_mod=past_key_value.score_mods[idx], return_lse=output_attentions)
+            if past_key_value is not None:
+                # sin and cos are specific to RoPE models; cache_position needed for the static cache
+                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        else:
+            if past_key_value is not None:
+                # sin and cos are specific to RoPE models; cache_position needed for the static cache
+                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+            from torch.nn.attention.flex_attention import flex_attention
+            # attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask, score_mod=past_key_value.score_mods[idx], return_lse=output_attentions)
+            attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask,  return_lse=output_attentions)
         attn_weights = None
         if output_attentions:
             attn_output = attn_output[0]
@@ -1293,30 +1307,33 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         return self.model
 
     def _set_paged_attention_mod(self, past_key_value, bsz, q_len, device):
-        from torch.nn.attention.flex_attention import create_block_mask
-        def noop(score, b, h, q_idx, kv_idx):
-            return score
-        def causal_mask(score, b, h, q_idx, kv_idx):
-            return torch.where(q_idx >= kv_idx, score, -float("inf"))
-
-        def generate_causal_offset(offset: torch.Tensor):
-            def causal_offset_mask(b, h, q_idx, kv_idx):
-                return (offset + q_idx) >= kv_idx
-
-            return causal_offset_mask
-        if past_key_value.get_seq_length() == 0:
-            mod = generate_causal_offset(
-                torch.tensor(q_len, device=device, dtype=torch.int32)
-            )
-        else:
-            mod = generate_causal_offset(
-                torch.tensor(past_key_value.get_seq_length(), device=device, dtype=torch.int32)
-            )
-        idx = 0
-        if q_len == 1:
-            idx = 1
-        block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[0].page_size)
+        from torch.nn.attention.flex_attention import create_block_mask, noop_mask
+        block_mask = create_block_mask(noop_mask, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[0].page_size)
         block_mask = past_key_value.paged_attentions[0].convert_logical_block_mask(block_mask)
+        # from torch.nn.attention.flex_attention import create_block_mask
+        # def noop(score, b, h, q_idx, kv_idx):
+        #     return score
+        # def causal_mask(score, b, h, q_idx, kv_idx):
+        #     return torch.where(q_idx >= kv_idx, score, -float("inf"))
+
+        # def generate_causal_offset(offset: torch.Tensor):
+        #     def causal_offset_mask(b, h, q_idx, kv_idx):
+        #         return (offset + q_idx) >= kv_idx
+
+        #     return causal_offset_mask
+        # if past_key_value.get_seq_length() == 0:
+        #     mod = generate_causal_offset(
+        #         torch.tensor(q_len, device=device, dtype=torch.int32)
+        #     )
+        # else:
+        #     mod = generate_causal_offset(
+        #         torch.tensor(past_key_value.get_seq_length(), device=device, dtype=torch.int32)
+        #     )
+        # idx = 0
+        # if q_len == 1:
+        #     idx = 1
+        # block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[0].page_size)
+        # block_mask = past_key_value.paged_attentions[0].convert_logical_block_mask(block_mask)
         # past_key_value.block_mask = block_mask
         # copy attritubes to avoid re-compile
         past_key_value.block_mask.kv_num_blocks = block_mask.kv_num_blocks
@@ -1331,9 +1348,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         past_key_value.block_mask.sparsity = block_mask.sparsity
         past_key_value.block_mask.mask_mod = block_mask.mask_mod
 
-        score_mod = past_key_value.paged_attentions[0].get_score_mod(causal_mask if q_len > 1 else noop)
-        if past_key_value.score_mods[idx] is None:
-            past_key_value.score_mods[idx] = score_mod
+        # score_mod = past_key_value.paged_attentions[0].get_score_mod(causal_mask if q_len > 1 else noop)
+        # if past_key_value.score_mods[idx] is None:
+        #     past_key_value.score_mods[idx] = score_mod
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
