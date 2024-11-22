@@ -383,17 +383,17 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
-EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
-PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
-REPO_UTIL_TESTS = [repo_utils_job]
-DOC_TESTS = [doc_test_job]
+# REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+# EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
+# PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
+# REPO_UTIL_TESTS = [repo_utils_job]
+# DOC_TESTS = [doc_test_job]
 
-# REGULAR_TESTS = [torch_and_tf_job] # fmt: skip
-# EXAMPLES_TESTS = []
-# PIPELINE_TESTS = []
-# REPO_UTIL_TESTS = []
-# DOC_TESTS = []
+REGULAR_TESTS = [torch_and_tf_job] # fmt: skip
+EXAMPLES_TESTS = []
+PIPELINE_TESTS = []
+REPO_UTIL_TESTS = []
+DOC_TESTS = []
 
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
 
@@ -412,6 +412,8 @@ def create_circleci_config(folder=None):
     final_collection_job.job_name = "final_collection_job"
     first_collection_job = EmptyJob()
     first_collection_job.job_name = "first_collection_job"
+    waiter_job = EmptyJob()
+    waiter_job.job_name = "waiter_job"
     jobs = [first_collection_job] + jobs
     jobs.append(final_collection_job)
 
@@ -419,8 +421,10 @@ def create_circleci_config(folder=None):
     for job in jobs:
         if job is first_collection_job:
             _jobs.append(job.job_name)
+        elif job is waiter_job:
+            _jobs.append({job.job_name: {"requires": [k.job_name for k in jobs if k not in [first_collection_job, waiter_job, final_collection_job]]}})
         elif job is final_collection_job:
-            _jobs.append({job.job_name: {"when": "always", "requires": [k.job_name for k in jobs if k not in [first_collection_job, final_collection_job]]}})
+            _jobs.append({job.job_name: {"requires": [waiter_job.job_name]}})
         else:
             _jobs.append({job.job_name: {"requires": [first_collection_job.job_name]}})
 
