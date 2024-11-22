@@ -3223,7 +3223,7 @@ class GenerationMixin:
             # prepare variable output controls (note: some models won't accept all output controls)
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-            if self.config._attn_implementation == "paged_attention":
+            if self.config._attn_implementation == "paged_attention" and model_inputs["input_ids"].shape[1] == 1:
                 self._set_paged_attention_mod(model_inputs['past_key_values'], model_inputs['input_ids'].shape[0], model_inputs['input_ids'].shape[1], input_ids.device)
             # forward pass to get next token
             outputs = self(**model_inputs, return_dict=True)
