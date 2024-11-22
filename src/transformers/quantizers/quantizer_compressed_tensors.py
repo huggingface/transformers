@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from compressed_tensors.quantization.quant_config import QuantizationStatus
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
@@ -39,7 +38,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
-                self.run_compressed = quantization_config.run_compressed
+        self.run_compressed = quantization_config.run_compressed
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -83,7 +82,11 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        return False
+        return True
+
+    def is_qat_trainable(self) -> bool:
+        """Loaded Models can carry out quantization aware training"""
+        return self.run_compressed
 
     def is_serializable(self, safe_serialization=None):
         return False
