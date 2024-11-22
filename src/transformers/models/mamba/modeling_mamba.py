@@ -667,7 +667,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         self.backbone = MambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.cache_snapshots: List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]] = None
+        self.cache_snapshots: List[Tuple[torch.Tensor, torch.Tensor]] = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -737,13 +737,11 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
-            # Save the current cache params and cache positions before new generation.
-            if (self.cache_snapshots is not None) and (cache_params is not None) and (cache_position is not None):
+            # Push the current cache params before new generation into the snapshot array.
+            if (self.cache_snapshots is not None) and (cache_params is not None):
                 # Save the current states as an extra snapshot.
                 snapshot = (cache_params.conv_states.detach().clone(),
-                            cache_params.ssm_states.detach().clone(),
-                            cache_position.detach().clone())
-                # This is change by reference.
+                            cache_params.ssm_states.detach().clone())
                 self.cache_snapshots.append(snapshot)
 
         if inputs_embeds is not None and cache_params is None:
