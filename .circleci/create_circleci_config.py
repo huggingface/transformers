@@ -206,6 +206,12 @@ class CircleCIJob:
             {"run": {"name": "Move reports", "command": "cp -r reports outputs"}},
             {"run": 'ls -la outputs'},
             {"run": 'ls -la outputs/reports'},
+            {
+                "persist_to_workspace": {
+                    "root": "outputs",
+                    "paths": ["reports"]
+                }
+            },
         ]
         if self.parallelism:
             job["parallelism"] = parallel
