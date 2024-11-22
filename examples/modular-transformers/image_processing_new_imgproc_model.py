@@ -34,7 +34,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class ImgProcModelImageProcessor(BaseImageProcessor):
+class ImgprocModelImageProcessor(BaseImageProcessor):
     r"""
     Constructs a NEW_IMGPROC_MODEL image processor.
 
