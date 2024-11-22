@@ -389,7 +389,7 @@ doc_test_job = CircleCIJob(
 # REPO_UTIL_TESTS = [repo_utils_job]
 # DOC_TESTS = [doc_test_job]
 
-REGULAR_TESTS = [torch_and_tf_job] # fmt: skip
+REGULAR_TESTS = [hub_job] # fmt: skip
 EXAMPLES_TESTS = []
 PIPELINE_TESTS = []
 REPO_UTIL_TESTS = []
