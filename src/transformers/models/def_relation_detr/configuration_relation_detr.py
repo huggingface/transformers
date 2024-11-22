@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Relation DETR model configuration"""
+import math
+
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -148,6 +150,10 @@ class RelationDetrConfig(PretrainedConfig):
         self,
         use_timm_backbone=True,
         backbone_config=None,
+        sin_cos_temperature=10000,
+        sin_cos_normalize=True,
+        sin_cos_scale=2 * math.pi,
+        sin_cos_offset=-0.5,
         num_channels=3,
         num_queries=900,
         hybrid_queries=1500,
@@ -163,6 +169,8 @@ class RelationDetrConfig(PretrainedConfig):
         activation_function="relu",
         d_model=256,
         d_relation=16,
+        rel_temperature=10000,
+        rel_scale=100,
         dropout=0.0,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -186,6 +194,7 @@ class RelationDetrConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         focal_alpha=0.25,
         focal_gamma=2.0,
+        two_stage_binary_cls=False,
         disable_custom_kernels=False,
         is_encoder_decoder=True,
         **kwargs,
@@ -218,6 +227,10 @@ class RelationDetrConfig(PretrainedConfig):
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
+        self.sin_cos_temperature = sin_cos_temperature
+        self.sin_cos_normalize = sin_cos_normalize
+        self.sin_cos_scale = sin_cos_scale
+        self.sin_cos_offset = sin_cos_offset
         self.num_channels = num_channels
         self.num_queries = num_queries
         self.hybrid_queries = hybrid_queries
@@ -233,6 +246,8 @@ class RelationDetrConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.d_model = d_model
         self.d_relation = d_relation
+        self.rel_temperature = rel_temperature
+        self.rel_scale = rel_scale
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
@@ -259,6 +274,7 @@ class RelationDetrConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.focal_alpha = focal_alpha
         self.focal_gamma = focal_gamma
+        self.two_stage_binary_cls = two_stage_binary_cls
         self.disable_custom_kernels = disable_custom_kernels
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

@@ -31,7 +31,7 @@ from torch.autograd.function import once_differentiable
 from torchvision.ops import Conv2dNormActivation
 
 from ...image_transforms import center_to_corners_format, corners_to_center_format
-from ...activations import ACT2FN
+from ...activations import ACT2FN, ACT2CLS
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -271,6 +271,8 @@ class RelationDetrModelOutput(ModelOutput):
     hybrid_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_attentions: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hybrid_enc_outputs_class: Optional[torch.FloatTensor] = None
+    hybrid_enc_outputs_coord: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -493,7 +495,6 @@ class RelationDetrConvEncoder(nn.Module):
         return features
 
 
-
 class RelationDetrSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -520,9 +521,8 @@ class RelationDetrSinePositionEmbedding(nn.Module):
         return (get_dim_t(self.embedding_dim, t, device) for t in self.temperature)
 
     def forward(self, pixel_mask):
-        not_mask = (~pixel_mask).int()  # onnx export does not support cumsum on bool tensor
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
+        y_embed = pixel_mask.cumsum(1)
+        x_embed = pixel_mask.cumsum(2)
         if self.normalize:
             y_embed = (y_embed + self.offset) / (y_embed[:, -1:, :] + self.eps) * self.scale
             x_embed = (x_embed + self.offset) / (x_embed[:, :, -1:] + self.eps) * self.scale
@@ -530,7 +530,7 @@ class RelationDetrSinePositionEmbedding(nn.Module):
             y_embed = y_embed + self.offset
             x_embed = x_embed + self.offset
 
-        dim_tx, dim_ty = self.get_dim_t(not_mask.device)
+        dim_tx, dim_ty = self.get_dim_t(pixel_mask.device)
 
         pos_x = x_embed.unsqueeze(-1) / dim_tx
         pos_y = y_embed.unsqueeze(-1) / dim_ty
@@ -794,8 +794,8 @@ class RelationDetrMultiheadAttention(nn.Module):
 
         batch_size, target_len, embed_dim = hidden_states.size()
         # add position embeddings to the hidden states before projecting to queries and keys
+        hidden_states_original = hidden_states
         if position_embeddings is not None:
-            hidden_states_original = hidden_states
             hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
 
         # get queries, keys and values
@@ -820,13 +820,35 @@ class RelationDetrMultiheadAttention(nn.Module):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            if attention_mask.dtype == torch.bool:
+                float_attention_mask = torch.zeros_like(attention_mask, dtype=hidden_states.dtype)
+                float_attention_mask.masked_fill_(~attention_mask, float("-inf"))
+                attention_mask = float_attention_mask
+
+            if attention_mask.dim() == 2:
+                if attention_mask.size() != (target_len, source_len):
+                    raise ValueError(
+                        f"2D-Attention mask should be of size {(target_len, source_len)}, but is {attention_mask.size()}"
+                    )
+                # [seq_len, seq_len] -> [batch_size, self.num_heads, target_seq_len, source_seq_len]
+                attention_mask = attention_mask.expand(batch_size, self.num_heads, *attention_mask.size())
+            elif attention_mask.dim() == 3:
+                if attention_mask.size() != (batch_size * self.num_heads, target_len, source_len):
+                    raise ValueError(
+                        f"3D-Attention mask should be of size {(batch_size, self.num_heads, target_len, source_len)}, but"
+                        f" is {attention_mask.size()}"
+                    )
+                attention_mask = attention_mask.view(batch_size, self.num_heads, target_len, source_len)
+            else:
+                raise ValueError(
+                    f"Attention mask should be of size {(target_len, source_len)} of {(batch_size * self.num_heads, target_len, source_len)}, but is"
+                    f" {attention_mask.size()}"
+                )
 
         if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
+            if attention_mask.size() != (batch_size, self.num_heads, target_len, source_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
+                    f"Attention mask should be of size {(batch_size, self.num_heads, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
@@ -1398,10 +1420,11 @@ class PositionRelationEmbedding(nn.Module):
         num_heads=8,
         temperature=10000.0,
         scale=100.0,
-        activation_layer=nn.ReLU,
+        activation_layer="relu",
         inplace=True,
     ):
         super().__init__()
+        activation_layer = ACT2CLS[activation_layer]
         self.pos_proj = Conv2dNormActivation(
             embedding_dim * 4,
             num_heads,
@@ -1478,7 +1501,11 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
         )
         self.norm = nn.LayerNorm(config.d_model)
         self.position_relation_embedding = PositionRelationEmbedding(
-            config.d_relation, config.num_attention_heads
+            embedding_dim=config.d_relation, 
+            num_heads=config.num_attention_heads,
+            temperature=config.rel_temperature,
+            scale=config.rel_scale,
+            activation_layer=config.activation_function,
         )
 
         # Initialize weights and apply final processing
@@ -1588,7 +1615,7 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
                     level_start_index=level_start_index,
                     self_attention_mask=position_relation,
                     encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=position_relation,
+                    encoder_attention_mask=encoder_attention_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -1604,10 +1631,10 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
             outputs_coords += (outputs_coord,)
 
             if not skip_relation:
-                pos_relation = self.position_relation_embedding(src_boxes, outputs_coord).flatten(0, 1)
+                position_relation = self.position_relation_embedding(src_boxes, outputs_coord).flatten(0, 1)
                 # note that True is valid, False is invalid, which is opposite to the official implementation
                 if self_attention_mask is not None:
-                    pos_relation.masked_fill_(~self_attention_mask, float("-inf"))
+                    position_relation.masked_fill_(~self_attention_mask, float("-inf"))
                 src_boxes = outputs_coord
 
             # hack implementation for iterative bounding box refinement
@@ -1751,7 +1778,13 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         # Create backbone + positional encoding
         self.backbone = RelationDetrConvEncoder(config)
-        self.position_embeddings = build_position_encoding(config)
+        self.position_embeddings = RelationDetrSinePositionEmbedding(
+            embedding_dim=config.d_model // 2,
+            temperature=config.sin_cos_temperature,
+            normalize=config.sin_cos_normalize,
+            scale=config.sin_cos_scale,
+            offset=config.sin_cos_offset,
+        )
 
         # Create input projection layers
         self.neck = RelationDetrChannelMapper(
@@ -1901,7 +1934,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         multi_level_masks = [interp_mask(feat.shape[-2:]) for feat in multi_level_feats]
 
         # extract multi_level_pos_embeds
-        multi_level_pos_embeds = [self.position_embeddings(~m) for m in multi_level_masks]
+        multi_level_pos_embeds = [self.position_embeddings(m) for m in multi_level_masks]
 
         return multi_level_feats, multi_level_masks, multi_level_pos_embeds
 
@@ -1955,7 +1988,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.bool, device=device)
+            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
         
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
@@ -2061,7 +2094,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             hybrid_outputs = self.decoder(
                 inputs_embeds=hybrid_target,
                 encoder_hidden_states=encoder_outputs[0],
-                self_attention_mask=self_attention_mask,
+                self_attention_mask=None,
                 encoder_attention_mask=mask_flatten,
                 reference_points=hybrid_reference_points,
                 spatial_shapes=spatial_shapes,
@@ -2074,14 +2107,12 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
                 skip_relation=True,
             )
         else:
-            hybrid_outputs = RelationDetrDecoderOutput()
+            hybrid_outputs = RelationDetrDecoderOutput() if return_dict else ()
 
         if not return_dict:
             enc_outputs = tuple(value for value in [topk_class, topk_coords] if value is not None)
-            tuple_outputs = (reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
-
-            if self.training:
-                tuple_outputs += hybrid_outputs
+            tuple_outputs = (reference_points,) + decoder_outputs + encoder_outputs + enc_outputs 
+            tuple_outputs += hybrid_outputs + tuple(value for value in [hybrid_enc_class, hybrid_enc_coord] if value is not None)
 
             return tuple_outputs
 
@@ -2110,6 +2141,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             hybrid_hidden_states=hybrid_outputs.hidden_states,
             hybrid_attentions=hybrid_outputs.attentions,
             hybrid_cross_attentions=hybrid_outputs.cross_attentions,
+            hybrid_enc_outputs_class=hybrid_enc_class,
+            hybrid_enc_outputs_coord=hybrid_enc_coord,
         )
 
 
@@ -2321,7 +2354,7 @@ class GenerateDNQueries(nn.Module):
         return RelationDetrDenoisingGeneratorOutput(
             noised_label_query=noised_label_queries,
             noised_box_query=noised_box_queries,
-            attn_mask=attn_mask,
+            denoise_attn_mask=attn_mask,
             denoising_groups=self.denoising_groups,
             max_gt_num_per_image=max_gt_num_per_image,
         )
@@ -2383,7 +2416,7 @@ class GenerateCDNQueries(GenerateDNQueries):
 
         return boxes
 
-    def forward(self, gt_labels_list, gt_boxes_list):
+    def forward(self, gt_labels_list, gt_boxes_list, return_dict: bool = None):
         """
 
         :param gt_labels_list: Ground truth bounding boxes per image
@@ -2494,7 +2527,7 @@ class GenerateCDNQueries(GenerateDNQueries):
         return RelationDetrDenoisingGeneratorOutput(
             noised_label_query=noised_label_queries,
             noised_box_query=noised_box_queries,
-            attn_mask=attn_mask,
+            denoise_attn_mask=attn_mask,
             denoising_groups=self.denoising_groups,
             max_gt_num_per_image=2 * max_gt_num_per_image,
         )
@@ -2527,7 +2560,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             label_noise_prob=config.label_noise_prob,
             box_noise_scale=config.box_noise_scale,
         )
-        
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2596,14 +2629,19 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             noised_embeddings = self.denoising_generator(gt_labels_list, gt_boxes_list)
             noised_label_query = noised_embeddings.noised_label_query if return_dict else noised_embeddings[0]
             noised_box_query = noised_embeddings.noised_box_query if return_dict else noised_embeddings[1]
-            self_attention_mask = noised_embeddings.attn_mask if return_dict else noised_embeddings[2]
+            self_attention_mask = noised_embeddings.denoise_attn_mask if return_dict else noised_embeddings[2]
             self_attention_mask = ~self_attention_mask  # note multi-head attention mask is opposite to that of torchvision
             denoising_groups = noised_embeddings.denoising_groups if return_dict else noised_embeddings[3]
             max_gt_num_per_image = noised_embeddings.max_gt_num_per_image if return_dict else noised_embeddings[4]
+
+            denoising_meta_values = {
+                "dn_num_group": denoising_groups,
+                "max_gt_num_per_image": max_gt_num_per_image,
+                "dn_num_split": [denoising_groups * max_gt_num_per_image, self.config.num_queries],
+            }
         else:
             noised_label_query = noised_box_query = None
-            self_attention_mask = denoising_groups = max_gt_num_per_image = None
-
+            denoising_meta_values = None
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
         outputs = self.model(
@@ -2629,15 +2667,55 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
+            enc_topk_logits = outputs.enc_outputs_class if return_dict else outputs[-7]
+            enc_topk_coords = outputs.enc_outputs_coord if return_dict else outputs[-6]
+
             loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
+                logits=logits,
+                labels=labels,
+                device=self.device,
+                pred_boxes=pred_boxes,
+                config=self.config,
+                outputs_class=outputs_class,
+                outputs_coord=outputs_coord,
+                enc_topk_logits=enc_topk_logits,
+                enc_topk_bboxes=enc_topk_coords,
+                denoising_meta_values=denoising_meta_values,
             )
+
+            if self.training:
+                hybrid_outputs_class = outputs.hybrid_outputs_class if return_dict else outputs[-7]
+                hybrid_outputs_coord = outputs.hybrid_outputs_coord if return_dict else outputs[-6]
+                hybrid_enc_topk_logits = outputs.hybrid_enc_outputs_class if return_dict else outputs[-2]
+                hybrid_enc_topk_coords = outputs.hybrid_enc_outputs_coord if return_dict else outputs[-1]
+                hybrid_logits = hybrid_outputs_class[-1]
+                hybrid_pred_boxes = hybrid_outputs_coord[-1]
+                hybrid_loss, hybrid_loss_dict, _ = self.loss_function(
+                    logits=hybrid_logits,
+                    labels=labels,
+                    device=self.device,
+                    pred_boxes=hybrid_pred_boxes,
+                    config=self.config,
+                    outputs_class=hybrid_outputs_class,
+                    outputs_coord=hybrid_outputs_coord,
+                    enc_topk_logits=hybrid_enc_topk_logits,
+                    enc_topk_bboxes=hybrid_enc_topk_coords,
+                    denoising_meta_values=None,
+                )
+
         if not return_dict:
             if auxiliary_outputs is not None:
                 output = (logits, pred_boxes) + auxiliary_outputs + outputs
             else:
                 output = (logits, pred_boxes) + outputs
-            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
+
+            tuple_outputs = output
+
+            if hybrid_loss is not None:
+                tuple_outputs = (hybrid_loss, hybrid_loss_dict) + tuple_outputs
+
+            if loss is not None:
+                tuple_outputs = (loss, loss_dict) + tuple_outputs            
 
             return tuple_outputs
 
