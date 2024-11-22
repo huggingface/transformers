@@ -52,7 +52,6 @@ from .pytorch_utils import (  # noqa: F401
     find_pruneable_heads_and_indices,
     id_tensor_storage,
     is_torch_greater_or_equal_than_1_13,
-    is_torch_greater_or_equal_than_2_4,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
@@ -90,6 +89,7 @@ from .utils import (
     is_peft_available,
     is_remote_url,
     is_safetensors_available,
+    is_torch_greater_or_equal,
     is_torch_sdpa_available,
     is_torch_xla_available,
     logging,
@@ -5032,7 +5032,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_mesh (`torch.distributed.DeviceMesh`):
                 The device mesh to use for tensor parallelism.
         """
-        if not is_torch_greater_or_equal_than_2_4:
+        if not is_torch_greater_or_equal("2.5"):
             raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
 
         # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
