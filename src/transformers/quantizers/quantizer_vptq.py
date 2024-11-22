@@ -47,7 +47,7 @@ class VptqHfQuantizer(HfQuantizer):
             raise ImportError("Using `vptq` quantization requires Accelerate: `pip install accelerate`")
 
         if not is_vptq_available():
-            raise ImportError("Using `vptq` quantization requires VPTQ: `pip install vptq`")
+            raise ImportError("Using `vptq` quantization requires VPTQ>=0.0.4: `pip install -U vptq`")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
