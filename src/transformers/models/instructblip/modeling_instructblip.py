@@ -1596,6 +1596,14 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 .repeat(batch_size, 1)
                 .to(image_embeds.device)
             )
+            if getattr(self.config, "image_token_index", None) is not None:
+                image_token_ids = (
+                    torch.LongTensor([[self.config.image_token_index]])
+                    .repeat(batch_size, self.config.num_query_tokens)
+                    .to(image_embeds.device)
+                )
+                input_ids = torch.cat([image_token_ids, input_ids], dim=-1)
+
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
