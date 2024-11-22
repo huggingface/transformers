@@ -1226,7 +1226,7 @@ else:
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
-    _import_structure["models.pixtral"].extend(["PixtralImageProcessor", "PixtralImageProcessorFast"])
+    _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
@@ -1258,6 +1258,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 # PyTorch-backed objects

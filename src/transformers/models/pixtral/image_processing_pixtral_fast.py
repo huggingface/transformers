@@ -27,7 +27,7 @@ from ...image_utils import (
     get_image_type,
     infer_channel_dimension_format,
     validate_kwargs,
-    validate_preprocess_arguments,
+    validate_fast_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -65,7 +65,7 @@ if is_torchvision_available():
 
 class PixtralImageProcessorFast(BaseImageProcessorFast):
     r"""
-    Constructs a Pixtral image processor.
+    Constructs a fast Pixtral image processor that leverages torchvision.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -280,7 +280,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        validate_preprocess_arguments(
+        validate_fast_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
@@ -289,13 +289,9 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             do_resize=do_resize,
             size=size,
             resample=resample,
+            return_tensors=return_tensors,
+            data_format=data_format,
         )
-        # Extra checks for FastProcessor
-        if return_tensors != "pt":
-            raise ValueError("Only returning PyTorch tensors is currently supported.")
-
-        if data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
 
         if do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]

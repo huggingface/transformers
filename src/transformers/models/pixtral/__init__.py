@@ -13,7 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -40,6 +46,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_pixtral"] = ["PixtralImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["image_processing_pixtral_fast"] = ["PixtralImageProcessorFast"]
 
 
@@ -65,6 +78,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_pixtral import PixtralImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .image_processing_pixtral_fast import PixtralImageProcessorFast
 
 else:
