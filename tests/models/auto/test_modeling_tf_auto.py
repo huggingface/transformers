@@ -295,6 +295,15 @@ class TFAutoModelTest(unittest.TestCase):
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
         _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # very strange stuff!
+        with RequestCounter() as counter:
+            pass
+        if (counter["GET"] != 0 or counter["HEAD"] != 1 or counter.total_calls != 1):
+            msg = counter._log
+            import pytest
+            pytest.fail(str(msg))
+
         with RequestCounter() as counter:
             _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         if (counter["GET"] != 0 or counter["HEAD"] != 1 or counter.total_calls != 1):
