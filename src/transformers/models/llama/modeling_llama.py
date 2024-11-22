@@ -752,7 +752,8 @@ class LlamaPagedAttention(LlamaAttention):
             value_states = value_states.contiguous()
 
         from torch.nn.attention.flex_attention import flex_attention
-        attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_masks[self.layer_idx], score_mod=past_key_value.score_mods[self.layer_idx], return_lse=output_attentions)
+        idx = 1 if q_len == 1 else 0
+        attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask, score_mod=past_key_value.score_mods[idx], return_lse=output_attentions)
         attn_weights = None
         if output_attentions:
             attn_output = attn_output[0]
@@ -1311,14 +1312,28 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             mod = generate_causal_offset(
                 torch.tensor(past_key_value.get_seq_length(), device=device, dtype=torch.int32)
             )
-        past_key_value.block_masks = []
-        past_key_value.score_mods = []
-        for i in range(len(past_key_value.paged_attentions)):
-            block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[i].page_size)
-            block_mask = past_key_value.paged_attentions[i].convert_logical_block_mask(block_mask)
-            past_key_value.block_masks.append(block_mask)
-            score_mod = past_key_value.paged_attentions[i].get_score_mod(causal_mask if q_len > 1 else noop)
-            past_key_value.score_mods.append(score_mod)
+        idx = 0
+        if q_len == 1:
+            idx = 1
+        block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[0].page_size)
+        block_mask = past_key_value.paged_attentions[0].convert_logical_block_mask(block_mask)
+        # past_key_value.block_mask = block_mask
+        # copy attritubes to avoid re-compile
+        past_key_value.block_mask.kv_num_blocks = block_mask.kv_num_blocks
+        past_key_value.block_mask.kv_indices = block_mask.kv_indices
+        past_key_value.block_mask.full_kv_num_blocks = block_mask.full_kv_num_blocks
+        past_key_value.block_mask.full_kv_indices = block_mask.full_kv_indices
+        past_key_value.block_mask.q_num_blocks = block_mask.q_num_blocks
+        past_key_value.block_mask.q_indices = block_mask.q_indices
+        past_key_value.block_mask.full_q_num_blocks = block_mask.full_q_num_blocks
+        past_key_value.block_mask.full_q_indices = block_mask.full_q_indices
+        past_key_value.block_mask.BLOCK_SIZE = block_mask.BLOCK_SIZE
+        past_key_value.block_mask.sparsity = block_mask.sparsity
+        past_key_value.block_mask.mask_mod = block_mask.mask_mod
+
+        score_mod = past_key_value.paged_attentions[0].get_score_mod(causal_mask if q_len > 1 else noop)
+        if past_key_value.score_mods[idx] is None:
+            past_key_value.score_mods[idx] = score_mod
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
