@@ -3333,7 +3333,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values")
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return GenerateDecoderOnlyOutput(

@@ -115,6 +115,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
         self.assistant_confidence_threshold = assistant_model.generation_config.assistant_confidence_threshold
 
+        self.is_mamba = True if "mamba" in self.assistant_model.__class__.__name__.lower() else False
+
         # Set eos in assistant same as in target model
         self.assistant_model.generation_config.eos_token_id = generation_config.eos_token_id
 
@@ -183,7 +185,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
         
-        if "mamba" in self.assistant_model.__class__.__name__.lower():
+        if self.is_mamba:
             # This is the mamba model used as assistant for draft generation.
             # Initialize the snapshots.
             self.assistant_model.cache_snapshots = []
@@ -238,7 +240,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
-        if "mamba" in self.assistant_model.__class__.__name__.lower():
+        if self.is_mamba:
             self.assistant_kwargs["cache_params"] = assistant_output.cache_params
 
         # 4. Prepare variables for output
@@ -271,7 +273,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
 
-        if "mamba" in self.assistant_model.__class__.__name__.lower():
+        if self.is_mamba:
             # This is the mamba model used as assistant for draft generation.
             # We now need to roll back state of the mamba to the state of the last accepted token.
             print("saeed")

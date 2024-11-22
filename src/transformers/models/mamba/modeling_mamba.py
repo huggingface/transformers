@@ -748,7 +748,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
-        
         model_inputs.update(
             {
                 "cache_params": cache_params,
