@@ -448,7 +448,7 @@ def validate_preprocess_arguments(
         raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
 
 
-def validate_fast_preprocess_arguments (
+def validate_fast_preprocess_arguments(
     do_rescale: Optional[bool] = None,
     rescale_factor: Optional[float] = None,
     do_normalize: Optional[bool] = None,
@@ -484,7 +484,6 @@ def validate_fast_preprocess_arguments (
 
     if data_format != ChannelDimension.FIRST:
         raise ValueError("Only channel first data format is currently supported.")
-
 
 
 # In the future we can add a TF implementation here when we have TF models.

@@ -26,8 +26,8 @@ from ...image_utils import (
     get_image_size,
     get_image_type,
     infer_channel_dimension_format,
-    validate_kwargs,
     validate_fast_preprocess_arguments,
+    validate_kwargs,
 )
 from ...utils import (
     TensorType,
