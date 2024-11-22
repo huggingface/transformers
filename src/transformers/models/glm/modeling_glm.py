@@ -38,19 +38,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_class_docstring,
-    auto_docstring,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-)
+from ...utils import auto_class_docstring, auto_docstring, is_flash_attn_greater_or_equal_2_10, logging
 from .configuration_glm import GlmConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
-_CONFIG_FOR_DOC = "GlmConfig"
 
 
 class GlmRMSNorm(nn.Module):

@@ -55,10 +55,6 @@ if is_torch_greater_or_equal("2.5"):
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "google/gemma2-7b"
-_CONFIG_FOR_DOC = "Gemma2Config"
-
-
 class Gemma2RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -412,7 +408,6 @@ class Gemma2DecoderLayer(nn.Module):
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,

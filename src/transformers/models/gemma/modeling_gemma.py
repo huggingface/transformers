@@ -37,19 +37,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_class_docstring,
-    auto_docstring,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-)
+from ...utils import auto_class_docstring, auto_docstring, is_flash_attn_greater_or_equal_2_10, logging
 from .configuration_gemma import GemmaConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "google/gemma-7b"
-_CONFIG_FOR_DOC = "GemmaConfig"
 
 
 class GemmaRMSNorm(nn.Module):
