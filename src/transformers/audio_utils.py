@@ -462,8 +462,9 @@ def spectrogram(
             If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
             frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
         dither (`float`):
-            Add dithering (add small Gaussian noise to each frame).
-            E.g. use 4 to add dithering, 0.0 means no dithering.
+            Adds dithering. In other words, adds a small Gaussian noise to each frame).
+            E.g. use 4.0 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
         preemphasis (`float`, *optional*)
             Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
         mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`, *optional*):
@@ -662,8 +663,9 @@ def spectrogram_batch(
         onesided (`bool`, *optional*, defaults to `True`):
             If True, returns a one-sided spectrogram for real input signals.
         dither (`float`):
-            Add dithering (add small Gaussian noise to each frame).
-            E.g. use 4 to add dithering, 0.0 means no dithering.
+            Adds dithering. In other words, adds a small Gaussian noise to each frame).
+            E.g. use 4.0 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
         preemphasis (`float`, *optional*):
             Applies a pre-emphasis filter to each frame.
         mel_filters (`np.ndarray`, *optional*):
