@@ -213,6 +213,7 @@ class BatchFeature(UserDict):
                 Will be passed to the `to(...)` function of the tensors.
             kwargs (`Dict`, *optional*):
                 Will be passed to the `to(...)` function of the tensors.
+                To enable asynchronous data transfer, set the `non_blocking` flag in `kwargs` (defaults to `False`).
 
         Returns:
             [`BatchFeature`]: The same instance after modification.
