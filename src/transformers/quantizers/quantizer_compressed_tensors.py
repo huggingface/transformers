@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from compressed_tensors.quantization.quant_config import QuantizationStatus
+
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 from .base import HfQuantizer
@@ -37,7 +39,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
-        self.run_compressed = quantization_config.quantization_config.run_compressed
+        
+        quantization_config.quantization_config.quantization_status = QuantizationStatus.FROZEN
+        self.run_compressed = quantization_config.run_compressed
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
