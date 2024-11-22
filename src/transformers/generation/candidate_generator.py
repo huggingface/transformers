@@ -186,7 +186,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if "mamba" in self.assistant_model.__class__.__name__.lower():
             # This is the mamba model used as assistant for draft generation.
             # Initialize the snapshots.
-            self.assistant_kwargs["cache_snapshots"] = []
+            self.assistant_model.cache_snapshots = []
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -237,8 +237,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
-        self.assistant_kwargs["cache_params"] = assistant_output.cache_params
-        self.assistant_kwargs["cache_snapshots"] = assistant_output.cache_snapshots
+
+        if "mamba" in self.assistant_model.__class__.__name__.lower():
+            self.assistant_kwargs["cache_params"] = assistant_output.cache_params
 
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
@@ -276,18 +277,16 @@ class AssistedCandidateGenerator(CandidateGenerator):
             print("saeed")
             print(self.assistant_kwargs.keys())
             print(num_matches.item())
+            print("len of snapshots:", len(self.assistant_model.cache_snapshots))
             print("\n")
-            for idx, snapshot in enumerate(self.assistant_kwargs["cache_snapshots"]):
+            for idx, snapshot in enumerate(self.assistant_model.cache_snapshots):
                 if idx != num_matches:
                     del snapshot
                 else:
                     snapshot_to_revive = snapshot
-                    conv_state, ssm_state, cache_position = snapshot_to_revive
-                    
-                    current_cache_position = self.assistant_kwargs["cache_position"]
-                    current_cache_position.zero_()
-                    current_cache_position.add_(cache_position)
-                    
+                    conv_state, ssm_state = snapshot_to_revive
+
+                    # Do in-place changes.
                     current_cache_params = self.assistant_kwargs["cache_params"]
                     current_cache_params.reset()
                     current_cache_params.conv_states.add_(conv_state)
@@ -295,13 +294,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
                     del conv_state
                     del ssm_state
-                    del cache_position
                     del snapshot_to_revive
                     del snapshot
  
             torch.cuda.empty_cache()
             gc.collect()
-            self.assistant_kwargs["cache_snapshots"] = []
+            # reset the snapshots.
+            self.assistant_model.cache_snapshots = []
                 
                 
                 

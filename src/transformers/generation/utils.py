@@ -154,7 +154,6 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     cache_params: Optional[MambaCache] = None,
 
 
-
 @dataclass
 class GenerateEncoderDecoderOutput(ModelOutput):
     """
@@ -726,7 +725,7 @@ class GenerationMixin:
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key not in ["cache_position", "cache_params", "cache_snapshots"]
+                    key not in ["cache_position", "cache_params"]
                     and dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                 ):
@@ -1566,7 +1565,9 @@ class GenerationMixin:
             # This is basically another call to generate after the first generation.
             # If this is Mamba, then we should only use len as the new cache position.
             # This is for draft generation using a mamba model.
-            print("implementing this function.")
+            print("Implementing this function.")
+
+            # Cache position should be a tensor.
             cache_position = input_ids.size()[1]
             
         else:
@@ -3343,7 +3344,6 @@ class GenerationMixin:
                     hidden_states=decoder_hidden_states,
                     past_key_values=model_kwargs.get("past_key_values"),
                     cache_params=model_kwargs.get("cache_params", None),
-                    cache_snapshots=model_kwargs.get("cache_snapshots", None)
                 )
         else:
             return input_ids
