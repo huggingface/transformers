@@ -2267,6 +2267,7 @@ class RequestCounter:
 
     def __enter__(self):
         self._counter = defaultdict(int)
+        self._log = defaultdict(list)
         self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=urllib3.connectionpool.log.debug)
         self.mock = self.patcher.start()
         return self
@@ -2277,6 +2278,7 @@ class RequestCounter:
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
                 if method in log:
                     self._counter[method] += 1
+                    self._log[method].append((method, call, log))
                     break
         self.patcher.stop()
 
