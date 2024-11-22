@@ -34,7 +34,7 @@ from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
 
 
-device = "cuda"  # "cpu"
+device = "cpu"
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -310,7 +310,6 @@ def convert_paligemma2_checkpoint(
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
     config = get_paligemma2_config(variant, precision=precision)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     if do_convert_weights:
         tokenizer_id = "google/paligemma-3b-pt-224"  # same tokenizer as paligemma 1
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
