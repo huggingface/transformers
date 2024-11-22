@@ -414,8 +414,7 @@ def create_circleci_config(folder=None):
     first_collection_job.job_name = "first_collection_job"
     waiter_job = EmptyJob()
     waiter_job.job_name = "waiter_job"
-    jobs = [first_collection_job] + jobs
-    jobs.append(final_collection_job)
+    jobs = [first_collection_job] + jobs + [waiter_job, final_collection_job]
 
     _jobs = []
     for job in jobs:
