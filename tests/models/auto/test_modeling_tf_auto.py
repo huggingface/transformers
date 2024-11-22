@@ -318,7 +318,7 @@ class TFAutoModelTest(unittest.TestCase):
         _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
         with RequestCounter() as counter:
             _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
-        if (counter["GET"] != 0 or counter["HEAD"] != 1 or counter.total_calls != 1):
+        if (counter["GET"] != 0 or counter["HEAD"] != 0 or counter.total_calls != 0):
             msg = counter._log
             import pytest
             pytest.fail(str(msg))
