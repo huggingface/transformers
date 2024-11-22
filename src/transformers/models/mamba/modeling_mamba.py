@@ -171,11 +171,11 @@ class MambaMixer(nn.Module):
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
             if cache_params is not None and cache_position[0] > 0:
                 hidden_states = causal_conv1d_update(
-                        hidden_states.squeeze(-1),
-                        cache_params.conv_states[self.layer_idx],
-                        conv_weights,
-                        self.conv1d.bias,
-                        self.activation,
+                    hidden_states.squeeze(-1),
+                    cache_params.conv_states[self.layer_idx],
+                    conv_weights,
+                    self.conv1d.bias,
+                    self.activation,
                 )
                 hidden_states = hidden_states.unsqueeze(-1)
             else:
@@ -461,7 +461,6 @@ class MambaOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None
 
 
 @dataclass
@@ -490,7 +489,6 @@ class MambaCausalLMOutput(ModelOutput):
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None
 
 
 MAMBA_START_DOCSTRING = r"""
@@ -587,7 +585,6 @@ class MambaModel(MambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None,
     ) -> Union[Tuple, MambaOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -652,7 +649,6 @@ class MambaModel(MambaPreTrainedModel):
             last_hidden_state=hidden_states,
             cache_params=cache_params if use_cache else None,
             hidden_states=all_hidden_states,
-            cache_snapshots=cache_snapshots if (use_cache and (cache_snapshots is not None)) else None,
         )
 
 
@@ -670,6 +666,9 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.backbone = MambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.cache_snapshots: List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]] = None
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -689,7 +688,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], num_new_tokens: int = 1, **kwargs
     ) -> Dict[str, Any]:
         model_kwargs["cache_params"] = outputs.get("cache_params", None)
-        model_kwargs["cache_snapshots"] = outputs.get("cache_snapshots", None)
         if (
             model_kwargs.get("use_cache", True)
             and "cache_position" in model_kwargs
@@ -713,7 +711,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None,
         **kwargs,
     ):
         # Overwitten -- uses `cache_params` as opposed to `past_key_values`
@@ -741,13 +738,13 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
             # Save the current cache params and cache positions before new generation.
-            if (cache_snapshots is not None) and (cache_params is not None) and (cache_position is not None):
+            if (self.cache_snapshots is not None) and (cache_params is not None) and (cache_position is not None):
                 # Save the current states as an extra snapshot.
                 snapshot = (cache_params.conv_states.detach().clone(),
                             cache_params.ssm_states.detach().clone(),
                             cache_position.detach().clone())
                 # This is change by reference.
-                cache_snapshots.append(snapshot)
+                self.cache_snapshots.append(snapshot)
 
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -760,7 +757,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 "use_cache": use_cache,
                 "cache_position": cache_position,
                 "attention_mask": attention_mask,
-                "cache_snapshots": cache_snapshots
             }
         )
         return model_inputs
@@ -782,7 +778,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None,
         **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, MambaCausalLMOutput]:
         r"""
@@ -802,7 +797,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             cache_position=cache_position,
             attention_mask=attention_mask,
-            cache_snapshots=cache_snapshots
         )
         hidden_states = mamba_outputs[0]
 
@@ -828,5 +822,4 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             logits=logits,
             cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
-            cache_snapshots=mamba_outputs.cache_snapshots
         )
