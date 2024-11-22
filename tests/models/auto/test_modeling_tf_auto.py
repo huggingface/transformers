@@ -314,6 +314,14 @@ class TFAutoModelTest(unittest.TestCase):
         self.assertEqual(counter["HEAD"], 1)
         self.assertEqual(counter.total_calls, 1)
 
+        # very strange stuff!
+        with RequestCounter() as counter:
+            pass
+        if (counter["GET"] != 0 or counter["HEAD"] != 0 or counter.total_calls != 0):
+            msg = counter._log
+            import pytest
+            pytest.fail(str(msg))
+
         # With a sharded checkpoint
         _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
         with RequestCounter() as counter:
