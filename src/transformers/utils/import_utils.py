@@ -1005,6 +1005,17 @@ def is_auto_gptq_available():
     return _auto_gptq_available and is_eetq_available()
 
 def is_eetq_available():
+    if not _eetq_available:
+        return _eetq_available
+
+    try:
+        from eetq import EetqLinear  # noqa: F401
+    except ImportError as exc:
+        if "shard_checkpoint" in str(exc):
+            # eetq is currently broken with newer transformers versions because it tries to import shard_checkpoint
+            # see https://github.com/NetEase-FuXi/EETQ/issues/34
+            # TODO: Remove once eetq releasees a fix and this release is used in CI
+            return False
     return _eetq_available
 
 
