@@ -222,6 +222,7 @@ class BatchFeature(UserDict):
 
         new_data = {}
         device = kwargs.get("device")
+        non_blocking = kwargs.get("non_blocking", False)
         # Check if the args are a device or a dtype
         if device is None and len(args) > 0:
             # device should be always the first argument
@@ -241,7 +242,7 @@ class BatchFeature(UserDict):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
-                new_data[k] = v.to(device=device)
+                new_data[k] = v.to(device=device, non_blocking=non_blocking)
             else:
                 new_data[k] = v
         self.data = new_data
