@@ -707,6 +707,8 @@ OWLV2_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
             `vision_model_last_hidden_state` under returned tensors for more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -723,6 +725,8 @@ OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1436,11 +1440,13 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        box_bias = self.box_bias.to(feature_map.device)
         if interpolate_pos_encoding:
             _, num_patches_height, num_patches_width, _ = feature_map.shape
-            dynamic_box_bias = self.compute_box_bias(num_patches_height, num_patches_width)
-            box_bias = dynamic_box_bias.to(feature_map.device)
+            box_bias = self.compute_box_bias(num_patches_height, num_patches_width)
+        else:
+            box_bias = self.box_bias
+
+        box_bias = box_bias.to(feature_map.device)
         pred_boxes += box_bias
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
@@ -1486,12 +1492,13 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             return_dict=True,
         )
 
-        num_patches_height = self.num_patches_height
-        num_patches_width = self.num_patches_width
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
             num_patches_height = height // self.config.vision_config.patch_size
             num_patches_width = width // self.config.vision_config.patch_size
+        else:
+            num_patches_height = self.num_patches_height
+            num_patches_width = self.num_patches_width
 
         # Get image embeddings
         last_hidden_state = outputs.vision_model_output[0]
@@ -1529,12 +1536,13 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
         )
 
-        num_patches_height = self.num_patches_height
-        num_patches_width = self.num_patches_width
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
             num_patches_height = height // self.config.vision_config.patch_size
             num_patches_width = width // self.config.vision_config.patch_size
+        else:
+            num_patches_height = self.num_patches_height
+            num_patches_width = self.num_patches_width
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
         last_hidden_state = vision_outputs[0]

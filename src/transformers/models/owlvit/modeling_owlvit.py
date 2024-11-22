@@ -1399,11 +1399,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        box_bias = self.box_bias.to(feature_map.device)
         if interpolate_pos_encoding:
             _, num_patches_height, num_patches_width, _ = feature_map.shape
-            dynamic_box_bias = self.compute_box_bias(num_patches_height, num_patches_width)
-            box_bias = dynamic_box_bias.to(feature_map.device)
+            box_bias = self.compute_box_bias(num_patches_height, num_patches_width)
+        else:
+            box_bias = self.box_bias
+
+        box_bias = box_bias.to(feature_map.device)
         pred_boxes += box_bias
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
@@ -1447,12 +1449,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             return_dict=True,
         )
 
-        num_patches_height = self.num_patches_height
-        num_patches_width = self.num_patches_width
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
             num_patches_height = height // self.config.vision_config.patch_size
             num_patches_width = width // self.config.vision_config.patch_size
+        else:
+            num_patches_height = self.num_patches_height
+            num_patches_width = self.num_patches_width
 
         # Get image embeddings
         last_hidden_state = outputs.vision_model_output[0]
@@ -1489,12 +1492,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
         )
 
-        num_patches_height = self.num_patches_height
-        num_patches_width = self.num_patches_width
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
             num_patches_height = height // self.config.vision_config.patch_size
             num_patches_width = width // self.config.vision_config.patch_size
+        else:
+            num_patches_height = self.num_patches_height
+            num_patches_width = self.num_patches_width
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
         last_hidden_state = vision_outputs[0]
