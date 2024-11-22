@@ -79,6 +79,8 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
 
 
 def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_conversion=False, **cached_file_kwargs):
+    import time
+    time.sleep(10)
     try:
         api = HfApi(token=cached_file_kwargs.get("token"), headers={"user-agent": http_user_agent()})
         sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
