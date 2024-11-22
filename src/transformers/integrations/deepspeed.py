@@ -56,6 +56,11 @@ else:
     from builtins import object as DeepSpeedConfig
 
 
+if is_deepspeed_available():
+    from deepspeed.sequence.layer import _SeqAllToAll
+    from deepspeed.utils import groups as ds_comm_groups
+
+
 class HfDeepSpeedConfig(DeepSpeedConfig):
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
@@ -449,3 +454,31 @@ def is_deepspeed_sp_enabled():
         return groups._get_sequence_parallel_world_size() > 1
     else:
         return False
+
+
+def wrap_deepspeed(_flash_attention_forward):
+    is_sp_enabled = is_deepspeed_sp_enabled()
+
+    def wrapped(*args, **kwargs):
+        if is_sp_enabled:
+            spg = ds_comm_groups._get_sequence_parallel_group()
+            scatter_idx = 2  # Scatter on num_heads dimension
+            gather_idx = 1  # Gather on seq_len dimension
+            batch_dim_idx = 0  # Synonymous with the batch_first==true
+            args = list(args)
+            args[0] = _SeqAllToAll.apply(spg, args[0], scatter_idx, gather_idx, batch_dim_idx)
+            args[1] = _SeqAllToAll.apply(spg, args[1], scatter_idx, gather_idx, batch_dim_idx)
+            args[2] = _SeqAllToAll.apply(spg, args[2], scatter_idx, gather_idx, batch_dim_idx)
+            args = tuple(args)
+
+        attn_output = _flash_attention_forward(*args, **kwargs)
+
+        if is_sp_enabled:
+            scatter_idx = 1  # Scatter back on seq_len dimension
+            gather_idx = 2  # Gather on num_heads dimension
+            batch_dim_idx = 0
+            attn_output = _SeqAllToAll.apply(spg, attn_output, scatter_idx, gather_idx, batch_dim_idx)
+
+        return attn_output
+
+    return wrapped
