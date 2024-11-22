@@ -71,6 +71,23 @@ class EmptyJob:
             steps.append(step)
             step = {"run": 'ls -la outputs/reports'}
             steps.append(step)
+        elif self.job_name == "waiter_job":
+            step = {"run": 'mkdir -p outputs'}
+            steps.append(step)
+            step = {
+                "attach_workspace": {
+                    "at": "outputs",
+                }
+            }
+            steps.append(step)
+            step = {"run": 'ls -la outputs'}
+            steps.append(step)
+            step = {"run": 'ls -la outputs/reports'}
+            steps.append(step)
+            step = {"run": 'sleep 240'}
+            steps.append(step)
+            step = {"run": 'echo "All required jobs have now completed"'}
+            steps.append(step)
         return {
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
             "steps": steps,
@@ -420,8 +437,10 @@ def create_circleci_config(folder=None):
     for job in jobs:
         if job is first_collection_job:
             _jobs.append(job.job_name)
+        # elif job is waiter_job:
+        #     _jobs.append({job.job_name: {"requires": [k.job_name for k in jobs if k not in [first_collection_job, waiter_job, final_collection_job]]}})
         elif job is waiter_job:
-            _jobs.append({job.job_name: {"requires": [k.job_name for k in jobs if k not in [first_collection_job, waiter_job, final_collection_job]]}})
+            _jobs.append(job.job_name)
         elif job is final_collection_job:
             _jobs.append({job.job_name: {"requires": [waiter_job.job_name]}})
         else:
