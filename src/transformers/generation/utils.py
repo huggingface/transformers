@@ -3226,7 +3226,7 @@ class GenerationMixin:
             return model.forward(*args, **kwargs)
 
         if isinstance(model_kwargs.get("past_key_values"), StaticCache):
-            if self.device == "cuda":
+            if self.device.type == "cuda":
                 model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)
 
         i = 0
