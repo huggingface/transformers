@@ -82,8 +82,6 @@ class EmptyJob:
             steps.append(step)
             step = {"run": 'ls -la outputs'}
             steps.append(step)
-            step = {"run": 'ls -la outputs/reports'}
-            steps.append(step)
             step = {"run": 'sleep 240'}
             steps.append(step)
             step = {"run": 'echo "All required jobs have now completed"'}
