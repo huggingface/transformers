@@ -19,13 +19,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -83,6 +81,7 @@ class InstructBlipVideoVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -112,24 +111,6 @@ class InstructBlipVideoVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.qkv_bias = qkv_bias
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from InstructBlipVideoConfig
-        if config_dict.get("model_type") == "instructblipvideo":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class InstructBlipVideoQFormerConfig(PretrainedConfig):
@@ -197,6 +178,7 @@ class InstructBlipVideoQFormerConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo_qformer"
+    base_config_key = "qformer_config"
 
     def __init__(
         self,
@@ -233,24 +215,6 @@ class InstructBlipVideoQFormerConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.cross_attention_frequency = cross_attention_frequency
         self.encoder_hidden_size = encoder_hidden_size
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the qformer config dict if we are loading from InstructBlipVideoConfig
-        if config_dict.get("model_type") == "instructblipvideo":
-            config_dict = config_dict["qformer_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class InstructBlipVideoConfig(PretrainedConfig):
@@ -310,6 +274,11 @@ class InstructBlipVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "qformer_config": InstructBlipVideoQFormerConfig,
+        "vision_config": InstructBlipVideoVisionConfig,
+    }
 
     def __init__(
         self,
