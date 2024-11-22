@@ -72,7 +72,7 @@ class EmptyJob:
             step = {"run": 'ls -la outputs/reports'}
             steps.append(step)
         elif self.job_name == "waiter_job":
-            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter")|.status' | grep -c "running") -gt 0 ]]; do; sleep 5; done"""
+            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
             step = {"run": 'mkdir -p outputs'}
             steps.append(step)
             step = {
