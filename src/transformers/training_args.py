@@ -401,26 +401,14 @@ class TrainingArguments:
         use_ipex (`bool`, *optional*, defaults to `False`):
             Use Intel extension for PyTorch when it is available. [IPEX
             installation](https://github.com/intel/intel-extension-for-pytorch).
-        bf16 (`bool`, *optional*, defaults to `False`):
-            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
-        fp16 (`bool`, *optional*, defaults to `False`):
-            Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
-        fp16_opt_level (`str`, *optional*, defaults to 'O1'):
-            For `fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details on
-            the [Apex documentation](https://nvidia.github.io/apex/amp).
-        fp16_backend (`str`, *optional*, defaults to `"auto"`):
-            This argument is deprecated. Use `half_precision_backend` instead.
-        half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto", "apex", "cpu_amp"`. `"auto"` will
-            use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices will force the
-            requested backend.
-        bf16_full_eval (`bool`, *optional*, defaults to `False`):
-            Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
-            metric values. This is an experimental API and it may change.
-        fp16_full_eval (`bool`, *optional*, defaults to `False`):
-            Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
-            metric values.
+        mixed_precision_dtype (`str`, *optional*, defaults to `"no"`):
+            The type of mixed precision to use. Can be one of `"no"`, `"fp16"`, `"bf16"`, or `"fp8"`.
+        mixed_precision_config (`dict`, *optional*):
+            A dictionary of configuration options for mixed precision training. Valid keys are:
+            - fp16_opt_level
+            - backend
+            - full_eval: Whether to use full `mixed_precision_dtype` evaluation instead of 32-bit.
+                         This will be faster and save memory but can harm metric values.
         tf32 (`bool`, *optional*):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
             on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
@@ -1054,47 +1042,18 @@ class TrainingArguments:
             )
         },
     )
-    bf16: bool = field(
-        default=False,
+    mixed_precision_dtype: Optional[str] = field(
+        default=None,
+        metadata={"help": "Mixed precision dtype to use. Can be one of `'no'`, `'fp16'`, `'bf16'`, or `'fp8'`."},
+    )
+    mixed_precision_config: Optional[dict] = field(
+        default=None,
         metadata={
             "help": (
-                "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
-                " architecture or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change."
+                "A dictionary of configuration options for mixed precision training. Valid keys are: "
+                "`fp16_opt_level`, `backend`, `full_eval`."
             )
         },
-    )
-    fp16: bool = field(
-        default=False,
-        metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
-    )
-    fp16_opt_level: str = field(
-        default="O1",
-        metadata={
-            "help": (
-                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
-                "See details at https://nvidia.github.io/apex/amp.html"
-            )
-        },
-    )
-    half_precision_backend: str = field(
-        default="auto",
-        metadata={
-            "help": "The backend to be used for half precision.",
-            "choices": ["auto", "apex", "cpu_amp"],
-        },
-    )
-    bf16_full_eval: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether to use full bfloat16 evaluation instead of 32-bit. This is an experimental API and it may"
-                " change."
-            )
-        },
-    )
-    fp16_full_eval: bool = field(
-        default=False,
-        metadata={"help": "Whether to use full float16 evaluation instead of 32-bit"},
     )
     tf32: Optional[bool] = field(
         default=None,
@@ -1394,6 +1353,31 @@ class TrainingArguments:
             "choices": ["auto", "apex", "cpu_amp"],
         },
     )
+
+    bf16: bool = field(
+        default=False,
+        metadata={"help": "Deprecated. Use `mixed_precision_dtype='bf16'` instead."},
+    )
+    fp16: bool = field(
+        default=False,
+        metadata={"help": "Deprecated. Use `mixed_precision_dtype='fp16'` instead."},
+    )
+    fp16_opt_level: str = field(
+        default="O1",
+        metadata={"help": "Deprecated. Use `mixed_precision_config` and set `fp16_opt_level` instead."},
+    )
+    half_precision_backend: str = field(
+        default="auto",
+        metadata={"help": "Deprecated. Use `mixed_precision_config` and set `backend` instead."},
+    )
+    bf16_full_eval: bool = field(
+        default=False,
+        metadata={"help": "Deprecated. Use `mixed_precision_config` and set `full_eval` instead."},
+    )
+    fp16_full_eval: bool = field(
+        default=False,
+        metadata={"help": "Deprecated. Use `mixed_precision_config` and set `full_eval` instead."},
+    )
     evaluation_strategy: Union[IntervalStrategy, str] = field(
         default=None,
         metadata={"help": "Deprecated. Use `eval_strategy` instead"},
@@ -1589,6 +1573,9 @@ class TrainingArguments:
             )
             self.use_cpu = self.no_cuda
 
+        if self.mixed_precision_config is None:
+            self.mixed_precision_config = {}
+
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
         self.save_strategy = SaveStrategy(self.save_strategy)
@@ -1682,10 +1669,10 @@ class TrainingArguments:
             if self.fp16_backend and self.fp16_backend != "auto":
                 warnings.warn(
                     "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
-                    " `half_precision_backend` instead",
+                    " `mixed_precision_config` and set `backend` instead",
                     FutureWarning,
                 )
-                self.half_precision_backend = self.fp16_backend
+                self.mixed_precision_config["backend"] = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
                 if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_xla_available():
