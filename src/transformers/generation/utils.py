@@ -32,6 +32,7 @@ from ..cache_utils import (
     OffloadedCache,
     QuantizedCacheConfig,
     StaticCache,
+    MambaCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -150,6 +151,8 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
+    cache_params: Optional[MambaCache] = None,
+
 
 
 @dataclass
@@ -723,7 +726,7 @@ class GenerationMixin:
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
+                    key not in ["cache_position", "cache_params", "cache_snapshots"]
                     and dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                 ):
@@ -1559,6 +1562,13 @@ class GenerationMixin:
             cache_position = (
                 torch.ones_like(model_kwargs["decoder_inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
             )
+        elif ("cache_params" in model_kwargs) and  (model_kwargs["cache_params"] is not None):
+            # This is basically another call to generate after the first generation.
+            # If this is Mamba, then we should only use len as the new cache position.
+            # This is for draft generation using a mamba model.
+            print("implementing this function.")
+            cache_position = input_ids.size()[1]
+            
         else:
             cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
 
@@ -2103,6 +2113,7 @@ class GenerationMixin:
         # - `max_length`, prepared above, is used to determine the maximum cache length
         # TODO (joao): remove `user_defined_cache` after v4.47 (remove default conversion to legacy format)
         cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
+        print("cache_name is:", cache_name)
         user_defined_cache = model_kwargs.get(cache_name)
         max_cache_length = generation_config.max_length
         if (
@@ -2155,6 +2166,7 @@ class GenerationMixin:
 
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
+            print("I am the generation config inside assistant mode:", generation_config.is_assistant)
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -2239,6 +2251,7 @@ class GenerationMixin:
             )
 
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+            print("I am the generation config inside sample mode:", generation_config.is_assistant)
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -3227,7 +3240,8 @@ class GenerationMixin:
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
-
+        print("Hasan: 1", model_kwargs.keys())
+        print("are you assistant", generation_config.is_assistant)
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -3247,6 +3261,7 @@ class GenerationMixin:
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
+            print("I am inside while:", model_kwargs.keys())
             if synced_gpus and this_peer_finished:
                 continue
 
@@ -3317,7 +3332,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
+                    past_key_values=model_kwargs.get("past_key_values")
                 )
             else:
                 return GenerateDecoderOnlyOutput(
@@ -3327,6 +3342,8 @@ class GenerationMixin:
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                     past_key_values=model_kwargs.get("past_key_values"),
+                    cache_params=model_kwargs.get("cache_params", None),
+                    cache_snapshots=model_kwargs.get("cache_snapshots", None)
                 )
         else:
             return input_ids

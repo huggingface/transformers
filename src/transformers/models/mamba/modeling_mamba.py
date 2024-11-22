@@ -18,7 +18,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union, List
 
 import torch
 import torch.utils.checkpoint
@@ -461,6 +461,7 @@ class MambaOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None
 
 
 @dataclass
@@ -489,6 +490,7 @@ class MambaCausalLMOutput(ModelOutput):
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None
 
 
 MAMBA_START_DOCSTRING = r"""
@@ -585,6 +587,7 @@ class MambaModel(MambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None,
     ) -> Union[Tuple, MambaOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -649,6 +652,7 @@ class MambaModel(MambaPreTrainedModel):
             last_hidden_state=hidden_states,
             cache_params=cache_params if use_cache else None,
             hidden_states=all_hidden_states,
+            cache_snapshots=cache_snapshots if (use_cache and (cache_snapshots is not None)) else None,
         )
 
 
@@ -685,6 +689,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], num_new_tokens: int = 1, **kwargs
     ) -> Dict[str, Any]:
         model_kwargs["cache_params"] = outputs.get("cache_params", None)
+        model_kwargs["cache_snapshots"] = outputs.get("cache_snapshots", None)
         if (
             model_kwargs.get("use_cache", True)
             and "cache_position" in model_kwargs
@@ -713,6 +718,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
     ):
         # Overwitten -- uses `cache_params` as opposed to `past_key_values`
 
+        print("I am inside mamba code for input generation.")
         if use_cache:
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
@@ -734,26 +740,27 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
+            # Save the current cache params and cache positions before new generation.
+            if (cache_snapshots is not None) and (cache_params is not None) and (cache_position is not None):
+                # Save the current states as an extra snapshot.
+                snapshot = (cache_params.conv_states.detach().clone(),
+                            cache_params.ssm_states.detach().clone(),
+                            cache_position.detach().clone())
+                # This is change by reference.
+                cache_snapshots.append(snapshot)
+
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
-
-        # Save the current cache params and cache positions before new generation.
-        if (cache_snapshots is not None) and (cache_params is not None) and (cache_position is not None):
-            # Save the current states as an extra snapshot.
-            snapshot = (cache_params.conv_states.detach().clone(),
-                        cache_params.ssm_states.detach().clone(),
-                        cache_position.detach().clone())
-            # This is change by reference.
-            cache_snapshots.append(snapshot)
-
+        
         model_inputs.update(
             {
                 "cache_params": cache_params,
                 "use_cache": use_cache,
                 "cache_position": cache_position,
                 "attention_mask": attention_mask,
+                "cache_snapshots": cache_snapshots
             }
         )
         return model_inputs
@@ -775,6 +782,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        cache_snapshots: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]] = None,
         **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, MambaCausalLMOutput]:
         r"""
@@ -794,6 +802,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             cache_position=cache_position,
             attention_mask=attention_mask,
+            cache_snapshots=cache_snapshots
         )
         hidden_states = mamba_outputs[0]
 
@@ -819,4 +828,5 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             logits=logits,
             cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
+            cache_snapshots=mamba_outputs.cache_snapshots
         )
