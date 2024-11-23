@@ -3225,20 +3225,20 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        model_forward = None
-        def foo(model, model_inputs):
+        o = dict()
+        o['model_forward'] = None
+        def foo(o, model, model_inputs):
 
-            def model_forward(model, *args, **kwargs):
+            def model_forward_2(model, *args, **kwargs):
                 return model.forward(*args, **kwargs)
 
             if isinstance(model_kwargs.get("past_key_values"), StaticCache):
                 if model.device.type == "cuda":
                     logger.warning_once("Using `torch.compile`.")
                     os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                    model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)
-
-            outputs = model_forward(model, return_dict=True, **model_inputs)
-            return model_forward
+                    model_forward_2 = torch.compile(model_forward_2, mode="reduce-overhead", fullgraph=True)
+                    outputs = model_forward_2(model, return_dict=True, **model_inputs)
+                    o['model_forward'] = model_forward_2
 
         i = 0
         while self._has_unfinished_sequences(
@@ -3257,13 +3257,14 @@ class GenerationMixin:
             else:
                 if i == 1:
                     import threading
-                    t = threading.Thread(target=foo, args=(self, model_inputs))
+                    t = threading.Thread(target=foo, args=(o, self, model_inputs))
                     t.start()
                     t.join()
-                if model_forward is not None:
-                    outputs = model_forward(self, return_dict=True, **model_inputs)
+                if o['model_forward'] is not None:
+                    outputs = o['model_forward'](self, return_dict=True, **model_inputs)
                 else:
                     outputs = self(**model_inputs, return_dict=True)
+                i += 1
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
