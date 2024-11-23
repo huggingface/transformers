@@ -240,7 +240,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "RoCBertConfig"),
         ("roformer", "RoFormerConfig"),
         ("rt_detr", "RTDetrConfig"),
-        ("rt_detr_v2", "RTDetrV2Config"),
+        ("rt_detr_v2", "RtDetrV2Config"),
         ("rt_detr_resnet", "RTDetrResNetConfig"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),

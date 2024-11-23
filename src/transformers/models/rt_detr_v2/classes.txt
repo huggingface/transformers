@@ -1,7 +1,0 @@
-This file will be deleted
-
-RTDetrMLPPredictionHead -> RTDetrMLPPredictionHeadV2
-RTDetrDecoderOutput -> RTDetrDecoderOutputV2
-RTDetrHybridEncoder -> RTDetrHybridEncoderV2
-RTDetrModelOutput -> RTDetrModelOutputV2
-RTDetrObjectDetectionOutput -> RTDetrObjectDetectionOutputV2

@@ -24,7 +24,7 @@ from torch.autograd.function import once_differentiable
 from ...utils import is_torch_cuda_available
 import torch.nn as nn
 
-class RTDetrV2Config(RTDetrConfig):
+class RtDetrV2Config(RTDetrConfig):
     model_type = "rt_detr_v2"
 
     def __init__(self, 
@@ -39,19 +39,19 @@ class RTDetrV2Config(RTDetrConfig):
         self.decoder_offset_scale = decoder_offset_scale
 
 # write the pass classes
-class RTDetrMLPPredictionHeadV2(RTDetrMLPPredictionHead):
+class RtDetrMLPPredictionHeadV2(RTDetrMLPPredictionHead):
     pass
 
-class RTDetrDecoderOutputV2(RTDetrDecoderOutput):
+class RtDetrDecoderOutputV2(RTDetrDecoderOutput):
     pass
 
-class RTDetrHybridEncoderV2(RTDetrHybridEncoder):
+class RtDetrHybridEncoderV2(RTDetrHybridEncoder):
     pass
 
-class RTDetrModelOutputV2(RTDetrModelOutput):
+class RtDetrModelOutputV2(RTDetrModelOutput):
     pass
 
-class RTDetrObjectDetectionOutputV2(RTDetrObjectDetectionOutput):
+class RtDetrObjectDetectionOutputV2(RTDetrObjectDetectionOutput):
     pass
 
 
@@ -130,13 +130,13 @@ def multi_scale_deformable_attention_v2(
     return output.transpose(1, 2).contiguous()
 
 
-class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
+class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
     """
     RTDETRv2 version of multiscale deformable attention, extending the base implementation
     with improved offset handling and initialization.
     """
 
-    def __init__(self, config: RTDetrV2Config):
+    def __init__(self, config: RtDetrV2Config):
         # Initialize parent class with config parameters
         super().__init__(
             config=config,
@@ -256,13 +256,13 @@ class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
         return output, attention_weights
 
 
-class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
-    def __init__(self, config: RTDetrV2Config):
+class RtDetrV2DecoderLayer(RTDetrDecoderLayer):
+    def __init__(self, config: RtDetrV2Config):
         # initialize parent class
         super().__init__(config)
         
         # override only the encoder attention module with v2 version
-        self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(config)
+        self.encoder_attn = RtDetrV2MultiscaleDeformableAttention(config)
 
     def forward(
         self,
@@ -324,8 +324,8 @@ class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
 
         return outputs
 
-class RTDetrV2PreTrainedModel(PreTrainedModel):
-    config_class = RTDetrV2Config
+class RtDetrV2PreTrainedModel(PreTrainedModel):
+    config_class = RtDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
     _no_split_modules = [r"RTDetrConvEncoder", r"RTDetrEncoderLayer", r"RTDetrDecoderLayer"]
@@ -334,7 +334,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
         """Initalize the weights"""
 
         """initialize linear layer bias value according to a given probability value."""
-        if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2Decoder)):
+        if isinstance(module, (RtDetrV2ForObjectDetection, RtDetrV2Decoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
@@ -347,7 +347,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
-        if isinstance(module, RTDetrV2Model):
+        if isinstance(module, RtDetrV2Model):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.encoder_score_head.weight)
@@ -366,14 +366,14 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
 
 
 
-## we may use better use of inherit here
-class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
-    def __init__(self, config: RTDetrV2Config):
+
+class RtDetrV2Decoder(RtDetrV2PreTrainedModel):
+    def __init__(self, config: RtDetrV2Config):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.query_pos_head = RTDetrMLPPredictionHeadV2(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+        self.layers = nn.ModuleList([RtDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.query_pos_head = RtDetrMLPPredictionHeadV2(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -512,7 +512,7 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
                 ]
                 if v is not None
             )
-        return RTDetrDecoderOutputV2(
+        return RtDetrDecoderOutputV2(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
@@ -524,8 +524,8 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
 
 
 # could make better use of inheritence
-class RTDetrV2Model(RTDetrV2PreTrainedModel):
-    def __init__(self, config: RTDetrV2Config):
+class RtDetrV2Model(RtDetrV2PreTrainedModel):
+    def __init__(self, config: RtDetrV2Config):
         super().__init__(config)
 
         # Create backbone
@@ -545,7 +545,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
 
         # Create encoder
-        self.encoder = RTDetrHybridEncoderV2(config)
+        self.encoder = RtDetrHybridEncoderV2(config)
 
         # denoising part
         if config.num_denoising > 0:
@@ -563,7 +563,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.encoder_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.encoder_bbox_head = RTDetrMLPPredictionHeadV2(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.encoder_bbox_head = RtDetrMLPPredictionHeadV2(config, config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -591,7 +591,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
 
         # decoder
-        self.decoder = RTDetrV2Decoder(config)
+        self.decoder = RtDetrV2Decoder(config)
 
         self.post_init()
 
@@ -649,14 +649,14 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutputV2]:
+    ) -> Union[Tuple[torch.FloatTensor], RtDetrModelOutputV2]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, RTDetrV2Model
+        >>> from transformers import AutoImageProcessor, RtDetrV2Model
         >>> from PIL import Image
         >>> import requests
 
@@ -664,7 +664,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("")
-        >>> model = RTDetrV2Model.from_pretrained("")
+        >>> model = RtDetrV2Model.from_pretrained("")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -827,7 +827,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
 
             return tuple_outputs
 
-        return RTDetrModelOutputV2(
+        return RtDetrModelOutputV2(
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
@@ -849,21 +849,21 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
 def _get_clones(partial_module, N):
     return nn.ModuleList([partial_module() for i in range(N)])
 
-class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
+class RtDetrV2ForObjectDetection(RtDetrV2PreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = ["bbox_embed", "class_embed"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
-    def __init__(self, config: RTDetrV2Config):
+    def __init__(self, config: RtDetrV2Config):
         super().__init__(config)
 
         # RTDETR encoder-decoder model
-        self.model = RTDetrV2Model(config)
+        self.model = RtDetrV2Model(config)
 
         # Detection heads on top
         self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        self.bbox_embed = partial(RTDetrMLPPredictionHeadV2, config, config.d_model, config.d_model, 4, num_layers=3)
+        self.bbox_embed = partial(RtDetrMLPPredictionHeadV2, config, config.d_model, config.d_model, 4, num_layers=3)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
@@ -900,7 +900,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **loss_kwargs,
-    ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutputV2]:
+    ) -> Union[Tuple[torch.FloatTensor], RtDetrObjectDetectionOutputV2]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
@@ -913,7 +913,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import RTDetrImageProcessor, RTDetrV2ForObjectDetection
+        >>> from transformers import RTDetrImageProcessor, RtDetrV2ForObjectDetection
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -922,7 +922,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = RTDetrImageProcessor.from_pretrained("")
-        >>> model = RTDetrV2ForObjectDetection.from_pretrained("")
+        >>> model = RtDetrV2ForObjectDetection.from_pretrained("")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1016,7 +1016,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
                 output = (logits, pred_boxes) + outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
-        return RTDetrObjectDetectionOutputV2(
+        return RtDetrObjectDetectionOutputV2(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,

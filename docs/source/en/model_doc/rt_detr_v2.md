@@ -48,7 +48,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## RTDetrV2ForObjectDetection
 
-[[autodoc]] RTDetrV2ForObjectDetection
+[[autodoc]] RtDetrV2ForObjectDetection
     - forward
 
 ## RTDetrV2ResNetBackbone

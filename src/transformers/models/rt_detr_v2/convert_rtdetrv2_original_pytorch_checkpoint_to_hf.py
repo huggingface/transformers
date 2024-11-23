@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert RT Detr checkpoints with Timm backbone"""
+"""Convert RT Detrv2 checkpoints with Timm backbone"""
 
 import argparse
 import json
@@ -24,7 +24,8 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrv2Config, RTDetrv2ForObjectDetection, RTDetrImageProcessor
+from transformers.models.rt_detr.image_processing_rt_detr import RTDetrImageProcessor
+from transformers.models.rt_detr_v2.modular_rtdetrv2 import RtDetrV2Config, RtDetrV2ForObjectDetection
 from transformers.utils import logging
 
 
@@ -32,8 +33,8 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_rtdetrv2_config(model_name: str) -> RTDetrv2Config:
-    config = RTDetrv2Config()
+def get_rt_detr_v2_config(model_name: str) -> RtDetrV2Config:
+    config = RtDetrV2Config()
 
     config.num_labels = 80
     repo_id = "huggingface/label-files"
@@ -43,39 +44,25 @@ def get_rtdetrv2_config(model_name: str) -> RTDetrv2Config:
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
-    if model_name == "rtdetr_r18vd":
+    if model_name == "rtdetr_v2_r18vd":
         config.backbone_config.hidden_sizes = [64, 128, 256, 512]
         config.backbone_config.depths = [2, 2, 2, 2]
         config.backbone_config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
-    elif model_name == "rtdetr_r34vd":
+    elif model_name == "rtdetr_v2_r34vd":
         config.backbone_config.hidden_sizes = [64, 128, 256, 512]
         config.backbone_config.depths = [3, 4, 6, 3]
         config.backbone_config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 4
-    elif model_name == "rtdetr_r50vd_m":
-        pass
-    elif model_name == "rtdetr_r50vd":
-        pass
-    elif model_name == "rtdetr_r101vd":
-        config.backbone_config.depths = [3, 4, 23, 3]
-        config.encoder_ffn_dim = 2048
-        config.encoder_hidden_dim = 384
-        config.decoder_in_channels = [384, 384, 384]
-    elif model_name == "rtdetr_r18vd_coco_o365":
-        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
-        config.backbone_config.depths = [2, 2, 2, 2]
-        config.backbone_config.layer_type = "basic"
-        config.encoder_in_channels = [128, 256, 512]
+    elif model_name == "rtdetr_v2_r50vd_m":
         config.hidden_expansion = 0.5
-        config.decoder_layers = 3
-    elif model_name == "rtdetr_r50vd_coco_o365":
+    elif model_name == "rtdetr_v2_r50vd":
         pass
-    elif model_name == "rtdetr_r101vd_coco_o365":
+    elif model_name == "rtdetr_v2_r101vd":
         config.backbone_config.depths = [3, 4, 23, 3]
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
@@ -154,7 +141,7 @@ def create_rename_keys(config):
                     f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.1.normalization.{last}",
                     ))
 
-            # https://github.com/lyuwenyu/RTDetrv2/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
+            # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
             if config.backbone_config.layer_type != "basic":
                 rename_keys.append(
                     (
@@ -233,11 +220,11 @@ def create_rename_keys(config):
         )
 
     for j in range(0, 3):
-        rename_keys.append((f"encoder.input_proj.{j}.0.weight", f"model.encoder_input_proj.{j}.0.weight"))
+        rename_keys.append((f"encoder.input_proj.{j}.conv.weight", f"model.encoder_input_proj.{j}.0.weight"))
         for last in last_key:
-            rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
+            rename_keys.append((f"encoder.input_proj.{j}.norm.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
-    block_levels = 3 if config.backbone_config.layer_type != "basic" else 4
+    block_levels = 4
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
@@ -385,6 +372,12 @@ def create_rename_keys(config):
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm2.bias", f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias")
         )
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.cross_attn.num_points_scale",
+                f"model.decoder.layers.{i}.encoder_attn.n_points_scale",
+            )
+        )
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.weight", f"model.decoder.layers.{i}.fc1.weight"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.bias", f"model.decoder.layers.{i}.fc1.bias"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear2.weight", f"model.decoder.layers.{i}.fc2.weight"))
@@ -471,18 +464,18 @@ def create_rename_keys(config):
             ("decoder.query_pos_head.layers.0.bias", "model.decoder.query_pos_head.layers.0.bias"),
             ("decoder.query_pos_head.layers.1.weight", "model.decoder.query_pos_head.layers.1.weight"),
             ("decoder.query_pos_head.layers.1.bias", "model.decoder.query_pos_head.layers.1.bias"),
-            ("decoder.enc_output.0.weight", "model.enc_output.0.weight"),
-            ("decoder.enc_output.0.bias", "model.enc_output.0.bias"),
-            ("decoder.enc_output.1.weight", "model.enc_output.1.weight"),
-            ("decoder.enc_output.1.bias", "model.enc_output.1.bias"),
-            ("decoder.enc_score_head.weight", "model.enc_score_head.weight"),
-            ("decoder.enc_score_head.bias", "model.enc_score_head.bias"),
-            ("decoder.enc_bbox_head.layers.0.weight", "model.enc_bbox_head.layers.0.weight"),
-            ("decoder.enc_bbox_head.layers.0.bias", "model.enc_bbox_head.layers.0.bias"),
-            ("decoder.enc_bbox_head.layers.1.weight", "model.enc_bbox_head.layers.1.weight"),
-            ("decoder.enc_bbox_head.layers.1.bias", "model.enc_bbox_head.layers.1.bias"),
-            ("decoder.enc_bbox_head.layers.2.weight", "model.enc_bbox_head.layers.2.weight"),
-            ("decoder.enc_bbox_head.layers.2.bias", "model.enc_bbox_head.layers.2.bias"),
+            ("decoder.enc_output.proj.weight", "model.encoder_output.0.weight"),
+            ("decoder.enc_output.proj.bias", "model.encoder_output.0.bias"),
+            ("decoder.enc_output.norm.weight", "model.encoder_output.1.weight"),
+            ("decoder.enc_output.norm.bias", "model.encoder_output.1.bias"),
+            ("decoder.enc_score_head.weight", "model.encoder_score_head.weight"),
+            ("decoder.enc_score_head.bias", "model.encoder_score_head.bias"),
+            ("decoder.enc_bbox_head.layers.0.weight", "model.encoder_bbox_head.layers.0.weight"),
+            ("decoder.enc_bbox_head.layers.0.bias", "model.encoder_bbox_head.layers.0.bias"),
+            ("decoder.enc_bbox_head.layers.1.weight", "model.encoder_bbox_head.layers.1.weight"),
+            ("decoder.enc_bbox_head.layers.1.bias", "model.encoder_bbox_head.layers.1.bias"),
+            ("decoder.enc_bbox_head.layers.2.weight", "model.encoder_bbox_head.layers.2.weight"),
+            ("decoder.enc_bbox_head.layers.2.bias", "model.encoder_bbox_head.layers.2.bias"),
         ]
     )
 
@@ -544,24 +537,21 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_rtdetrv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
+def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
     """
-    Copy/paste/tweak model's weights to our RTDETRV2 structure.
+    Copy/paste/tweak model's weights to our RTDETR structure.
     """
 
     # load default config
-    config = get_rtdetrv2_config(model_name)
+    config = get_rt_detr_v2_config(model_name)
 
     # load original model from torch hub
     model_name_to_checkpoint_url = {
-        "rtdetr_r18vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_dec3_6x_coco_from_paddle.pth",
-        "rtdetr_r34vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r34vd_dec4_6x_coco_from_paddle.pth",
-        "rtdetr_r50vd_m": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_m_6x_coco_from_paddle.pth",
-        "rtdetr_r50vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth",
-        "rtdetr_r101vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_6x_coco_from_paddle.pth",
-        "rtdetr_r18vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_5x_coco_objects365_from_paddle.pth",
-        "rtdetr_r50vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_2x_coco_objects365_from_paddle.pth",
-        "rtdetr_r101vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_2x_coco_objects365_from_paddle.pth",
+        "rtdetr_v2_r18vd": "https://github.com/lyuwenyu/storage/releases/download/v0.2/rtdetrv2_r18vd_120e_coco_rerun_48.1.pth",
+        "rtdetr_v2_r34vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r34vd_120e_coco_ema.pth",
+        "rtdetr_v2_r50vd_m": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r50vd_m_7x_coco_ema.pth",
+        "rtdetr_v2_r50vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r50vd_6x_coco_ema.pth",
+        "rtdetr_v2_r101vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r101vd_6x_coco_from_paddle.pth",
     }
     logger.info(f"Converting model {model_name}...")
     state_dict = torch.hub.load_state_dict_from_url(model_name_to_checkpoint_url[model_name], map_location="cpu")[
@@ -581,8 +571,12 @@ def convert_rtdetrv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
 
+    # This layer is not required since it is static layer
+    del state_dict["decoder.anchors"]
+    del state_dict["decoder.valid_mask"]
+
     # finally, create HuggingFace model and load state dict
-    model = RTDetrv2ForObjectDetection(config)
+    model = RtDetrV2ForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -613,130 +607,45 @@ def convert_rtdetrv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # Pass image by the model
     outputs = model(pixel_values)
 
-    if model_name == "rtdetr_r18vd":
+    if model_name == "rtdetr_v2_r18vd":
         expected_slice_logits = torch.tensor(
-            [
-                [-4.3364253, -6.465683, -3.6130402],
-                [-4.083815, -6.4039373, -6.97881],
-                [-4.192215, -7.3410473, -6.9027247],
-            ]
+            [[-3.7045, -5.1913, -6.1787], [-4.0106, -9.3450, -5.2043], [-4.1287, -4.7463, -5.8634]]
         )
         expected_slice_boxes = torch.tensor(
-            [
-                [0.16868353, 0.19833282, 0.21182671],
-                [0.25559652, 0.55121744, 0.47988364],
-                [0.7698693, 0.4124569, 0.46036878],
-            ]
+            [[0.2582, 0.5497, 0.4764], [0.1684, 0.1985, 0.2120], [0.7665, 0.4146, 0.4669]]
         )
-    elif model_name == "rtdetr_r34vd":
+    elif model_name == "rtdetr_v2_r34vd":
         expected_slice_logits = torch.tensor(
-            [
-                [-4.3727384, -4.7921476, -5.7299604],
-                [-4.840536, -8.455345, -4.1745796],
-                [-4.1277084, -5.2154565, -5.7852697],
-            ]
+            [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
         )
         expected_slice_boxes = torch.tensor(
-            [
-                [0.258278, 0.5497808, 0.4732004],
-                [0.16889669, 0.19890057, 0.21138911],
-                [0.76632994, 0.4147879, 0.46851268],
-            ]
+            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
         )
-    elif model_name == "rtdetr_r50vd_m":
+    elif model_name == "rtdetr_v2_r50vd_m":
         expected_slice_logits = torch.tensor(
-            [
-                [-4.319764, -6.1349025, -6.094794],
-                [-5.1056995, -7.744766, -4.803956],
-                [-4.7685347, -7.9278393, -4.5751696],
-            ]
+            [[-2.7453, -5.4595, -7.3702], [-3.1858, -5.3803, -7.9838], [-5.0293, -7.0083, -4.2888]]
         )
         expected_slice_boxes = torch.tensor(
-            [
-                [0.2582739, 0.55071366, 0.47660282],
-                [0.16811174, 0.19954777, 0.21292639],
-                [0.54986024, 0.2752091, 0.0561416],
-            ]
+            [[0.7711, 0.4135, 0.4577], [0.2570, 0.5480, 0.4755], [0.1694, 0.1992, 0.2127]]
         )
-    elif model_name == "rtdetr_r50vd":
+    elif model_name == "rtdetr_v2_r50vd":
         expected_slice_logits = torch.tensor(
-            [
-                [-4.6476398, -5.001154, -4.9785104],
-                [-4.1593494, -4.7038546, -5.946485],
-                [-4.4374595, -4.658361, -6.2352347],
-            ]
+            [[-4.7881, -4.6754, -6.1624], [-5.4441, -6.6486, -4.3840], [-3.5455, -4.9318, -6.3544]]
         )
         expected_slice_boxes = torch.tensor(
-            [
-                [0.16880608, 0.19992264, 0.21225442],
-                [0.76837635, 0.4122631, 0.46368608],
-                [0.2595386, 0.5483334, 0.4777486],
-            ]
+            [[0.2588, 0.5487, 0.4747], [0.5497, 0.2760, 0.0573], [0.7688, 0.4133, 0.4634]]
         )
-    elif model_name == "rtdetr_r101vd":
+    elif model_name == "rtdetr_v2_r101vd":
         expected_slice_logits = torch.tensor(
-            [
-                [-4.6162, -4.9189, -4.6656],
-                [-4.4701, -4.4997, -4.9659],
-                [-5.6641, -7.9000, -5.0725],
-            ]
+            [[-4.6162, -4.9189, -4.6656], [-4.4701, -4.4997, -4.9659], [-5.6641, -7.9000, -5.0725]]
         )
         expected_slice_boxes = torch.tensor(
-            [
-                [0.7707, 0.4124, 0.4585],
-                [0.2589, 0.5492, 0.4735],
-                [0.1688, 0.1993, 0.2108],
-            ]
-        )
-    elif model_name == "rtdetr_r18vd_coco_o365":
-        expected_slice_logits = torch.tensor(
-            [
-                [-4.8726, -5.9066, -5.2450],
-                [-4.8157, -6.8764, -5.1656],
-                [-4.7492, -5.7006, -5.1333],
-            ]
-        )
-        expected_slice_boxes = torch.tensor(
-            [
-                [0.2552, 0.5501, 0.4773],
-                [0.1685, 0.1986, 0.2104],
-                [0.7692, 0.4141, 0.4620],
-            ]
-        )
-    elif model_name == "rtdetr_r50vd_coco_o365":
-        expected_slice_logits = torch.tensor(
-            [
-                [-4.6491, -3.9252, -5.3163],
-                [-4.1386, -5.0348, -3.9016],
-                [-4.4778, -4.5423, -5.7356],
-            ]
-        )
-        expected_slice_boxes = torch.tensor(
-            [
-                [0.2583, 0.5492, 0.4747],
-                [0.5501, 0.2754, 0.0574],
-                [0.7693, 0.4137, 0.4613],
-            ]
-        )
-    elif model_name == "rtdetr_r101vd_coco_o365":
-        expected_slice_logits = torch.tensor(
-            [
-                [-4.5152, -5.6811, -5.7311],
-                [-4.5358, -7.2422, -5.0941],
-                [-4.6919, -5.5834, -6.0145],
-            ]
-        )
-        expected_slice_boxes = torch.tensor(
-            [
-                [0.7703, 0.4140, 0.4583],
-                [0.1686, 0.1991, 0.2107],
-                [0.2570, 0.5496, 0.4750],
-            ]
+            [[0.7707, 0.4124, 0.4585], [0.2589, 0.5492, 0.4735], [0.1688, 0.1993, 0.2108]]
         )
     else:
-        raise ValueError(f"Unknown rtdetrv2_name: {model_name}")
+        raise ValueError(f"Unknown rt_detr_v2_name: {model_name}")
 
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-3)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
 
     if pytorch_dump_folder_path is not None:
@@ -750,14 +659,16 @@ def convert_rtdetrv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id, commit_message="Add config from convert_rtdetrv2_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add config from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
         model.push_to_hub(
-            repo_id=repo_id, commit_message="Add model from convert_rtdetrv2_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add model from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
         image_processor.push_to_hub(
             repo_id=repo_id,
-            commit_message="Add image processor from convert_rtdetrv2_original_pytorch_checkpoint_to_pytorch.py",
+            commit_message="Add image processor from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
 
 
@@ -765,7 +676,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="rtdetr_r50vd",
+        default="rtdetr_v2_r18vd",
         type=str,
         help="model_name of the checkpoint you'd like to convert.",
     )
@@ -779,4 +690,4 @@ if __name__ == "__main__":
         help="repo_id where the model will be pushed to.",
     )
     args = parser.parse_args()
-    convert_rtdetrv2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
+    convert_rt_detr_v2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
