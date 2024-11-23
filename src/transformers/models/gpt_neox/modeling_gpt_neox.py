@@ -243,14 +243,19 @@ def sdpa_attention_forward(
     return attn_output, None
 
 
-def flex_attention_forward(query, key, value, attention_mask, norm_factor, output_attentions=False, **_kwargs):
+def flex_attention_forward(query, key, value, attention_mask, head_mask, norm_factor, output_attentions=False, **_kwargs):
+    causal_mask_exists = attention_mask is not None
+    head_mask_exists = head_mask is not None
+
     causal_mask = attention_mask
-    if attention_mask is not None:
+    if causal_mask_exists:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     def causal_mod(score, b, h, q_idx, kv_idx):
-        if causal_mask is not None:
-            return score + causal_mask[b][0][q_idx][kv_idx]
+        if causal_mask_exists:
+            score += causal_mask[b][0][q_idx][kv_idx]
+        if head_mask_exists:
+            score += head_mask[b][h][0][0]
         return score
 
     attn_output = flex_attention(
@@ -369,9 +374,19 @@ class GPTNeoXAttention(nn.Module):
 
         # Checking for fallbacks in case an unsupported feature is requested
         attention_type = self.config._attn_implementation
-        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+        if (output_attentions or head_mask is not None) and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+            warning_msg = "Setting `attention_type` to `eager` because"
+
+            if output_attentions:
+                warning_msg += f" `output_attentions=True`"
+            if output_attentions and head_mask is not None:
+                warning_msg += f" and `head_mask` not None"
+            elif head_mask is not None:
+                warning_msg += f" `head_mask` not None"
+            warning_msg += f" not supported in {attention_type}"
+
             logger.warning_once(
-                f"Setting `attention_type` to `eager` because `output_attentions=True` is not supported in {attention_type}"
+                warning_msg
             )
             attention_type = "eager"
 
@@ -932,7 +947,12 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        converted_head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        # Flex Attention converts it to a separate mask
+        if head_mask is not None:
+            converted_head_mask = torch.where(converted_head_mask < 1.0, torch.finfo(inputs_embeds.dtype).min, 0).to(device=self.device)
+        head_mask = converted_head_mask
+
         hidden_states = self.emb_dropout(inputs_embeds)
 
         # create position embeddings to be shared across the decoder layers
