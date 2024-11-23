@@ -8,7 +8,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class AriaTextConfig(PretrainedConfig):
@@ -29,6 +29,7 @@ class AriaTextConfig(PretrainedConfig):
 
     model_type = "aria_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -133,6 +134,7 @@ class AriaConfig(PretrainedConfig):
 
     model_type = "aria"
     is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,

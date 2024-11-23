@@ -105,9 +105,6 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
         "AutoModelForCausalLM": "modeling_aria.AriaForConditionalGeneration",
     }
 
-    config.pad_token_id = 32001
-    config.image_token_index = 32000
-
     with torch.device("meta"):
         model = AriaForConditionalGeneration(config)
 

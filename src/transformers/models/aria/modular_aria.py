@@ -33,7 +33,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_torch_available
-from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer
+from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LLAMA_ATTENTION_CLASSES,
@@ -113,6 +113,7 @@ class AriaTextConfig(LlamaConfig):
     """
 
     model_type = "aria_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -161,6 +162,7 @@ class AriaConfig(PretrainedConfig):
 
     model_type = "aria"
     is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig} 
 
     def __init__(
         self,
@@ -239,21 +241,20 @@ class AriaCrossAttention(nn.Module):
 
     def __init__(self, config: AriaConfig, dropout_rate: float = 0):
         super().__init__()
-        in_features = config.vision_config.hidden_size
+        hidden_size = config.vision_config.hidden_size
         num_heads = config.vision_config.num_attention_heads
-        kv_dim = config.vision_config.hidden_size
         self.num_heads = num_heads
-        self.q_proj = nn.Linear(in_features, in_features, bias=False)
-        self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
-        self.v_proj = nn.Linear(kv_dim, in_features, bias=False)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
 
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
-        self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
-        self.linear = nn.Linear(in_features, in_features)
+        self.multihead_attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
+        self.linear = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(dropout_rate)
 
-        self.layer_norm = nn.LayerNorm(in_features)
-        self.layer_norm_kv = nn.LayerNorm(kv_dim)
+        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.layer_norm_kv = nn.LayerNorm(hidden_size)
 
     def forward(self, key_value_states, hidden_states, attn_mask=None, add_residual=False):
         """
@@ -662,25 +663,15 @@ class AriaProcessor(ProcessorMixin):
         image_token: str = "<|img|>",
         size_conversion: Optional[Dict] = None,
     ):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = size_conversion
-
-        if image_processor is None:
-            self.image_processor = AriaImageProcessor(max_image_size=patch_size)
-        else:
-            self.image_processor = image_processor
-
-        if isinstance(tokenizer, str):
-            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer, trust_remote_code=True, use_fast=False)
-        else:
-            self.tokenizer = tokenizer
 
         if self.tokenizer is not None and self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.unk_token
 
         self.image_token = image_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     # Modified from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
@@ -721,7 +712,7 @@ class AriaProcessor(ProcessorMixin):
         """
         output_kwargs = self._merge_kwargs(
             AriaProcessorKwargs,
-            {},
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
         if isinstance(text, str):
@@ -731,9 +722,7 @@ class AriaProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(
                 images,
-                return_tensors=output_kwargs["images_kwargs"]["return_tensors"],
-                max_image_size=output_kwargs["images_kwargs"]["max_image_size"],
-                split_image=output_kwargs["images_kwargs"]["split_image"],
+                **output_kwargs["images_kwargs"],
             )
             # expand the image_token according to the num_crops and tokens per image
             tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
@@ -750,10 +739,7 @@ class AriaProcessor(ProcessorMixin):
 
         text_inputs = self.tokenizer(
             prompt_strings,
-            return_tensors=output_kwargs["text_kwargs"]["return_tensors"],
-            padding=output_kwargs["text_kwargs"]["padding"],
-            truncation=output_kwargs["text_kwargs"]["truncation"],
-            max_length=output_kwargs["text_kwargs"]["max_length"],
+            **output_kwargs["text_kwargs"],
         )
 
         return BatchFeature(data={**text_inputs, **image_inputs})

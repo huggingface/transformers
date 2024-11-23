@@ -90,17 +90,17 @@ class AriaTextRMSNorm(nn.Module):
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+        self.varia_textnce_epsilon = eps
 
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        varia_textnce = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(varia_textnce + self.varia_textnce_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        return f"{tuple(self.weight.shape)}, eps={self.varia_textnce_epsilon}"
 
 
 class AriaProjectorMLP(nn.Module):
@@ -135,21 +135,20 @@ class AriaCrossAttention(nn.Module):
 
     def __init__(self, config: AriaConfig, dropout_rate: float = 0):
         super().__init__()
-        in_features = config.vision_config.hidden_size
+        hidden_size = config.vision_config.hidden_size
         num_heads = config.vision_config.num_attention_heads
-        kv_dim = config.vision_config.hidden_size
         self.num_heads = num_heads
-        self.q_proj = nn.Linear(in_features, in_features, bias=False)
-        self.k_proj = nn.Linear(kv_dim, in_features, bias=False)
-        self.v_proj = nn.Linear(kv_dim, in_features, bias=False)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
 
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
-        self.multihead_attn = nn.MultiheadAttention(in_features, num_heads, batch_first=True)
-        self.linear = nn.Linear(in_features, in_features)
+        self.multihead_attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
+        self.linear = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(dropout_rate)
 
-        self.layer_norm = nn.LayerNorm(in_features)
-        self.layer_norm_kv = nn.LayerNorm(kv_dim)
+        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.layer_norm_kv = nn.LayerNorm(hidden_size)
 
     def forward(self, key_value_states, hidden_states, attn_mask=None, add_residual=False):
         """

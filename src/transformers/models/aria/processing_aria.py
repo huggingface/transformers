@@ -58,25 +58,15 @@ class AriaProcessor(ProcessorMixin):
         image_token: str = "<|img|>",
         size_conversion: Optional[Dict] = None,
     ):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = size_conversion
-
-        if image_processor is None:
-            self.image_processor = AriaImageProcessor(max_image_size=patch_size)
-        else:
-            self.image_processor = image_processor
-
-        if isinstance(tokenizer, str):
-            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer, trust_remote_code=True, use_fast=False)
-        else:
-            self.tokenizer = tokenizer
 
         if self.tokenizer is not None and self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.unk_token
 
         self.image_token = image_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     # Modified from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
@@ -117,7 +107,7 @@ class AriaProcessor(ProcessorMixin):
         """
         output_kwargs = self._merge_kwargs(
             AriaProcessorKwargs,
-            {},
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
         if isinstance(text, str):
@@ -127,9 +117,7 @@ class AriaProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(
                 images,
-                return_tensors=output_kwargs["images_kwargs"]["return_tensors"],
-                max_image_size=output_kwargs["images_kwargs"]["max_image_size"],
-                split_image=output_kwargs["images_kwargs"]["split_image"],
+                **output_kwargs["images_kwargs"],
             )
             # expand the image_token according to the num_crops and tokens per image
             tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
@@ -146,10 +134,7 @@ class AriaProcessor(ProcessorMixin):
 
         text_inputs = self.tokenizer(
             prompt_strings,
-            return_tensors=output_kwargs["text_kwargs"]["return_tensors"],
-            padding=output_kwargs["text_kwargs"]["padding"],
-            truncation=output_kwargs["text_kwargs"]["truncation"],
-            max_length=output_kwargs["text_kwargs"]["max_length"],
+            **output_kwargs["text_kwargs"],
         )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
