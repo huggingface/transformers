@@ -141,7 +141,7 @@ def foo():
                 outputs = model_forward_2(model, return_dict=True, **model_inputs)
                 o['model_forward'] = model_forward_2
         else:
-            outputs = model_forward_2(model, return_dict=True, **model_inputs)
+            outputs = o['model_forward'](model, return_dict=True, **model_inputs)
             o['outputs'] = outputs
             p.put(o)
 
@@ -3293,7 +3293,7 @@ class GenerationMixin:
                     item = p.get()
                     outputs = item['outputs']
                     d = (datetime.datetime.now() - s).total_seconds()
-                    print(d)
+                    # print(d)
                 else:
                     outputs = self(**model_inputs, return_dict=True)
                 i += 1
