@@ -3287,9 +3287,13 @@ class GenerationMixin:
                     q.put((o, self, model_inputs))
                 # when compiled is done
                 if o['model_forward'] is not None:
+                    import datetime
+                    s = datetime.datetime.now()
                     q.put((o, self, model_inputs))
                     item = p.get()
                     outputs = item['outputs']
+                    d = (datetime.datetime.now() - s).total_seconds()
+                    print(d)
                 else:
                     outputs = self(**model_inputs, return_dict=True)
                 i += 1
