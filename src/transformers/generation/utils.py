@@ -147,8 +147,6 @@ def foo():
                 o['model_forward'] = model_forward_3
         else:
             outputs = o['model_forward'](my_model, return_dict=True, **model_inputs)
-            o['outputs'] = outputs
-            p.put(o)
 
 
 @dataclass
@@ -3283,24 +3281,36 @@ class GenerationMixin:
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             if i == 0:
+                already_compied = False
+                if o['model_forward'] is not None:
+                    already_compied = True
+                    
                 outputs = self(**model_inputs, return_dict=True)
                 i += 1
             else:
-                if i == 1 and o['model_forward'] is None:
-                    # don't join
-                    # just compile
+                if not already_compied:
                     q.put((o, self, model_inputs))
-                # when compiled is done
-                if o['model_forward'] is not None:
-                    import datetime
-                    s = datetime.datetime.now()
-                    q.put((o, self, model_inputs))
-                    item = p.get()
-                    outputs = item['outputs']
-                    d = (datetime.datetime.now() - s).total_seconds()
-                    # print(d)
-                else:
+                    # use self
                     outputs = self(**model_inputs, return_dict=True)
+                else:
+                    # directly call (??)
+                    outputs = o['model_forward'](self, return_dict=True, **model_inputs)
+
+                # if i == 1 and o['model_forward'] is None:
+                #     # don't join
+                #     # just compile
+                #     q.put((o, self, model_inputs))
+                # # when compiled is done
+                # if o['model_forward'] is not None:
+                #     import datetime
+                #     s = datetime.datetime.now()
+                #     q.put((o, self, model_inputs))
+                #     item = p.get()
+                #     outputs = item['outputs']
+                #     d = (datetime.datetime.now() - s).total_seconds()
+                #     # print(d)
+                # else:
+                #     outputs = self(**model_inputs, return_dict=True)
                 i += 1
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
