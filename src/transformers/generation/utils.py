@@ -124,9 +124,14 @@ import queue
 q = queue.Queue()
 p = queue.Queue()
 
-def foo():
-    def model_forward_2(model, *args, **kwargs):
+
+def model_forward_2(model, *args, **kwargs):
+    with torch.no_grad():
         return model.forward(*args, **kwargs)
+
+my_model = None
+
+def foo():
 
     while True:
         item = q.get()
@@ -137,11 +142,11 @@ def foo():
             if model.device.type == "cuda":
                 logger.warning_once("Using `torch.compile`.")
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                model_forward_2 = torch.compile(model_forward_2, mode="reduce-overhead", fullgraph=True)
-                outputs = model_forward_2(model, return_dict=True, **model_inputs)
-                o['model_forward'] = model_forward_2
+                model_forward_3 = torch.compile(model_forward_2, mode="reduce-overhead", fullgraph=True)
+                outputs = model_forward_3(my_model, return_dict=True, **model_inputs)
+                o['model_forward'] = model_forward_3
         else:
-            outputs = o['model_forward'](model, return_dict=True, **model_inputs)
+            outputs = o['model_forward'](my_model, return_dict=True, **model_inputs)
             o['outputs'] = outputs
             p.put(o)
 
