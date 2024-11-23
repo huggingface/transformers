@@ -60,7 +60,7 @@ class Zamba2ModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=16,
         mamba_d_state=2,
         chunk_size=8,
         mamba_dt_rank="auto",

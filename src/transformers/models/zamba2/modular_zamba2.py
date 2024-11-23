@@ -15,7 +15,7 @@
 # limitations under the License.
 import math
 from itertools import cycle
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -46,7 +46,6 @@ from ..zamba.modeling_zamba import (
     ZambaMambaDecoderLayer,
     ZambaMLP,
     ZambaModel,
-    ZambaPreTrainedModel,
     ZambaRMSNorm,
     repeat_kv,
 )
