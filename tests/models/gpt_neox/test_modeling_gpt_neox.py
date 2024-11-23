@@ -466,6 +466,7 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
             model = GPTNeoXForCausalLM.from_pretrained(
                 "EleutherAI/pythia-410m-deduped", attn_implementation="flex_attention"
             )
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             if checkpointing:
                 model.gradient_checkpointing_enable()
