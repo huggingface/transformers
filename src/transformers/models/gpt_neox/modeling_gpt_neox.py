@@ -243,7 +243,9 @@ def sdpa_attention_forward(
     return attn_output, None
 
 
-def flex_attention_forward(query, key, value, attention_mask, head_mask, norm_factor, output_attentions=False, **_kwargs):
+def flex_attention_forward(
+    query, key, value, attention_mask, head_mask, norm_factor, output_attentions=False, **_kwargs
+):
     causal_mask_exists = attention_mask is not None
     head_mask_exists = head_mask is not None
 
@@ -374,20 +376,21 @@ class GPTNeoXAttention(nn.Module):
 
         # Checking for fallbacks in case an unsupported feature is requested
         attention_type = self.config._attn_implementation
-        if (output_attentions or head_mask is not None) and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+        if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
+            "sdpa",
+            "flash_attention_2",
+        ]:
             warning_msg = "Setting `attention_type` to `eager` because"
 
             if output_attentions:
-                warning_msg += f" `output_attentions=True`"
+                warning_msg += " `output_attentions=True`"
             if output_attentions and head_mask is not None:
-                warning_msg += f" and `head_mask` not None"
+                warning_msg += " and `head_mask` not None"
             elif head_mask is not None:
-                warning_msg += f" `head_mask` not None"
+                warning_msg += " `head_mask` not None"
             warning_msg += f" not supported in {attention_type}"
 
-            logger.warning_once(
-                warning_msg
-            )
+            logger.warning_once(warning_msg)
             attention_type = "eager"
 
         if (
@@ -950,7 +953,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         converted_head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         # Flex Attention converts it to a separate mask
         if head_mask is not None:
-            converted_head_mask = torch.where(converted_head_mask < 1.0, torch.finfo(inputs_embeds.dtype).min, 0).to(device=self.device)
+            converted_head_mask = torch.where(converted_head_mask < 1.0, torch.finfo(inputs_embeds.dtype).min, 0)
+            converted_head_mask = converted_head_mask.to(device=self.device)
         head_mask = converted_head_mask
 
         hidden_states = self.emb_dropout(inputs_embeds)
