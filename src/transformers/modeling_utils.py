@@ -2807,7 +2807,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             shard = {}
             for tensor in tensors:
                 shard[tensor] = state_dict[tensor].contiguous()
-                del state_dict[tensor]  # delete reference, see [UPDATE WITH PR NUMBER]
+                del state_dict[tensor]  # delete reference, see #34890
 
             # remake shard with onloaded parameters if necessary
             if module_map:
@@ -2834,6 +2834,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
+
+        del state_dict
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
