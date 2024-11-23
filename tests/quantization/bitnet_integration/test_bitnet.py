@@ -116,8 +116,8 @@ class BitNetTest(unittest.TestCase):
         u = torch.randint(0, 255, (256, 256), dtype=torch.uint8)
         unpacked_u = unpack_weights(u, dtype=torch.bfloat16)
         repacked_u = pack_weights(unpacked_u)
-        for i in range(u.shape[0]) : 
-            for j in range(u.shape[1]) : 
+        for i in range(u.shape[0]):
+            for j in range(u.shape[1]):
                 self.assertEqual(repacked_u[i][j], u[i][j])
 
     def test_activation_quant(self):
@@ -130,15 +130,13 @@ class BitNetTest(unittest.TestCase):
         layer = BitLinear(in_features=4, out_features=2, bias=False, dtype=torch.float32)
         layer.to(self.device)
 
-        input_tensor = torch.tensor([1.0, -1.0, -1.0, 1.0], dtype=torch.float32).to(
-            torch_device
-        )
+        input_tensor = torch.tensor([1.0, -1.0, -1.0, 1.0], dtype=torch.float32).to(torch_device)
 
         # Quantize the input tensor
         quantized_tensor, scale = layer.activation_quant(input_tensor)
 
         # Verify the output quantized tensor
-        for i in range(input_tensor.shape[0]) : 
+        for i in range(input_tensor.shape[0]):
             self.assertEqual(quantized_tensor[i] / scale, input_tensor[i])
 
         # Verify the scale tensor
