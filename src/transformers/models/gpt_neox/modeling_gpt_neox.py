@@ -233,7 +233,7 @@ def sdpa_attention_forward(
         key=key,
         value=value,
         attn_mask=causal_mask,
-        dropout_p=attention_dropout.p if training else 0.0,
+        dropout_p=attention_dropout if training else 0.0,
         is_causal=is_causal,
     )
 
