@@ -118,6 +118,34 @@ if is_accelerate_available():
 
 
 o = dict()
+
+import queue
+
+q = queue.Queue()
+p = queue.Queue()
+
+def foo():
+    def model_forward_2(model, *args, **kwargs):
+        return model.forward(*args, **kwargs)
+
+    while True:
+        item = q.get()
+        o, model, model_inputs = item
+
+        if o['model_forward'] is None:
+            #if isinstance(model_kwargs.get("past_key_values"), StaticCache):
+            if model.device.type == "cuda":
+                logger.warning_once("Using `torch.compile`.")
+                os.environ["TOKENIZERS_PARALLELISM"] = "0"
+                model_forward_2 = torch.compile(model_forward_2, mode="reduce-overhead", fullgraph=True)
+                outputs = model_forward_2(model, return_dict=True, **model_inputs)
+                o['model_forward'] = model_forward_2
+        else:
+            outputs = model_forward_2(model, return_dict=True, **model_inputs)
+            o['outputs'] = outputs
+            p.put(o)
+
+
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
@@ -3228,30 +3256,9 @@ class GenerationMixin:
 
         #o = dict()
         o['model_forward'] = None
-        import queue
-        q = queue.Queue()
-        p = queue.Queue()
 
-        def foo():
-            def model_forward_2(model, *args, **kwargs):
-                return model.forward(*args, **kwargs)
 
-            while True:
-                item = q.get()
-                o, model, model_inputs = item
 
-                if o['model_forward'] is None:
-                    if isinstance(model_kwargs.get("past_key_values"), StaticCache):
-                        if model.device.type == "cuda":
-                            logger.warning_once("Using `torch.compile`.")
-                            os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                            model_forward_2 = torch.compile(model_forward_2, mode="reduce-overhead", fullgraph=True)
-                            outputs = model_forward_2(model, return_dict=True, **model_inputs)
-                            o['model_forward'] = model_forward_2
-                else:
-                    outputs = model_forward_2(model, return_dict=True, **model_inputs)
-                    o['outputs'] = outputs
-                    p.put(o)
                 # q.task_done()
 
         import threading
