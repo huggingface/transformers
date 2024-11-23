@@ -953,8 +953,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         converted_head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         # Flex Attention converts it to a separate mask
         if head_mask is not None:
-            converted_head_mask = torch.where(converted_head_mask < 1.0, torch.finfo(inputs_embeds.dtype).min, 0)
-            converted_head_mask = converted_head_mask.to(device=self.device)
+            converted_head_mask = ~converted_head_mask.bool() * torch.finfo(inputs_embeds.dtype).min
+            converted_head_mask = converted_head_mask.to(dtype=self.dtype, device=self.device)
         head_mask = converted_head_mask
 
         hidden_states = self.emb_dropout(inputs_embeds)
