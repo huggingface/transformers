@@ -3255,7 +3255,8 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         #o = dict()
-        o['model_forward'] = None
+        if 'model_forward' not in o:
+            o['model_forward'] = None
 
 
 
@@ -3280,7 +3281,7 @@ class GenerationMixin:
                 outputs = self(**model_inputs, return_dict=True)
                 i += 1
             else:
-                if i == 1:
+                if i == 1 and o['model_forward'] is not None:
                     # don't join
                     # just compile
                     q.put((o, self, model_inputs))
