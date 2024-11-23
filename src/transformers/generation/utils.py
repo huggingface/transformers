@@ -3227,18 +3227,33 @@ class GenerationMixin:
 
         o = dict()
         o['model_forward'] = None
-        def foo(o, model, model_inputs):
+        import queue
+        q = queue.Queue()
 
+        def foo():
             def model_forward_2(model, *args, **kwargs):
                 return model.forward(*args, **kwargs)
 
-            if isinstance(model_kwargs.get("past_key_values"), StaticCache):
-                if model.device.type == "cuda":
-                    logger.warning_once("Using `torch.compile`.")
-                    os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                    model_forward_2 = torch.compile(model_forward_2, mode="reduce-overhead", fullgraph=True)
+            while True:
+                item = q.get()
+                q.task_done()
+                o, model, model_inputs = item
+
+                if o['model_forward'] is None:
+                    if isinstance(model_kwargs.get("past_key_values"), StaticCache):
+                        if model.device.type == "cuda":
+                            logger.warning_once("Using `torch.compile`.")
+                            os.environ["TOKENIZERS_PARALLELISM"] = "0"
+                            model_forward_2 = torch.compile(model_forward_2, mode="reduce-overhead", fullgraph=True)
+                            outputs = model_forward_2(model, return_dict=True, **model_inputs)
+                            o['model_forward'] = model_forward_2
+                else:
                     outputs = model_forward_2(model, return_dict=True, **model_inputs)
-                    o['model_forward'] = model_forward_2
+                    o['outputs'] = outputs
+
+        import threading
+        t = threading.Thread(target=foo)
+        t.start()
 
         i = 0
         while self._has_unfinished_sequences(
@@ -3256,10 +3271,7 @@ class GenerationMixin:
                 i += 1
             else:
                 if i == 1:
-                    import threading
-                    t = threading.Thread(target=foo, args=(o, self, model_inputs))
-                    t.start()
-                    t.join()
+                    q.put((o, self, model_inputs))
                 if o['model_forward'] is not None:
                     outputs = o['model_forward'](self, return_dict=True, **model_inputs)
                 else:
