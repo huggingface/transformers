@@ -3251,8 +3251,7 @@ class GenerationMixin:
                     outputs = model_forward_2(model, return_dict=True, **model_inputs)
                     o['outputs'] = outputs
                     p.put(o)
-
-                q.task_done()
+                # q.task_done()
 
         import threading
         t = threading.Thread(target=foo)
@@ -3275,14 +3274,13 @@ class GenerationMixin:
             else:
                 if i == 1:
                     # don't join
+                    # just compile
                     q.put((o, self, model_inputs))
                 # when compiled is done
                 if o['model_forward'] is not None:
                     q.put((o, self, model_inputs))
-                    q.join()
                     item = p.get()
                     outputs = item['outputs']
-                    p.task_done()
                 else:
                     outputs = self(**model_inputs, return_dict=True)
                 i += 1
