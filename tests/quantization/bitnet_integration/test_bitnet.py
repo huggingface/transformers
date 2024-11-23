@@ -65,7 +65,7 @@ class BitNetTest(unittest.TestCase):
         """
         Load the model
         """
-        cls.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device)
 
     def tearDown(self):
