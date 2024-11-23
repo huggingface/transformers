@@ -117,6 +117,7 @@ if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 
+o = dict()
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
@@ -3225,7 +3226,7 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        o = dict()
+        #o = dict()
         o['model_forward'] = None
         import queue
         q = queue.Queue()
@@ -3284,7 +3285,6 @@ class GenerationMixin:
                 else:
                     outputs = self(**model_inputs, return_dict=True)
                 i += 1
-
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
