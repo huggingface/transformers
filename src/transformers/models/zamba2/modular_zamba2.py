@@ -1457,11 +1457,16 @@ ZAMBA2_START_DOCSTRING = r"""
     "The bare Zamba2 Model outputting raw hidden-states without any specific head on top.",
     ZAMBA2_START_DOCSTRING,
 )
-class Zamba2PreTrainedModel(ZambaPreTrainedModel):
+class Zamba2PreTrainedModel(PreTrainedModel):
     config_class = Zamba2Config
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = False
+    _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
+    _is_stateful = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1488,23 +1493,6 @@ class Zamba2PreTrainedModel(ZambaPreTrainedModel):
             with torch.no_grad():
                 module.dt_bias.copy_(inv_dt)
             module.dt_bias._no_reinit = True
-
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        check_device_map: bool = True,
-        hard_check_only: bool = False,
-    ):
-        return super(PreTrainedModel, cls)._check_and_enable_flash_attn_2(
-            config,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-            hard_check_only=hard_check_only,
-        )
 
 
 ZAMBA2_INPUTS_DOCSTRING = r"""
