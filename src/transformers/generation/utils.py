@@ -3271,12 +3271,16 @@ class GenerationMixin:
                 i += 1
             else:
                 if i == 1:
+                    # don't join
                     q.put((o, self, model_inputs))
                 if o['model_forward'] is not None:
-                    outputs = o['model_forward'](self, return_dict=True, **model_inputs)
+                    q.put((o, self, model_inputs))
+                    q.join()
+                    outputs = o['outputs']
                 else:
                     outputs = self(**model_inputs, return_dict=True)
                 i += 1
+
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
