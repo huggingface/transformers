@@ -7,15 +7,9 @@
 from typing import Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-)
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import (
-    PreTokenizedInput,
-    TensorType,
-    TextInput,
-)
+from ...tokenization_utils import PreTokenizedInput, TensorType, TextInput
 from ...utils import logging
 from ..auto import AutoTokenizer
 from .image_processing_aria import AriaImageProcessor
