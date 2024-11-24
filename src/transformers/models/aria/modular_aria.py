@@ -20,7 +20,10 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    infer_channel_dimension_format,
     to_numpy_array,
+    valid_images,
+    validate_preprocess_arguments,
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -45,6 +48,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
+from ..llava_next.image_processing_llava_next import make_batched_images
 
 
 logger = logging.get_logger(__name__)
@@ -480,17 +484,20 @@ class AriaImageProcessor(BaseImageProcessor):
             self.split_ratio = split_ratio
 
         self._set_processor_class("AriaProcessor")
-
     def preprocess(
         self,
         images: Union[ImageInput, List[ImageInput]],
-        max_image_size: int = 980,
-        min_image_size: int = 336,
+        max_image_size: Optional[int] = None,
+        min_image_size: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         split_image: Optional[bool] = False,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
         Process a list of images.
@@ -504,63 +511,97 @@ class AriaImageProcessor(BaseImageProcessor):
             do_convert_rgb (bool, optional): Whether to convert the image to RGB. Defaults to True.
             do_normalize (bool, optional): Whether to normalize the image. Defaults to True.
             resample (PILImageResampling, optional): The resampling filter to use if resizing the image. Defaults to BICUBIC.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
 
         Returns:
             BatchFeature: A BatchFeature object containing:
                 - 'pixel_values': Tensor of processed image pixel values.
-                - 'pixel_mask': Boolean pixel mask. This mask is a 2D tensor of shape (max_size, max_size) where:
+                - 'pixel_mask': Boolean pixel mask. This mask is a 2D tensor of shape (max_image_size, max_image_size) where:
                     - True (1) values indicate pixels that belong to the original resized image.
                     - False (0) values indicate pixels that are part of the padding.
                   The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
                 - 'num_crops': The maximum number of crops across all images.
         """
-        max_size = self.max_image_size if max_image_size is None else max_image_size
-        min_size = self.min_image_size if min_image_size is None else min_image_size
-
-        if max_size not in [490, 980]:
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+        max_image_size = self.max_image_size if max_image_size is None else max_image_size
+        min_image_size = self.min_image_size if min_image_size is None else min_image_size
+        if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
-        if not isinstance(images, list):
-            images = [images]
+        images = make_batched_images(images)
+
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        validate_preprocess_arguments(
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            resample=resample,
+        )
+
+        if do_convert_rgb:
+            images = [convert_to_rgb(image) for image in images]
+
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
 
         pixel_values = []
         pixel_masks = []
         num_crops = None
 
         for image in images:
-            if do_convert_rgb:
-                image = convert_to_rgb(image)
-            image = to_numpy_array(image)
             if split_image:
-                crop_images = self.get_image_patches(image, self.split_ratio, max_size)
+                crop_images = self.get_image_patches(image, self.split_ratio, max_image_size, data_format=input_data_format, input_data_format=input_data_format)
             else:
                 crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
                 num_crops = len(crop_images)
+
             for crop_image in crop_images:
                 # At this point the scale is the rescaling factor that would bring the image to max_size in its larger dimension
-                h, w = crop_image.shape[:2]
-                scale = max_size / max(h, w)
-                if w >= h:
-                    new_size = (max(int(h * scale), min_size), max_size)  # h, w
+                if input_data_format == ChannelDimension.FIRST:
+                    h, w = crop_image.shape[1:]
                 else:
-                    new_size = (max_size, max(int(w * scale), min_size))  # h, w
+                    h, w = crop_image.shape[:2]
+                scale = max_image_size / max(h, w)
+                if w >= h:
+                    new_size = (max(int(h * scale), min_image_size), max_image_size)  # h, w
+                else:
+                    new_size = (max_image_size, max(int(w * scale), min_image_size))  # h, w
 
-                crop_image_resized = resize(crop_image, new_size, resample=resample)
+                crop_image_resized = resize(
+                    crop_image, new_size, resample=resample, data_format=data_format, input_data_format=input_data_format
+                )
 
-                padding_bottom, padding_right = max_size - new_size[0], max_size - new_size[1]
-                crop_image_padded = pad(crop_image_resized, ((0, padding_bottom), (0, padding_right)))
+                padding_bottom, padding_right = max_image_size - new_size[0], max_image_size - new_size[1]
+                crop_image_padded = pad(crop_image_resized, ((0, padding_bottom), (0, padding_right)), data_format=data_format, input_data_format=data_format)
 
                 # Create a pixel mask
-                pixel_mask = torch.zeros(max_size, max_size, dtype=bool)
+                pixel_mask = np.zeros((max_image_size, max_image_size), dtype=bool)
                 pixel_mask[: new_size[0], : new_size[1]] = 1
                 pixel_masks.append(pixel_mask)
 
                 if do_normalize:
-                    crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std)
+                    crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std, data_format=data_format, input_data_format=data_format)
 
-                # Switch to rgb channel first
-                crop_image_padded = np.transpose(crop_image_padded, (2, 0, 1))
                 pixel_values.append(crop_image_padded)
         return BatchFeature(
             data={
