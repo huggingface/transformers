@@ -2732,9 +2732,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
 
         if not return_dict:
             if auxiliary_outputs is not None:
-                if not isinstance(auxiliary_outputs, tuple):
-                    auxiliary_outputs = tuple(auxiliary_outputs)
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
+                output = (logits, pred_boxes, auxiliary_outputs) + outputs
             else:
                 output = (logits, pred_boxes) + outputs
 

@@ -396,9 +396,7 @@ def RelationDetrForObjectDetectionLoss(
     outputs_loss = {}
     outputs_loss["logits"] = outputs_class[:, -1]
     outputs_loss["pred_boxes"] = outputs_coord[:, -1]
-    auxiliary_outputs = tuple(
-        _set_aux_loss(outputs_class.transpose(0, 1), outputs_coord.transpose(0, 1))
-    )
+    auxiliary_outputs = _set_aux_loss(outputs_class.transpose(0, 1), outputs_coord.transpose(0, 1))
     outputs_loss["auxiliary_outputs"] = auxiliary_outputs
     outputs_loss["encoder_outputs"] = {"logits": enc_topk_logits, "pred_boxes": enc_topk_bboxes}
 
@@ -433,4 +431,6 @@ def RelationDetrForObjectDetectionLoss(
         loss_dict.update({k + "_dn": v / dn_num_group for k, v in dn_loss_dict.items()})
 
     loss = sum(loss_dict.values())
+    if isinstance(auxiliary_outputs, list):
+        auxiliary_outputs = tuple(auxiliary_outputs)
     return loss, loss_dict, auxiliary_outputs
