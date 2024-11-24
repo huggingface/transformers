@@ -14,10 +14,9 @@
 # limitations under the License.
 
 import copy
-from functools import lru_cache
 import threading
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import weakref
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -576,8 +575,7 @@ class AssistantVocabMapping:
         target_vocab = self.target_tokenizer.get_vocab()
         assistant_vocab = self.assistant_tokenizer.get_vocab()
         return {
-            assistant_vocab[tok]: target_vocab[tok]
-            for tok in set(target_vocab.keys()) & set(assistant_vocab.keys())
+            assistant_vocab[tok]: target_vocab[tok] for tok in set(target_vocab.keys()) & set(assistant_vocab.keys())
         }
 
     def _get_suppress_input_ids(self) -> list[int]:
@@ -606,7 +604,7 @@ class AssistantVocabMappingCache:
                 assistant_dict[assistant_tokenizer] = mapping
 
             return mapping
-        
+
 
 class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):
     """
@@ -646,9 +644,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
-        assistant_vocab_mapping = AssistantVocabMappingCache.get_mapping(
-            target_tokenizer, assistant_tokenizer
-        )
+        assistant_vocab_mapping = AssistantVocabMappingCache.get_mapping(target_tokenizer, assistant_tokenizer)
         self._assistant_to_target_input_ids = assistant_vocab_mapping.assistant_to_target_input_ids
         logits_processor += [
             SuppressTokensLogitsProcessor(

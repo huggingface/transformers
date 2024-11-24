@@ -1,7 +1,7 @@
 import unittest
-from parameterized import parameterized
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
@@ -49,10 +49,12 @@ class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
 class TestGenerateWithDifferentModels(unittest.TestCase):
     """Tests generation with different target and assistant models."""
 
-    @parameterized.expand([
-        (False,),
-        (True,),
-    ])
+    @parameterized.expand(
+        [
+            (False,),
+            (True,),
+        ]
+    )
     def test_generate_with_different_models(self, do_sample):
         # Use smaller test models instead
         target_model_checkpoint = "hf-internal-testing/tiny-random-LlamaForCausalLM"
