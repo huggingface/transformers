@@ -562,11 +562,15 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
 
 class AssistantToTargetTranslator:
-    def __init__(self, target_tokenizer, assistant_tokenizer):
-        self._target_tokenizer = target_tokenizer
-        self._assistant_tokenizer = assistant_tokenizer
-        self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
-        self.suppress_input_ids = self._get_suppress_input_ids()
+    """
+    Translate the assistant into the target universe.
+    """
+
+    def __init__(self, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase"):
+        self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
+        self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
+        self._assistant_to_target_input_ids: dict[int, int] = self._get_assistant_to_target_input_ids()
+        self.suppress_input_ids: list[int] = self._get_suppress_input_ids()
 
     def _get_assistant_to_target_input_ids(self) -> dict[int, int]:
         """
@@ -595,13 +599,18 @@ class AssistantToTargetTranslator:
         """
         Return the target logits that correspond to the assistant logits.
         """
-        target_vocab_size = len(self._target_tokenizer.get_vocab())
-        ret: torch.FloatTensor = torch.zeros(
-            (assistant_logits.shape[0], target_vocab_size), device=assistant_logits.device
+        target_vocab_size: int = len(self._target_tokenizer.get_vocab())
+        target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], target_vocab_size)
+        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf"))
+        assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
+        assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
+            -1
+        ]
+        target_logits_supported_indices: torch.IntTensor = assistant_logits_supported_indices.apply_(
+            lambda x: self._assistant_to_target_input_ids[x]
         )
-        ret[:, self.suppress_input_ids] = -float("inf")
-        ret[:, list(self._assistant_to_target_input_ids.values())] = assistant_logits
-        return ret
+        target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
+        return target_logits
 
 
 class AssistantVocabMappingCache:
@@ -609,7 +618,9 @@ class AssistantVocabMappingCache:
     _cache = weakref.WeakKeyDictionary()
 
     @classmethod
-    def get_mapping(cls, target_tokenizer, assistant_tokenizer) -> AssistantToTargetTranslator:
+    def get_mapping(
+        cls, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase"
+    ) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
             if assistant_dict is None:
@@ -755,11 +766,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
-        candidate_ids = self._assistant_vocab_mapping.get_target_input_ids(candidate_ids)
+        target_ids = self._assistant_vocab_mapping.get_target_input_ids(candidate_ids)
 
-        candidate_logits = self._assistant_vocab_mapping.get_target_logits(candidate_logits)
-
-        return candidate_ids, candidate_logits
+        target_logits = self._assistant_vocab_mapping.get_target_logits(candidate_logits)
+        return target_ids, target_logits
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
