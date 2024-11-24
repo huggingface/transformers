@@ -870,7 +870,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         pad_size: Optional[Dict[str, int]] = None,
-        size_divisor: int = 32,
+        size_divisor: Optional[int] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:

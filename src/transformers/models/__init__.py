@@ -225,6 +225,7 @@ from . import (
     roberta_prelayernorm,
     roc_bert,
     roformer,
+    relation_detr,
     rt_detr,
     rwkv,
     sam,
