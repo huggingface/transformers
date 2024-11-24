@@ -404,8 +404,8 @@ def RelationDetrForObjectDetectionLoss(
 
     if denoising_meta_values is not None:
         dn_outputs_loss = {}
-        dn_outputs_loss["logits"] = dn_out_class[-1]
-        dn_outputs_loss["pred_boxes"] = dn_out_coord[-1]
+        dn_outputs_loss["logits"] = dn_out_class[:, -1]
+        dn_outputs_loss["pred_boxes"] = dn_out_coord[:, -1]
         dn_outputs_loss["auxiliary_outputs"] = _set_aux_loss(
             dn_out_class.transpose(0, 1), dn_out_coord.transpose(0, 1)
         )
