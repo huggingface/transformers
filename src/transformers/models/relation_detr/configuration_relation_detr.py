@@ -61,9 +61,9 @@ class RelationDetrConfig(PretrainedConfig):
             The temperature of the sine and cosine positional encodings.
         sin_cos_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the sine and cosine positional encodings.
-        sin_cos_scale (`float`, *optional*, defaults to `2 * math.pi`):
+        sin_cos_scale (`float`, *optional*, defaults to 6.28):
             The scale of the sine and cosine positional encodings.
-        sin_cos_offset (`float`, *optional*, defaults to `-0.5`):
+        sin_cos_offset (`float`, *optional*, defaults to -0.5):
             The offset of the sine and cosine positional encodings.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
@@ -88,7 +88,7 @@ class RelationDetrConfig(PretrainedConfig):
             The temperature of the relation positional encodings.
         rel_scale (`float`, *optional*, defaults to 100):
             The scale of the relation positional encodings.
-        dropout (`float`, *optional*, defaults to 0.1):
+        dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -96,13 +96,14 @@ class RelationDetrConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
+        init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
+        max_position_embeddings (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
@@ -121,7 +122,7 @@ class RelationDetrConfig(PretrainedConfig):
             The number of sampled keys in each feature level for each attention head in the encoder.
         decoder_n_points (`int`, *optional*, defaults to 4):
             The number of sampled keys in each feature level for each attention head in the decoder.
-        class_cost (`float`, *optional*, defaults to 1):
+        class_cost (`float`, *optional*, defaults to 2):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
             Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.

@@ -289,6 +289,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [RecurrentGemma](model_doc/recurrent_gemma)                |       ✅        |         ❌         |      ❌      |
 |                      [Reformer](model_doc/reformer)                      |       ✅        |         ❌         |      ❌      |
 |                        [RegNet](model_doc/regnet)                        |       ✅        |         ✅         |      ✅      |
+|                 [Relation DETR](model_doc/relation_detr)                 |       ✅        |         ❌         |      ❌      |
 |                       [RemBERT](model_doc/rembert)                       |       ✅        |         ✅         |      ❌      |
 |                        [ResNet](model_doc/resnet)                        |       ✅        |         ✅         |      ✅      |
 |                     [RetriBERT](model_doc/retribert)                     |       ✅        |         ❌         |      ❌      |
