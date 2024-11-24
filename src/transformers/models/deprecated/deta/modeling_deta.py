@@ -2058,7 +2058,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
 
         if not return_dict:
             if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
+                output = (logits, pred_boxes) + (auxiliary_outputs,) + outputs
             else:
                 output = (logits, pred_boxes) + outputs
             tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
