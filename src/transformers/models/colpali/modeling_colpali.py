@@ -22,6 +22,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
+from ...models.paligemma import PaliGemmaForConditionalGeneration
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -225,7 +226,9 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.model = AutoModel.from_config(config.vlm_backbone_config)
+        # FIXME: uncomment when PaliGemmaForConditionalGeneration is available in AutoModel
+        # self.model = AutoModel.from_config(config.vlm_backbone_config)
+        self.model = PaliGemmaForConditionalGeneration(config.vlm_backbone_config)
         if self.model.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.model.language_model._tied_weights_keys]
 
