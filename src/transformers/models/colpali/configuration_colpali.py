@@ -14,6 +14,8 @@
 # limitations under the License.
 """ColPali model configuration"""
 
+from copy import deepcopy
+
 from ...modeling_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING
 
@@ -58,14 +60,21 @@ class ColPaliConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(vlm_backbone_config, dict):
+            vlm_backbone_config = deepcopy(vlm_backbone_config)
             vlm_backbone_config["model_type"] = (
                 vlm_backbone_config["model_type"] if "model_type" in vlm_backbone_config else "paligemma"
             )
             vlm_backbone_config = CONFIG_MAPPING[vlm_backbone_config["model_type"]](**vlm_backbone_config)
         elif vlm_backbone_config is None:
             vlm_backbone_config = CONFIG_MAPPING["paligemma"]()
+
+        self.vlm_backbone_config = vlm_backbone_config
         self.embedding_dim = embedding_dim
+
         super().__init__(**kwargs)
 
     def ignore_index(self):
         raise AttributeError("Not needed for ColPali")
+
+
+__all__ = ["ColPaliConfig"]

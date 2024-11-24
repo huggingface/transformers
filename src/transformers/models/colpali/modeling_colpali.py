@@ -332,3 +332,10 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
+
+
+__all__ = [
+    "ColPaliForRetrieval",
+    "ColPaliForRetrievalOutput",
+    "ColPaliPreTrainedModel",
+]
