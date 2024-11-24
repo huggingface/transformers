@@ -6,7 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from typing import Dict, List, Optional, Union
 
-from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput

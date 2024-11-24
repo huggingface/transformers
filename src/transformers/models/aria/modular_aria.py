@@ -6,9 +6,8 @@ import numpy as np
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
-from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
-from ...image_processing_utils import BaseImageProcessor, select_best_resolution
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, select_best_resolution
 from ...image_transforms import (
     convert_to_rgb,
     pad,
@@ -1158,7 +1157,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class AriaTextPreTrainedModel(LlamaPreTrainedModel):
+class AriaPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
@@ -1213,7 +1212,7 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-class AriaForConditionalGeneration(AriaTextPreTrainedModel, GenerationMixin):
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
 

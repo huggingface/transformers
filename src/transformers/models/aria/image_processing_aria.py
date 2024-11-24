@@ -8,7 +8,6 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, select_best_resolution
 from ...image_transforms import convert_to_rgb, pad, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -22,7 +21,6 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...tokenization_utils import TensorType
 from ...utils import TensorType
 
 

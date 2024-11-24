@@ -4,12 +4,12 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+import importlib
+import math
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import importlib
-import os
-import math
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -246,7 +246,7 @@ class AriaProjector(nn.Module):
         return out
 
 
-class AriaPreTrainedModel(PreTrainedModel):
+class AriaTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
@@ -1063,7 +1063,7 @@ ARIA_START_DOCSTRING = r"""
     "The bare Aria Model outputting raw hidden-states without any specific head on top.",
     ARIA_START_DOCSTRING,
 )
-class AriaTextPreTrainedModel(PreTrainedModel):
+class AriaPreTrainedModel(PreTrainedModel):
     config_class = AriaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
