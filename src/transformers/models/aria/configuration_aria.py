@@ -120,6 +120,8 @@ class AriaConfig(PretrainedConfig):
         projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
         ignore_index (int): Index to ignore in loss calculation.
         image_token_index (int): Index used to represent image tokens.
+        vision_feature_layer (`int`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature.
         **kwargs: Additional keyword arguments passed to the parent class.
 
     Attributes:
@@ -139,6 +141,7 @@ class AriaConfig(PretrainedConfig):
     def __init__(
         self,
         vision_config=None,
+        vision_feature_layer=-1,
         text_config=None,
         projector_patch_to_query_dict=None,
         ignore_index=-100,
@@ -157,7 +160,7 @@ class AriaConfig(PretrainedConfig):
                 4900: 256,
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
-
+        self.vision_feature_layer = vision_feature_layer
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)

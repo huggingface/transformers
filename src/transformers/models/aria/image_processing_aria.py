@@ -85,7 +85,6 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
     return patches
 
 
-
 class AriaImageProcessor(BaseImageProcessor):
     """
     A vision processor for the Aria model that handles image preprocessing.

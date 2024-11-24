@@ -22,8 +22,6 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "truncation": None,
-            "max_length": None,
         },
         "images_kwargs": {
             "max_image_size": 980,

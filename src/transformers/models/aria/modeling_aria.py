@@ -249,8 +249,6 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "truncation": None,
-            "max_length": None,
         },
         "images_kwargs": {
             "max_image_size": 980,
@@ -1751,8 +1749,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_feature_layer = -1
-
         if inputs_embeds is None:
             # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1761,7 +1757,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             if pixel_values is not None and input_ids.shape[1] != 1:
                 image_features = self.get_image_features(
                     pixel_values=pixel_values,
-                    vision_feature_layer=vision_feature_layer,
+                    vision_feature_layer=self.config.vision_feature_layer,
                 )
                 n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
                 n_image_features = image_features.shape[1]

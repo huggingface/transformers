@@ -152,6 +152,8 @@ class AriaConfig(PretrainedConfig):
         projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
         ignore_index (int): Index to ignore in loss calculation.
         image_token_index (int): Index used to represent image tokens.
+        vision_feature_layer (`int`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature.
         **kwargs: Additional keyword arguments passed to the parent class.
 
     Attributes:
@@ -171,6 +173,7 @@ class AriaConfig(PretrainedConfig):
     def __init__(
         self,
         vision_config=None,
+        vision_feature_layer=-1,
         text_config=None,
         projector_patch_to_query_dict=None,
         ignore_index=-100,
@@ -189,7 +192,7 @@ class AriaConfig(PretrainedConfig):
                 4900: 256,
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
-
+        self.vision_feature_layer = vision_feature_layer
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
@@ -668,8 +671,6 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "truncation": None,
-            "max_length": None,
         },
         "images_kwargs": {
             "max_image_size": 980,
@@ -1255,8 +1256,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_feature_layer = -1
-
         if inputs_embeds is None:
             # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1265,7 +1264,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             if pixel_values is not None and input_ids.shape[1] != 1:
                 image_features = self.get_image_features(
                     pixel_values=pixel_values,
-                    vision_feature_layer=vision_feature_layer,
+                    vision_feature_layer=self.config.vision_feature_layer,
                 )
                 n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
                 n_image_features = image_features.shape[1]
