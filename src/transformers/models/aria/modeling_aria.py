@@ -156,13 +156,17 @@ class AriaCrossAttention(nn.Module):
         Forward pass of the AriaCrossAttention module.
 
         Args:
-            key_value_states (torch.Tensor): Input tensor for key and value.
-            hidden_states (torch.Tensor): Input tensor for query.
-            attn_mask (torch.Tensor, optional): Attention mask. Default is None.
-            add_residual (bool): Whether to add residual connection. Default is False.
+            key_value_states (`torch.Tensor`):
+                Input tensor for key and value.
+            hidden_states (`torch.Tensor`):
+                Input tensor for query.
+            attn_mask (`torch.Tensor`, *optional*, defaults to None):
+                Attention mask.
+            add_residual (`bool`, *optional*, defaults to False):
+                Whether to add residual connection.
 
         Returns:
-            torch.Tensor: Output tensor after cross-attention.
+            `torch.Tensor`: Output tensor after cross-attention.
         """
         query = self.q_proj(self.layer_norm(hidden_states))
 
@@ -219,11 +223,13 @@ class AriaProjector(nn.Module):
         Forward pass of the Projector module.
 
         Args:
-            key_value_states (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
-            attn_mask (torch.Tensor, optional): Attention mask. Default is None.
+            key_value_states (`torch.Tensor`):
+                Input tensor of shape (batch_size, num_patches, kv_dim).
+            attn_mask (`torch.Tensor`, *optional*, default is None):
+                Attention mask.
 
         Returns:
-            torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
+            `torch.Tensor`: Output tensor of shape (batch_size, query_number, output_dim).
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
@@ -286,7 +292,7 @@ class AriaSharedExpertsMLP(nn.Module):
     This class reconfigures the intermediate size in comparison to the LlamaMLP.
 
     Args:
-        config (AriaTextConfig): Configuration object for the Aria language model.
+        config (`AriaTextConfig`): Configuration object for the Aria language model.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -412,7 +418,8 @@ class AriaTextMoELayer(nn.Module):
         Forward pass of the MoE Layer.
 
         Args:
-            hidden_states (torch.Tensor): Input tensor of shape (batch_size, sequence_length, hidden_size).
+            hidden_states (`torch.Tensor`):
+                Input tensor of shape (batch_size, sequence_length, hidden_size).
 
         Returns:
             torch.Tensor: Output tensor after passing through the MoE layer.

@@ -61,7 +61,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
             The channel dimension format of the input image.
 
     Returns:
-        list: A list of np.array representing the patches.
+        `list`: A list of np.array representing the patches.
     """
     patches = []
     height, width = get_image_size(image, channel_dim=input_data_format)
@@ -82,11 +82,16 @@ class AriaImageProcessor(BaseImageProcessor):
     Initialize the AriaImageProcessor.
 
     Args:
-        max_image_size (int, optional): Maximum image size. Defaults to 980.
-        min_image_size (int, optional): Minimum image size. Defaults to 336.
-        image_mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
-        image_std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
-        split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
+        max_image_size (`int`, *optional*, defaults to 980):
+            Maximum image size.
+        min_image_size (`int`, *optional*, defaults to 336):
+            Minimum image size.
+        image_mean (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
+            Mean values for normalization.
+        image_std (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
+            Standard deviation values for normalization.
+        split_ratio (`list`, *optional*, defaults to a list of common split ratios as tuples):
+            The ratio for splitting the image.
     """
 
     def __init__(
@@ -154,33 +159,53 @@ class AriaImageProcessor(BaseImageProcessor):
         Process a list of images.
 
         Args:
-            images (ImageInput or list of ImageInput): The input image or a list of images.
-            max_image_size (int, optional): Maximum image size. Defaults to `self.max_image_size` (980).
-            min_image_size (int, optional): Minimum image size. Defaults to `self.min_image_size` (336).
-            return_tensors (str or TensorType, optional): The type of tensor to return. Defaults to "pt".
-            split_image (bool, optional): Whether to split the image. Defaults to False.
-            do_convert_rgb (bool, optional): Whether to convert the image to RGB. Defaults to True.
-            do_normalize (bool, optional): Whether to normalize the image. Defaults to True.
-            resample (PILImageResampling, optional): The resampling filter to use if resizing the image. Defaults to BICUBIC.
+            images (ImageInput or list of ImageInput):
+                The input image or a list of images.
+            max_image_size (`int`, *optional*, defaults to `self.max_image_size` (980)):
+                Maximum image size.
+            min_image_size (`int`, *optional*, defaults to `self.min_image_size` (336)):
+                Minimum image size.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to "pt"):
+                The type of tensor to return.
+            split_image (`bool`, *optional*, defaults to False):
+                Whether to split the image.
+            image_mean (`float`, *optional*, defaults to None):
+                The mean value of the image.
+            image_std (`float`, *optional*, defaults to None):
+                The standard deviation of the image.
+            do_convert_rgb (`bool`, *optional*, defaults to True):
+                Whether to convert the image to RGB.
+            do_normalize (`bool`, *optional*, defaults to True):
+                Whether to normalize the image.
+            resample (PILImageResampling, *optional*, defaults to BICUBIC):
+                The resampling filter to use if resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                    - `"channels_first"` or `ChannelDimension.FIRST`:
+                        image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`:
+                        image in (height, width, num_channels) format.
                 If unset, will use same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the input image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                    - `"channels_first"` or `ChannelDimension.FIRST`:
+                        image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`:
+                        image in (height, width, num_channels) format.
                 If unset, will use the inferred format of the input image.
 
         Returns:
-            BatchFeature: A BatchFeature object containing:
-                - 'pixel_values': Tensor of processed image pixel values.
-                - 'pixel_mask': Boolean pixel mask. This mask is a 2D tensor of shape (max_image_size, max_image_size) where:
+            BatchFeature:
+                A BatchFeature object containing:
+                - 'pixel_values':
+                    Tensor of processed image pixel values.
+                - 'pixel_mask':
+                    Boolean pixel mask. This mask is a 2D tensor of shape (max_image_size, max_image_size) where:
                     - True (1) values indicate pixels that belong to the original resized image.
                     - False (0) values indicate pixels that are part of the padding.
                   The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
-                - 'num_crops': The maximum number of crops across all images.
+                - 'num_crops':
+                    The maximum number of crops across all images.
         """
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -298,7 +323,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
-            image (np.array):
+            image (`np.array`):
                 The input image to be processed.
             grid_pinpoints (List[Tuple[int, int]]):
                 A list of possible resolutions as tuples.
@@ -312,7 +337,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            List[np.array]: A list of NumPy arrays containing the processed image patches.
+            `List[np.array]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")

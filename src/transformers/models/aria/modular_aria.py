@@ -295,13 +295,18 @@ class AriaCrossAttention(nn.Module):
         Forward pass of the AriaCrossAttention module.
 
         Args:
-            key_value_states (torch.Tensor): Input tensor for key and value.
-            hidden_states (torch.Tensor): Input tensor for query.
-            attn_mask (torch.Tensor, optional): Attention mask. Default is None.
-            add_residual (bool): Whether to add residual connection. Default is False.
+            key_value_states (`torch.Tensor`):
+                Input tensor for key and value.
+            hidden_states (`torch.Tensor`):
+                Input tensor for query.
+            attn_mask (`torch.Tensor`, *optional*, defaults to None):
+                Attention mask.
+            add_residual (`bool`, *optional*, defaults to False):
+                Whether to add residual connection.
 
         Returns:
-            torch.Tensor: Output tensor after cross-attention.
+            torch.Tensor:
+                Output tensor after cross-attention.
         """
         query = self.q_proj(self.layer_norm(hidden_states))
 
@@ -358,11 +363,13 @@ class AriaProjector(nn.Module):
         Forward pass of the Projector module.
 
         Args:
-            key_value_states (torch.Tensor): Input tensor of shape (batch_size, num_patches, kv_dim).
-            attn_mask (torch.Tensor, optional): Attention mask. Default is None.
+            key_value_states (`torch.Tensor`):
+                Input tensor of shape (batch_size, num_patches, kv_dim).
+            attn_mask (`torch.Tensor`, *optional*, default is None):
+                Attention mask.
 
         Returns:
-            torch.Tensor: Output tensor of shape (batch_size, query_number, output_dim).
+            `torch.Tensor`: Output tensor of shape (batch_size, query_number, output_dim).
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
@@ -399,7 +406,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
             The channel dimension format of the input image.
 
     Returns:
-        list: A list of np.array representing the patches.
+        `list`: A list of np.array representing the patches.
     """
     patches = []
     height, width = get_image_size(image, channel_dim=input_data_format)
@@ -460,11 +467,16 @@ class AriaImageProcessor(BaseImageProcessor):
     Initialize the AriaImageProcessor.
 
     Args:
-        max_image_size (int, optional): Maximum image size. Defaults to 980.
-        min_image_size (int, optional): Minimum image size. Defaults to 336.
-        image_mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
-        image_std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
-        split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
+        max_image_size (`int`, *optional*, defaults to 980):
+            Maximum image size.
+        min_image_size (`int`, *optional*, defaults to 336):
+            Minimum image size.
+        image_mean (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
+            Mean values for normalization.
+        image_std (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
+            Standard deviation values for normalization.
+        split_ratio (`list`, *optional*, defaults to a list of common split ratios as tuples):
+            The ratio for splitting the image.
     """
 
     def __init__(
@@ -532,33 +544,53 @@ class AriaImageProcessor(BaseImageProcessor):
         Process a list of images.
 
         Args:
-            images (ImageInput or list of ImageInput): The input image or a list of images.
-            max_image_size (int, optional): Maximum image size. Defaults to `self.max_image_size` (980).
-            min_image_size (int, optional): Minimum image size. Defaults to `self.min_image_size` (336).
-            return_tensors (str or TensorType, optional): The type of tensor to return. Defaults to "pt".
-            split_image (bool, optional): Whether to split the image. Defaults to False.
-            do_convert_rgb (bool, optional): Whether to convert the image to RGB. Defaults to True.
-            do_normalize (bool, optional): Whether to normalize the image. Defaults to True.
-            resample (PILImageResampling, optional): The resampling filter to use if resizing the image. Defaults to BICUBIC.
+            images (ImageInput or list of ImageInput):
+                The input image or a list of images.
+            max_image_size (`int`, *optional*, defaults to `self.max_image_size` (980)):
+                Maximum image size.
+            min_image_size (`int`, *optional*, defaults to `self.min_image_size` (336)):
+                Minimum image size.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to "pt"):
+                The type of tensor to return.
+            split_image (`bool`, *optional*, defaults to False):
+                Whether to split the image.
+            image_mean (`float`, *optional*, defaults to None):
+                The mean value of the image.
+            image_std (`float`, *optional*, defaults to None):
+                The standard deviation of the image.
+            do_convert_rgb (`bool`, *optional*, defaults to True):
+                Whether to convert the image to RGB.
+            do_normalize (`bool`, *optional*, defaults to True):
+                Whether to normalize the image.
+            resample (PILImageResampling, *optional*, defaults to BICUBIC):
+                The resampling filter to use if resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                    - `"channels_first"` or `ChannelDimension.FIRST`:
+                        image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`:
+                        image in (height, width, num_channels) format.
                 If unset, will use same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the input image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                    - `"channels_first"` or `ChannelDimension.FIRST`:
+                        image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`:
+                        image in (height, width, num_channels) format.
                 If unset, will use the inferred format of the input image.
 
         Returns:
-            BatchFeature: A BatchFeature object containing:
-                - 'pixel_values': Tensor of processed image pixel values.
-                - 'pixel_mask': Boolean pixel mask. This mask is a 2D tensor of shape (max_image_size, max_image_size) where:
+            BatchFeature:
+                A BatchFeature object containing:
+                - 'pixel_values':
+                    Tensor of processed image pixel values.
+                - 'pixel_mask':
+                    Boolean pixel mask. This mask is a 2D tensor of shape (max_image_size, max_image_size) where:
                     - True (1) values indicate pixels that belong to the original resized image.
                     - False (0) values indicate pixels that are part of the padding.
                   The mask helps distinguish between actual image content and padded areas in subsequent processing steps.
-                - 'num_crops': The maximum number of crops across all images.
+                - 'num_crops':
+                    The maximum number of crops across all images.
         """
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -676,7 +708,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
-            image (np.array):
+            image (`np.array`):
                 The input image to be processed.
             grid_pinpoints (List[Tuple[int, int]]):
                 A list of possible resolutions as tuples.
@@ -690,7 +722,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            List[np.array]: A list of NumPy arrays containing the processed image patches.
+            `List[np.array]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -780,27 +812,21 @@ class AriaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s).
 
         Args:
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
             text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
+            images (`ImageInput`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
+            `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+            `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **pixel_mask** -- Pixel mask to be fed to a model. Returned when `images` is not `None`.
         """
@@ -957,7 +983,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
     This class reconfigures the intermediate size in comparison to the LlamaMLP.
 
     Args:
-        config (AriaTextConfig): Configuration object for the Aria language model.
+        config (`AriaTextConfig`): Configuration object for the Aria language model.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -1079,7 +1105,8 @@ class AriaTextMoELayer(nn.Module):
         Forward pass of the MoE Layer.
 
         Args:
-            hidden_states (torch.Tensor): Input tensor of shape (batch_size, sequence_length, hidden_size).
+            hidden_states (`torch.Tensor`):
+                Input tensor of shape (batch_size, sequence_length, hidden_size).
 
         Returns:
             torch.Tensor: Output tensor after passing through the MoE layer.

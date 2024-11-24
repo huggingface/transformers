@@ -84,27 +84,21 @@ class AriaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s).
 
         Args:
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
             text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
+            images (`ImageInput`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
+            `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+            `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **pixel_mask** -- Pixel mask to be fed to a model. Returned when `images` is not `None`.
         """
