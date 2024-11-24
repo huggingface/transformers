@@ -2088,7 +2088,6 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         outputs_classes = decoder_outputs.pred_logits if return_dict else decoder_outputs[0]
         outputs_coords = decoder_outputs.pred_boxes if return_dict else decoder_outputs[1]
-        decoder_mediate_outputs = tuple(decoder_outputs[2:])
 
         if self.training:
             hybrid_outputs = self.decoder(
@@ -2108,12 +2107,14 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             )
             hybrid_outputs_classes = hybrid_outputs.pred_logits if return_dict else hybrid_outputs[0]
             hybrid_outputs_coords = hybrid_outputs.pred_boxes if return_dict else hybrid_outputs[1]
-            hybrid_mediate_output = tuple(hybrid_outputs[2:])
+            
         else:
             hybrid_outputs_classes = hybrid_outputs_coords = None
             hybrid_mediate_output = RelationDetrDecoderOutput() if return_dict else ()
 
         if not return_dict:
+            decoder_mediate_outputs = decoder_outputs[2:]
+            hybrid_mediate_output = hybrid_outputs[2:]
             # The variable number of outputs from decoder may change the index of some necessary elements, 
             # so put these elements at the start and end of the tuple for correct indexing.
             # Other optional results are at the middle of the tuple.
@@ -2138,18 +2139,18 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             dec_outputs_coord=outputs_coords,
             enc_outputs_class=topk_class,
             enc_outputs_coord=topk_coords,
-            last_hidden_state=decoder_mediate_outputs.last_hidden_state,
-            intermediate_hidden_states=decoder_mediate_outputs.intermediate_hidden_states,
-            intermediate_reference_points=decoder_mediate_outputs.intermediate_reference_points,
-            decoder_hidden_states=decoder_mediate_outputs.hidden_states,
-            decoder_attentions=decoder_mediate_outputs.attentions,
-            cross_attentions=decoder_mediate_outputs.cross_attentions,
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            hybrid_hidden_states=hybrid_mediate_output.hidden_states,
-            hybrid_attentions=hybrid_mediate_output.attentions,
-            hybrid_cross_attentions=hybrid_mediate_output.cross_attentions,
+            hybrid_hidden_states=hybrid_outputs.hidden_states,
+            hybrid_attentions=hybrid_outputs.attentions,
+            hybrid_cross_attentions=hybrid_outputs.cross_attentions,
             hybrid_outputs_class=hybrid_outputs_classes,
             hybrid_outputs_coord=hybrid_outputs_coords,
             hybrid_enc_outputs_class=hybrid_enc_class,
@@ -2652,7 +2653,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
                 "dn_num_split": [denoising_groups * max_gt_num_per_image, self.config.num_queries],
             }
         else:
-            noised_label_query = noised_box_query = None
+            noised_label_query = noised_box_query = self_attention_mask = None
             denoising_meta_values = None
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
@@ -2678,6 +2679,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         pred_boxes = outputs_coord[:, -1]
 
         loss, loss_dict, auxiliary_outputs = None, None, None
+        hybrid_loss = hybrid_loss_dict = None
         if labels is not None:
             enc_topk_logits = outputs.enc_outputs_class if return_dict else outputs[3]
             enc_topk_coords = outputs.enc_outputs_coord if return_dict else outputs[4]

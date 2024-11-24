@@ -264,7 +264,7 @@ class RelationDetrLoss(nn.Module):
             )
             / num_boxes
         )
-        losses = {"loss_class": loss_class}
+        losses = {"loss_class": loss_class * self.loss_class}
         return losses
 
     def loss_boxes(self, outputs, targets, num_boxes, indices, **kwargs):
@@ -396,8 +396,8 @@ def RelationDetrForObjectDetectionLoss(
     outputs_loss = {}
     outputs_loss["logits"] = outputs_class[:, -1]
     outputs_loss["pred_boxes"] = outputs_coord[:, -1]
-    auxiliary_outputs = _set_aux_loss(
-        outputs_class.transpose(0, 1), outputs_coord.transpose(0, 1)
+    auxiliary_outputs = tuple(
+        _set_aux_loss(outputs_class.transpose(0, 1), outputs_coord.transpose(0, 1))
     )
     outputs_loss["auxiliary_outputs"] = auxiliary_outputs
     outputs_loss["encoder_outputs"] = {"logits": enc_topk_logits, "pred_boxes": enc_topk_bboxes}
@@ -405,10 +405,10 @@ def RelationDetrForObjectDetectionLoss(
     loss_dict = criterion(outputs_loss, labels)
 
     if denoising_meta_values is not None:
-        dn_metas = {}
-        dn_metas["logits"] = dn_out_class[-1]
-        dn_metas["pred_boxes"] = dn_out_coord[-1]
-        dn_metas["auxiliary_outputs"] = _set_aux_loss(
+        dn_outputs_loss = {}
+        dn_outputs_loss["logits"] = dn_out_class[-1]
+        dn_outputs_loss["pred_boxes"] = dn_out_coord[-1]
+        dn_outputs_loss["auxiliary_outputs"] = _set_aux_loss(
             dn_out_class.transpose(0, 1), dn_out_coord.transpose(0, 1)
         )
 
@@ -429,8 +429,8 @@ def RelationDetrForObjectDetectionLoss(
                 output_idx = tgt_idx = torch.tensor([], dtype=torch.long, device=device)
             dn_idx.append((output_idx, tgt_idx))
 
-        dn_loss_dict = criterion(outputs_loss, labels, indices=dn_idx)
-        loss_dict.update({k + "_dn": v for k, v in dn_loss_dict.items()})
+        dn_loss_dict = criterion(dn_outputs_loss, labels, indices=dn_idx)
+        loss_dict.update({k + "_dn": v / dn_num_group for k, v in dn_loss_dict.items()})
 
     loss = sum(loss_dict.values())
     return loss, loss_dict, auxiliary_outputs
