@@ -103,7 +103,6 @@ class RelationDetrConfig(PretrainedConfig):
             for more details.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        max_position_embeddings (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
@@ -200,7 +199,6 @@ class RelationDetrConfig(PretrainedConfig):
         init_xavier_std=1.0,
         encoder_layerdrop=0.0,
         position_embedding_type="sine",
-        max_position_embeddings=2048,
         backbone="resnet50",
         use_pretrained_backbone=True,
         backbone_kwargs=None,
@@ -278,7 +276,6 @@ class RelationDetrConfig(PretrainedConfig):
         self.init_xavier_std = init_xavier_std
         self.encoder_layerdrop = encoder_layerdrop
         self.position_embedding_type = position_embedding_type
-        self.max_position_embeddings = max_position_embeddings
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
