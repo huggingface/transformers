@@ -1,5 +1,4 @@
 import unittest
-from parameterized import parameterized
 
 import numpy as np
 from parameterized import parameterized
