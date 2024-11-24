@@ -27,9 +27,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_relation_detr"] = ["RelationDetrFeatureExtractor"]
     _import_structure["image_processing_relation_detr"] = ["RelationDetrImageProcessor"]
-    _import_structure["image_processing_relation_detr_fast"] = ["RelationDetrImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -53,9 +51,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_relation_detr import RelationDetrFeatureExtractor
         from .image_processing_relation_detr import RelationDetrImageProcessor
-        from .image_processing_relation_detr_fast import RelationDetrImageProcessorFast
 
     try:
         if not is_torch_available():

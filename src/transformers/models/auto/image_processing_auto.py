@@ -127,6 +127,7 @@ else:
             ("pvt_v2", ("PvtImageProcessor",)),
             ("qwen2_vl", ("Qwen2VLImageProcessor",)),
             ("regnet", ("ConvNextImageProcessor",)),
+            ("relation_detr", ("RelationDetrImageProcessor",)),
             ("resnet", ("ConvNextImageProcessor",)),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor",)),
