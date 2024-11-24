@@ -1,6 +1,8 @@
 import math
 import json
 import re
+import sys
+import warnings
 from copy import deepcopy
 from pathlib import Path
 from dataclasses import dataclass
@@ -11,7 +13,14 @@ import torch.nn.functional as F
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
-import xformers.ops as xops
+try:
+    import xformers.ops as xops
+except ModuleNotFoundError:
+    warnings.warn(
+        "XFormers installation not found - using native PyTorch version for operations instead.",
+        RuntimeWarning
+    )
+
 
 from huggingface_hub import PyTorchModelHubMixin
 
@@ -69,7 +78,7 @@ class Params:
     dim: int = 512
     n_layers: int = 8
     n_heads: int = 8
-    vocab_size: int = -1
+    vocab_size: int = 2048
     norm_eps: float = 1e-5
     seq_len: int = 2048
     post_embed_norm: bool = False
@@ -236,7 +245,11 @@ class Block(nn.Module):
         if args.ffn_type == "swiglu":
             # this follows llama / lit llama -- go to multiple of 256
             self.hidden_dim = 256 * ((int(2 * 4 * args.dim / 3) + 256 - 1) // 256)
-            self.feed_forward = xops.SwiGLU(args.dim, self.hidden_dim, args.dim, bias=False)
+            if "xformers.ops" in sys.modules:
+                self.feed_forward = xops.SwiGLU(args.dim, self.hidden_dim, args.dim, bias=False)
+            else:
+                self.feed_forward = SwiGLUTorch(args.dim, self.hidden_dim, args.dim, bias=False)
+
         elif args.ffn_type == "swiglu_torch":
             # this follows llama / lit llama -- go to multiple of 256
             self.hidden_dim = 256 * ((int(2 * 4 * args.dim / 3) + 256 - 1) // 256)

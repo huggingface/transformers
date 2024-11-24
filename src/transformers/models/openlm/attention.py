@@ -2,7 +2,11 @@ from functools import partial
 
 import torch
 from torch.nn import functional as F
-import xformers.ops as xops
+
+try:
+    import xformers.ops as xops
+except ModuleNotFoundError:
+    pass
 
 
 def get_rectangular_causal_mask(shape, q_seq_len, k_seq_len, device, dtype):
