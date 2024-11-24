@@ -1765,6 +1765,7 @@ else:
     _import_structure["models.colpali"].extend(
         [
             "ColPaliForRetrieval",
+            "ColPaliPreTrainedModel",
         ]
     )
     _import_structure["models.conditional_detr"].extend(
@@ -6633,6 +6634,7 @@ if TYPE_CHECKING:
         )
         from .models.colpali import (
             ColPaliForRetrieval,
+            ColPaliPreTrainedModel,
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
