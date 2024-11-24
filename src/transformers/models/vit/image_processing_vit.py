@@ -240,7 +240,7 @@ class ViTImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-        
+
         if do_convert_rgb:
             if not input_data_format == ChannelDimension.NONE:
                 images = [convert_to_rgb(image) for image in images]
