@@ -5,7 +5,6 @@
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -38,6 +37,16 @@ class AriaTextConfig(PretrainedConfig):
 
     model_type = "aria_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `AriaModel`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
     base_config_key = "text_config"
 
     def __init__(
@@ -72,6 +81,13 @@ class AriaTextConfig(PretrainedConfig):
         moe_num_shared_experts: int = 2,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -107,14 +123,6 @@ class AriaTextConfig(PretrainedConfig):
         self.moe_aux_loss_coeff = moe_aux_loss_coeff
         self.moe_num_shared_experts = moe_num_shared_experts
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-
 
 class AriaConfig(PretrainedConfig):
     """
@@ -142,13 +150,20 @@ class AriaConfig(PretrainedConfig):
             Additional keyword arguments passed to the parent class.
 
     Attributes:
-        model_type (`str`): Type of the model, set to `"aria"`.
-        is_composition (`bool`): Whether the model is a composition of multiple components.
-        ignore_index (`int`): Index to ignore in loss calculation.
-        image_token_index (`int`): Index used to represent image tokens.
-        projector_patch_to_query_dict (`dict`): Mapping of patch sizes to query dimensions.
-        vision_config (`AriaVisionConfig`): Configuration for the vision component.
-        text_config (`AriaTextConfig`): Configuration for the text component.
+        model_type (`str`):
+            Type of the model, set to `"aria"`.
+        is_composition (`bool`):
+            Whether the model is a composition of multiple components.
+        ignore_index (`int`):
+            Index to ignore in loss calculation.
+        image_token_index (`int`):
+            Index used to represent image tokens.
+        projector_patch_to_query_dict (`dict`):
+            Mapping of patch sizes to query dimensions.
+        vision_config (`AriaVisionConfig`):
+            Configuration for the vision component.
+        text_config (`AriaTextConfig`):
+            Configuration for the text component.
     """
 
     model_type = "aria"

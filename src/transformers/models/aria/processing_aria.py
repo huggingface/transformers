@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import PreTokenizedInput, TensorType, TextInput
-from ...utils import logging
+from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...utils import TensorType, logging
 from ..auto import AutoTokenizer
 from .image_processing_aria import AriaImageProcessor
 
@@ -35,11 +35,16 @@ class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
     Args:
-        image_processor(AriaImageProcessor): The AriaImageProcessor to use for image preprocessing.
-        tokenizer(AutoTokenizer): The AutoTokenizer to use for tokenizing the text.
-        patch_size(int): The patch size to use for the image processor.
-        chat_template(str): The chat template to use for the tokenizer.
-        image_token(str): The image token to use for the tokenizer.
+        image_processor(`AriaImageProcessor`):
+            The AriaImageProcessor to use for image preprocessing.
+        tokenizer(`AutoTokenizer`):
+            The AutoTokenizer to use for tokenizing the text.
+        patch_size(`):
+            The patch size to use for the image processor.
+        chat_template(`str`):
+            The chat template to use for the tokenizer.
+        image_token(`str`):
+            The image token to use for the tokenizer.
     """
 
     attributes = ["image_processor", "tokenizer"]

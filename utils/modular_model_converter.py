@@ -942,12 +942,17 @@ def replace_class_node(mapper: ModelFileMapper, class_node: cst.ClassDef, rename
         if m.matches(func, DOCSTRING_NODE):  # This processes the docstring of the class!
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
-            original_docstring = docstring_node[0].body[0].value.value
-            merged_doc = merge_docstrings(original_docstring, updated_docstring)
-            # Update the docstring in the original function
-            docstring_node = [
-                docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
-            ]
+            if len(docstring_node) == 0:  # If the original docstring is empty, just create one from the updated.
+                docstring_node = [
+                    cst.SimpleStatementLine(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
+                ]
+            else:
+                original_docstring = docstring_node[0].body[0].value.value
+                merged_doc = merge_docstrings(original_docstring, updated_docstring)
+                # Update the docstring in the original function
+                docstring_node = [
+                    docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
+                ]
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
@@ -1522,7 +1527,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/starcoder2/modular_starcoder2.py"],
+        default=["src/transformers/models/aria/modular_aria.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )

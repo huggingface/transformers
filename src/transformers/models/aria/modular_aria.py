@@ -29,10 +29,10 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import (
     PreTokenizedInput,
-    TensorType,
     TextInput,
 )
 from ...utils import (
+    TensorType,
     logging,
 )
 from ...utils.import_utils import is_torch_available
@@ -918,7 +918,7 @@ class AriaProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
-class AriaPreTrainedModel(PreTrainedModel):
+class AriaTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
@@ -1183,7 +1183,7 @@ class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
         self.post_init()
 
 
-class AriaTextForCausalLM(AriaPreTrainedModel, LlamaForCausalLM):
+class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
     """
     Aria model for causal language modeling tasks.
 
@@ -1213,7 +1213,7 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
+class AriaForConditionalGeneration(AriaTextPreTrainedModel, GenerationMixin):
     """
     Aria model for conditional generation tasks.
 

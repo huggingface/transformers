@@ -9,13 +9,8 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, select_best_resolution
-from ...image_transforms import (
-    convert_to_rgb,
-    pad,
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, select_best_resolution
+from ...image_transforms import convert_to_rgb, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -27,12 +22,10 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...tokenization_utils import (
-    TensorType,
-)
+from ...tokenization_utils import TensorType
+from ...utils import TensorType
 
 
-# Copied from models.llava_next.image_processing_llava_next.py
 def make_batched_images(images) -> List[List[ImageInput]]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
@@ -86,7 +79,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
 
 
 class AriaImageProcessor(BaseImageProcessor):
-    r"""
+    """
     A vision processor for the Aria model that handles image preprocessing.
     Initialize the AriaImageProcessor.
 
