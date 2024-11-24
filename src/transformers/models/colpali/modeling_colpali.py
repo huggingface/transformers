@@ -29,7 +29,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ..auto import AutoModel
 from .configuration_colpali import ColPaliConfig
 
 
@@ -244,6 +243,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
@@ -292,6 +292,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         ```"""
         if "pixel_values" in kwargs:
             kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -303,6 +304,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             pixel_values=pixel_values,
             output_hidden_states=True,
             return_dict=return_dict,
+            output_attentions=output_attentions,
             **kwargs,
         )
 
