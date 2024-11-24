@@ -561,19 +561,19 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return new_target_ids
 
 
-class AssistantVocabMapping:
+class AssistantToTargetTranslator:
     def __init__(self, target_tokenizer, assistant_tokenizer):
-        self.target_tokenizer = target_tokenizer
-        self.assistant_tokenizer = assistant_tokenizer
-        self.assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
+        self._target_tokenizer = target_tokenizer
+        self._assistant_tokenizer = assistant_tokenizer
+        self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
         self.suppress_input_ids = self._get_suppress_input_ids()
 
     def _get_assistant_to_target_input_ids(self) -> dict[int, int]:
         """
         Get a mapping from assistant tokens to target tokens based on vocabularies.
         """
-        target_vocab = self.target_tokenizer.get_vocab()
-        assistant_vocab = self.assistant_tokenizer.get_vocab()
+        target_vocab = self._target_tokenizer.get_vocab()
+        assistant_vocab = self._assistant_tokenizer.get_vocab()
         return {
             assistant_vocab[tok]: target_vocab[tok] for tok in set(target_vocab.keys()) & set(assistant_vocab.keys())
         }
@@ -582,8 +582,26 @@ class AssistantVocabMapping:
         """
         Get the input ids that are in the assistant vocab but not in the target vocab.
         """
-        assistant_vocab = self.assistant_tokenizer.get_vocab()
-        return list(set(assistant_vocab.values()) - set(self.assistant_to_target_input_ids.keys()))
+        assistant_vocab = self._assistant_tokenizer.get_vocab()
+        return list(set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.keys()))
+
+    def get_target_input_ids(self, assistant_input_ids: torch.LongTensor) -> torch.LongTensor:
+        """
+        Return the target input ids that correspond to the assistant input ids.
+        """
+        return assistant_input_ids.apply_(lambda x: self._assistant_to_target_input_ids.get(x, x))
+
+    def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Return the target logits that correspond to the assistant logits.
+        """
+        target_vocab_size = len(self._target_tokenizer.get_vocab())
+        ret: torch.FloatTensor = torch.zeros(
+            (assistant_logits.shape[0], target_vocab_size), device=assistant_logits.device
+        )
+        ret[:, self.suppress_input_ids] = -float("inf")
+        ret[:, list(self._assistant_to_target_input_ids.values())] = assistant_logits
+        return ret
 
 
 class AssistantVocabMappingCache:
@@ -591,7 +609,7 @@ class AssistantVocabMappingCache:
     _cache = weakref.WeakKeyDictionary()
 
     @classmethod
-    def get_mapping(cls, target_tokenizer, assistant_tokenizer) -> AssistantVocabMapping:
+    def get_mapping(cls, target_tokenizer, assistant_tokenizer) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
             if assistant_dict is None:
@@ -600,7 +618,7 @@ class AssistantVocabMappingCache:
 
             mapping = assistant_dict.get(assistant_tokenizer)
             if mapping is None:
-                mapping = AssistantVocabMapping(target_tokenizer, assistant_tokenizer)
+                mapping = AssistantToTargetTranslator(target_tokenizer, assistant_tokenizer)
                 assistant_dict[assistant_tokenizer] = mapping
 
             return mapping
@@ -644,11 +662,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
-        assistant_vocab_mapping = AssistantVocabMappingCache.get_mapping(target_tokenizer, assistant_tokenizer)
-        self._assistant_to_target_input_ids = assistant_vocab_mapping.assistant_to_target_input_ids
+        self._assistant_vocab_mapping = AssistantVocabMappingCache.get_mapping(target_tokenizer, assistant_tokenizer)
         logits_processor += [
             SuppressTokensLogitsProcessor(
-                suppress_tokens=assistant_vocab_mapping.suppress_input_ids,
+                suppress_tokens=self._assistant_vocab_mapping.suppress_input_ids,
                 device=assistant_model.device,
             ),
             LogitNormalization(),
@@ -697,7 +714,6 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
                 self._prev_assistant_ids = self._prev_assistant_ids + assistant_new_ids
             return torch.tensor(self._prev_assistant_ids).unsqueeze(0).to(self.assistant_model.device)
 
-        target_input_ids = input_ids.clone()
         input_ids = get_assistant_input_ids(input_ids)
 
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
@@ -739,13 +755,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
-        device = candidate_ids.device
-        candidate_ids = candidate_ids.cpu()
-        candidate_ids = candidate_ids[0, -(len(candidate_ids[0]) - input_ids.shape[1]) :].apply_(
-            lambda x: self._assistant_to_target_input_ids[x]
-        )
-        candidate_ids = candidate_ids.to(device)
-        candidate_ids = torch.cat((target_input_ids, candidate_ids.unsqueeze(0)), dim=1)
+        candidate_ids = self._assistant_vocab_mapping.get_target_input_ids(candidate_ids)
+
+        candidate_logits = self._assistant_vocab_mapping.get_target_logits(candidate_logits)
 
         return candidate_ids, candidate_logits
 
