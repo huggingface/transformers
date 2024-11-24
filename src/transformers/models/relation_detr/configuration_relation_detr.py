@@ -49,12 +49,22 @@ class RelationDetrConfig(PretrainedConfig):
             [`RelationDetrForObjectDetection`] can detect in a single image.
         hybrid_queries (`int`, *optional*, defaults to 1500):
             Number of hybrid queries, i.e. detection slots. This is the number of auxiliary objects used for faster convergence in training.
+        hybrid_assign (`int`, *optional*, defaults to 6):
+            Number of hybrid assignments, i.e. the number of auxiliary objects assigned to each object in training.
         num_denoising (`int`, *optional*, defaults to 100):
             Number of denoising samples for each image in training. It is used to generate noisy labels for the speed up training.
         label_noise_ratio (`float`, *optional*, defaults to 0.5):
             The probability of adding noise to the labels in the denoising training.
         box_noise_scale (`float`, *optional*, defaults to 1.0):
             The scale of the noise added to the bounding box coordinates in the denoising training.
+        sin_cos_temperature (`float`, *optional*, defaults to 10000):
+            The temperature of the sine and cosine positional encodings.
+        sin_cos_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the sine and cosine positional encodings.
+        sin_cos_scale (`float`, *optional*, defaults to `2 * math.pi`):
+            The scale of the sine and cosine positional encodings.
+        sin_cos_offset (`float`, *optional*, defaults to `-0.5`):
+            The offset of the sine and cosine positional encodings.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
@@ -72,6 +82,12 @@ class RelationDetrConfig(PretrainedConfig):
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
+        d_relation (`int`, *optional*, defaults to 16):
+            Dimension of the sin-cos embedding of position relation.
+        rel_temperature (`float`, *optional*, defaults to 10000):
+            The temperature of the relation positional encodings.
+        rel_scale (`float`, *optional*, defaults to 100):
+            The scale of the relation positional encodings.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -121,9 +137,13 @@ class RelationDetrConfig(PretrainedConfig):
             Alpha parameter in the focal loss.
         focal_gamma (`float`, *optional*, defaults to 2.0):
             Gamma parameter in the focal loss.
+        two_stage_binary_cls (`bool`, *optional*, defaults to `False`):
+            Whether to use binary classification for the first-stage loss in two-stage settings.
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is used as an encoder/decoder or not.
 
     Examples:
 
@@ -150,10 +170,6 @@ class RelationDetrConfig(PretrainedConfig):
         self,
         use_timm_backbone=True,
         backbone_config=None,
-        sin_cos_temperature=10000,
-        sin_cos_normalize=True,
-        sin_cos_scale=2 * math.pi,
-        sin_cos_offset=-0.5,
         num_channels=3,
         num_queries=900,
         hybrid_queries=1500,
@@ -161,6 +177,10 @@ class RelationDetrConfig(PretrainedConfig):
         num_denoising=100,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
+        sin_cos_temperature=10000,
+        sin_cos_normalize=True,
+        sin_cos_scale=2 * math.pi,
+        sin_cos_offset=-0.5,
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
