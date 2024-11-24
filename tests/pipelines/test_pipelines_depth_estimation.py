@@ -129,7 +129,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
 
         # This seems flaky.
         # self.assertEqual(outputs["depth"], "1a39394e282e9f3b0741a90b9f108977")
-        self.assertEqual(nested_simplify(outputs["predicted_depth"].max().item()), 29.304)
+        self.assertEqual(nested_simplify(outputs["predicted_depth"].max().item()), 29.306)
         self.assertEqual(nested_simplify(outputs["predicted_depth"].min().item()), 2.662)
 
     @require_torch

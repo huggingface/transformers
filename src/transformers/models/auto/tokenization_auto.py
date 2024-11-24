@@ -349,6 +349,7 @@ else:
                 ),
             ),
             ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("olmo_1124", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "omdet-turbo",

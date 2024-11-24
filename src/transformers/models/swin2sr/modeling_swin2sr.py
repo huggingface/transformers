@@ -482,7 +482,9 @@ class Swin2SROutput(nn.Module):
 
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Layer with Swinv2->Swin2SR
 class Swin2SRLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
+    def __init__(
+        self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0, pretrained_window_size=0
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         window_size, shift_size = self._compute_window_shift(
@@ -500,7 +502,7 @@ class Swin2SRLayer(nn.Module):
             else (pretrained_window_size, pretrained_window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.drop_path = Swin2SRDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Swin2SRDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.intermediate = Swin2SRIntermediate(config, dim)
         self.output = Swin2SROutput(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)

@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.46.0.dev0"
+__version__ = "4.47.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -625,6 +625,7 @@ _import_structure = {
     "models.nougat": ["NougatProcessor"],
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
+    "models.olmo_1124": ["Olmo1124Config"],
     "models.olmoe": ["OlmoeConfig"],
     "models.omdet_turbo": [
         "OmDetTurboConfig",
@@ -873,6 +874,7 @@ _import_structure = {
         "ImageClassificationPipeline",
         "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
+        "ImageTextToTextPipeline",
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
@@ -1189,7 +1191,7 @@ else:
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
     _import_structure["models.deformable_detr"].extend(
-        ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
+        ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast"]
     )
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
     _import_structure["models.deprecated.deta"].append("DetaImageProcessor")
@@ -1233,7 +1235,7 @@ else:
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
-    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
+    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor", "RTDetrImageProcessorFast"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -1306,6 +1308,8 @@ else:
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
+            "BayesianDetectorConfig",
+            "BayesianDetectorModel",
             "BeamScorer",
             "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
@@ -1344,6 +1348,9 @@ else:
             "StopStringCriteria",
             "SuppressTokensAtBeginLogitsProcessor",
             "SuppressTokensLogitsProcessor",
+            "SynthIDTextWatermarkDetector",
+            "SynthIDTextWatermarkingConfig",
+            "SynthIDTextWatermarkLogitsProcessor",
             "TemperatureLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
@@ -2926,6 +2933,13 @@ else:
             "OlmoForCausalLM",
             "OlmoModel",
             "OlmoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.olmo_1124"].extend(
+        [
+            "Olmo1124ForCausalLM",
+            "Olmo1124Model",
+            "Olmo1124PreTrainedModel",
         ]
     )
     _import_structure["models.olmoe"].extend(
@@ -5520,6 +5534,7 @@ if TYPE_CHECKING:
         NystromformerConfig,
     )
     from .models.olmo import OlmoConfig
+    from .models.olmo_1124 import Olmo1124Config
     from .models.olmoe import OlmoeConfig
     from .models.omdet_turbo import (
         OmDetTurboConfig,
@@ -5809,6 +5824,7 @@ if TYPE_CHECKING:
         ImageClassificationPipeline,
         ImageFeatureExtractionPipeline,
         ImageSegmentationPipeline,
+        ImageTextToTextPipeline,
         ImageToImagePipeline,
         ImageToTextPipeline,
         JsonPipelineDataFormat,
@@ -6104,6 +6120,7 @@ if TYPE_CHECKING:
         from .models.deformable_detr import (
             DeformableDetrFeatureExtractor,
             DeformableDetrImageProcessor,
+            DeformableDetrImageProcessorFast,
         )
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
@@ -6167,7 +6184,7 @@ if TYPE_CHECKING:
         )
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
-        from .models.rt_detr import RTDetrImageProcessor
+        from .models.rt_detr import RTDetrImageProcessor, RTDetrImageProcessorFast
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -6233,6 +6250,8 @@ if TYPE_CHECKING:
         )
         from .generation import (
             AlternatingCodebooksLogitsProcessor,
+            BayesianDetectorConfig,
+            BayesianDetectorModel,
             BeamScorer,
             BeamSearchScorer,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -6271,6 +6290,9 @@ if TYPE_CHECKING:
             StopStringCriteria,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
+            SynthIDTextWatermarkDetector,
+            SynthIDTextWatermarkingConfig,
+            SynthIDTextWatermarkLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
@@ -7538,6 +7560,11 @@ if TYPE_CHECKING:
             OlmoForCausalLM,
             OlmoModel,
             OlmoPreTrainedModel,
+        )
+        from .models.olmo_1124 import (
+            Olmo1124ForCausalLM,
+            Olmo1124Model,
+            Olmo1124PreTrainedModel,
         )
         from .models.olmoe import (
             OlmoeForCausalLM,
