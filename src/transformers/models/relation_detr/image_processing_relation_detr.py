@@ -852,7 +852,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
         size_divisor (`Optional`, *optional*):
-            If provided, the image will be padded to the nearest multiple of `size_divisor`. 
+            If provided, the image will be padded to the nearest multiple of `size_divisor`.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
