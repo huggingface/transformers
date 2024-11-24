@@ -834,7 +834,16 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             )
         )
         logits_processor.append(LogitNormalization())
-        super().__init__(input_ids, assistant_model, target_tokenizer, assistant_tokenizer, generation_config, model_kwargs, inputs_tensor, logits_processor)
+        super().__init__(
+            input_ids,
+            assistant_model,
+            target_tokenizer,
+            assistant_tokenizer,
+            generation_config,
+            model_kwargs,
+            inputs_tensor,
+            logits_processor,
+        )
         self._prev_target_seq_len: int = 0
         self._prev_assistant_ids: torch.LongTensor | None = None
 
@@ -867,7 +876,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             else:
                 self._prev_assistant_ids = self._prev_assistant_ids + assistant_new_ids
             return torch.tensor(self._prev_assistant_ids).unsqueeze(0).to(self.assistant_model.device)
-        
+
         target_input_ids = input_ids.clone()
         input_ids = get_assistant_input_ids(input_ids)
 
@@ -912,7 +921,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         candidate_ids = assistant_output.sequences
         device = candidate_ids.device
         candidate_ids = candidate_ids.cpu()
-        candidate_ids = candidate_ids[0, -(len(candidate_ids[0])-input_ids.shape[1]):].apply_(lambda x: self._assistant_to_target_input_ids[x])
+        candidate_ids = candidate_ids[0, -(len(candidate_ids[0]) - input_ids.shape[1]) :].apply_(
+            lambda x: self._assistant_to_target_input_ids[x]
+        )
         candidate_ids = candidate_ids.to(device)
         candidate_ids = torch.cat((target_input_ids, candidate_ids.unsqueeze(0)), dim=1)
 
