@@ -392,7 +392,7 @@ def normalize(
         input_data_format = infer_channel_dimension_format(image)
 
     # if of ChannelDimension.NONE and not made HWC by resize, handle here
-    if ChannelDimension.NONE:
+    if input_data_format == ChannelDimension.NONE:
         input_data_format = ChannelDimension.LAST
         image = np.expand_dims(image, axis=-1) if image.ndim == 2 else image
 
