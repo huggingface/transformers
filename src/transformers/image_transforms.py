@@ -82,8 +82,11 @@ def to_channel_dimension_format(
 
     if input_channel_dim is None:
         input_channel_dim = infer_channel_dimension_format(image)
-
     target_channel_dim = ChannelDimension(channel_dim)
+
+    if target_channel_dim == ChannelDimension.NONE and input_channel_dim != ChannelDimension.NONE:
+        raise ValueError(f"Can't convert from dim format {input_channel_dim} to {target_channel_dim}")
+
     if input_channel_dim == target_channel_dim:
         return image
 
