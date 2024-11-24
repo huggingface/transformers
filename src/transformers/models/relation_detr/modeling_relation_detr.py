@@ -1146,12 +1146,6 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "reference_points") and not self.config.two_stage:
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
-        if hasattr(module, "level_embed"):
-            nn.init.normal_(module.level_embed)
-        if hasattr(module, "target_embed"):
-            nn.init.normal_(module.target_embed.weight)
-        if hasattr(module, "hybrid_embed"):
-            nn.init.normal_(module.hybrid_embed.weight)
 
 
 RELATION_DETR_START_DOCSTRING = r"""
@@ -1820,13 +1814,6 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         self.encoder_bbox_head = RelationDetrMLPPredictionHead(config.d_model, config.d_model, 4, 3)
         self.hybrid_bbox_head = RelationDetrMLPPredictionHead(config.d_model, config.d_model, 4, 3)
 
-        self.two_stage_num_proposals = config.num_queries
-        self.hybrid_num_proposals = config.hybrid_queries
-        self.num_labels = config.num_labels
-
-        self.post_init()
-
-    def init_weights(self):
         # initilize encoder and hybrid classification layers
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -1837,6 +1824,12 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         nn.init.constant_(self.encoder_bbox_head.layers[-1].bias, 0.0)
         nn.init.constant_(self.hybrid_bbox_head.layers[-1].weight, 0.0)
         nn.init.constant_(self.hybrid_bbox_head.layers[-1].bias, 0.0)
+
+        self.two_stage_num_proposals = config.num_queries
+        self.hybrid_num_proposals = config.hybrid_queries
+        self.num_labels = config.num_labels
+
+        self.post_init()
 
     def get_encoder(self):
         return self.encoder
@@ -2049,7 +2042,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         enc_outputs_coord_logits = delta_bbox + output_proposals
 
         # only keep top scoring `config.num_queries` proposals
-        topk = self.config.num_queries
+        topk = min(self.config.num_queries, enc_outputs_class.shape[1])
         topk_proposals = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1].unsqueeze(-1)
         topk_class = torch.gather(enc_outputs_class, 1, topk_proposals.repeat(1, 1, self.num_labels))
         topk_coords_logits = torch.gather(
