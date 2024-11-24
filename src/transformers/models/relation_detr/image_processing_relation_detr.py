@@ -855,7 +855,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.__init__
     def __init__(
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
@@ -1175,7 +1174,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             )
         return padded_image, annotation
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
@@ -1271,7 +1269,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.preprocess
     def preprocess(
         self,
         images: ImageInput,

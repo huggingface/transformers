@@ -498,7 +498,6 @@ class RelationDetrConvEncoder(nn.Module):
                     if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
                         parameter.requires_grad_(False)
 
-    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->RelationDetr
     def forward(self, pixel_values: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
