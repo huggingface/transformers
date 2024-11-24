@@ -49,9 +49,9 @@ class RelationDetrConfig(PretrainedConfig):
             [`RelationDetrForObjectDetection`] can detect in a single image.
         hybrid_queries (`int`, *optional*, defaults to 1500):
             Number of hybrid queries, i.e. detection slots. This is the number of auxiliary objects used for faster convergence in training.
-        denoising_nums (`int`, *optional*, defaults to 100):
+        num_denoising (`int`, *optional*, defaults to 100):
             Number of denoising samples for each image in training. It is used to generate noisy labels for the speed up training.
-        label_noise_prob (`float`, *optional*, defaults to 0.5):
+        label_noise_ratio (`float`, *optional*, defaults to 0.5):
             The probability of adding noise to the labels in the denoising training.
         box_noise_scale (`float`, *optional*, defaults to 1.0):
             The scale of the noise added to the bounding box coordinates in the denoising training.
@@ -158,8 +158,8 @@ class RelationDetrConfig(PretrainedConfig):
         num_queries=900,
         hybrid_queries=1500,
         hybrid_assign=6,
-        denoising_nums=100,
-        label_noise_prob=0.5,
+        num_denoising=100,
+        label_noise_ratio=0.5,
         box_noise_scale=1.0,
         encoder_layers=6,
         encoder_ffn_dim=2048,
@@ -236,8 +236,8 @@ class RelationDetrConfig(PretrainedConfig):
         self.num_queries = num_queries
         self.hybrid_queries = hybrid_queries
         self.hybrid_assign = hybrid_assign
-        self.denoising_nums = denoising_nums
-        self.label_noise_prob = label_noise_prob
+        self.num_denoising = num_denoising
+        self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
         self.encoder_layers = encoder_layers
         self.encoder_ffn_dim = encoder_ffn_dim

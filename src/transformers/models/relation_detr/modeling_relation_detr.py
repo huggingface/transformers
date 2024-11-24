@@ -253,24 +253,24 @@ class RelationDetrModelOutput(ModelOutput):
     """
 
     init_reference_points: torch.FloatTensor = None
+    dec_outputs_class: torch.FloatTensor = None
+    dec_outputs_coord: torch.FloatTensor = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    dec_outputs_class: torch.FloatTensor = None
-    dec_outputs_coord: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord: Optional[torch.FloatTensor] = None
-    hybrid_outputs_class: Optional[torch.FloatTensor] = None
-    hybrid_outputs_coord: Optional[torch.FloatTensor] = None
     hybrid_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_attentions: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hybrid_outputs_class: Optional[torch.FloatTensor] = None
+    hybrid_outputs_coord: Optional[torch.FloatTensor] = None
     hybrid_enc_outputs_class: Optional[torch.FloatTensor] = None
     hybrid_enc_outputs_coord: Optional[torch.FloatTensor] = None
 
@@ -342,6 +342,10 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
+    dec_outputs_class: torch.FloatTensor = None
+    dec_outputs_coord: torch.FloatTensor = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
@@ -351,8 +355,15 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    enc_outputs_class: Optional = None
-    enc_outputs_coord: Optional = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord: Optional[torch.FloatTensor] = None
+    hybrid_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hybrid_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hybrid_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hybrid_outputs_class: Optional[torch.FloatTensor] = None
+    hybrid_outputs_coord: Optional[torch.FloatTensor] = None
+    hybrid_enc_outputs_class: Optional[torch.FloatTensor] = None
+    hybrid_enc_outputs_coord: Optional[torch.FloatTensor] = None
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -1583,7 +1594,9 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
         src_boxes = reference_points
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.detach()[:, :, None] * valid_ratio_scale
-            query_sine_embed = get_sine_pos_embed(reference_points_input[:, :, 0, :])
+            query_sine_embed = get_sine_pos_embed(
+                reference_points_input[:, :, 0, :], self.config.d_model // 2
+            )
             position_embeddings = self.ref_point_head(query_sine_embed)
             if idx != 0:
                 position_embeddings = position_embeddings * self.query_scale(hidden_states)
@@ -2110,7 +2123,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             
         else:
             hybrid_outputs_classes = hybrid_outputs_coords = None
-            hybrid_mediate_output = RelationDetrDecoderOutput() if return_dict else ()
+            hybrid_outputs = RelationDetrDecoderOutput() if return_dict else ()
 
         if not return_dict:
             decoder_mediate_outputs = decoder_outputs[2:]
@@ -2188,7 +2201,7 @@ class GenerateDNQueries(nn.Module):
         num_classes (int): Number of total categories. Default: 80.
         label_embed_dim (int): The embedding dimension for label encoding. Default: 256.
         denoising_groups (int): Number of noised ground truth groups. Default: 5.
-        label_noise_prob (float): The probability of the label being noised. Default: 0.2.
+        label_noise_ratio (float): The probability of the label being noised. Default: 0.2.
         box_noise_scale (float): Scaling factor for box noising. Default: 0.4
         with_indicator (bool): If True, add indicator in noised label/box queries.
 
@@ -2200,7 +2213,7 @@ class GenerateDNQueries(nn.Module):
         num_classes: int = 80,
         label_embed_dim: int = 256,
         denoising_groups: int = 5,
-        label_noise_prob: float = 0.2,
+        label_noise_ratio: float = 0.2,
         box_noise_scale: float = 0.4,
         with_indicator: bool = False,
         return_dict: bool = True,
@@ -2210,7 +2223,7 @@ class GenerateDNQueries(nn.Module):
         self.num_classes = num_classes
         self.label_embed_dim = label_embed_dim
         self.denoising_groups = denoising_groups
-        self.label_noise_prob = label_noise_prob
+        self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
         self.with_indicator = with_indicator
         self.return_dict = return_dict
@@ -2223,10 +2236,10 @@ class GenerateDNQueries(nn.Module):
 
     @staticmethod
     def apply_label_noise(
-        labels: torch.Tensor, label_noise_prob: float = 0.2, num_classes: int = 80
+        labels: torch.Tensor, label_noise_ratio: float = 0.2, num_classes: int = 80
     ):
-        if label_noise_prob > 0:
-            mask = torch.rand_like(labels.float()) < label_noise_prob
+        if label_noise_ratio > 0:
+            mask = torch.rand_like(labels.float()) < label_noise_ratio
             noised_labels = torch.randint_like(labels, 0, num_classes)
             noised_labels = torch.where(mask, noised_labels, labels)
             return noised_labels
@@ -2291,7 +2304,7 @@ class GenerateDNQueries(nn.Module):
         gt_nums_per_image = [x.numel() for x in gt_labels_list]
 
         # Add noise on labels and boxes
-        noised_labels = self.apply_label_noise(gt_labels, self.label_noise_prob, self.num_classes)
+        noised_labels = self.apply_label_noise(gt_labels, self.label_noise_ratio, self.num_classes)
         noised_boxes = self.apply_box_noise(gt_boxes, self.box_noise_scale)
         noised_boxes = inverse_sigmoid(noised_boxes)
 
@@ -2378,8 +2391,8 @@ class GenerateCDNQueries(GenerateDNQueries):
         num_queries: int = 300,
         num_classes: int = 80,
         label_embed_dim: int = 256,
-        denoising_nums: int = 100,
-        label_noise_prob: float = 0.5,
+        num_denoising: int = 100,
+        label_noise_ratio: float = 0.5,
         box_noise_scale: float = 1.0,
         return_dict: bool = True,
     ):
@@ -2387,13 +2400,13 @@ class GenerateCDNQueries(GenerateDNQueries):
             num_queries=num_queries,
             num_classes=num_classes,
             label_embed_dim=label_embed_dim,
-            label_noise_prob=label_noise_prob,
+            label_noise_ratio=label_noise_ratio,
             box_noise_scale=box_noise_scale,
             denoising_groups=1,
             return_dict=return_dict,
         )
 
-        self.denoising_nums = denoising_nums
+        self.num_denoising = num_denoising
         self.label_encoder = nn.Embedding(num_classes, label_embed_dim)
 
     def apply_box_noise(self, boxes: torch.Tensor, box_noise_scale: float = 0.4):
@@ -2452,7 +2465,7 @@ class GenerateCDNQueries(GenerateDNQueries):
 
         # get denoising_groups, which is 1 for empty ground truth
         denoising_groups = (
-            self.denoising_nums * max_gt_num_per_image // max(max_gt_num_per_image**2, 1)
+            self.num_denoising * max_gt_num_per_image // max(max_gt_num_per_image**2, 1)
         )
         self.denoising_groups = max(denoising_groups, 1)
 
@@ -2476,7 +2489,7 @@ class GenerateCDNQueries(GenerateDNQueries):
 
         # Add noise on labels and boxes
         noised_labels = self.apply_label_noise(
-            gt_labels, self.label_noise_prob * 0.5, self.num_classes
+            gt_labels, self.label_noise_ratio * 0.5, self.num_classes
         )
         noised_boxes = self.apply_box_noise(gt_boxes, self.box_noise_scale)
         noised_boxes = inverse_sigmoid(noised_boxes)
@@ -2568,8 +2581,8 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             num_queries=config.num_queries,
             num_classes=config.num_labels,
             label_embed_dim=config.d_model,
-            denoising_nums=config.denoising_nums,
-            label_noise_prob=config.label_noise_prob,
+            num_denoising=config.num_denoising,
+            label_noise_ratio=config.label_noise_ratio,
             box_noise_scale=config.box_noise_scale,
             return_dict=config.use_return_dict,
         )
@@ -2635,7 +2648,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.training and labels is not None:
+        if self.training and self.config.num_denoising > 0 and labels is not None:
             # collect ground truth for denoising generation
             gt_labels_list = [t["class_labels"] for t in labels]
             gt_boxes_list = [t["boxes"] for t in labels]
@@ -2719,17 +2732,13 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
 
         if not return_dict:
             if auxiliary_outputs is not None:
+                if not isinstance(auxiliary_outputs, tuple):
+                    auxiliary_outputs = tuple(auxiliary_outputs)
                 output = (logits, pred_boxes) + auxiliary_outputs + outputs
             else:
                 output = (logits, pred_boxes) + outputs
 
-            tuple_outputs = output
-
-            if hybrid_loss is not None:
-                tuple_outputs = (hybrid_loss, hybrid_loss_dict) + tuple_outputs
-
-            if loss is not None:
-                tuple_outputs = (loss, loss_dict) + tuple_outputs            
+            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output      
 
             return tuple_outputs
 
@@ -2739,18 +2748,27 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
+            init_reference_points=outputs.init_reference_points,
+            dec_outputs_class=outputs.dec_outputs_class,
+            dec_outputs_coord=outputs.dec_outputs_coord,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord=outputs.enc_outputs_coord,
             last_hidden_state=outputs.last_hidden_state,
+            intermediate_hidden_states=outputs.intermediate_hidden_states,
+            intermediate_reference_points=outputs.intermediate_reference_points,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
-            intermediate_hidden_states=outputs.intermediate_hidden_states,
-            intermediate_reference_points=outputs.intermediate_reference_points,
-            init_reference_points=outputs.init_reference_points,
-            enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord=outputs.enc_outputs_coord,
+            hybrid_hidden_states=outputs.hybrid_hidden_states,
+            hybrid_attentions=outputs.hybrid_attentions,
+            hybrid_cross_attentions=outputs.hybrid_cross_attentions,
+            hybrid_outputs_class=outputs.hybrid_outputs_class,
+            hybrid_outputs_coord=outputs.hybrid_outputs_coord,
+            hybrid_enc_outputs_class=outputs.hybrid_enc_outputs_class,
+            hybrid_enc_outputs_coord=outputs.hybrid_enc_outputs_coord,
         )
 
         return dict_outputs
