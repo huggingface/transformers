@@ -33,7 +33,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_torch_available
-from ..auto import CONFIG_MAPPING, AutoModel, AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LLAMA_ATTENTION_CLASSES,
@@ -855,43 +855,6 @@ class AriaPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-# adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/router.py#L96-L304
-class AriaTopKRouter(nn.Module):
-    """
-    Top-K Router for Mixture of Experts (MoE) models.
-
-    This router determines which experts should process each token based on the top-k scoring experts.
-    It also applies auxiliary losses to encourage load balancing among experts.
-
-    Args:
-        config (AriaTextConfig): Configuration object containing MoE-related parameters.
-    """
-
-    def __init__(self, config: AriaTextConfig):
-        super().__init__()
-        self.config = config
-
-        self.weight = nn.Parameter(torch.empty((self.config.moe_num_experts, self.config.hidden_size)))
-
-    # Simplify code a lot compared to original, since we do not need training.
-    # Original: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/moe_lm.py#L170
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        logits = nn.functional.linear(hidden_states, self.weight)
-        top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = nn.functional.softmax(top_logits, dim=-1)
-
-        original_dtype = top_indices.dtype
-
-        tokens_per_expert = torch.histc(
-            top_indices.flatten().to(torch.float32),
-            bins=self.config.moe_num_experts,
-            min=0,
-            max=self.config.moe_num_experts - 1,
-        )
-
-        return scores, top_indices, tokens_per_expert.to(original_dtype)
-
-
 class AriaSharedExpertsMLP(LlamaMLP):
     """
     Shared Expert MLP for shared experts.
@@ -1007,7 +970,7 @@ class AriaTextMoELayer(nn.Module):
     def __init__(self, config: AriaTextConfig):
         super().__init__()
 
-        self.router = AriaTopKRouter(config)
+        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
         self.experts = AriaGroupedExpertsMLP(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
         self.config = config
@@ -1032,7 +995,20 @@ class AriaTextMoELayer(nn.Module):
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
 
-        scores, indices, tokens_per_expert = self.router(hidden_states)
+        # Top K Routing
+        logits = self.router(hidden_states)
+        top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
+        scores = nn.functional.softmax(top_logits, dim=-1)
+
+        original_dtype = top_indices.dtype
+
+        tokens_per_expert = torch.histc(
+            top_indices.flatten().to(torch.float32),
+            bins=self.config.moe_num_experts,
+            min=0,
+            max=self.config.moe_num_experts - 1,
+        ).to(original_dtype)
+        indices = top_indices
 
         # Token permutation
         flatten_indices = indices.view(-1)
@@ -1252,24 +1228,59 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and images
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                vision_feature_layer=vision_feature_layer,
-            )
-            n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
-            n_image_features = image_features.shape[1]
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            if pixel_values is not None and input_ids.shape[1] != 1:
+                image_features = self.get_image_features(
+                    pixel_values=pixel_values,
+                    vision_feature_layer=vision_feature_layer,
                 )
-            special_image_mask = (
-                (input_ids == self.config.image_token_index)
-                .unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+                n_image_tokens = (input_ids == self.config.image_token_index).sum(dim=-1)[0].item()
+                n_image_features = image_features.shape[1]
+                if n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
+                special_image_mask = (
+                    (input_ids == self.config.image_token_index)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
+                )
+                image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+            # In case input_ids.shape[1] == 1 & pixel_values != None & past_key_values != None, we are in the case of
+            # generation with cache
+            elif past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
+                # Retrieve the first layer to inspect the logits and mask out the hidden states
+                # that are set to 0
+                first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
+
+                # Sum all dimensions of head_dim (-2) to avoid random errors
+                # such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+
+                # Get the target length
+                target_length = input_ids.shape[1]
+                past_length = first_layer_past_key_value.shape[-1]
+
+                extended_attention_mask = torch.ones(
+                    (attention_mask.shape[0], past_length),
+                    dtype=attention_mask.dtype,
+                    device=attention_mask.device,
+                )
+
+                # Filter out only the tokens that can be un-attended, this can happen
+                # if one uses Llava + Fused modules where the cache on the
+                # first iteration is already big enough, or if one passes custom cache
+                valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                new_batch_index = batch_index[valid_indices]
+                new_non_attended_tokens = non_attended_tokens[valid_indices]
+
+                # Zero-out the places where we don't need to attend
+                extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+
+                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
+                position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
             attention_mask=attention_mask,
