@@ -1,4 +1,5 @@
 import unittest
+from parameterized import parameterized
 
 import numpy as np
 
@@ -48,7 +49,11 @@ class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
 class TestGenerateWithDifferentModels(unittest.TestCase):
     """Tests generation with different target and assistant models."""
 
-    def test_generate_with_different_models(self):
+    @parameterized.expand([
+        (False,),
+        (True,),
+    ])
+    def test_generate_with_different_models(self, do_sample):
         # Use smaller test models instead
         target_model_checkpoint = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         assistant_checkpoint = "hf-internal-testing/tiny-random-gpt2"
@@ -70,7 +75,6 @@ class TestGenerateWithDifferentModels(unittest.TestCase):
         input_ids = target_tokenizer(prompt, return_tensors="pt").input_ids.to(target_model.device)
 
         # Create generation configs
-        do_sample = False
         base_config = GenerationConfig(
             max_new_tokens=20,
             do_sample=do_sample,
