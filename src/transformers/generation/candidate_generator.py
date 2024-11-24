@@ -14,7 +14,10 @@
 # limitations under the License.
 
 import copy
+from functools import lru_cache
+import threading
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+import weakref
 
 import numpy as np
 import torch
@@ -559,6 +562,52 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return new_target_ids
 
 
+class AssistantVocabMapping:
+    def __init__(self, target_tokenizer, assistant_tokenizer):
+        self.target_tokenizer = target_tokenizer
+        self.assistant_tokenizer = assistant_tokenizer
+        self.assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
+        self.suppress_input_ids = self._get_suppress_input_ids()
+
+    def _get_assistant_to_target_input_ids(self) -> dict[int, int]:
+        """
+        Get a mapping from assistant tokens to target tokens based on vocabularies.
+        """
+        target_vocab = self.target_tokenizer.get_vocab()
+        assistant_vocab = self.assistant_tokenizer.get_vocab()
+        return {
+            assistant_vocab[tok]: target_vocab[tok]
+            for tok in set(target_vocab.keys()) & set(assistant_vocab.keys())
+        }
+
+    def _get_suppress_input_ids(self) -> list[int]:
+        """
+        Get the input ids that are in the assistant vocab but not in the target vocab.
+        """
+        assistant_vocab = self.assistant_tokenizer.get_vocab()
+        return list(set(assistant_vocab.values()) - set(self.assistant_to_target_input_ids.keys()))
+
+
+class AssistantVocabMappingCache:
+    _lock = threading.Lock()
+    _cache = weakref.WeakKeyDictionary()
+
+    @classmethod
+    def get_mapping(cls, target_tokenizer, assistant_tokenizer) -> AssistantVocabMapping:
+        with cls._lock:
+            assistant_dict = cls._cache.get(target_tokenizer)
+            if assistant_dict is None:
+                assistant_dict = weakref.WeakKeyDictionary()
+                cls._cache[target_tokenizer] = assistant_dict
+
+            mapping = assistant_dict.get(assistant_tokenizer)
+            if mapping is None:
+                mapping = AssistantVocabMapping(target_tokenizer, assistant_tokenizer)
+                assistant_dict[assistant_tokenizer] = mapping
+
+            return mapping
+        
+
 class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):
     """
     `CandidateGenerator` class to be used for Universal Speculative Decoding (USD): speculative decoding with different tokenizers
@@ -597,20 +646,18 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
-        target_vocab: dict[str, int] = target_tokenizer.get_vocab()
-        assistant_vocab: dict[str, int] = assistant_tokenizer.get_vocab()
-        self._assistant_to_target_input_ids: dict[int, int] = {
-            assistant_vocab[tok]: target_vocab[tok] for tok in target_vocab.keys() & assistant_vocab.keys()
-        }
-        # Suppress tokens that are in the assistant vocab but not in the target vocab
-        suppress_input_ids = list(set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.keys()))
-        logits_processor.append(
-            SuppressTokensLogitsProcessor(
-                suppress_tokens=suppress_input_ids,
-                device=assistant_model.device,
-            )
+        assistant_vocab_mapping = AssistantVocabMappingCache.get_mapping(
+            target_tokenizer, assistant_tokenizer
         )
-        logits_processor.append(LogitNormalization())
+        self._assistant_to_target_input_ids = assistant_vocab_mapping.assistant_to_target_input_ids
+        logits_processor += [
+            SuppressTokensLogitsProcessor(
+                suppress_tokens=assistant_vocab_mapping.suppress_input_ids,
+                device=assistant_model.device,
+            ),
+            LogitNormalization(),
+        ]
+
         super().__init__(
             input_ids,
             assistant_model,
