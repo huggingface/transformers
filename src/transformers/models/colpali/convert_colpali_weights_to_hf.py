@@ -315,12 +315,12 @@ def get_torch_device(device: str = "auto") -> str:
     return device
 
 
-def remove_model_prefix(state_dict: Dict[str, Any]) -> Dict[str, Any]:
+def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     new_state_dict = {}
     for key, value in state_dict.items():
         new_key = key
-        if key.startswith("model."):
-            new_key = key[len("model.") :]
+        if key.startswith("custom_text_proj"):
+            new_key = key.replace("custom_text_proj", "embedding_proj_layer")
         new_state_dict[new_key] = value
     return new_state_dict
 
@@ -338,13 +338,16 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     )
 
     # Format the state_dict keys
-    original_state_dict = remove_model_prefix(original_state_dict)
+    original_state_dict = rename_state_dict_keys(original_state_dict)
 
     # Add the extra attributes for the new model
-    new_config = ORIGINAL_CONFIG.copy()
-    new_config["model_type"] = "colpali"
-    new_config["is_composition"] = False
-    new_config["embedding_dim"] = 128
+    new_config = {
+        "vlm_backbone_config": ORIGINAL_CONFIG.copy(),
+        "model_type": "colpali",
+        "is_composition": False,
+        "embedding_dim": 128,
+        "initializer_range": 0.02,  # unused as initialized weights will be replaced
+    }
 
     # Create the new config
     config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
@@ -368,8 +371,8 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     print("Loaded original model weights")
 
     # Tie the weights (following ColPali's `__init__`` step)
-    if model.language_model._tied_weights_keys is not None:
-        model._tied_weights_keys = [f"language_model.{k}" for k in model.language_model._tied_weights_keys]
+    if model.model.language_model._tied_weights_keys is not None:
+        model._tied_weights_keys = [f"model.language_model.{k}" for k in model.model.language_model._tied_weights_keys]
 
     # Sanity check: ensure all keys are the same
     state_dict_keys_old = set(original_state_dict.keys())
@@ -405,7 +408,7 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
 
     # Sanity checks
     print(f"Mean Absolute Error (MAE) for images: {mae_images}")
-    print(f"Mean Absolute Error (MAE) for queries: {mae_queries}")
+    print(f"Mean Absolute Error (MAE) for queries: {mae_queries}")  # FIXME: MAE ≈ 0.0017
     if mae_images > TOLERANCE or mae_queries > TOLERANCE:
         raise ValueError("Mean Absolute Error (MAE) is greater than the tolerance")
 
@@ -421,6 +424,8 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
         rtol=TOLERANCE,
     ):
         raise ValueError("Outputs for queries do not match the original model's outputs")
+
+    breakpoint()
 
     # Save the model
     if push_to_hub:
