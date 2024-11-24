@@ -19,7 +19,6 @@ from huggingface_hub import snapshot_download
 from safetensors import safe_open
 
 from transformers import (
-    AddedToken,
     AriaForConditionalGeneration,
     AriaProcessor,
     AutoConfig,
@@ -86,13 +85,16 @@ def convert_state_dict_to_hf(state_dict):
 def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
     torch.set_default_dtype(torch.float16)
 
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    tokenizer.add_special_tokens({"pad_token": "<pad>"})
-
+    tokenizer = AutoTokenizer.from_pretrained(
+        text_model_id,
+        extra_special_tokens={
+            "image_token": "<image>",
+            "pad_token": "<pad>",
+        },
+    )
     processor = AriaProcessor.from_pretrained(
         text_model_id,
-        tokenizer_path=text_model_id,
+        tokenizer=tokenizer,
     )
 
     config = AutoConfig.from_pretrained(text_model_id)

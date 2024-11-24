@@ -168,7 +168,7 @@ class AriaConfig(PretrainedConfig):
 
     model_type = "aria"
     is_composition = False
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig} 
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -487,6 +487,7 @@ class AriaImageProcessor(BaseImageProcessor):
             self.split_ratio = split_ratio
 
         self._set_processor_class("AriaProcessor")
+
     def preprocess(
         self,
         images: Union[ImageInput, List[ImageInput]],
@@ -572,7 +573,13 @@ class AriaImageProcessor(BaseImageProcessor):
 
         for image in images:
             if split_image:
-                crop_images = self.get_image_patches(image, self.split_ratio, max_image_size, data_format=input_data_format, input_data_format=input_data_format)
+                crop_images = self.get_image_patches(
+                    image,
+                    self.split_ratio,
+                    max_image_size,
+                    data_format=input_data_format,
+                    input_data_format=input_data_format,
+                )
             else:
                 crop_images = [image]
             if num_crops is None or len(crop_images) > num_crops:
@@ -591,11 +598,20 @@ class AriaImageProcessor(BaseImageProcessor):
                     new_size = (max_image_size, max(int(w * scale), min_image_size))  # h, w
 
                 crop_image_resized = resize(
-                    crop_image, new_size, resample=resample, data_format=data_format, input_data_format=input_data_format
+                    crop_image,
+                    new_size,
+                    resample=resample,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
                 )
 
                 padding_bottom, padding_right = max_image_size - new_size[0], max_image_size - new_size[1]
-                crop_image_padded = pad(crop_image_resized, ((0, padding_bottom), (0, padding_right)), data_format=data_format, input_data_format=data_format)
+                crop_image_padded = pad(
+                    crop_image_resized,
+                    ((0, padding_bottom), (0, padding_right)),
+                    data_format=data_format,
+                    input_data_format=data_format,
+                )
 
                 # Create a pixel mask
                 pixel_mask = np.zeros((max_image_size, max_image_size), dtype=bool)
@@ -603,7 +619,13 @@ class AriaImageProcessor(BaseImageProcessor):
                 pixel_masks.append(pixel_mask)
 
                 if do_normalize:
-                    crop_image_padded = self.normalize(crop_image_padded, self.image_mean, self.image_std, data_format=data_format, input_data_format=data_format)
+                    crop_image_padded = self.normalize(
+                        crop_image_padded,
+                        self.image_mean,
+                        self.image_std,
+                        data_format=data_format,
+                        input_data_format=data_format,
+                    )
 
                 pixel_values.append(crop_image_padded)
         return BatchFeature(
