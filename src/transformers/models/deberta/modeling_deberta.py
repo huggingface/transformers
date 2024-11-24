@@ -217,6 +217,12 @@ class StableDropout(nn.Module):
         self.drop_prob = drop_prob
         self.count = 0
         self.context_stack = None
+    
+    def __repr__(self):
+        return f"StableDropout(p={self.drop_prob:.4f})"
+
+    def __str__(self):
+        return f"StableDropout(p={self.drop_prob:.4f})"
 
     def forward(self, x):
         """
