@@ -326,8 +326,8 @@
         title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
-      - local: in_translation
-        title: (번역중) BERT
+      - local: model_doc/bert
+        title: BERT
       - local: in_translation
         title: (번역중) BertGeneration
       - local: model_doc/bert-japanese
@@ -448,8 +448,8 @@
         title: Mamba
       - local: model_doc/mamba2
         title: Mamba2
-      - local: in_translation
-        title: (번역중) MarianMT
+      - local: model_doc/marian
+        title: MarianMT
       - local: in_translation
         title: (번역중) MarkupLM
       - local: in_translation
@@ -677,6 +677,10 @@
       title: (번역중) 오디오 모델
     - isExpanded: false
       sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: in_translation
+        title: (번역중) VideoMAE
       - local: model_doc/vivit
         title: ViViT
       title: (번역중) 비디오 모델
