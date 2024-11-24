@@ -82,7 +82,7 @@ if is_scipy_available():
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION)
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -386,212 +386,212 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-# # Copied from transformers.models.detr.image_processing_detr.masks_to_boxes
-# def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
-#     """
-#     Compute the bounding boxes around the provided panoptic segmentation masks.
+# Copied from transformers.models.detr.image_processing_detr.masks_to_boxes
+def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
+    """
+    Compute the bounding boxes around the provided panoptic segmentation masks.
 
-#     Args:
-#         masks: masks in format `[number_masks, height, width]` where N is the number of masks
+    Args:
+        masks: masks in format `[number_masks, height, width]` where N is the number of masks
 
-#     Returns:
-#         boxes: bounding boxes in format `[number_masks, 4]` in xyxy format
-#     """
-#     if masks.size == 0:
-#         return np.zeros((0, 4))
+    Returns:
+        boxes: bounding boxes in format `[number_masks, 4]` in xyxy format
+    """
+    if masks.size == 0:
+        return np.zeros((0, 4))
 
-#     h, w = masks.shape[-2:]
-#     y = np.arange(0, h, dtype=np.float32)
-#     x = np.arange(0, w, dtype=np.float32)
-#     # see https://github.com/pytorch/pytorch/issues/50276
-#     y, x = np.meshgrid(y, x, indexing="ij")
+    h, w = masks.shape[-2:]
+    y = np.arange(0, h, dtype=np.float32)
+    x = np.arange(0, w, dtype=np.float32)
+    # see https://github.com/pytorch/pytorch/issues/50276
+    y, x = np.meshgrid(y, x, indexing="ij")
 
-#     x_mask = masks * np.expand_dims(x, axis=0)
-#     x_max = x_mask.reshape(x_mask.shape[0], -1).max(-1)
-#     x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
-#     x_min = x.filled(fill_value=1e8)
-#     x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
+    x_mask = masks * np.expand_dims(x, axis=0)
+    x_max = x_mask.reshape(x_mask.shape[0], -1).max(-1)
+    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
+    x_min = x.filled(fill_value=1e8)
+    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
 
-#     y_mask = masks * np.expand_dims(y, axis=0)
-#     y_max = y_mask.reshape(x_mask.shape[0], -1).max(-1)
-#     y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
-#     y_min = y.filled(fill_value=1e8)
-#     y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
+    y_mask = masks * np.expand_dims(y, axis=0)
+    y_max = y_mask.reshape(x_mask.shape[0], -1).max(-1)
+    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
+    y_min = y.filled(fill_value=1e8)
+    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
 
-#     return np.stack([x_min, y_min, x_max, y_max], 1)
-
-
-# # Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->RelationDetr
-# def prepare_coco_panoptic_annotation(
-#     image: np.ndarray,
-#     target: Dict,
-#     masks_path: Union[str, pathlib.Path],
-#     return_masks: bool = True,
-#     input_data_format: Union[ChannelDimension, str] = None,
-# ) -> Dict:
-#     """
-#     Prepare a coco panoptic annotation for RelationDetr.
-#     """
-#     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
-#     annotation_path = pathlib.Path(masks_path) / target["file_name"]
-
-#     new_target = {}
-#     new_target["image_id"] = np.asarray([target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64)
-#     new_target["size"] = np.asarray([image_height, image_width], dtype=np.int64)
-#     new_target["orig_size"] = np.asarray([image_height, image_width], dtype=np.int64)
-
-#     if "segments_info" in target:
-#         masks = np.asarray(PIL.Image.open(annotation_path), dtype=np.uint32)
-#         masks = rgb_to_id(masks)
-
-#         ids = np.array([segment_info["id"] for segment_info in target["segments_info"]])
-#         masks = masks == ids[:, None, None]
-#         masks = masks.astype(np.uint8)
-#         if return_masks:
-#             new_target["masks"] = masks
-#         new_target["boxes"] = masks_to_boxes(masks)
-#         new_target["class_labels"] = np.array(
-#             [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=np.int64
-#         )
-#         new_target["iscrowd"] = np.asarray(
-#             [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=np.int64
-#         )
-#         new_target["area"] = np.asarray(
-#             [segment_info["area"] for segment_info in target["segments_info"]], dtype=np.float32
-#         )
-
-#     return new_target
+    return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# # Copied from transformers.models.detr.image_processing_detr.get_segmentation_image
-# def get_segmentation_image(
-#     masks: np.ndarray, input_size: Tuple, target_size: Tuple, stuff_equiv_classes, deduplicate=False
-# ):
-#     h, w = input_size
-#     final_h, final_w = target_size
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->RelationDetr
+def prepare_coco_panoptic_annotation(
+    image: np.ndarray,
+    target: Dict,
+    masks_path: Union[str, pathlib.Path],
+    return_masks: bool = True,
+    input_data_format: Union[ChannelDimension, str] = None,
+) -> Dict:
+    """
+    Prepare a coco panoptic annotation for RelationDetr.
+    """
+    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
+    annotation_path = pathlib.Path(masks_path) / target["file_name"]
 
-#     m_id = scipy.special.softmax(masks.transpose(0, 1), -1)
+    new_target = {}
+    new_target["image_id"] = np.asarray([target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64)
+    new_target["size"] = np.asarray([image_height, image_width], dtype=np.int64)
+    new_target["orig_size"] = np.asarray([image_height, image_width], dtype=np.int64)
 
-#     if m_id.shape[-1] == 0:
-#         # We didn't detect any mask :(
-#         m_id = np.zeros((h, w), dtype=np.int64)
-#     else:
-#         m_id = m_id.argmax(-1).reshape(h, w)
+    if "segments_info" in target:
+        masks = np.asarray(PIL.Image.open(annotation_path), dtype=np.uint32)
+        masks = rgb_to_id(masks)
 
-#     if deduplicate:
-#         # Merge the masks corresponding to the same stuff class
-#         for equiv in stuff_equiv_classes.values():
-#             for eq_id in equiv:
-#                 m_id[m_id == eq_id] = equiv[0]
+        ids = np.array([segment_info["id"] for segment_info in target["segments_info"]])
+        masks = masks == ids[:, None, None]
+        masks = masks.astype(np.uint8)
+        if return_masks:
+            new_target["masks"] = masks
+        new_target["boxes"] = masks_to_boxes(masks)
+        new_target["class_labels"] = np.array(
+            [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=np.int64
+        )
+        new_target["iscrowd"] = np.asarray(
+            [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=np.int64
+        )
+        new_target["area"] = np.asarray(
+            [segment_info["area"] for segment_info in target["segments_info"]], dtype=np.float32
+        )
 
-#     seg_img = id_to_rgb(m_id)
-#     seg_img = resize(seg_img, (final_w, final_h), resample=PILImageResampling.NEAREST)
-#     return seg_img
-
-
-# # Copied from transformers.models.detr.image_processing_detr.get_mask_area
-# def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: int) -> np.ndarray:
-#     final_h, final_w = target_size
-#     np_seg_img = seg_img.astype(np.uint8)
-#     np_seg_img = np_seg_img.reshape(final_h, final_w, 3)
-#     m_id = rgb_to_id(np_seg_img)
-#     area = [(m_id == i).sum() for i in range(n_classes)]
-#     return area
-
-
-# # Copied from transformers.models.detr.image_processing_detr.score_labels_from_class_probabilities
-# def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-#     probs = scipy.special.softmax(logits, axis=-1)
-#     labels = probs.argmax(-1, keepdims=True)
-#     scores = np.take_along_axis(probs, labels, axis=-1)
-#     scores, labels = scores.squeeze(-1), labels.squeeze(-1)
-#     return scores, labels
+    return new_target
 
 
-# # Copied from transformers.models.detr.image_processing_detr.post_process_panoptic_sample
-# def post_process_panoptic_sample(
-#     out_logits: np.ndarray,
-#     masks: np.ndarray,
-#     boxes: np.ndarray,
-#     processed_size: Tuple[int, int],
-#     target_size: Tuple[int, int],
-#     is_thing_map: Dict,
-#     threshold=0.85,
-# ) -> Dict:
-#     """
-#     Converts the output of [`DetrForSegmentation`] into panoptic segmentation predictions for a single sample.
+# Copied from transformers.models.detr.image_processing_detr.get_segmentation_image
+def get_segmentation_image(
+    masks: np.ndarray, input_size: Tuple, target_size: Tuple, stuff_equiv_classes, deduplicate=False
+):
+    h, w = input_size
+    final_h, final_w = target_size
 
-#     Args:
-#         out_logits (`torch.Tensor`):
-#             The logits for this sample.
-#         masks (`torch.Tensor`):
-#             The predicted segmentation masks for this sample.
-#         boxes (`torch.Tensor`):
-#             The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
-#             width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
-#         processed_size (`Tuple[int, int]`):
-#             The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
-#             after data augmentation but before batching.
-#         target_size (`Tuple[int, int]`):
-#             The target size of the image, `(height, width)` corresponding to the requested final size of the
-#             prediction.
-#         is_thing_map (`Dict`):
-#             A dictionary mapping class indices to a boolean value indicating whether the class is a thing or not.
-#         threshold (`float`, *optional*, defaults to 0.85):
-#             The threshold used to binarize the segmentation masks.
-#     """
-#     # we filter empty queries and detection below threshold
-#     scores, labels = score_labels_from_class_probabilities(out_logits)
-#     keep = (labels != out_logits.shape[-1] - 1) & (scores > threshold)
+    m_id = scipy.special.softmax(masks.transpose(0, 1), -1)
 
-#     cur_scores = scores[keep]
-#     cur_classes = labels[keep]
-#     cur_boxes = center_to_corners_format(boxes[keep])
+    if m_id.shape[-1] == 0:
+        # We didn't detect any mask :(
+        m_id = np.zeros((h, w), dtype=np.int64)
+    else:
+        m_id = m_id.argmax(-1).reshape(h, w)
 
-#     if len(cur_boxes) != len(cur_classes):
-#         raise ValueError("Not as many boxes as there are classes")
+    if deduplicate:
+        # Merge the masks corresponding to the same stuff class
+        for equiv in stuff_equiv_classes.values():
+            for eq_id in equiv:
+                m_id[m_id == eq_id] = equiv[0]
 
-#     cur_masks = masks[keep]
-#     cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
-#     cur_masks = safe_squeeze(cur_masks, 1)
-#     b, h, w = cur_masks.shape
+    seg_img = id_to_rgb(m_id)
+    seg_img = resize(seg_img, (final_w, final_h), resample=PILImageResampling.NEAREST)
+    return seg_img
 
-#     # It may be that we have several predicted masks for the same stuff class.
-#     # In the following, we track the list of masks ids for each stuff class (they are merged later on)
-#     cur_masks = cur_masks.reshape(b, -1)
-#     stuff_equiv_classes = defaultdict(list)
-#     for k, label in enumerate(cur_classes):
-#         if not is_thing_map[label]:
-#             stuff_equiv_classes[label].append(k)
 
-#     seg_img = get_segmentation_image(cur_masks, processed_size, target_size, stuff_equiv_classes, deduplicate=True)
-#     area = get_mask_area(cur_masks, processed_size, n_classes=len(cur_scores))
+# Copied from transformers.models.detr.image_processing_detr.get_mask_area
+def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: int) -> np.ndarray:
+    final_h, final_w = target_size
+    np_seg_img = seg_img.astype(np.uint8)
+    np_seg_img = np_seg_img.reshape(final_h, final_w, 3)
+    m_id = rgb_to_id(np_seg_img)
+    area = [(m_id == i).sum() for i in range(n_classes)]
+    return area
 
-#     # We filter out any mask that is too small
-#     if cur_classes.size() > 0:
-#         # We know filter empty masks as long as we find some
-#         filtered_small = np.array([a <= 4 for a in area], dtype=bool)
-#         while filtered_small.any():
-#             cur_masks = cur_masks[~filtered_small]
-#             cur_scores = cur_scores[~filtered_small]
-#             cur_classes = cur_classes[~filtered_small]
-#             seg_img = get_segmentation_image(cur_masks, (h, w), target_size, stuff_equiv_classes, deduplicate=True)
-#             area = get_mask_area(seg_img, target_size, n_classes=len(cur_scores))
-#             filtered_small = np.array([a <= 4 for a in area], dtype=bool)
-#     else:
-#         cur_classes = np.ones((1, 1), dtype=np.int64)
 
-#     segments_info = [
-#         {"id": i, "isthing": is_thing_map[cat], "category_id": int(cat), "area": a}
-#         for i, (cat, a) in enumerate(zip(cur_classes, area))
-#     ]
-#     del cur_classes
+# Copied from transformers.models.detr.image_processing_detr.score_labels_from_class_probabilities
+def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    probs = scipy.special.softmax(logits, axis=-1)
+    labels = probs.argmax(-1, keepdims=True)
+    scores = np.take_along_axis(probs, labels, axis=-1)
+    scores, labels = scores.squeeze(-1), labels.squeeze(-1)
+    return scores, labels
 
-#     with io.BytesIO() as out:
-#         PIL.Image.fromarray(seg_img).save(out, format="PNG")
-#         predictions = {"png_string": out.getvalue(), "segments_info": segments_info}
 
-#     return predictions
+# Copied from transformers.models.detr.image_processing_detr.post_process_panoptic_sample
+def post_process_panoptic_sample(
+    out_logits: np.ndarray,
+    masks: np.ndarray,
+    boxes: np.ndarray,
+    processed_size: Tuple[int, int],
+    target_size: Tuple[int, int],
+    is_thing_map: Dict,
+    threshold=0.85,
+) -> Dict:
+    """
+    Converts the output of [`DetrForSegmentation`] into panoptic segmentation predictions for a single sample.
+
+    Args:
+        out_logits (`torch.Tensor`):
+            The logits for this sample.
+        masks (`torch.Tensor`):
+            The predicted segmentation masks for this sample.
+        boxes (`torch.Tensor`):
+            The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
+            width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
+        processed_size (`Tuple[int, int]`):
+            The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
+            after data augmentation but before batching.
+        target_size (`Tuple[int, int]`):
+            The target size of the image, `(height, width)` corresponding to the requested final size of the
+            prediction.
+        is_thing_map (`Dict`):
+            A dictionary mapping class indices to a boolean value indicating whether the class is a thing or not.
+        threshold (`float`, *optional*, defaults to 0.85):
+            The threshold used to binarize the segmentation masks.
+    """
+    # we filter empty queries and detection below threshold
+    scores, labels = score_labels_from_class_probabilities(out_logits)
+    keep = (labels != out_logits.shape[-1] - 1) & (scores > threshold)
+
+    cur_scores = scores[keep]
+    cur_classes = labels[keep]
+    cur_boxes = center_to_corners_format(boxes[keep])
+
+    if len(cur_boxes) != len(cur_classes):
+        raise ValueError("Not as many boxes as there are classes")
+
+    cur_masks = masks[keep]
+    cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
+    cur_masks = safe_squeeze(cur_masks, 1)
+    b, h, w = cur_masks.shape
+
+    # It may be that we have several predicted masks for the same stuff class.
+    # In the following, we track the list of masks ids for each stuff class (they are merged later on)
+    cur_masks = cur_masks.reshape(b, -1)
+    stuff_equiv_classes = defaultdict(list)
+    for k, label in enumerate(cur_classes):
+        if not is_thing_map[label]:
+            stuff_equiv_classes[label].append(k)
+
+    seg_img = get_segmentation_image(cur_masks, processed_size, target_size, stuff_equiv_classes, deduplicate=True)
+    area = get_mask_area(cur_masks, processed_size, n_classes=len(cur_scores))
+
+    # We filter out any mask that is too small
+    if cur_classes.size() > 0:
+        # We know filter empty masks as long as we find some
+        filtered_small = np.array([a <= 4 for a in area], dtype=bool)
+        while filtered_small.any():
+            cur_masks = cur_masks[~filtered_small]
+            cur_scores = cur_scores[~filtered_small]
+            cur_classes = cur_classes[~filtered_small]
+            seg_img = get_segmentation_image(cur_masks, (h, w), target_size, stuff_equiv_classes, deduplicate=True)
+            area = get_mask_area(seg_img, target_size, n_classes=len(cur_scores))
+            filtered_small = np.array([a <= 4 for a in area], dtype=bool)
+    else:
+        cur_classes = np.ones((1, 1), dtype=np.int64)
+
+    segments_info = [
+        {"id": i, "isthing": is_thing_map[cat], "category_id": int(cat), "area": a}
+        for i, (cat, a) in enumerate(zip(cur_classes, area))
+    ]
+    del cur_classes
+
+    with io.BytesIO() as out:
+        PIL.Image.fromarray(seg_img).save(out, format="PNG")
+        predictions = {"png_string": out.getvalue(), "segments_info": segments_info}
+
+    return predictions
 
 
 # Copied from transformers.models.detr.image_processing_detr.resize_annotation
@@ -646,49 +646,49 @@ def resize_annotation(
     return new_annotation
 
 
-# # Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
-# def binary_mask_to_rle(mask):
-#     """
-#     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
+# Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
+def binary_mask_to_rle(mask):
+    """
+    Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
 
-#     Args:
-#         mask (`torch.Tensor` or `numpy.array`):
-#             A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
-#             segment_id or class_id.
-#     Returns:
-#         `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
-#         format.
-#     """
-#     if is_torch_tensor(mask):
-#         mask = mask.numpy()
+    Args:
+        mask (`torch.Tensor` or `numpy.array`):
+            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
+            segment_id or class_id.
+    Returns:
+        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
+        format.
+    """
+    if is_torch_tensor(mask):
+        mask = mask.numpy()
 
-#     pixels = mask.flatten()
-#     pixels = np.concatenate([[0], pixels, [0]])
-#     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
-#     runs[1::2] -= runs[::2]
-#     return list(runs)
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return list(runs)
 
 
-# # Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
-# def convert_segmentation_to_rle(segmentation):
-#     """
-#     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
+# Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
+def convert_segmentation_to_rle(segmentation):
+    """
+    Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
 
-#     Args:
-#         segmentation (`torch.Tensor` or `numpy.array`):
-#             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
-#     Returns:
-#         `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
-#     """
-#     segment_ids = torch.unique(segmentation)
+    Args:
+        segmentation (`torch.Tensor` or `numpy.array`):
+            A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
+    Returns:
+        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
+    """
+    segment_ids = torch.unique(segmentation)
 
-#     run_length_encodings = []
-#     for idx in segment_ids:
-#         mask = torch.where(segmentation == idx, 1, 0)
-#         rle = binary_mask_to_rle(mask)
-#         run_length_encodings.append(rle)
+    run_length_encodings = []
+    for idx in segment_ids:
+        mask = torch.where(segmentation == idx, 1, 0)
+        rle = binary_mask_to_rle(mask)
+        run_length_encodings.append(rle)
 
-#     return run_length_encodings
+    return run_length_encodings
 
 
 # Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
@@ -720,84 +720,84 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
-# # Copied from transformers.models.detr.image_processing_detr.check_segment_validity
-# def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-#     # Get the mask associated with the k class
-#     mask_k = mask_labels == k
-#     mask_k_area = mask_k.sum()
+# Copied from transformers.models.detr.image_processing_detr.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+    # Get the mask associated with the k class
+    mask_k = mask_labels == k
+    mask_k_area = mask_k.sum()
 
-#     # Compute the area of all the stuff in query k
-#     original_area = (mask_probs[k] >= mask_threshold).sum()
-#     mask_exists = mask_k_area > 0 and original_area > 0
+    # Compute the area of all the stuff in query k
+    original_area = (mask_probs[k] >= mask_threshold).sum()
+    mask_exists = mask_k_area > 0 and original_area > 0
 
-#     # Eliminate disconnected tiny segments
-#     if mask_exists:
-#         area_ratio = mask_k_area / original_area
-#         if not area_ratio.item() > overlap_mask_area_threshold:
-#             mask_exists = False
+    # Eliminate disconnected tiny segments
+    if mask_exists:
+        area_ratio = mask_k_area / original_area
+        if not area_ratio.item() > overlap_mask_area_threshold:
+            mask_exists = False
 
-#     return mask_exists, mask_k
+    return mask_exists, mask_k
 
 
-# # Copied from transformers.models.detr.image_processing_detr.compute_segments
-# def compute_segments(
-#     mask_probs,
-#     pred_scores,
-#     pred_labels,
-#     mask_threshold: float = 0.5,
-#     overlap_mask_area_threshold: float = 0.8,
-#     label_ids_to_fuse: Optional[Set[int]] = None,
-#     target_size: Tuple[int, int] = None,
-# ):
-#     height = mask_probs.shape[1] if target_size is None else target_size[0]
-#     width = mask_probs.shape[2] if target_size is None else target_size[1]
+# Copied from transformers.models.detr.image_processing_detr.compute_segments
+def compute_segments(
+    mask_probs,
+    pred_scores,
+    pred_labels,
+    mask_threshold: float = 0.5,
+    overlap_mask_area_threshold: float = 0.8,
+    label_ids_to_fuse: Optional[Set[int]] = None,
+    target_size: Tuple[int, int] = None,
+):
+    height = mask_probs.shape[1] if target_size is None else target_size[0]
+    width = mask_probs.shape[2] if target_size is None else target_size[1]
 
-#     segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-#     segments: List[Dict] = []
+    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+    segments: List[Dict] = []
 
-#     if target_size is not None:
-#         mask_probs = nn.functional.interpolate(
-#             mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
-#         )[0]
+    if target_size is not None:
+        mask_probs = nn.functional.interpolate(
+            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+        )[0]
 
-#     current_segment_id = 0
+    current_segment_id = 0
 
-#     # Weigh each mask by its prediction score
-#     mask_probs *= pred_scores.view(-1, 1, 1)
-#     mask_labels = mask_probs.argmax(0)  # [height, width]
+    # Weigh each mask by its prediction score
+    mask_probs *= pred_scores.view(-1, 1, 1)
+    mask_labels = mask_probs.argmax(0)  # [height, width]
 
-#     # Keep track of instances of each class
-#     stuff_memory_list: Dict[str, int] = {}
-#     for k in range(pred_labels.shape[0]):
-#         pred_class = pred_labels[k].item()
-#         should_fuse = pred_class in label_ids_to_fuse
+    # Keep track of instances of each class
+    stuff_memory_list: Dict[str, int] = {}
+    for k in range(pred_labels.shape[0]):
+        pred_class = pred_labels[k].item()
+        should_fuse = pred_class in label_ids_to_fuse
 
-#         # Check if mask exists and large enough to be a segment
-#         mask_exists, mask_k = check_segment_validity(
-#             mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
-#         )
+        # Check if mask exists and large enough to be a segment
+        mask_exists, mask_k = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
 
-#         if mask_exists:
-#             if pred_class in stuff_memory_list:
-#                 current_segment_id = stuff_memory_list[pred_class]
-#             else:
-#                 current_segment_id += 1
+        if mask_exists:
+            if pred_class in stuff_memory_list:
+                current_segment_id = stuff_memory_list[pred_class]
+            else:
+                current_segment_id += 1
 
-#             # Add current object segment to final segmentation map
-#             segmentation[mask_k] = current_segment_id
-#             segment_score = round(pred_scores[k].item(), 6)
-#             segments.append(
-#                 {
-#                     "id": current_segment_id,
-#                     "label_id": pred_class,
-#                     "was_fused": should_fuse,
-#                     "score": segment_score,
-#                 }
-#             )
-#             if should_fuse:
-#                 stuff_memory_list[pred_class] = current_segment_id
+            # Add current object segment to final segmentation map
+            segmentation[mask_k] = current_segment_id
+            segment_score = round(pred_scores[k].item(), 6)
+            segments.append(
+                {
+                    "id": current_segment_id,
+                    "label_id": pred_class,
+                    "was_fused": should_fuse,
+                    "score": segment_score,
+                }
+            )
+            if should_fuse:
+                stuff_memory_list[pred_class] = current_segment_id
 
-#     return segmentation, segments
+    return segmentation, segments
 
 
 class RelationDetrImageProcessor(BaseImageProcessor):
@@ -964,15 +964,15 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             target = prepare_coco_detection_annotation(
                 image, target, return_segmentation_masks, input_data_format=input_data_format
             )
-        # elif format == AnnotationFormat.COCO_PANOPTIC:
-        #     return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
-        #     target = prepare_coco_panoptic_annotation(
-        #         image,
-        #         target,
-        #         masks_path=masks_path,
-        #         return_masks=return_segmentation_masks,
-        #         input_data_format=input_data_format,
-        #     )
+        elif format == AnnotationFormat.COCO_PANOPTIC:
+            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
+            target = prepare_coco_panoptic_annotation(
+                image,
+                target,
+                masks_path=masks_path,
+                return_masks=return_segmentation_masks,
+                input_data_format=input_data_format,
+            )
         else:
             raise ValueError(f"Format {format} is not supported.")
         return target
