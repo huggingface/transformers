@@ -20,8 +20,7 @@
 # limitations under the License.
 
 
-import os
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -130,23 +129,41 @@ class MolmoVisionConfig(PretrainedConfig):
         self.residual_dropout = residual_dropout
         self.hidden_act = hidden_act
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from MOLMOConfig
-        if config_dict.get("model_type") == "molmo":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
+class MolmoPoolingConfig(PretrainedConfig):
+    def __init__(
+        self,
+        hidden_size=2048,
+        num_attention_heads=16,
+        head_dim=64,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        pooling_height=2,
+        pooling_width=2,
+        pad_embed_dim=2048,
+        image_feature_dropout=0.0,
+        text_intermediate_size=37888,
+        text_hidden_size=3584,
+        image_pooling_type="attention_meanq",
+        image_padding_embed="pad_and_partial_pad",
+        projector_hidden_act="silu",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.head_dim = head_dim
+        self.pooling_height = pooling_height
+        self.pooling_width = pooling_width
+        self.initializer_range = initializer_range
+        self.attention_dropout = attention_dropout
+        self.pad_embed_dim = pad_embed_dim
+        self.image_feature_dropout = image_feature_dropout
+        self.text_intermediate_size = text_intermediate_size
+        self.text_hidden_size = text_hidden_size
+        self.image_pooling_type = image_pooling_type
+        self.image_padding_embed = image_padding_embed
+        self.projector_hidden_act = projector_hidden_act
 
 
 class MolmoTextConfig(PretrainedConfig):
@@ -302,44 +319,7 @@ class MolmoTextConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
-        self.head_dim = head_dim
-        self.additional_vocab_size = additional_vocab_size
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
-        self.max_window_layers = max_window_layers
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
         self.head_dim = head_dim
         self.additional_vocab_size = additional_vocab_size
@@ -370,8 +350,6 @@ class MolmoConfig(PretrainedConfig):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
@@ -408,19 +386,18 @@ class MolmoConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
+        pooling_config=None,
         ignore_index=-100,
         image_token_index=32000,
-        projector_hidden_act="gelu",
         image_seq_length=576,
         initializer_range=0.02,
-        vision_feature_select_strategy="full",
+        vision_feature_select_strategy="default",
         vision_feature_layers=[-2, -9],
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layers = vision_feature_layers
@@ -430,8 +407,11 @@ class MolmoConfig(PretrainedConfig):
         if text_config is None:
             text_config = {}
             logger.info("text_config is None. initializing the MolmoTextConfig with default values.")
+        if pooling_config is None:
+            pooling_config = {}
         self.vision_config = MolmoVisionConfig(**vision_config)
         self.text_config = MolmoTextConfig(**text_config)
+        self.pooling_config = MolmoPoolingConfig(**pooling_config)
         self.initializer_range = initializer_range
 
     @classmethod

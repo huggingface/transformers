@@ -16,16 +16,26 @@
 Processor class for Molmo.
 """
 
-from typing import List, Union, Optional
+from typing import List, Optional, Union
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order, ImagesKwargs, TextKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
 import numpy as np
 
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import (
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+    _validate_images_text_input_order,
+)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+
+
 logger = logging.get_logger(__name__)
+
 
 class MolmoImagesKwargs(ImagesKwargs, total=False):
     max_crops: Optional[int]
@@ -35,6 +45,7 @@ class MolmoImagesKwargs(ImagesKwargs, total=False):
     image_token_length_h: Optional[int]
     image_patch_size: Optional[int]
     image_padding_mask: Optional[bool]
+
 
 class MolmoTextKwargs(TextKwargs, total=False):
     style: Optional[str]
@@ -61,10 +72,12 @@ class MolmoProcessorKwargs(ProcessingKwargs, total=False):
         },
     }
 
-DEFAULT_IMAGE_PATCH_TOKEN = f"<im_patch>"
-DEFAULT_IM_START_TOKEN = f"<im_start>"
-DEFAULT_IM_END_TOKEN = f"<im_end>"
-DEFAULT_IM_COL_TOKEN = f"<im_col>"
+
+DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
+DEFAULT_IM_START_TOKEN = "<im_start>"
+DEFAULT_IM_END_TOKEN = "<im_end>"
+DEFAULT_IM_COL_TOKEN = "<im_col>"
+
 
 class MolmoProcessor(ProcessorMixin):
     r"""
@@ -78,11 +91,6 @@ class MolmoProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        patch_size (`int`, *optional*):
-            Patch size from the vision tower.
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -90,7 +98,7 @@ class MolmoProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token"]
+    valid_kwargs = ["chat_template", "image_token"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -98,17 +106,12 @@ class MolmoProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
-        patch_size=None,
-        vision_feature_select_strategy=None,
         chat_template=None,
         image_token="<|image|>",  # set the default and let users change if they have peculiar special tokens in rare cases
         **kwargs,
     ):
-        self.patch_size = patch_size
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
 
     def __call__(
         self,
@@ -174,75 +177,71 @@ class MolmoProcessor(ProcessorMixin):
         prompt_strings = text
         # TODO should be vectorizable
         if image_inputs.get("pixel_values") is not None and image_inputs.get("crop_grids") is not None:
-            if self.patch_size is not None:
-                for crop_grid, patch_ordering in zip(image_inputs.pop("crop_grids"), image_inputs.pop("patch_orderings")):
-                    overlap_margins = self.image_processor.overlap_margins
-                    crop_window_patches = self.image_processor.crop_window_patches
+            for crop_grid, patch_ordering in zip(image_inputs.pop("crop_grids"), image_inputs.pop("patch_orderings")):
+                overlap_margins = self.image_processor.overlap_margins
+                crop_window_patches = self.image_processor.crop_window_patches
 
-
-                    full_height = crop_grid[0] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
-                    full_width = crop_grid[1] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
-                    tokens_per_row = np.full(( (full_width + 1) // 2,), DEFAULT_IMAGE_PATCH_TOKEN, )
-                    tokens_per_row = np.concatenate([tokens_per_row, [DEFAULT_IM_COL_TOKEN]], 0)
-
-                    crop_tokens = np.tile(tokens_per_row, [(full_height + 1) // 2])
-                    crop_tokens = [
-                        [DEFAULT_IM_START_TOKEN],
-                        crop_tokens,
-                        [DEFAULT_IM_END_TOKEN]
-                    ]
-
-                    # for the global image
-
-                    global_tokens_per_row = np.full(
-                        (self.image_processor.tokens_per_image_width,),
-                        DEFAULT_IMAGE_PATCH_TOKEN,
-                    )
-                    global_tokens_per_row = np.concatenate([global_tokens_per_row, [DEFAULT_IM_COL_TOKEN]], 0)
-                    extra_tokens = np.tile(global_tokens_per_row, [self.image_processor.tokens_per_image_height])
-                    all_image_tokens = [
-                                [DEFAULT_IM_START_TOKEN],
-                                extra_tokens,
-                                [DEFAULT_IM_END_TOKEN],
-                            ] + crop_tokens
-
-                    all_image_tokens = np.concatenate(all_image_tokens, 0)
-
-                    # then build the image token indices with the patch ordering baked in
-
-                    image_token_mask = np.nonzero(all_image_tokens == DEFAULT_IMAGE_PATCH_TOKEN)[0].astype(np.int32)
-                    number_of_tokens = image_token_mask.shape[0]
-                    patch_ordering = np.reshape(patch_ordering, [-1])
-                    valid = patch_ordering >= 0
-                    number_of_valid_patches = valid.sum()
-
-                    sorted_patch_ixs = np.zeros([number_of_tokens], np.int32)
-                    sorted_patch_ixs[patch_ordering[valid]] = np.arange(number_of_valid_patches, dtype=np.int32)
-
-                    # Project the inverted mapping into same sparse structure
-                    sorted_patch_ixs_ex = np.full(np.shape(patch_ordering), -1)
-                    sorted_patch_ixs_ex[valid] = sorted_patch_ixs
-
-                    # Do the gather and then re-masked outputs that were masked in `sorted_patch_ixs`
-                    valid = (sorted_patch_ixs_ex >= 0).astype(np.int32)
-                    image_token_mask = image_token_mask[sorted_patch_ixs_ex * valid]
-                    image_token_mask = image_token_mask * valid - 100 * (1 - valid)
-                    image_token_mask = np.reshape(image_token_mask, [-1, self.image_processor.tokens_per_image_width * self.image_processor.tokens_per_image_height])
-                    image_inputs.setdefault('image_token_indices', []).append(image_token_mask)
-                    # Replace the image token with the expanded image token sequence
-                    prompt_strings = []
-                    for sample in text:
-                        sample = sample.replace(self.image_token, "".join(all_image_tokens))
-                        prompt_strings.append(sample)
-            else:
-                logger.warning_once(
-                    "Expanding inputs for image tokens in Molmo should be done in processing. "
-                    "Please add `patch_size` and to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}`. "
+                full_height = crop_grid[0] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
+                full_width = crop_grid[1] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
+                tokens_per_row = np.full(
+                    ((full_width + 1) // 2,),
+                    DEFAULT_IMAGE_PATCH_TOKEN,
                 )
+                tokens_per_row = np.concatenate([tokens_per_row, [DEFAULT_IM_COL_TOKEN]], 0)
+
+                crop_tokens = np.tile(tokens_per_row, [(full_height + 1) // 2])
+                crop_tokens = [[DEFAULT_IM_START_TOKEN], crop_tokens, [DEFAULT_IM_END_TOKEN]]
+
+                # for the global image
+
+                global_tokens_per_row = np.full(
+                    (self.image_processor.tokens_per_image_width,),
+                    DEFAULT_IMAGE_PATCH_TOKEN,
+                )
+                global_tokens_per_row = np.concatenate([global_tokens_per_row, [DEFAULT_IM_COL_TOKEN]], 0)
+                extra_tokens = np.tile(global_tokens_per_row, [self.image_processor.tokens_per_image_height])
+                all_image_tokens = [
+                    [DEFAULT_IM_START_TOKEN],
+                    extra_tokens,
+                    [DEFAULT_IM_END_TOKEN],
+                ] + crop_tokens
+                all_image_tokens = np.concatenate(all_image_tokens, 0)
+
+                # then build the image token indices with the patch ordering baked in
+
+                image_token_mask = np.nonzero(all_image_tokens == DEFAULT_IMAGE_PATCH_TOKEN)[0].astype(np.int32)
+                number_of_tokens = image_token_mask.shape[0]
+                patch_ordering = np.reshape(patch_ordering, [-1])
+                valid = patch_ordering >= 0
+                number_of_valid_patches = valid.sum()
+
+                sorted_patch_ixs = np.zeros([number_of_tokens], np.int32)
+                sorted_patch_ixs[patch_ordering[valid]] = np.arange(number_of_valid_patches, dtype=np.int32)
+
+                # Project the inverted mapping into same sparse structure
+                sorted_patch_ixs_ex = np.full(np.shape(patch_ordering), -1)
+                sorted_patch_ixs_ex[valid] = sorted_patch_ixs
+
+                # Do the gather and then re-masked outputs that were masked in `sorted_patch_ixs`
+                valid = (sorted_patch_ixs_ex >= 0).astype(np.int32)
+                image_token_mask = image_token_mask[sorted_patch_ixs_ex * valid]
+                image_token_mask = image_token_mask * valid - 100 * (1 - valid)
+                image_token_mask = np.reshape(
+                    image_token_mask,
+                    [-1, self.image_processor.tokens_per_image_width * self.image_processor.tokens_per_image_height],
+                )
+                image_inputs.setdefault("image_token_indices", []).append(image_token_mask)
+
+                # Replace the image token with the expanded image token sequence
+                prompt_strings = []
+                for sample in text:
+                    sample = sample.replace(self.image_token, "".join(all_image_tokens))
+                    prompt_strings.append(sample)
 
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(
+            data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
+        )
 
     def batch_decode(self, *args, **kwargs):
         """

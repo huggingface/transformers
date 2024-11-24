@@ -14,17 +14,17 @@
 # limitations under the License.
 
 
-from typing import Optional, Tuple, Union, List, Dict
+import math
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutput
-from ...modeling_rope_utils import rope_config_validation
-from ..clip.configuration_clip import CLIPVisionConfig
-from ..qwen2.configuration_qwen2 import Qwen2Config
+
 from ...configuration_utils import PretrainedConfig
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
@@ -36,30 +36,17 @@ from ..clip.modeling_clip import (
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
-from ..llava.modeling_llava import (
-    LlavaForConditionalGeneration,
-    LlavaMultiModalProjector,
-    LlavaCausalLMOutputWithPast
-)
+from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaMultiModalProjector
+from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import (
     Qwen2Attention,
     Qwen2DecoderLayer,
     Qwen2FlashAttention2,
     Qwen2ForCausalLM,
-    Qwen2MLP,
     Qwen2Model,
     Qwen2SdpaAttention,
 )
-import math
 
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-    replace_return_docstrings,
-)
 
 logger = logging.get_logger(__name__)
 
@@ -69,10 +56,10 @@ class MolmoVisionConfig(CLIPVisionConfig):
         self,
         hidden_size=1024,
         num_attention_heads=16,
-        intermediate_size = 4096,
+        intermediate_size=4096,
         image_num_key_value_heads=16,
-        num_hidden_layers = 23,
-        num_image_positions = 577,
+        num_hidden_layers=23,
+        num_image_positions=577,
         projection_dim=512,
         num_channels=3,
         image_size=336,
@@ -107,17 +94,18 @@ class MolmoVisionConfig(CLIPVisionConfig):
         self.hidden_act = hidden_act
         self.residual_dropout = residual_dropout
 
+
 class MolmoTextConfig(Qwen2Config):
     def __init__(
         self,
-        hidden_size = 3584,
-        num_key_value_heads = 4,
-        num_attention_heads = 28,
-        num_hidden_layers = 28,
-        head_dim = 128,
-        vocab_size = 152064,
-        additional_vocab_size = 128,
-        intermediate_size = 37888,
+        hidden_size=3584,
+        num_key_value_heads=4,
+        num_attention_heads=28,
+        num_hidden_layers=28,
+        head_dim=128,
+        vocab_size=152064,
+        additional_vocab_size=128,
+        intermediate_size=37888,
         hidden_act="swiglu",
         max_position_embeddings=32768,
         initializer_range=0.02,
@@ -163,6 +151,8 @@ class MolmoTextConfig(Qwen2Config):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
 class MolmoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
@@ -260,15 +250,17 @@ class MolmoConfig(PretrainedConfig):
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
+# swiglu activation
 
-# swiglu activation 
 
 class MolmoSwiGLU(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x, gate = x.chunk(2, dim=-1)
         return nn.functional.silu(gate) * x
 
+
 # text modules inherited from Qwen2
+
 
 class MolmoMLP(CLIPMLP):
     def __init__(self, config):
@@ -277,12 +269,15 @@ class MolmoMLP(CLIPMLP):
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.fc2 = nn.Linear(config.intermediate_size // 2, config.hidden_size, bias=False)
 
+
 # We have different attention classes for the txt and the image components, they need to be propagated back correctly
 class MolmoTextAttention(Qwen2Attention):
     pass
 
+
 class MolmoTextSdpaAttention(MolmoTextAttention, Qwen2SdpaAttention):
     pass
+
 
 class MolmoTextFlashAttention2(MolmoTextAttention, Qwen2FlashAttention2):
     pass
@@ -385,10 +380,12 @@ class MolmoVisionEmbeddings(CLIPVisionEmbeddings):
         super().__init__()
         self.position_embedding = nn.Embedding(config.num_image_positions, config.hidden_size)
         self.patch_embedding = nn.Linear(
-            self.patch_size ** 2 * 3,
+            self.patch_size**2 * 3,
             self.embed_dim,
             bias=False,
-            )
+        )
+
+
 class MolmoVisionMLP(CLIPMLP):
     pass
 
@@ -398,7 +395,6 @@ class MolmoEncoderLayer(CLIPEncoderLayer):
         super().__init__()
         self.self_attn = MOLMO_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = MolmoVisionMLP(config)
-
 
 
 class MolmoEncoder(CLIPEncoder):
@@ -414,6 +410,7 @@ class MolmoEncoder(CLIPEncoder):
         super().__init__()
         self.layers = nn.ModuleList([MolmoEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
+
 # TODO add pooling call + embed here
 class MolmoVisionTransformer(CLIPVisionTransformer):
     def __init__(self, config: MolmoVisionConfig):
@@ -421,7 +418,6 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         self.embeddings = MolmoVisionEmbeddings(config)
         self.encoder = MolmoEncoder(config)  # necessary because of renaming issue in modular
         del self.post_layernorm
-
 
     def forward(
         self,
@@ -455,7 +451,7 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         )
 
         last_hidden_state = encoder_outputs[0]
-        # TODO add pooling operations here! 
+        # TODO add pooling operations here!
 
         if not return_dict:
             return (last_hidden_state) + encoder_outputs[1:]
@@ -465,6 +461,7 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
 
 class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be doable to take from CLIP?
     def __init__(self, config: MolmoVisionConfig):
@@ -506,7 +503,7 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-   
+
     def _split_heads(self, hidden_states, num_heads) -> torch.Tensor:
         return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
 
@@ -534,7 +531,7 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
 
         original_queries_dtype = queries.dtype
 
-        #if self.config.float32_attention:
+        # if self.config.float32_attention:
         # Seems that the default is float32
         queries = queries.to(torch.float)
         keys = keys.to(torch.float)
@@ -553,7 +550,7 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
                 keys.transpose(1, 2).contiguous(),
                 values.transpose(1, 2).contiguous(),
                 is_causal=False,
-                dropout_p=self.config.vision_backbone.attention_dropout
+                dropout_p=self.config.vision_backbone.attention_dropout,
             ).transpose(1, 2)
         else:
             raise NotImplementedError(f"{self.config._attn_implementation} is not supported.")
@@ -563,6 +560,7 @@ class MolmoImagePooling2d(nn.Module):  # It's an attention layer, so should be d
         attn_output = self.residual_dropout(attn_output)
 
         return attn_output
+
 
 class MolmoVisionModel(CLIPVisionModel):
     config_class = MolmoVisionConfig  # needed because renames
@@ -575,8 +573,10 @@ class MolmoVisionModel(CLIPVisionModel):
         self.image_pooling_2d = MolmoImagePooling2d(config)
         self.pad_embed = nn.Parameter(torch.zeros((2, self.image_hidden_size)))
 
+
 class MolmoCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
+
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     def __init__(self, config: MolmoConfig):
@@ -601,10 +601,10 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
         image_features = torch.cat(features, dim=-1)
         # TODO add pad embed, dropout, pooling, reshaping, then multimodal projection
         return image_features
-    
+
     # redefinition of forward to include the vision feature selection
     # TODO (modular): how do we change this kind of attribute within a method
-    # without changing the whole method? 
+    # without changing the whole method?
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -744,6 +744,8 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
+
+
 __all__ = [
     "MolmoConfig",
     "MolmoVisionConfig",

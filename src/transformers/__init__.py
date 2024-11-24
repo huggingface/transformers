@@ -593,11 +593,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
-    "models.molmo": [
-        "MolmoConfig",
-        "MolmoProcessor",
-        "MolmoImageProcessor"
-        ],
+    "models.molmo": ["MolmoConfig", "MolmoProcessor", "MolmoImageProcessor"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -5501,8 +5497,8 @@ if TYPE_CHECKING:
     )
     from .models.molmo import (
         MolmoConfig,
-        MolmoProcessor,
         MolmoImageProcessor,
+        MolmoProcessor,
     )
     from .models.moshi import (
         MoshiConfig,

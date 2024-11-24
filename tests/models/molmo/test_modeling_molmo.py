@@ -21,7 +21,6 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    AutoTokenizer,
     MolmoConfig,
     MolmoForConditionalGeneration,
     is_torch_available,
@@ -30,8 +29,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
-    require_vision,
     slow,
     torch_device,
 )
@@ -39,6 +36,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -176,15 +174,23 @@ class MolmoVisionText2TextModelTester:
 
 
 @require_torch
-class MolmoForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MolmoForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `MolmoForConditionalGeneration`.
     """
 
     all_model_classes = (MolmoForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (MolmoForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-to-text": MolmoForConditionalGeneration, "image-text-to-text": MolmoForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = MolmoVisionText2TextModelTester(self)
@@ -268,6 +274,7 @@ class MolmoForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
+
     # TEST IS TODO
     @slow
     @require_bitsandbytes
@@ -290,4 +297,3 @@ class MolmoForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-

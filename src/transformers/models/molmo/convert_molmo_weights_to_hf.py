@@ -16,27 +16,22 @@ import argparse
 import gc
 import glob
 import json
-from typing import List
 import os
+from typing import List
+
 import regex as re
 import torch
 import torch.nn.functional as F
 from safetensors.torch import load_file
 
 from transformers import (
-    CLIPVisionConfig,
     MolmoConfig,
-    # See below TODO
-    # MolmoForConditionalGeneration,
-    # MolmoConfig,
-    # MolmoForConditionalGeneration,
-    # MolmoImageProcessor,
-    Qwen2Config,
 )
 
 # TODO why is this import not solved at modular parsing?
 from transformers.models.molmo import MolmoForConditionalGeneration
 from transformers.models.molmo.configuration_molmo import MolmoTextConfig, MolmoVisionConfig
+from transformers.models.molmo.processing_molmo import MolmoProcessor
 
 
 # from transformers.models.molmo.configuration_molmo import MolmoTextConfig, MolmoVisionConfig
@@ -56,10 +51,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.wte.embedding":                                                  r"language_model.model.word_embeddings.weight",
     r"transformer.wte.new_embedding":                                              r"language_model.model.new_embeddings.weight",
 
-    r"vision_backbone.image_pooling_2d.w(q|k|v|o).bias":                           r"vision_tower.image_pooling_2d.\1_proj.bias",
-    r"vision_backbone.image_pooling_2d.w(q|k|v|o).weight":                         r"vision_tower.image_pooling_2d.\1_proj.weight",
+    r"vision_backbone.image_pooling_2d.w(q|k|v|o).bias":                           r"adapter.image_pooling_2d.\1_proj.bias",
+    r"vision_backbone.image_pooling_2d.w(q|k|v|o).weight":                         r"adapter.image_pooling_2d.\1_proj.weight",
 
-    r"vision_backbone.image_projector.w(\d+).weight":                              r"multi_modal_projector.linear_\1.weight",
+    r"vision_backbone.image_projector.w(\d+).weight":                              r"adapter.multi_modal_projector.linear_\1.weight",
 
     r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention.w(k|q|v).(weight|bias)":   r"vision_tower.vision_model.encoder.layers.\1.self_attn.\2_proj.\3",
     r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention.wo.(weight|bias)":         r"vision_tower.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
@@ -73,7 +68,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_backbone.image_vit.class_embedding":                                  r"vision_tower.vision_model.embeddings.class_embedding",
     r"vision_backbone.image_vit.patch_embedding.weight":                           r"vision_tower.vision_model.embeddings.patch_embedding.weight",
     r"vision_backbone.image_vit.pre_ln.(weight|bias)":                             r"vision_tower.vision_model.pre_layrnorm.\1",
-    r"vision_backbone.pad_embed":                                                  r"vision_tower.pad_embed",
+    r"vision_backbone.pad_embed":                                                  r"adapter.pad_embed",
 
 }
 # fmt: on
@@ -231,7 +226,9 @@ def write_model(
     # convert word embeddings. They exist separately in the Molmo custom Embedding layer.
     initial_word_embeddings = state_dict.pop("language_model.model.word_embeddings.weight")
     new_word_embeddings = state_dict.pop("language_model.model.new_embeddings.weight")
-    state_dict["language_model.model.embed_tokens.weight"] = torch.cat([initial_word_embeddings, new_word_embeddings], dim=0)
+    state_dict["language_model.model.embed_tokens.weight"] = torch.cat(
+        [initial_word_embeddings, new_word_embeddings], dim=0
+    )
     gc.collect()
     print("Loading the checkpoint in a Molmo model.")
     with torch.device("meta"):
@@ -252,6 +249,10 @@ def write_model(
     MolmoForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
+    processor = MolmoProcessor.from_pretrained(input_base_path)
+    processor.save_pretrained(model_path)
+    print("Processor saved successfully.")
+
     # generation config
 
 
@@ -259,12 +260,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="Molmo-7B-D-0924",
+        default="/raid/raushan/Molmo-7B-D-0924",
         help="Location locally or on the hub of Molmo weights, which contains tokenizer.model and model folders in safetensors",
     )
     parser.add_argument(
         "--output_dir",
-        default="Molmo-7B-D-hf",
+        default="/raid/raushan/Molmo-7B-D-hf",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
@@ -281,7 +282,6 @@ def main():
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         safe_serialization=args.safe_serialization,
-        instruct=args.instruct,
     )
 
 
