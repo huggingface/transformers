@@ -60,11 +60,23 @@ class ColPaliPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.vlm_backbone_config.initializer_range
-        )
+        std = None
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        elif hasattr(self.config, "vlm_backbone_config"):
+            vlm_backbone_config = self.config.vlm_backbone_config
+            if hasattr(vlm_backbone_config, "initializer_range"):
+                std = vlm_backbone_config.initializer_range
+            elif hasattr(vlm_backbone_config, "vision_config"):
+                vision_config = vlm_backbone_config.vision_config
+                if hasattr(vision_config, "initializer_range"):
+                    std = vision_config.initializer_range
+            elif hasattr(vlm_backbone_config, "text_config"):
+                text_config = vlm_backbone_config.text_config
+                if hasattr(text_config, "initializer_range"):
+                    std = text_config.initializer_range
+        if std is None:
+            raise ValueError("initializer_range not found in any config level")
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
