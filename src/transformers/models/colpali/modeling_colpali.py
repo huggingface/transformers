@@ -240,7 +240,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class="ColPaliConfig")
     def forward(
         self,
-        input_ids: torch.LongTensor,
+        input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
