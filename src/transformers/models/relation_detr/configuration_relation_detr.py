@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Relation DETR model configuration"""
-import math
 
+import math
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging

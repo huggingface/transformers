@@ -1,8 +1,9 @@
 import copy
-from typing import Dict, Optional
+from typing import Optional
+
 import torch
-from torch import Tensor
 import torch.nn as nn
+from torch import Tensor
 from torch.nn import functional as F
 
 from ..image_transforms import center_to_corners_format
@@ -32,9 +33,7 @@ def reduce_loss(loss, reduction: str = "sum"):
     raise ValueError("Only sum, mean and none are valid reduction")
 
 
-def sigmoid_focal_loss(
-    inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2, reduction: str = "sum"
-):
+def sigmoid_focal_loss(inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2, reduction: str = "sum"):
     prob = inputs.sigmoid()
     target_score = targets.to(inputs.dtype)
     pos_weight = alpha * (1 - prob).pow(gamma)
@@ -68,9 +67,7 @@ def score_aware_vari_sigmoid_focal_loss(
     pos_weight = target_score  # pos_weight = gt_score.unsqueeze(-1)
     neg_weight = (1 - alpha) * prob.pow(gamma)
     weight = neg_weight * (1 - targets) + targets * pos_weight
-    loss = F.binary_cross_entropy_with_logits(
-        inputs, target_score, weight=weight, reduction="none"
-    )
+    loss = F.binary_cross_entropy_with_logits(inputs, target_score, weight=weight, reduction="none")
     return reduce_loss(loss, reduction)
 
 
@@ -139,9 +136,7 @@ class RelationDetrHungarianMatcher(nn.Module):
 
     def calculate_giou_cost(self, pred_boxes, gt_boxes, **kwargs):
         # Compute the giou cost betwen boxes
-        giou_cost = -generalized_box_iou(
-            center_to_corners_format(pred_boxes), center_to_corners_format(gt_boxes)
-        )
+        giou_cost = -generalized_box_iou(center_to_corners_format(pred_boxes), center_to_corners_format(gt_boxes))
         return giou_cost
 
     @torch.no_grad()
@@ -153,10 +148,7 @@ class RelationDetrHungarianMatcher(nn.Module):
 
         cost = class_cost + bbox_cost + giou_cost
 
-        if (
-            input_dict.get("pred_masks", None) is not None
-            and input_dict.get("gt_masks", None) is not None
-        ):
+        if input_dict.get("pred_masks", None) is not None and input_dict.get("gt_masks", None) is not None:
             cost_mask, cost_dice = self.calculate_mask_cost(**input_dict)
             cost_mask = cost_mask * self.cost_mask
             cost_dice = cost_dice * self.cost_dice
@@ -307,7 +299,8 @@ class RelationDetrLoss(nn.Module):
         losses = {}
         # get matching results for each image
         if not indices:
-            gt_boxes, gt_labels = list(zip(*map(lambda x: (x["boxes"], x["class_labels"]), targets)))
+            gt_boxes = [t["boxes"] for t in targets]
+            gt_labels = [t["class_labels"] for t in targets]
             logits, pred_boxes = outputs["logits"], outputs["pred_boxes"]
             indices = list(map(self.matcher, pred_boxes, logits, gt_boxes, gt_labels))
 
@@ -331,7 +324,7 @@ class RelationDetrLoss(nn.Module):
             for bt in bin_targets:
                 bt["class_labels"] = torch.zeros_like(bt["class_labels"])
         losses_enc = self.calculate_loss(enc_outputs, bin_targets, *args, **kwargs)
-        return {k + f"_enc": v for k, v in losses_enc.items()}
+        return {k + "_enc": v for k, v in losses_enc.items()}
 
     def forward(self, outputs, targets, indices=None):
         """This performs the loss computation.
@@ -342,9 +335,7 @@ class RelationDetrLoss(nn.Module):
         """
         # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
-        num_boxes = torch.as_tensor(
-            [num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device
-        )
+        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         num_boxes = torch.clamp(num_boxes, min=1).item()
 
         # Compute all the requested losses
@@ -385,12 +376,8 @@ def RelationDetrForObjectDetectionLoss(
     criterion.to(device)
 
     if denoising_meta_values is not None:
-        dn_out_coord, outputs_coord = torch.split(
-            outputs_coord, denoising_meta_values["dn_num_split"], dim=2
-        )
-        dn_out_class, outputs_class = torch.split(
-            outputs_class, denoising_meta_values["dn_num_split"], dim=2
-        )
+        dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)
+        dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
 
     # Second: compute the losses, based on outputs and labels
     outputs_loss = {}

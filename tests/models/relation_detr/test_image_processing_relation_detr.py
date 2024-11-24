@@ -15,13 +15,12 @@
 
 
 import json
-import pathlib
 import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 

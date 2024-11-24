@@ -1229,7 +1229,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             padded_size = (pad_size["height"], pad_size["width"])
         else:
             padded_size = get_max_height_width(images, input_data_format=input_data_format)
-        
+
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         if size_divisor is not None:
             height, width = padded_size

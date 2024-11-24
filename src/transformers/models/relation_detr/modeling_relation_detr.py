@@ -30,9 +30,8 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 from torchvision.ops import Conv2dNormActivation
 
+from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
-from ...activations import ACT2FN, ACT2CLS
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -201,6 +200,7 @@ class RelationDetrDenoisingGeneratorOutput(ModelOutput):
         max_gt_num_per_image (`int`):
             Maximum number of ground truth boxes per image.
     """
+
     noised_label_query: Optional[torch.FloatTensor] = None
     noised_box_query: Optional[torch.FloatTensor] = None
     denoise_attn_mask: Optional[torch.FloatTensor] = None
@@ -1312,9 +1312,11 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         spatial_shapes_tuple = tuple(spatial_shapes_list)
-        
+
         if reference_points is None:
-            reference_points = self.get_reference_points(spatial_shapes_tuple, valid_ratios, device=inputs_embeds.device)
+            reference_points = self.get_reference_points(
+                spatial_shapes_tuple, valid_ratios, device=inputs_embeds.device
+            )
 
         encoder_states = ()
         all_attentions = () if output_attentions else None
@@ -1375,6 +1377,7 @@ def box_rel_encoding(src_boxes, tgt_boxes, eps=1e-5):
 
     return pos_embed
 
+
 @functools.lru_cache  # use lru_cache to avoid redundant calculation for dim_t
 def get_dim_t(num_pos_feats: int, temperature: int, device: torch.device):
     dim_t = torch.arange(num_pos_feats // 2, dtype=torch.float32, device=device)
@@ -1418,10 +1421,11 @@ def get_sine_pos_embed(
     pos_res = pos_res.flatten(-2)
     return pos_res
 
+
 class PositionRelationEmbedding(nn.Module):
     def __init__(
         self,
-        embedding_dim=16, 
+        embedding_dim=16,
         num_heads=8,
         temperature=10000.0,
         scale=100.0,
@@ -1451,14 +1455,15 @@ class PositionRelationEmbedding(nn.Module):
             tgt_boxes = src_boxes
         # src_boxes: [batch_size, num_boxes1, 4]
         # tgt_boxes: [batch_size, num_boxes2, 4]
-        torch._assert(src_boxes.shape[-1] == 4, f"src_boxes much have 4 coordinates")
-        torch._assert(tgt_boxes.shape[-1] == 4, f"tgt_boxes must have 4 coordinates")
+        torch._assert(src_boxes.shape[-1] == 4, "src_boxes much have 4 coordinates")
+        torch._assert(tgt_boxes.shape[-1] == 4, "tgt_boxes must have 4 coordinates")
         with torch.no_grad():
             pos_embed = box_rel_encoding(src_boxes, tgt_boxes)
             pos_embed = self.pos_func(pos_embed).permute(0, 3, 1, 2)
         pos_embed = self.pos_proj(pos_embed)
 
         return pos_embed.clone()
+
 
 class RelationDetrDecoder(RelationDetrPreTrainedModel):
     """
@@ -1500,13 +1505,15 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
         )
         self.bbox_head = nn.ModuleList(
             [
-                RelationDetrMLPPredictionHead(input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3)
+                RelationDetrMLPPredictionHead(
+                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                )
                 for _ in range(config.decoder_layers)
             ]
         )
         self.norm = nn.LayerNorm(config.d_model)
         self.position_relation_embedding = PositionRelationEmbedding(
-            embedding_dim=config.d_relation, 
+            embedding_dim=config.d_relation,
             num_heads=config.num_attention_heads,
             temperature=config.rel_temperature,
             scale=config.rel_scale,
@@ -1588,9 +1595,7 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
         src_boxes = reference_points
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.detach()[:, :, None] * valid_ratio_scale
-            query_sine_embed = get_sine_pos_embed(
-                reference_points_input[:, :, 0, :], self.config.d_model // 2
-            )
+            query_sine_embed = get_sine_pos_embed(reference_points_input[:, :, 0, :], self.config.d_model // 2)
             position_embeddings = self.ref_point_head(query_sine_embed)
             if idx != 0:
                 position_embeddings = position_embeddings * self.query_scale(hidden_states)
@@ -1795,7 +1800,9 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         # Create input projection layers
         self.neck = RelationDetrChannelMapper(
-            in_channels=self.backbone.intermediate_channel_sizes, out_channels=config.d_model, num_outs=config.num_feature_levels
+            in_channels=self.backbone.intermediate_channel_sizes,
+            out_channels=config.d_model,
+            num_outs=config.num_feature_levels,
         )
 
         self.encoder = RelationDetrEncoder(config)
@@ -1847,9 +1854,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
     @staticmethod
     def flatten_multi_level(multi_level_elements):
-        multi_level_elements = torch.cat(
-            tensors=[e.flatten(-2) for e in multi_level_elements], dim=-1
-        )  # (b, [c], s)
+        multi_level_elements = torch.cat(tensors=[e.flatten(-2) for e in multi_level_elements], dim=-1)  # (b, [c], s)
         if multi_level_elements.ndim == 3:
             multi_level_elements.transpose_(1, 2)
         return multi_level_elements
@@ -1857,9 +1862,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
     def multi_level_misc(self, multi_level_masks):
         spatial_shapes = [m.shape[-2:] for m in multi_level_masks]
         spatial_shapes = multi_level_masks[0].new_tensor(spatial_shapes, dtype=torch.int64)
-        level_start_index = torch.cat(
-            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
-        )
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = self.multi_level_valid_ratios(multi_level_masks)
         return spatial_shapes, level_start_index, valid_ratios
 
@@ -1908,9 +1911,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         return reference_points, proposals
 
     def get_lvl_pos_embed(self, multi_level_pos_embeds):
-        multi_level_pos_embeds = [
-            p + l.view(1, -1, 1, 1) for p, l in zip(multi_level_pos_embeds, self.level_embed)
-        ]
+        multi_level_pos_embeds = [p + l.view(1, -1, 1, 1) for p, l in zip(multi_level_pos_embeds, self.level_embed)]
         return self.flatten_multi_level(multi_level_pos_embeds)
 
     def get_encoder_output(self, memory, proposals, memory_padding_mask):
@@ -1932,8 +1933,9 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         # extract multi_level masks and pos_embeds
         pixel_mask = pixel_mask.to(pixel_values.dtype)
-        interp_mask = lambda size: F.interpolate(pixel_mask[None], size=size)[0].to(torch.bool)
-        multi_level_masks = [interp_mask(feat.shape[-2:]) for feat in multi_level_feats]
+        multi_level_masks = [
+            F.interpolate(pixel_mask[None], size=feat.shape[-2:])[0].to(torch.bool) for feat in multi_level_feats
+        ]
 
         # extract multi_level_pos_embeds
         multi_level_pos_embeds = [self.position_embeddings(m) for m in multi_level_masks]
@@ -2045,9 +2047,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         topk = min(self.config.num_queries, enc_outputs_class.shape[1])
         topk_proposals = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1].unsqueeze(-1)
         topk_class = torch.gather(enc_outputs_class, 1, topk_proposals.repeat(1, 1, self.num_labels))
-        topk_coords_logits = torch.gather(
-            enc_outputs_coord_logits, 1, topk_proposals.repeat(1, 1, 4)
-        )
+        topk_coords_logits = torch.gather(enc_outputs_coord_logits, 1, topk_proposals.repeat(1, 1, 4))
         topk_coords = topk_coords_logits.sigmoid()
 
         # get target and reference points
@@ -2061,14 +2061,10 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             hybrid_enc_coord = hybrid_enc_coord.sigmoid()
             topk = min(self.hybrid_num_proposals, hybrid_enc_class.shape[1])
             topk_index = torch.topk(hybrid_enc_class.max(-1)[0], topk, dim=1)[1].unsqueeze(-1)
-            hybrid_enc_class = hybrid_enc_class.gather(
-                1, topk_index.expand(-1, -1, self.num_labels)
-            )
+            hybrid_enc_class = hybrid_enc_class.gather(1, topk_index.expand(-1, -1, self.num_labels))
             hybrid_enc_coord = hybrid_enc_coord.gather(1, topk_index.expand(-1, -1, 4))
             hybrid_reference_points = hybrid_enc_coord.detach()
-            hybrid_target = self.hybrid_target_embed.weight.expand(
-                batch_size, -1, -1
-            )[:, :topk]
+            hybrid_target = self.hybrid_target_embed.weight.expand(batch_size, -1, -1)[:, :topk]
         else:
             hybrid_enc_class = hybrid_enc_coord = None
 
@@ -2113,7 +2109,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             )
             hybrid_outputs_classes = hybrid_outputs.pred_logits if return_dict else hybrid_outputs[0]
             hybrid_outputs_coords = hybrid_outputs.pred_boxes if return_dict else hybrid_outputs[1]
-            
+
         else:
             hybrid_outputs_classes = hybrid_outputs_coords = None
             hybrid_outputs = RelationDetrDecoderOutput() if return_dict else ()
@@ -2121,7 +2117,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         if not return_dict:
             decoder_mediate_outputs = decoder_outputs[2:]
             hybrid_mediate_output = hybrid_outputs[2:]
-            # The variable number of outputs from decoder may change the index of some necessary elements, 
+            # The variable number of outputs from decoder may change the index of some necessary elements,
             # so put these elements at the start and end of the tuple for correct indexing.
             # Other optional results are at the middle of the tuple.
             outputs = (reference_points, outputs_classes, outputs_coords, topk_class, topk_coords)
@@ -2135,7 +2131,9 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
                 ]
                 if value is not None
             )
-            tuple_outputs = outputs + decoder_mediate_outputs + encoder_outputs + hybrid_mediate_output + hybrid_outputs
+            tuple_outputs = (
+                outputs + decoder_mediate_outputs + encoder_outputs + hybrid_mediate_output + hybrid_outputs
+            )
 
             return tuple_outputs
 
@@ -2228,9 +2226,7 @@ class GenerateDNQueries(nn.Module):
             self.label_encoder = nn.Embedding(num_classes, label_embed_dim)
 
     @staticmethod
-    def apply_label_noise(
-        labels: torch.Tensor, label_noise_ratio: float = 0.2, num_classes: int = 80
-    ):
+    def apply_label_noise(labels: torch.Tensor, label_noise_ratio: float = 0.2, num_classes: int = 80):
         if label_noise_ratio > 0:
             mask = torch.rand_like(labels.float()) < label_noise_ratio
             noised_labels = torch.randint_like(labels, 0, num_classes)
@@ -2307,9 +2303,7 @@ class GenerateDNQueries(nn.Module):
 
         # add indicator to label encoding if with_indicator == True
         if self.with_indicator:
-            label_embedding = torch.cat(
-                [label_embedding, torch.ones([query_num, 1], device=device)], 1
-            )
+            label_embedding = torch.cat([label_embedding, torch.ones([query_num, 1], device=device)], 1)
 
         # calculate the max number of ground truth in one image inside the batch.
         # e.g. gt_nums_per_image = [2, 3] which means
@@ -2322,9 +2316,7 @@ class GenerateDNQueries(nn.Module):
 
         # initialize the generated noised queries to zero.
         # And the zero initialized queries will be assigned with noised embeddings later.
-        noised_label_queries = torch.zeros(
-            batch_size, noised_query_nums, self.label_embed_dim, device=device
-        )
+        noised_label_queries = torch.zeros(batch_size, noised_query_nums, self.label_embed_dim, device=device)
         noised_box_queries = torch.zeros(batch_size, noised_query_nums, 4, device=device)
 
         # batch index per image: [0, 1, 2, 3] for batch_size == 4
@@ -2335,9 +2327,7 @@ class GenerateDNQueries(nn.Module):
         # then the "batch_idx_per_instance" equals to [0, 0, 1, 1, 1]
         # which indicates which image the instance belongs to.
         # cuz the instances has been flattened before.
-        batch_idx_per_instance = torch.repeat_interleave(
-            batch_idx, torch.tensor(gt_nums_per_image).long()
-        )
+        batch_idx_per_instance = torch.repeat_interleave(batch_idx, torch.tensor(gt_nums_per_image).long())
 
         # indicate which image the noised labels belong to. For example:
         # noised label: tensor([0, 1, 2, 2, 3, 4, 0, 1, 2, 2, 3, 4])
@@ -2353,10 +2343,7 @@ class GenerateDNQueries(nn.Module):
         if len(gt_nums_per_image):
             valid_index_per_group = torch.cat([torch.arange(num) for num in gt_nums_per_image])
             valid_index_per_group = torch.cat(
-                [
-                    valid_index_per_group + max_gt_num_per_image * i
-                    for i in range(self.denoising_groups)
-                ]
+                [valid_index_per_group + max_gt_num_per_image * i for i in range(self.denoising_groups)]
             ).long()
         if len(batch_idx_per_group):
             noised_label_queries[(batch_idx_per_group, valid_index_per_group)] = label_embedding
@@ -2368,7 +2355,7 @@ class GenerateDNQueries(nn.Module):
         if not return_dict:
             output = (noised_label_queries, noised_box_queries, attn_mask, self.denoising_groups, max_gt_num_per_image)
             return output
-        
+
         return RelationDetrDenoisingGeneratorOutput(
             noised_label_query=noised_label_queries,
             noised_box_query=noised_box_queries,
@@ -2413,9 +2400,7 @@ class GenerateCDNQueries(GenerateDNQueries):
         positive_idx = torch.arange(num_boxes, dtype=torch.long, device=boxes.device)
         positive_idx = positive_idx.unsqueeze(0).repeat(self.denoising_groups, 1)
         positive_idx += (
-            torch.arange(self.denoising_groups, dtype=torch.long, device=boxes.device).unsqueeze(1)
-            * num_boxes
-            * 2
+            torch.arange(self.denoising_groups, dtype=torch.long, device=boxes.device).unsqueeze(1) * num_boxes * 2
         )
         positive_idx = positive_idx.flatten()
         negative_idx = positive_idx + num_boxes
@@ -2457,9 +2442,7 @@ class GenerateCDNQueries(GenerateDNQueries):
         max_gt_num_per_image = max(gt_nums_per_image)
 
         # get denoising_groups, which is 1 for empty ground truth
-        denoising_groups = (
-            self.num_denoising * max_gt_num_per_image // max(max_gt_num_per_image**2, 1)
-        )
+        denoising_groups = self.num_denoising * max_gt_num_per_image // max(max_gt_num_per_image**2, 1)
         self.denoising_groups = max(denoising_groups, 1)
 
         # concat ground truth labels and boxes in one batch
@@ -2481,9 +2464,7 @@ class GenerateCDNQueries(GenerateDNQueries):
         batch_size = len(gt_labels_list)
 
         # Add noise on labels and boxes
-        noised_labels = self.apply_label_noise(
-            gt_labels, self.label_noise_ratio * 0.5, self.num_classes
-        )
+        noised_labels = self.apply_label_noise(gt_labels, self.label_noise_ratio * 0.5, self.num_classes)
         noised_boxes = self.apply_box_noise(gt_boxes, self.box_noise_scale)
         noised_boxes = inverse_sigmoid(noised_boxes)
 
@@ -2495,9 +2476,7 @@ class GenerateCDNQueries(GenerateDNQueries):
 
         # initialize the generated noised queries to zero.
         # And the zero initialized queries will be assigned with noised embeddings later.
-        noised_label_queries = torch.zeros(
-            batch_size, noised_query_nums, self.label_embed_dim, device=device
-        )
+        noised_label_queries = torch.zeros(batch_size, noised_query_nums, self.label_embed_dim, device=device)
         noised_box_queries = torch.zeros(batch_size, noised_query_nums, 4, device=device)
 
         # batch index per image: [0, 1, 2, 3] for batch_size == 4
@@ -2508,9 +2487,7 @@ class GenerateCDNQueries(GenerateDNQueries):
         # then the "batch_idx_per_instance" equals to [0, 0, 1, 1, 1]
         # which indicates which image the instance belongs to.
         # cuz the instances has been flattened before.
-        batch_idx_per_instance = torch.repeat_interleave(
-            batch_idx, torch.tensor(gt_nums_per_image, dtype=torch.long)
-        )
+        batch_idx_per_instance = torch.repeat_interleave(batch_idx, torch.tensor(gt_nums_per_image, dtype=torch.long))
 
         # indicate which image the noised labels belong to. For example:
         # noised label: tensor([0, 1, 2, 2, 3, 4, 0, 1, 2, 2, 3, 4, 0, 1, 2, 2, 3, 4， 0, 1, 2, 2, 3, 4])
@@ -2526,10 +2503,7 @@ class GenerateCDNQueries(GenerateDNQueries):
         if len(gt_nums_per_image):
             valid_index_per_group = torch.cat([torch.arange(num) for num in gt_nums_per_image])
             valid_index_per_group = torch.cat(
-                [
-                    valid_index_per_group + max_gt_num_per_image * i
-                    for i in range(self.denoising_groups * 2)
-                ]
+                [valid_index_per_group + max_gt_num_per_image * i for i in range(self.denoising_groups * 2)]
             ).long()
         if len(batch_idx_per_group):
             noised_label_queries[(batch_idx_per_group, valid_index_per_group)] = label_embedding
@@ -2539,9 +2513,15 @@ class GenerateCDNQueries(GenerateDNQueries):
         attn_mask = self.generate_query_masks(2 * max_gt_num_per_image, device)
 
         if not return_dict:
-            output = (noised_label_queries, noised_box_queries, attn_mask, self.denoising_groups, 2 * max_gt_num_per_image)
+            output = (
+                noised_label_queries,
+                noised_box_queries,
+                attn_mask,
+                self.denoising_groups,
+                2 * max_gt_num_per_image,
+            )
             return output
-        
+
         return RelationDetrDenoisingGeneratorOutput(
             noised_label_query=noised_label_queries,
             noised_box_query=noised_box_queries,
@@ -2649,7 +2629,9 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             noised_label_query = noised_embeddings.noised_label_query if return_dict else noised_embeddings[0]
             noised_box_query = noised_embeddings.noised_box_query if return_dict else noised_embeddings[1]
             self_attention_mask = noised_embeddings.denoise_attn_mask if return_dict else noised_embeddings[2]
-            self_attention_mask = ~self_attention_mask  # note multi-head attention mask is opposite to that of torchvision
+            self_attention_mask = (
+                ~self_attention_mask
+            )  # note multi-head attention mask is opposite to that of torchvision
             denoising_groups = noised_embeddings.denoising_groups if return_dict else noised_embeddings[3]
             max_gt_num_per_image = noised_embeddings.max_gt_num_per_image if return_dict else noised_embeddings[4]
 
@@ -2729,7 +2711,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             else:
                 output = (logits, pred_boxes) + outputs
 
-            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output      
+            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
 
             return tuple_outputs
 
