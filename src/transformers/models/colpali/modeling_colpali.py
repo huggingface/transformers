@@ -232,7 +232,10 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             self._tied_weights_keys = [f"language_model.{k}" for k in self.model.language_model._tied_weights_keys]
 
         self.embedding_dim = self.config.embedding_dim
-        self.projection_layer = nn.Linear(self.config.vlm_backbone_config.text_config.hidden_size, self.embedding_dim)
+        self.embedding_proj_layer = nn.Linear(
+            self.config.vlm_backbone_config.text_config.hidden_size,
+            self.embedding_dim,
+        )
 
         self.post_init()
 
@@ -309,7 +312,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
 
         last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
-        embeddings = self.projection_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
+        embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
