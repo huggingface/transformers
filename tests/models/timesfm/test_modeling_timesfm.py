@@ -18,7 +18,6 @@ import unittest
 from typing import List
 
 import numpy as np
-import torch
 
 from transformers import TimesFMConfig, is_torch_available
 from transformers.testing_utils import (
