@@ -460,4 +460,6 @@ def RTDetrForObjectDetectionLoss(
     loss_dict = criterion(outputs_loss, labels)
 
     loss = sum(loss_dict.values())
+    if isinstance(auxiliary_outputs, list):
+        auxiliary_outputs = tuple(auxiliary_outputs)
     return loss, loss_dict, auxiliary_outputs
