@@ -2059,14 +2059,14 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         # get target and reference points
         reference_points = topk_coords.detach()
-        target = self.target_embed.weight.expand(batch_size, -1, -1)
+        target = self.target_embed.weight.expand(batch_size, -1, -1)[:, :topk]
 
         if self.training:
-            topk = self.hybrid_num_proposals
             # get hybrid classes and coordinates, target and reference points
             hybrid_enc_class = self.hybrid_class_head(object_query_embedding)
             hybrid_enc_coord = self.hybrid_bbox_head(object_query_embedding) + output_proposals
             hybrid_enc_coord = hybrid_enc_coord.sigmoid()
+            topk = min(self.hybrid_num_proposals, hybrid_enc_class.shape[1])
             topk_index = torch.topk(hybrid_enc_class.max(-1)[0], topk, dim=1)[1].unsqueeze(-1)
             hybrid_enc_class = hybrid_enc_class.gather(
                 1, topk_index.expand(-1, -1, self.num_labels)
@@ -2075,7 +2075,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             hybrid_reference_points = hybrid_enc_coord.detach()
             hybrid_target = self.hybrid_target_embed.weight.expand(
                 batch_size, -1, -1
-            )
+            )[:, :topk]
         else:
             hybrid_enc_class = hybrid_enc_coord = None
 
