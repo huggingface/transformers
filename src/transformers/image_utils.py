@@ -95,6 +95,7 @@ VideoInput = Union[
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"
+    NONE = "none"
 
 
 class AnnotationFormat(ExplicitEnum):
