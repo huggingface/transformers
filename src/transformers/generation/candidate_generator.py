@@ -613,12 +613,12 @@ class AssistantToTargetTranslator:
         return target_logits
 
 
-class AssistantVocabMappingCache:
+class AssistantVocabTranslatorCache:
     _lock = threading.Lock()
     _cache = weakref.WeakKeyDictionary()
 
     @classmethod
-    def get_mapping(
+    def get_translator(
         cls, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase"
     ) -> AssistantToTargetTranslator:
         with cls._lock:
@@ -673,10 +673,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
-        self._assistant_vocab_mapping = AssistantVocabMappingCache.get_mapping(target_tokenizer, assistant_tokenizer)
+        self._atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer)
         logits_processor += [
             SuppressTokensLogitsProcessor(
-                suppress_tokens=self._assistant_vocab_mapping.suppress_input_ids,
+                suppress_tokens=self._atm_translator.suppress_input_ids,
                 device=assistant_model.device,
             ),
             LogitNormalization(),
@@ -766,9 +766,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
-        target_ids = self._assistant_vocab_mapping.get_target_input_ids(candidate_ids)
+        target_ids = self._atm_translator.get_target_input_ids(candidate_ids)
 
-        target_logits = self._assistant_vocab_mapping.get_target_logits(candidate_logits)
+        target_logits = self._atm_translator.get_target_logits(candidate_logits)
         return target_ids, target_logits
 
 
