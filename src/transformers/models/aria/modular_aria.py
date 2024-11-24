@@ -174,13 +174,20 @@ class AriaConfig(PretrainedConfig):
             Additional keyword arguments passed to the parent class.
 
     Attributes:
-        model_type (`str`): Type of the model, set to `"aria"`.
-        is_composition (`bool`): Whether the model is a composition of multiple components.
-        ignore_index (`int`): Index to ignore in loss calculation.
-        image_token_index (`int`): Index used to represent image tokens.
-        projector_patch_to_query_dict (`dict`): Mapping of patch sizes to query dimensions.
-        vision_config (`AriaVisionConfig`): Configuration for the vision component.
-        text_config (`AriaTextConfig`): Configuration for the text component.
+        model_type (`str`):
+            Type of the model, set to `"aria"`.
+        is_composition (`bool`):
+            Whether the model is a composition of multiple components.
+        ignore_index (`int`):
+            Index to ignore in loss calculation.
+        image_token_index (`int`):
+            Index used to represent image tokens.
+        projector_patch_to_query_dict (`dict`):
+            Mapping of patch sizes to query dimensions.
+        vision_config (`AriaVisionConfig`):
+            Configuration for the vision component.
+        text_config (`AriaTextConfig`):
+            Configuration for the text component.
     """
 
     model_type = "aria"
@@ -725,11 +732,16 @@ class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
     Args:
-        image_processor(AriaImageProcessor): The AriaImageProcessor to use for image preprocessing.
-        tokenizer(AutoTokenizer): The AutoTokenizer to use for tokenizing the text.
-        patch_size(int): The patch size to use for the image processor.
-        chat_template(str): The chat template to use for the tokenizer.
-        image_token(str): The image token to use for the tokenizer.
+        image_processor(`AriaImageProcessor`):
+            The AriaImageProcessor to use for image preprocessing.
+        tokenizer(`AutoTokenizer`):
+            The AutoTokenizer to use for tokenizing the text.
+        patch_size(`):
+            The patch size to use for the image processor.
+        chat_template(`str`):
+            The chat template to use for the tokenizer.
+        image_token(`str`):
+            The image token to use for the tokenizer.
     """
 
     attributes = ["image_processor", "tokenizer"]

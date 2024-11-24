@@ -86,8 +86,16 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
 
 
 class AriaImageProcessor(BaseImageProcessor):
-    """
+    r"""
     A vision processor for the Aria model that handles image preprocessing.
+    Initialize the AriaImageProcessor.
+
+    Args:
+        max_image_size (int, optional): Maximum image size. Defaults to 980.
+        min_image_size (int, optional): Minimum image size. Defaults to 336.
+        image_mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
+        image_std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
+        split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
     """
 
     def __init__(
@@ -99,16 +107,6 @@ class AriaImageProcessor(BaseImageProcessor):
         split_ratio: Optional[List[Tuple[int, int]]] = None,
         **kwargs,
     ):
-        """
-        Initialize the AriaImageProcessor.
-
-        Args:
-            max_image_size (int, optional): Maximum image size. Defaults to 980.
-            min_image_size (int, optional): Minimum image size. Defaults to 336.
-            image_mean (list, optional): Mean values for normalization. Defaults to [0.5, 0.5, 0.5].
-            image_std (list, optional): Standard deviation values for normalization. Defaults to [0.5, 0.5, 0.5].
-            split_ratio (list, optional): The ratio for splitting the image. Defaults to a list of common split ratios as tuples.
-        """
         super().__init__(**kwargs)
 
         if image_mean is None:

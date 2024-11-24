@@ -108,9 +108,12 @@ class AriaProjectorMLP(nn.Module):
     Feed-Forward Network module for the Aria Projector.
 
     Args:
-        in_features (int): Input embedding dimension.
-        hidden_features (int): Hidden dimension of the feed-forward network.
-        output_dim (int): Output dimension.
+        in_features (`int`):
+            Input embedding dimension.
+        hidden_features (`int`):
+            Hidden dimension of the feed-forward network.
+        output_dim (`int`):
+            Output dimension.
     """
 
     def __init__(self, in_features, hidden_features, output_dim):
@@ -130,7 +133,8 @@ class AriaCrossAttention(nn.Module):
     Aria Cross-Attention module.
 
     Args:
-        config (AriaConfig): the configuration to use.
+        config (`AriaConfig`):
+            The configuration to use.
     """
 
     def __init__(self, config: AriaConfig, dropout_rate: float = 0):
@@ -181,13 +185,13 @@ class AriaCrossAttention(nn.Module):
 
 class AriaProjector(nn.Module):
     """
-    A projection module with one cross-attention layer and one AriaProjectorMLP layer, which projects ViT's outputs into MoE's inputs.
+    Aria Projector module.
+
+    This module projects vision features into the language model's embedding space, enabling interaction between vision and language components.
 
     Args:
-        config (AriaConfig): the configuration to use.
-
-    Outputs:
-        A tensor with the shape of (batch_size, query_number, output_dim)
+        config (`AriaConfig`):
+            Configuration object for the model.
     """
 
     def __init__(
@@ -343,9 +347,12 @@ class AriaGroupedExpertsGEMM(nn.Module):
     functionality.
 
     Args:
-        in_features (int): Number of input features.
-        out_features (int): Number of output features.
-        groups (int): Number of expert groups.
+        in_features (`int`):
+            Number of input features.
+        out_features (`int`):
+            Number of output features.
+        groups (`int`):
+            Number of expert groups.
     """
 
     def __init__(self, in_features, out_features, groups):
@@ -360,8 +367,10 @@ class AriaGroupedExpertsGEMM(nn.Module):
         Perform grouped matrix multiplication.
 
         Args:
-            input (torch.Tensor): Input tensor of shape (num_tokens, in_features).
-            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+            input (`torch.Tensor`):
+                Input tensor of shape (num_tokens, in_features).
+            tokens_per_expert (`torch.Tensor`):
+                Number of tokens assigned to each expert.
 
         Returns:
             torch.Tensor: Output tensor of shape (num_tokens, out_features).
@@ -384,7 +393,8 @@ class AriaGroupedExpertsMLP(nn.Module):
     Grouped MLP module for Mixture of Experts.
 
     Args:
-        config (AriaTextConfig): Configuration object for the model.
+        config (`AriaTextConfig`):
+            Configuration object for the model.
     """
 
     def __init__(self, config: AriaTextConfig) -> None:
@@ -414,14 +424,13 @@ class AriaGroupedExpertsMLP(nn.Module):
 # Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
 class AriaTextMoELayer(nn.Module):
     """
-    Mixture of Experts (MoE) Layer for the Aria model.
+    Aria Text Mixture of Experts (MoE) Layer.
 
-    This layer implements the MoE mechanism, which routes input tokens to different experts
-    based on a routing algorithm, processes them through the experts, and then combines
-    the outputs.
+    This layer applies a gating mechanism to route input tokens to different experts.
 
     Args:
-        config (AriaTextConfig): Configuration object for the MoE layer.
+        config (`AriaTextConfig`):
+            Configuration object for the text component of the model.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -977,12 +986,15 @@ ARIA_TEXT_ATTENTION_CLASSES = {
 
 class AriaTextDecoderLayer(nn.Module):
     """
-    Custom Decoder Layer for the Aria model which modifies the standard `LlamaDecoderLayer` by
-    replacing the traditional MLP with a Mixture of Experts (MoE) Layer.
+    Aria Text Decoder Layer.
+
+    This class defines a single decoder layer in the language model, incorporating self-attention and Mixture of Experts (MoE) feed-forward network.
 
     Args:
-        config (AriaTextConfig): Configuration object for the layer.
-        layer_idx (int): Index of the current layer in the model.
+        config (`AriaTextConfig`):
+            Configuration object for the text component of the model.
+        layer_idx (`int`):
+            Index of the layer.
     """
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
@@ -1472,11 +1484,12 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
     """
     Aria model for causal language modeling tasks.
 
-    This class extends LlamaForCausalLM to incorporate the Mixture of Experts (MoE) approach,
+    This class extends `LlamaForCausalLM` to incorporate the Mixture of Experts (MoE) approach,
     allowing for more efficient and scalable language modeling.
 
     Args:
-        config (AriaTextConfig): Configuration object for the model.
+        config (`AriaTextConfig`):
+            Configuration object for the model.
     """
 
     _tied_weights_keys = ["lm_head.weight"]
@@ -1652,7 +1665,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     to perform tasks that involve both image and text inputs.
 
     Args:
-        config (AriaConfig): Configuration object for the model.
+        config (`AriaConfig`):
+            Configuration object for the model.
     """
 
     _supports_flash_attn_2 = True
@@ -1720,28 +1734,46 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         """
-        Forward pass of the AriaForConditionalGeneration model.
+        Forward pass of the `AriaForConditionalGeneration` model.
 
         This method processes both text and image inputs, merges them if necessary,
         and generates output using the language model.
 
         Args:
-            input_ids (torch.LongTensor, optional): Input token ids.
-            pixel_values (torch.FloatTensor, optional): Pixel values of the images.
-            pixel_mask (torch.LongTensor, optional): Mask for the pixel values.
-            attention_mask (torch.Tensor, optional): Attention mask.
-            position_ids (torch.LongTensor, optional): Position ids.
-            past_key_values (List[torch.FloatTensor], optional): Past key values for efficient processing.
-            inputs_embeds (torch.FloatTensor, optional): Input embeddings.
-            labels (torch.LongTensor, optional): Labels for computing the language modeling loss.
-            use_cache (bool, optional): Whether to use the model's cache mechanism.
-            output_attentions (bool, optional): Whether to output attention weights.
-            output_hidden_states (bool, optional): Whether to output hidden states.
-            return_dict (bool, optional): Whether to return a ModelOutput object.
-            num_logits_to_keep (`int`, optional): Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
+            input_ids (`torch.LongTensor`, *optional*):
+                Input token IDs.
+            pixel_values (`torch.FloatTensor`, *optional*):
+                Pixel values of the images.
+            pixel_mask (`torch.LongTensor`, *optional*):
+                Mask for the pixel values.
+            attention_mask (`torch.Tensor`, *optional*):
+                Attention mask.
+            position_ids (`torch.LongTensor`, *optional*):
+                Position IDs.
+            past_key_values (`List[torch.FloatTensor]`, *optional*):
+                Past key values for efficient processing.
+            inputs_embeds (`torch.FloatTensor`, *optional*):
+                Input embeddings.
+            labels (`torch.LongTensor`, *optional*):
+                Labels for computing the language modeling loss.
+            use_cache (`bool`, *optional*):
+                Whether to use the model's cache mechanism.
+            output_attentions (`bool`, *optional*):
+                Whether to output attention weights.
+            output_hidden_states (`bool`, *optional*):
+                Whether to output hidden states.
+            return_dict (`bool`, *optional*):
+                Whether to return a `ModelOutput` object.
+            num_logits_to_keep (`int`, *optional*, defaults to 0):
+                Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
+            cache_position (`torch.LongTensor`, *optional*):
+                Cache positions.
+            **loss_kwargs:
+                Additional keyword arguments for loss calculation.
 
         Returns:
-            Union[Tuple, AriaCausalLMOutputWithPast]: Model outputs.
+            `Union[Tuple, AriaCausalLMOutputWithPast]`:
+                Model outputs.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

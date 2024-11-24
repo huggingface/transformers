@@ -18,13 +18,22 @@ class AriaTextConfig(PretrainedConfig):
     This class extends the LlamaConfig to include additional parameters specific to the Mixture of Experts (MoE) architecture.
 
     Args:
-        moe_intermediate_size (`int`): The intermediate size for MoE layers. Default is 4096.
-        moe_num_experts (int): The number of experts in the MoE layer. Default is 8.
-        moe_topk (int): The number of top experts to route to for each token. Default is 2.
-        moe_z_loss_coeff (float): The coefficient for the auxiliary z-loss. Default is 1e-5.
-        moe_aux_loss_coeff (float): The coefficient for the auxiliary load balancing loss. Default is 1e-3.
-        moe_num_shared_experts (int): The number of shared experts. Default is 2.
-        **kwargs: Additional keyword arguments to be passed to the parent LlamaConfig.
+        moe_intermediate_size (`int`, *optional*, defaults to 4096):
+            The intermediate size for MoE layers.
+        moe_num_experts (`int`, *optional*, defaults to 8):
+            The number of experts in the MoE layer.
+        moe_topk (`int`, *optional*, defaults to 2):
+            The number of top experts to route to for each token.
+        moe_z_loss_coeff (`float`, *optional*, defaults to 1e-5):
+            The coefficient for the auxiliary z-loss.
+        moe_aux_loss_coeff (`float`, *optional*, defaults to 1e-3):
+            The coefficient for the auxiliary load balancing loss.
+        moe_num_shared_experts (`int`, *optional*, defaults to 2):
+            The number of shared experts.
+        pad_token_id (`int`, *optional*, defaults to 2):
+            The padding token ID.
+        **kwargs:
+            Additional keyword arguments to be passed to the parent `LlamaConfig`.
     """
 
     model_type = "aria_text_model"
@@ -115,23 +124,31 @@ class AriaConfig(PretrainedConfig):
     as well as additional parameters for image token handling and projector mapping.
 
     Args:
-        vision_config (AriaVisionConfig or dict): Configuration for the vision component.
-        text_config (AriaTextConfig or dict): Configuration for the text component.
-        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
-        ignore_index (int): Index to ignore in loss calculation.
-        image_token_index (int): Index used to represent image tokens.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
+        vision_config (`AriaVisionConfig` or `dict`, *optional*):
+            Configuration for the vision component.
+        vision_feature_layer (`int`, *optional*, defaults to -1):
             The index of the layer to select the vision feature.
-        **kwargs: Additional keyword arguments passed to the parent class.
+        text_config (`AriaTextConfig` or `dict`, *optional*):
+            Configuration for the text component.
+        projector_patch_to_query_dict (`dict`, *optional*):
+            Mapping of patch sizes to query dimensions.
+        ignore_index (`int`, *optional*, defaults to -100):
+            Index to ignore in loss calculation.
+        image_token_index (`int`, *optional*, defaults to 32000):
+            Index used to represent image tokens.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated normal initializer for initializing all weight matrices.
+        **kwargs:
+            Additional keyword arguments passed to the parent class.
 
     Attributes:
-        model_type (str): Type of the model, set to "aria".
-        is_composition (bool): Whether the model is a composition of multiple components.
-        ignore_index (int): Index to ignore in loss calculation.
-        image_token_index (int): Index used to represent image tokens.
-        projector_patch_to_query_dict (dict): Mapping of patch sizes to query dimensions.
-        vision_config (AriaVisionConfig): Configuration for the vision component.
-        text_config (AriaTextConfig): Configuration for the text component.
+        model_type (`str`): Type of the model, set to `"aria"`.
+        is_composition (`bool`): Whether the model is a composition of multiple components.
+        ignore_index (`int`): Index to ignore in loss calculation.
+        image_token_index (`int`): Index used to represent image tokens.
+        projector_patch_to_query_dict (`dict`): Mapping of patch sizes to query dimensions.
+        vision_config (`AriaVisionConfig`): Configuration for the vision component.
+        text_config (`AriaTextConfig`): Configuration for the text component.
     """
 
     model_type = "aria"
