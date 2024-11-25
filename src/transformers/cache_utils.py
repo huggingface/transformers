@@ -1827,7 +1827,7 @@ class MambaCache:
 
         self.conv_states: torch.Tensor = torch.zeros(
             config.num_hidden_layers,
-            self.batch_size,
+            self.max_batch_size,
             self.intermediate_size,
             self.conv_kernel_size,
             device=device,
@@ -1835,7 +1835,7 @@ class MambaCache:
         )
         self.ssm_states: torch.Tensor = torch.zeros(
             config.num_hidden_layers,
-            self.batch_size,
+            self.max_batch_size,
             self.intermediate_size,
             self.ssm_state_size,
             device=device,
@@ -1864,6 +1864,14 @@ class MambaCache:
     def reset(self):
         self.conv_states.zero_()
         self.ssm_states.zero_()
+
+    @property
+    def batch_size(self):
+        logger.warning_once(
+            f"The 'batch_size' attribute of {self.__class__.__name__} is deprecated and will be removed in "
+            "v4.49. Use the more precisely named 'self.max_batch_size' attribute instead."
+        )
+        return self.max_batch_size
 
 
 class OffloadedStaticCache(StaticCache):
