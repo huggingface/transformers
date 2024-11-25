@@ -1146,7 +1146,8 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "reference_points") and not self.config.two_stage:
             nn.init.xavier_uniform_(module.reference_points.weight.data, xavier_gain)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
-
+        if hasattr(module, "level_embed"):
+            nn.init.normal_(module.level_embed)
 
 RELATION_DETR_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
