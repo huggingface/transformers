@@ -252,3 +252,10 @@ class XLNetTokenizer(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
+
+
+class Rwkv6Tokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
