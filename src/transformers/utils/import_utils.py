@@ -192,7 +192,7 @@ _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
-_spqr_available = _is_package_available("spqr")
+_spqr_available = _is_package_available("spqr_quant")
 
 
 _torch_version = "N/A"
