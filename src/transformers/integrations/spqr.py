@@ -20,7 +20,6 @@ if is_torch_available():
     import torch.nn as nn
 
 
-# DONE(elvircrn): copy from spqr repo
 def replace_with_spqr_linear(
     model,
     quantization_config=None,
@@ -48,7 +47,7 @@ def replace_with_spqr_linear(
             should not be passed by the user.
     """
     if not is_spqr_available():
-        raise ValueError("SpQR is not available. Please install it with `pip install spqr[cpu,gpu]`")
+        raise ValueError("SpQR is not available. Please install it with `pip install spqr_quant`")
 
     if not is_accelerate_available():
         raise ValueError(
@@ -59,7 +58,7 @@ def replace_with_spqr_linear(
         linear_weights_not_to_quantize = []
 
     from accelerate import init_empty_weights
-    from spqr import QuantizedLinear
+    from spqr_quant import QuantizedLinear
 
     for name, module in model.named_children():
         if current_key_name is None:
@@ -70,20 +69,25 @@ def replace_with_spqr_linear(
             # Check if the current key is not in the `linear_weights_not_to_quantize`
             if ".".join(current_key_name) + ".weight" not in linear_weights_not_to_quantize:
                 with init_empty_weights():
+                    tensor_name = '.'.join(current_key_name)
+                    dense_weights_shape = quantization_config.shapes[f'{tensor_name}.dense_weights.shape']
+                    row_offsets_shape = quantization_config.shapes[f'{tensor_name}.row_offsets.shape']
+                    col_vals_shape = quantization_config.shapes[f'{tensor_name}.col_vals.shape']
+                    in_perm_shape = quantization_config.shapes[f'{tensor_name}.in_perm.shape']
+
                     in_features = module.in_features
                     out_features = module.out_features
 
-                    model._modules[name] = QuantizedLinear(
-                        m=in_features,
-                        n=out_features,
+                    model._modules[name] = QuantizedLinear.create_placehodler(
+                        rows=out_features,
+                        cols=in_features,
                         bits=quantization_config.bits,
                         beta1=quantization_config.beta1,
                         beta2=quantization_config.beta2,
-                        buff0=None,
-                        row_offsets=None,
-                        col_vals=None,
-                        in_perm=None,
-                        out_perm=None
+                        dense_weights_shape=dense_weights_shape,
+                        row_offsets_shape=row_offsets_shape,
+                        col_vals_shape=col_vals_shape,
+                        in_perm_shape=in_perm_shape
                     )
                     has_been_replaced = True
 
@@ -91,6 +95,8 @@ def replace_with_spqr_linear(
                     model._modules[name].source_cls = type(module)
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
+            else:
+                pass
         if len(list(module.children())) > 0:
             _, has_been_replaced = replace_with_spqr_linear(
                 module,

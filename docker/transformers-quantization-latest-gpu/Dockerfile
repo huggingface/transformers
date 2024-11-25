@@ -54,7 +54,7 @@ RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 RUN python3 -m pip install --no-cache-dir vptq
 
 # Add spqr for quantization testing
-RUN python3 -m pip install --no-cache-dir spqr[gpu]==1.0.2
+RUN python3 -m pip install --no-cache-dir spqr_quant
 
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq

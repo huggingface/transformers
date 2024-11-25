@@ -188,8 +188,8 @@ class SpQRTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @unittest.skipUnless(
-        is_spqr_available() and version.parse(importlib.metadata.version("spqr")) >= version.parse("1.0.3"),
-        "test requires `spqr>=1.0.3`",
+        is_spqr_available(),
+        "test requires `spqr_quant`",
     )
     def test_quantized_model_compile(self):
         """

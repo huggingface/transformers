@@ -1518,13 +1518,14 @@ class SpQRConfig(QuantizationConfigMixin):
             bits: int = 3,
             beta1: int = 16,
             beta2: int = 16,
-            linear_weights_not_to_quantize: Optional[List[str]] = None,
             **kwargs,
     ):
+        self.quant_method = QuantizationMethod.SPQR
         self.bits = bits
         self.beta1 = beta1
         self.beta2 = beta2
-        self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
+        self.linear_weights_not_to_quantize = kwargs['linear_weights_not_to_quantize']
+        self.shapes = kwargs['shapes']
         self.post_init()
 
     def post_init(self):
@@ -1538,11 +1539,3 @@ class SpQRConfig(QuantizationConfigMixin):
         if not isinstance(self.beta2, int):
             raise TypeError("beta2 must be an int")
 
-
-        if self.linear_weights_not_to_quantize is not None and not isinstance(
-            self.linear_weights_not_to_quantize, list
-        ):
-            raise ValueError("linear_weights_not_to_quantize must be a list of strings")
-
-        if self.linear_weights_not_to_quantize is None:
-            self.linear_weights_not_to_quantize = []
