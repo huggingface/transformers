@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_rwkv": ["Rwkv6Config"],
+    "configuration_rwkv6": ["Rwkv6Config"],
 }
 
 try:
