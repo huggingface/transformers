@@ -17,13 +17,17 @@ Image/Text processor class for OWL-ViT
 """
 
 import warnings
-from typing import List
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import is_flax_available, is_tf_available, is_torch_available
+from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available
+
+
+if TYPE_CHECKING:
+    from .modeling_owlvit import OwlViTObjectDetectionOutput
 
 
 class OwlViTProcessor(ProcessorMixin):
@@ -184,7 +188,46 @@ class OwlViTProcessor(ProcessorMixin):
         This method forwards all its arguments to [`OwlViTImageProcessor.post_process_object_detection`]. Please refer
         to the docstring of this method for more information.
         """
+        warnings.warn(
+            "`post_process_object_detection` method is deprecated for OwlVitProcessor and will be removed in v5. "
+            "Use `post_process_grounded_object_detection` instead.",
+            FutureWarning,
+        )
         return self.image_processor.post_process_object_detection(*args, **kwargs)
+
+    def post_process_grounded_object_detection(
+        self,
+        outputs: "OwlViTObjectDetectionOutput",
+        threshold: float = 0.1,
+        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        text_labels: Optional[List[List[str]]] = None,
+    ):
+        """
+        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`OwlViTObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.1):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            text_labels (`List[List[str]]`, *optional*):
+                List of lists of text labels for each image in the batch. If unset, "text_labels" in output will be
+                set to `None`.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            - "scores": The confidence scores for each predicted box on the image.
+            - "labels": Indexes of the classes predicted by the model on the image.
+            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
+            - "text_labels": The text labels for each predicted bounding box on the image.
+        """
+        return self.image_processor.post_process_object_detection(
+            outputs=outputs, threshold=threshold, target_sizes=target_sizes, text_labels=text_labels
+        )
 
     def post_process_image_guided_detection(self, *args, **kwargs):
         """
