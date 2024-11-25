@@ -21,7 +21,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
-from transformers.utils.import_utils import is_mamba_2_ssm_available, is_causal_conv1d_available
+from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -159,14 +159,14 @@ class Mamba2ModelTester:
         inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
-    def create_and_check_mamba2_slow_vs_fast_forward(
-            self, config, input_ids, *args, gradient_checkpointing=False
-    ):
+    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
         model = Mamba2Model(config)
         model.eval()
 
         if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
-            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found.")
+            self.parent.skipTest(
+                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
+            )
         if torch_device != "cuda":
             self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
 
