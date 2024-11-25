@@ -147,7 +147,7 @@ Let's call it now for the next experiment.
 ```python
 flush()
 ```
-In the recent version of the accelerate library, you can also use a utility method called `release_memory()`
+In the recent version of the accelerate library, you can also use a device-agnostic utility method called `release_memory()`, which takes various hardware backends like XPU, MLU, NPU, MPS etc. into account:
 
 ```python
 from accelerate.utils import release_memory
