@@ -94,6 +94,7 @@ class RWKV_TOKENIZER:
             sorted += [x]
             self.idx2token[idx] = x
 
+        self.idx2token[0] = b'<|endoftext|>' # use a special token
         self.token2idx = {}
         for k, v in self.idx2token.items():
             self.token2idx[v] = int(k)
@@ -123,18 +124,17 @@ class RWKV_TOKENIZER:
             return [self.encodeBytes(s.encode("utf-8")) for s in src]
 
     def decode(self, tokens):
-        return [self.decodeBytes(batch).decode("utf-8") for batch in tokens]
-        # try:
-        #     return self.decodeBytes(tokens).decode('utf-8')
-        # except:
-        #     return '\ufffd' # bad utf-8
-
+        return [
+            self.decodeBytes(batch).decode(
+                'utf-8',
+                errors='replace') for batch in tokens]
+        
     def printTokens(self, tokens):
         for i in tokens:
             s = self.idx2token[i]
             try:
                 s = s.decode("utf-8")
-            except:
+            except BaseException:
                 pass
             print(f"{repr(s)}{i}", end=" ")
         print()
@@ -152,9 +152,6 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
                 " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
-
-        with open(vocab_file, "r", encoding="utf-8") as reader:
-            tokens = reader.readlines()
 
         if "add_bos_token" in kwargs:
             self.add_bos_token = kwargs["add_bos_token"]
