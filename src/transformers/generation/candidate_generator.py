@@ -595,11 +595,16 @@ class AssistantToTargetTranslator:
         assistant_vocab = self._assistant_tokenizer.get_vocab()
         return list(set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.keys()))
 
-    def get_target_input_ids(self, assistant_input_ids: torch.LongTensor) -> torch.LongTensor:
+    def get_target_ids(self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor) -> torch.LongTensor:
         """
-        Return the target input ids that correspond to the assistant input ids.
+        Return the target candidate ids that correspond to the assistant candidate ids.
+        Note that we have already the target ids for the prompt and we only need to find the target ids for the new tokens.
+        Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
         """
-        return assistant_input_ids.apply_(lambda x: self._assistant_to_target_input_ids.get(x, x))
+        target_candidate_ids = assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].apply_(
+            lambda x: self._assistant_to_target_input_ids.get(x, x)
+        )
+        return torch.cat((target_input_ids, target_candidate_ids.unsqueeze(0)), dim=1)
 
     def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
         """
@@ -723,6 +728,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
                 self._prev_assistant_ids = self._prev_assistant_ids + assistant_new_ids
             return torch.tensor(self._prev_assistant_ids).unsqueeze(0).to(self.assistant_model.device)
 
+        target_input_ids = input_ids.clone()
         input_ids = get_assistant_input_ids(input_ids)
 
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
@@ -764,14 +770,13 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
         # 4. Prepare variables for output
-        # candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_logits = torch.stack(assistant_output.logits, dim=1)
         if not candidate_logits.shape[1] > 1:
             msg = f"Since we set min_new_tokens to {assistant_generation_kwargs['min_new_tokens']} and max_new_tokens to {assistant_generation_kwargs['max_new_tokens']}, we expect at least 2 candidates, but seems like we got {candidate_logits.shape[1]} candidates."
             raise Exception(msg)
         candidate_ids = assistant_output.sequences
         candidate_logits = self._atm_translator.logits_processors(input_ids=candidate_ids, scores=candidate_logits)
-        target_ids = self._atm_translator.get_target_input_ids(candidate_ids)
+        target_ids = self._atm_translator.get_target_ids(input_ids, target_input_ids, candidate_ids)
 
         target_logits = self._atm_translator.get_target_logits(candidate_logits)
         return target_ids, target_logits
