@@ -303,6 +303,7 @@ logger = logging.get_logger(__name__)
 TRAINING_ARGS_NAME = "training_args.bin"
 TRAINER_STATE_NAME = "trainer_state.json"
 OPTIMIZER_NAME = "optimizer.pt"
+SCALER_NAME = "scaler.pt"
 OPTIMIZER_NAME_BIN = "optimizer.bin"
 SCHEDULER_NAME = "scheduler.pt"
 SCALER_NAME = "scaler.pt"
@@ -2359,6 +2360,7 @@ class Trainer:
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
+        self._load_scaler(resume_from_checkpoint)
 
         # important: at this point:
         # self.model         is the Transformers Model
@@ -3212,6 +3214,7 @@ class Trainer:
         if not self.args.save_only_model:
             # Save optimizer and scheduler
             self._save_optimizer_and_scheduler(output_dir)
+            self._save_scaler(output_dir)
             # Save RNG state
             self._save_rng_state(output_dir)
 
@@ -3443,6 +3446,43 @@ class Trainer:
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
+                reissue_pt_warnings(caught_warnings)
+
+    def _save_scaler(self, output_dir):
+        if is_torch_xla_available():
+            xm.rendezvous("saving_scaler_state")
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                xm.save(self.accelerator.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+                reissue_pt_warnings(caught_warnings)
+
+        # Save SCALER
+        if (
+            self.args.should_save
+            and not is_torch_xla_available()
+        ):
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                torch.save(self.accelerator.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+            reissue_pt_warnings(caught_warnings)
+
+    def _load_scaler(self, checkpoint):
+        """If scaler state exists, load it."""
+        if checkpoint is None:
+            return
+
+        checkpoint_file_exists =  os.path.isfile(os.path.join(checkpoint, SCALER_NAME))
+
+        if checkpoint_file_exists:
+            # On TPU we have to take some extra precautions to properly load the states on the right device.
+            # Load in scaler states
+            if is_torch_xla_available():
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    scaler_state = torch.load(os.path.join(checkpoint, SCALER_NAME), map_location="cpu")
+                reissue_pt_warnings(caught_warnings)
+                xm.send_cpu_data_to_device(scaler_state, self.args.device)
+                self.accelerator.scaler.load_state_dict(scaler_state)
+            else:
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    self.accelerator.scaler.load_state_dict(torch.load(os.path.join(checkpoint, SCALER_NAME)))
                 reissue_pt_warnings(caught_warnings)
 
     def _load_callback_state(self):
