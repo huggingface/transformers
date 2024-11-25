@@ -270,13 +270,13 @@ def flex_attention_forward(
         return_lse=output_attentions,
     )
 
+    attn_weights = attn_output[1] if output_attentions else None
+    attn_output = attn_output[0] if attn_output else attn_output
+
     # Reshape outputs
     attn_output = attn_output.transpose(1, 2).contiguous()
 
-    if not output_attentions:
-        return attn_output, None
-    else:
-        return attn_output[0], attn_output[1]
+    return attn_output, attn_weights
 
 
 GPTNEOX_ATTENTION_FUNCTION = {
