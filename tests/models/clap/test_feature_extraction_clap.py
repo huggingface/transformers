@@ -68,6 +68,7 @@ class ClapFeatureExtractionTester(unittest.TestCase):
         return_attention_mask=False,
         do_normalize=True,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

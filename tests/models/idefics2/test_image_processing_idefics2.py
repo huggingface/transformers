@@ -55,6 +55,7 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         do_pad=True,
         do_image_splitting=True,
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 378, "longest_edge": 980}
         self.parent = parent
         self.batch_size = batch_size

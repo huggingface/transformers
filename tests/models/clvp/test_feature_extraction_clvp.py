@@ -71,6 +71,7 @@ class ClvpFeatureExtractionTester(unittest.TestCase):
         sampling_rate=4_000,
         return_attention_mask=False,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

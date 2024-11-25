@@ -64,6 +64,7 @@ class DacFeatureExtractionTester(unittest.TestCase):
         sampling_rate=16000,
         hop_length=512,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

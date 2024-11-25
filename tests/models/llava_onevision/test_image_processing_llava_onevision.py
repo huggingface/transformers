@@ -49,6 +49,7 @@ class LlavaOnevisionImageProcessingTester(unittest.TestCase):
         image_std=OPENAI_CLIP_STD,
         do_convert_rgb=True,
     ):
+        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size
