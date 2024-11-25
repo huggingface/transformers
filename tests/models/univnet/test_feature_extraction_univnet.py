@@ -78,6 +78,7 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
         model_in_channels=64,
         pad_end_length=10,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

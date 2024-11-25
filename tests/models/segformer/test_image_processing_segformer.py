@@ -48,6 +48,7 @@ class SegformerImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         do_reduce_labels=False,
     ):
+        super().__init__()
         size = size if size is not None else {"height": 30, "width": 30}
         self.parent = parent
         self.batch_size = batch_size

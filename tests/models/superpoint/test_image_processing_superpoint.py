@@ -45,6 +45,7 @@ class SuperPointImageProcessingTester(unittest.TestCase):
         do_resize=True,
         size=None,
     ):
+        super().__init__()
         size = size if size is not None else {"height": 480, "width": 640}
         self.parent = parent
         self.batch_size = batch_size

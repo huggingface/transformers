@@ -70,6 +70,7 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
         mel_floor=1e-10,
         return_attention_mask=True,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

@@ -66,6 +66,7 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         stride=2,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length
