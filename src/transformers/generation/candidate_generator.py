@@ -944,14 +944,14 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             target_new_ids = target_input_ids[:, -(target_seq_len - self._prev_target_seq_len) :]
             self._prev_target_seq_len = target_seq_len
             # Convert target_new_ids to string
-            target_new_toks = self.target_tokenizer.batch_decode(target_new_ids, skip_special_tokens=False)
+            target_new_toks = self.target_tokenizer.batch_decode(target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             # Convert the string to assistant_new_ids
-            assistant_new_ids = self.assistant_tokenizer.encode(target_new_toks[0], add_special_tokens=False)
+            assistant_new_ids = self.assistant_tokenizer(target_new_toks, add_special_tokens=False, return_tensors="pt")["input_ids"]
             if self._prev_assistant_ids is None:
                 self._prev_assistant_ids = assistant_new_ids
             else:
-                self._prev_assistant_ids = self._prev_assistant_ids + assistant_new_ids
-            return torch.tensor(self._prev_assistant_ids).unsqueeze(0).to(self.assistant_model.device)
+                self._prev_assistant_ids = torch.cat(self._prev_assistant_ids, assistant_new_ids, dim=-1)
+            return self._prev_assistant_ids.to(self.assistant_model.device)
 
         target_input_ids = input_ids.clone()
         input_ids = get_assistant_input_ids(input_ids)
