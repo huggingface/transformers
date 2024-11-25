@@ -2964,7 +2964,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for tensor in tensors:
                 shard[tensor] = state_dict[tensor].contiguous()
                 # delete reference, see https://github.com/huggingface/transformers/pull/34890
-                del state_dict[tensor]  
+                del state_dict[tensor]
 
             # remake shard with onloaded parameters if necessary
             if module_map:
