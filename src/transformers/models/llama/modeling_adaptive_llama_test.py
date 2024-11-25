@@ -3,12 +3,13 @@ import pytest
 import torch
 
 from transformers.models.llama.configuration_llama import LlamaConfig
-from transformers.models.llama.modeling_adaptive_llama import AdaptiveFanIn, AdaptiveFanOut, AdaptiveFanInOutput, AdaptiveFanOutOutput, AdaptiveLlamaModel
+from transformers.models.llama.modeling_adaptive_llama import AdaptiveFanIn, AdaptiveFanInGumbel, AdaptiveFanOut, AdaptiveFanInOutput, AdaptiveFanOutOutput, AdaptiveLlamaModel
 
-def test_adaptive_fan_in_no_merge():
+@pytest.mark.parametrize("fan_in_class", [AdaptiveFanIn, AdaptiveFanInGumbel])
+def test_adaptive_fan_in_no_merge(fan_in_class):
     config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
-    afin = AdaptiveFanIn(config)
+    afin = fan_in_class(config)
 
     batch_size, seq_len = 3, 6
     hidden_states = torch.rand([ batch_size, seq_len, config.hidden_size ])
@@ -29,10 +30,12 @@ def test_adaptive_fan_in_no_merge():
     assert afin_output.merged_embeddings_counts.shape[1] == seq_len
 
 
-def test_adaptive_fan_in_all_merge():
+
+@pytest.mark.parametrize("fan_in_class", [AdaptiveFanIn, AdaptiveFanInGumbel])
+def test_adaptive_fan_in_all_merge(fan_in_class):
     config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
-    afin = AdaptiveFanIn(config)
+    afin = fan_in_class(config)
 
     batch_size, seq_len = 3, 6
     hidden_states = torch.rand([ batch_size, seq_len, config.hidden_size ])
@@ -55,10 +58,11 @@ def test_adaptive_fan_in_all_merge():
 
     return
 
-def test_adaptive_fan_in_all_but_first_merge():
+@pytest.mark.parametrize("fan_in_class", [AdaptiveFanIn, AdaptiveFanInGumbel])
+def test_adaptive_fan_in_all_but_first_merge(fan_in_class):
     config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
-    afin = AdaptiveFanIn(config)
+    afin = fan_in_class(config)
 
     batch_size, seq_len = 3, 6
     hidden_states = torch.rand([ batch_size, seq_len, config.hidden_size ])
@@ -124,10 +128,11 @@ def test_adaptive_fan_out():
     restored_hidden_states
 
 
-def test_adaptive_fan_in_fan_out():
+@pytest.mark.parametrize("fan_in_class", [AdaptiveFanIn, AdaptiveFanInGumbel])
+def test_adaptive_fan_in_fan_out(fan_in_class):
     config = LlamaConfig(hidden_size=256, num_hidden_layers=2)
 
-    afin = AdaptiveFanIn(config)
+    afin = fan_in_class(config)
     afout = AdaptiveFanOut(config)
 
     batch_size, seq_len = 3, 6
@@ -197,7 +202,9 @@ def test_adaptive_llama_gradient_accumulation_with_different_merging_map():
 
     # first_grad_norm = allama_model.adaptive_down[0].fan_in_mlp.weight.grad.detach().clone()
 
-    llama_output_inverted = allama_model.forward(inputs_embeds=hidden_states, attention_mask=attention_mask, special_embeddings_mask=special_embeddings_mask, use_cache=False, invert_merging_maps=True)
+    inverted_merging_map = [ 1 - x for x in llama_output.fan_in_merging_maps]
+
+    llama_output_inverted = allama_model.forward(inputs_embeds=hidden_states, attention_mask=attention_mask, special_embeddings_mask=special_embeddings_mask, use_cache=False, inverted_merging_map=inverted_merging_map)
 
     last_hidden_state_inverted = llama_output_inverted.last_hidden_state
 
@@ -205,7 +212,7 @@ def test_adaptive_llama_gradient_accumulation_with_different_merging_map():
 
     second_grad_norm = allama_model.adaptive_down[0].fan_in_mlp.weight.grad.detach().clone()
 
-    breakpoint()
+    # breakpoint()
 
     assert llama_output.last_hidden_state.shape == hidden_states.shape
 

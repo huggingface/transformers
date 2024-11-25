@@ -70,21 +70,26 @@ class AdaptiveLlamaTrainer(Trainer):
             attention_mask=inputs['attention_mask'],
         )
 
+        inverted_merging_map = [ 1 - x for x in outputs.fan_in_merging_maps]
+        # print([ x.shape for x in inverted_merging_map ])
+
         outputs_inversed = model.forward(
             input_ids=inputs['input_ids'],
             labels=inputs['labels'],
             special_embeddings_mask=inputs['special_embeddings_mask'],
             attention_mask=inputs['attention_mask'],
             use_cache=False,
-            invert_merging_maps=True
+            inverted_merging_map=inverted_merging_map
         )
 
         # TODO Lambda for inversed outputs?
-        loss = outputs.loss + (outputs_inversed.loss / 10)
+        outputs_inversed_loss = outputs_inversed.loss / 2
+        loss = outputs.loss + outputs_inversed_loss + 0.1 * sum([x.fan_in_mlp.weight.norm(2) for x in model.model.adaptive_down])
+        # loss = outputs.loss # + (outputs_inversed.loss / 10)
 
         log_info = {
             "debug/straight_loss": loss.detach().item(),
-            "debug/inverse_loss": outputs_inversed.loss.item() / 10,
+            "debug/inverse_loss": outputs_inversed_loss.detach().item(),
             "debug/mean_merged_tokens": outputs.mean_merged_tokens,
         }
         self.log(log_info)
@@ -118,7 +123,7 @@ if __name__ == "__main__":
         hidden_size=128,
         vocab_size=VOCAB_SIZE,
         intermediate_size=256,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=8,
         max_position_embeddings=MAX_SEQ_LEN,
         use_cache=False,
@@ -134,9 +139,9 @@ if __name__ == "__main__":
         output_dir="llama_for_sequential_numbers",
         learning_rate=1e-4,
         warmup_steps=100,
-        per_device_train_batch_size=8,
+        per_device_train_batch_size=32,
         per_device_eval_batch_size=8,
-        num_train_epochs=10,
+        num_train_epochs=20,
         weight_decay=0.01,
         eval_strategy="epoch",
         save_strategy="epoch",
