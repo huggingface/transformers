@@ -1192,7 +1192,7 @@ class ModularFileMapper(ModuleMapper):
         self.visited_modules = {}
         self.renamers = {}
         for file, module in self.model_specific_modules.items():
-            file_model_name = re.search(r"models\.\w*?\.\w*?_(\S*)", file).groups()[0]
+            file_model_name = file.split(".")[-2]
             renamer = ReplaceNameTransformer(
                 file_model_name, self.model_name, self.given_old_name, self.given_new_name
             )
