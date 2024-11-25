@@ -1106,7 +1106,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         from compressed_tensors.config import SparsityCompressionConfig
-        from compressed_tensors.quantization import QuantizationConfigHFQuantizer
+        from compressed_tensors.quantization import QuantizationConfig
 
         self.quantization_config = None
         self.sparsity_config = None
@@ -1115,7 +1115,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
-            self.quantization_config = QuantizationConfigHFQuantizer.parse_obj(
+            self.quantization_config = QuantizationConfig.parse_obj(
                 {
                     "config_groups": config_groups,
                     "quant_method": quant_method,
