@@ -3252,7 +3252,7 @@ class GenerationMixin:
                 outputs = self(**model_inputs, return_dict=True)
                 is_prefill = False
             else:
-                outputs = model_forward(self, return_dict=True, **model_inputs)
+                outputs = model_forward(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(

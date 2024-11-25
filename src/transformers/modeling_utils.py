@@ -5087,7 +5087,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @property
     def compiled_forward(self):
         if not hasattr(self, "_compiled_forward"):
-            self._compiled_forward = torch.compile(self._call_impl, mode="reduce-overhead", fullgraph=True)
+            self._compiled_forward = torch.compile(self.__call__, mode="reduce-overhead", fullgraph=True)
         return self._compiled_forward
 
 
