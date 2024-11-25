@@ -17,6 +17,7 @@ Processor class for Grounding DINO.
 """
 
 import pathlib
+import warnings
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
@@ -25,6 +26,7 @@ from ...image_utils import AnnotationFormat, ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
+from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
@@ -95,6 +97,23 @@ def _merge_candidate_labels_text(text: List[str]) -> str:
     labels = [t.strip().lower() for t in text]  # ensure lowercase
     merged_labels_str = ". ".join(labels) + "."  # join with dot and add a dot at the end
     return merged_labels_str
+
+
+class _dict_with_warning_message(dict):
+    message = (
+        "The key `labels` is will be set to `None` in `GroundingDinoProcessor.post_process_grounded_object_detection` "
+        "output since v4.51.0. Use `text_labels` instead to retrieve string object names."
+    )
+
+    def __getitem__(self, key):
+        if key == "labels":
+            warnings.warn(self.message, FutureWarning)
+        return super().__getitem__(key)
+
+    def get(self, key, *args, **kwargs):
+        if key == "labels":
+            warnings.warn(self.message, FutureWarning)
+        return super().get(key, *args, **kwargs)
 
 
 class GroundingDinoImagesKwargs(ImagesKwargs, total=False):
@@ -232,11 +251,12 @@ class GroundingDinoProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
+    @deprecate_kwarg("box_threshold", new_name="threshold", version="4.51.0")
     def post_process_grounded_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
         input_ids: Optional[TensorType] = None,
-        box_threshold: float = 0.25,
+        threshold: float = 0.25,
         text_threshold: float = 0.25,
         target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
     ):
@@ -249,8 +269,8 @@ class GroundingDinoProcessor(ProcessorMixin):
                 Raw outputs of the model.
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 The token ids of the input text. If not provided will be taken from the model output.
-            box_threshold (`float`, *optional*, defaults to 0.25):
-                Score threshold to keep object detection predictions.
+            threshold (`float`, *optional*, defaults to 0.25):
+                Threshold to keep object detection predictions based on confidence score.
             text_threshold (`float`, *optional*, defaults to 0.25):
                 Score threshold to keep text detection predictions.
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
@@ -260,20 +280,17 @@ class GroundingDinoProcessor(ProcessorMixin):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        logits, boxes = outputs.logits, outputs.pred_boxes
+        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         input_ids = input_ids if input_ids is not None else outputs.input_ids
 
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
+        if target_sizes is not None and len(target_sizes) != len(batch_logits):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
 
-        probs = torch.sigmoid(logits)  # (batch_size, num_queries, 256)
-        scores = torch.max(probs, dim=-1)[0]  # (batch_size, num_queries)
+        batch_probs = torch.sigmoid(batch_logits)  # (batch_size, num_queries, 256)
+        batch_scores = torch.max(batch_probs, dim=-1)[0]  # (batch_size, num_queries)
 
         # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
+        batch_boxes = center_to_corners_format(batch_boxes)
 
         # Convert from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
@@ -283,16 +300,29 @@ class GroundingDinoProcessor(ProcessorMixin):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(batch_boxes.device)
+            batch_boxes = batch_boxes * scale_fct[:, None, :]
 
         results = []
-        for idx, (s, b, p) in enumerate(zip(scores, boxes, probs)):
-            score = s[s > box_threshold]
-            box = b[s > box_threshold]
-            prob = p[s > box_threshold]
+        for idx, (scores, boxes, probs) in enumerate(zip(batch_scores, batch_boxes, batch_probs)):
+            keep = scores > threshold
+            scores = scores[keep]
+            boxes = boxes[keep]
+
+            # extract text labels
+            prob = probs[keep]
             label_ids = get_phrases_from_posmap(prob > text_threshold, input_ids[idx])
-            label = self.batch_decode(label_ids)
-            results.append({"scores": score, "labels": label, "boxes": box})
+            objects_text_labels = self.batch_decode(label_ids)
+
+            result = _dict_with_warning_message(
+                {
+                    "scores": scores,
+                    "boxes": boxes,
+                    "text_labels": objects_text_labels,
+                    # TODO: @pavel, set labels to None since v4.51.0 or find a way to extract ids
+                    "labels": objects_text_labels,
+                }
+            )
+            results.append(result)
 
         return results
