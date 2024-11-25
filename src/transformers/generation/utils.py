@@ -3226,7 +3226,7 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         def model_forward(model, *args, **kwargs):
-            return model.forward(*args, **kwargs)
+            return model(*args, **kwargs)
 
         if isinstance(model_kwargs.get("past_key_values"), StaticCache):
             if self.device.type == "cuda":
