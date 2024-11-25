@@ -122,6 +122,7 @@ _import_structure = {
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
     "generation": [
+        "AsyncTextIteratorStreamer",
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
