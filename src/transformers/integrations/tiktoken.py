@@ -39,6 +39,7 @@ def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
             "`tiktoken` is required to save a `tiktoken` file. Install it with " "`pip install tiktoken`."
         )
 
-    TikTokenConverter(
+    tokenizer = TikTokenConverter(
         vocab_file=save_file_absolute, pattern=encoding._pat_str, additional_special_tokens=encoding._special_tokens
-    ).tokenizer().save(output_file_absolute)
+    ).tokenizer()
+    tokenizer.save(output_file_absolute)
