@@ -98,9 +98,6 @@ class RelationDetrConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
@@ -197,7 +194,6 @@ class RelationDetrConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         init_xavier_std=1.0,
-        encoder_layerdrop=0.0,
         position_embedding_type="sine",
         backbone="resnet50",
         use_pretrained_backbone=True,
@@ -274,7 +270,6 @@ class RelationDetrConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.init_std = init_std
         self.init_xavier_std = init_xavier_std
-        self.encoder_layerdrop = encoder_layerdrop
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone

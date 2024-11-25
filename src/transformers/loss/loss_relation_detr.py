@@ -366,11 +366,17 @@ def RelationDetrForObjectDetectionLoss(
     criterion = RelationDetrLoss(
         num_classes=config.num_labels,
         matcher=RelationDetrHungarianMatcher(
-            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
+            class_cost=config.class_cost,
+            bbox_cost=config.bbox_cost,
+            giou_cost=config.giou_cost,
+            focal_alpha=config.focal_alpha,
+            focal_gamma=config.focal_gamma,
         ),
         loss_class=config.class_loss_coefficient,
         loss_bbox=config.bbox_loss_coefficient,
         loss_giou=config.giou_loss_coefficient,
+        alpha=config.focal_alpha,
+        gamma=config.focal_gamma,
     )
     device = outputs_class.device
     criterion.to(device)

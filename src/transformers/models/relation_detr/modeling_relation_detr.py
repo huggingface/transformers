@@ -1106,6 +1106,7 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
+        xavier_gain = self.config.init_xavier_std
 
         if isinstance(module, RelationDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
@@ -1128,9 +1129,9 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight.data, 0.0)
             nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
+            nn.init.xavier_uniform_(module.value_proj.weight.data, xavier_gain)
             nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
+            nn.init.xavier_uniform_(module.output_proj.weight.data, xavier_gain)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -1143,7 +1144,7 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
+            nn.init.xavier_uniform_(module.reference_points.weight.data, xavier_gain)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
 
 
