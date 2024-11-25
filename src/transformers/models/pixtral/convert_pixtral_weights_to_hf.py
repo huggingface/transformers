@@ -275,8 +275,8 @@ def convert_mistral_model(input_dir, output_dir):
     model.load_state_dict(new_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
     config_json = config.to_dict()
-    # with open(f"{output_dir}/config.json","w") as f:
-    #    json.dump(config_json, f, indent=2)
+    with open(f"{output_dir}/config.json","w") as f:
+        json.dump(config_json, f, indent=2)
     
 def main():
     parser = argparse.ArgumentParser()
