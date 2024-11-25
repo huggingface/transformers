@@ -32,6 +32,7 @@ VOCAB_FILES_NAMES = {
     "vocab_file": "rwkv_vocab_v20230424.txt",
 }
 
+
 class TRIE:
     __slots__ = tuple("ch,to,values,front".split(","))
     to: list
@@ -46,11 +47,11 @@ class TRIE:
     def __repr__(self):
         fr = self
         ret = []
-        while fr != None:
-            if fr.ch != None:
+        while fr is not None:
+            if fr.ch is not None:
                 ret.append(fr.ch)
             fr = fr.front
-        return "<TRIE %s %s>" % (ret[::-1], self.values)
+        return f"<TRIE {ret[::-1]} {self.values}>"
 
     def add(self, key: bytes, idx: int = 0, val=None):
         if idx == len(key):
@@ -66,6 +67,7 @@ class TRIE:
     def find_longest(self, key: bytes, idx: int = 0):
         u: TRIE = self
         ch: int = key[idx]
+        ret = None
 
         while u.to[ch] is not None:
             u = u.to[ch]
@@ -75,26 +77,29 @@ class TRIE:
             if idx == len(key):
                 break
             ch = key[idx]
-        return ret
+        
+        if ret is None:
+            raise ValueError("No match found")
+        return ret 
 
 
-class RWKV_TOKENIZER:
+class RwkvTokenizer:
     def __init__(self, file_name):
         self.idx2token = {}
-        sorted = []  # must be already sorted
+        sorted_token = []  # must be already sorted
         with open(file_name, "r", encoding="utf-8") as f:
             lines = f.readlines()
         for l in lines:
             idx = int(l[: l.index(" ")])
-            x = eval(l[l.index(" ") : l.rindex(" ")])
+            x = eval(l[l.index(" "): l.rindex(" ")])
             x = x.encode("utf-8") if isinstance(x, str) else x
             assert isinstance(x, bytes)
 
-            assert len(x) == int(l[l.rindex(" ") :])
-            sorted += [x]
+            assert len(x) == int(l[l.rindex(" "):])
+            sorted_token += [x]
             self.idx2token[idx] = x
 
-        self.idx2token[0] = b'<|endoftext|>' # use a special token
+        self.idx2token[0] = b'<|endoftext|>'  # use a special token
         self.token2idx = {}
         for k, v in self.idx2token.items():
             self.token2idx[v] = int(k)
@@ -103,7 +108,7 @@ class RWKV_TOKENIZER:
         for t, i in self.token2idx.items():
             _ = self.root.add(t, val=(t, i))
 
-    def encodeBytes(self, src: bytes):
+    def encode_bytes(self, src: bytes):
         idx: int = 0
         tokens = []
         while idx < len(src):
@@ -114,22 +119,22 @@ class RWKV_TOKENIZER:
             tokens.append(token)
         return tokens
 
-    def decodeBytes(self, tokens):
+    def decode_bytes(self, tokens):
         return b"".join(map(lambda i: self.idx2token[i], tokens))
 
     def encode(self, src):
         if isinstance(src, str):
-            return [self.encodeBytes(src.encode("utf-8"))]
+            return [self.encode_bytes(src.encode("utf-8"))]
         elif isinstance(src, list):
-            return [self.encodeBytes(s.encode("utf-8")) for s in src]
+            return [self.encode_bytes(s.encode("utf-8")) for s in src]
 
     def decode(self, tokens):
         return [
-            self.decodeBytes(batch).decode(
+            self.decode_bytes(batch).decode(
                 'utf-8',
                 errors='replace') for batch in tokens]
-        
-    def printTokens(self, tokens):
+
+    def print_tokens(self, tokens):
         for i in tokens:
             s = self.idx2token[i]
             try:
@@ -157,7 +162,7 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
             self.add_bos_token = kwargs["add_bos_token"]
         else:
             self.add_bos_token = False
-        self.trie_tokenizer = RWKV_TOKENIZER(vocab_file)
+        self.trie_tokenizer = RwkvTokenizer(vocab_file)
         vocab = self.trie_tokenizer.token2idx
         self.encoder = vocab
         self.decoder = {v: k for k, v in vocab.items()}
@@ -171,7 +176,7 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def get_vocab(self):
-        vocab = {str(self.convert_ids_to_tokens(i)): i for i in range(self.vocab_size)}
+        vocab = {str(self.convert_ids_to_tokens(i))                 : i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
@@ -192,7 +197,8 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (bytes) in a single string. Additional tokens are encoded to bytes"""
         out_string = b"".join(
-            [k.encode(errors="replace") if isinstance(k, str) else k for k in tokens]
+            [k.encode(errors="replace") if isinstance(
+                k, str) else k for k in tokens]
         ).decode("utf-8")
         return out_string
 
