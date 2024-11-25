@@ -72,7 +72,7 @@ class TrOCRProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        *,
+        *,  # TODO deprecate/remove this
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
