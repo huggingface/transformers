@@ -120,7 +120,7 @@ class RwkvTokenizer:
         return tokens
 
     def decode_bytes(self, tokens):
-        return b"".join(map(lambda i: self.idx2token[i], tokens))
+        return b"".join(self.idx2token[i] for i in tokens)
 
     def encode(self, src):
         if isinstance(src, str):
