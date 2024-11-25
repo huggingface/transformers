@@ -37,17 +37,35 @@ from transformers.utils import (
 
 from .configuration_rwkv6 import Rwkv6Config
 
-try:
-    import triton
-    from rwkvfla.utils import device
-    from rwkvfla.ops.rwkv6.fused_recurrent import fused_recurrent_rwkv6
-    from rwkvfla.ops.rwkv6.chunk import chunk_rwkv6
-except ImportError:
-    device == 'cpu'
-    print("Required module is not installed. Please install it using the following commands:")
-    print("pip install rwkv-fla")
-    print("Additionally, ensure you have the correct version of Triton installed:")
-    print('pip install "triton>=3.0.0"')
+def check_dependencies():
+    missing_deps = []
+    
+    try:
+        import triton
+    except ImportError:
+        missing_deps.append('triton>=3.0.0')
+    
+    try:
+        import rwkvfla
+    except ImportError:
+        missing_deps.append('rwkv-fla')
+    
+    if missing_deps:
+        install_instructions = """
+Required dependencies are missing. Please install them using:
+
+{}
+
+""".strip()
+        install_commands = '\n'.join(f'pip install "{dep}"' for dep in missing_deps)
+        print(install_instructions.format(install_commands))
+        raise ImportError(f"Missing dependencies: {', '.join(missing_deps)}")
+
+check_dependencies()
+from rwkvfla.utils import device
+from rwkvfla.ops.rwkv6.fused_recurrent import fused_recurrent_rwkv6
+from rwkvfla.ops.rwkv6.chunk import chunk_rwkv6
+from rwkvfla.ops.rwkv6.recurrent_naive import native_recurrent_rwkv6
 
 
 logger = logging.get_logger(__name__)
@@ -55,29 +73,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "RWKV/rwkv-6-world-1b6"
 _CONFIG_FOR_DOC = "Rwkv6Config"
 
-def rwkv6_linear_attention_cpu(receptance, key, value, time_decay, time_first, state):
-    # For CPU fallback. Will be slower and probably take more memory than the custom CUDA kernel if not executed
-    # within a torch.no_grad.
-    batch, seq_length, _ = receptance.shape
-    num_heads, head_size = time_first.shape
-    key = key.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2).transpose(-2, -1)
-    value = value.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)
-    receptance = receptance.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)
-    time_decay = torch.exp(-torch.exp(time_decay.float())).view(batch, seq_length, num_heads, head_size).permute(0, 2, 3, 1)
-    time_first = time_first.float().reshape(-1, 1, 1).reshape(num_heads, -1, 1)
-    out = torch.zeros_like(key).reshape(batch, seq_length, num_heads, head_size)
-
-    for current_index in range(seq_length):
-        current_receptance = receptance[:, :, current_index:current_index+1, :]
-        current_key = key[:, :, :, current_index:current_index+1]
-        current_value = value[:, :, current_index:current_index+1, :]
-        current_time_decay = time_decay[:, :, :, current_index:current_index+1]
-        attention_output = current_key @ current_value
-        out[:, current_index] = (current_receptance @ (time_first * attention_output + state)).squeeze(2)
-        with torch.no_grad():
-            state = attention_output + current_time_decay * state
-
-    return out, state
 
 def rwkv6_linear_attention(
     training,
@@ -89,24 +84,20 @@ def rwkv6_linear_attention(
     state,
 ):
     one_token = key.size(1) == 1
+    batch, seq_length, _ = receptance.shape
+    num_heads, head_size = time_first.shape
+    key = key.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, T, H, K -> B, H, T, K
+    value = value.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, T, H, K - > B, H, T, V
+    receptance = receptance.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, H, T, K
+    time_decay = -torch.exp(time_decay.float()).view(batch, seq_length, num_heads, head_size).permute(0, 2, 1, 3) # B, T, H, K -> B, H, T, K
+    time_first = time_first.float().reshape(num_heads, head_size) # H, K
     if device == 'cpu':
-        assert training == False, print('cpu device is not available for training.')
-        return rwkv6_linear_attention_cpu(
-            receptance, key, value, time_decay, time_first, state
-        )
+        out, state = native_recurrent_rwkv6(receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True)
+    elif one_token:
+        out, state = fused_recurrent_rwkv6(receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True)
     else:
-        batch, seq_length, _ = receptance.shape
-        num_heads, head_size = time_first.shape
-        key = key.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, T, H, K -> B, H, T, K
-        value = value.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, T, H, K - > B, H, T, V
-        receptance = receptance.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, H, T, K
-        time_decay = -torch.exp(time_decay.float()).view(batch, seq_length, num_heads, head_size).permute(0, 2, 1, 3) # B, T, H, K -> B, H, T, K
-        time_first = time_first.float().reshape(num_heads, head_size) # H, K
-        if one_token:
-            out, state = fused_recurrent_rwkv6(receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True)
-        else:
-            out, state = chunk_rwkv6(receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True)
-        return out.transpose(1, 2), state
+        out, state = chunk_rwkv6(receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True)
+    return out.transpose(1, 2), state
 
 
 class Rwkv6SelfAttention(nn.Module):
