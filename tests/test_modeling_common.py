@@ -847,31 +847,33 @@ class ModelTesterMixin:
                     ]
                     or not model_class.supports_gradient_checkpointing
                 ):
-                    self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    # TODO (ydshieh): use `skipTest` once pytest-dev/pytest-subtests/pull/169 is merged
+                    # self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    continue
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-            model = model_class(config)
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                config.use_cache = False
+                config.return_dict = True
+                model = model_class(config)
 
-            model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
-            model.train()
+                model.to(torch_device)
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.train()
 
-            # unfreeze additional layers
-            for p in model.parameters():
-                p.requires_grad_(True)
+                # unfreeze additional layers
+                for p in model.parameters():
+                    p.requires_grad_(True)
 
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-            optimizer.step()
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                loss = model(**inputs).loss
+                loss.backward()
+                optimizer.step()
 
-            for k, v in model.named_parameters():
-                if v.requires_grad:
-                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                for k, v in model.named_parameters():
+                    if v.requires_grad:
+                        self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -2341,7 +2343,8 @@ class ModelTesterMixin:
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
-                    else:
+                    # model might return non-tensors objects (e.g. Cache class)
+                    elif isinstance(tuple_object, torch.Tensor):
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
@@ -2536,7 +2539,11 @@ class ModelTesterMixin:
             tf_outputs[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}).")
+            self.assertLessEqual(
+                max_diff,
+                tol,
+                f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}",
+            )
         else:
             raise ValueError(
                 "`tf_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `tf.Tensor`. Got"
@@ -2612,7 +2619,7 @@ class ModelTesterMixin:
 
             tf_model_class = getattr(transformers, tf_model_class_name)
 
-            pt_model = model_class(config)
+            pt_model = model_class(config).eval()
             tf_model = tf_model_class(config)
 
             pt_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
