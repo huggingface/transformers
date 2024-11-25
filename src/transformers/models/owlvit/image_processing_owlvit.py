@@ -494,7 +494,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
         outputs: "OwlViTObjectDetectionOutput",
         threshold: float = 0.1,
         target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
-        text_labels: Optional[List[List[str]]] = None,
     ):
         """
         Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -508,25 +507,18 @@ class OwlViTImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-            text_labels (`List[List[str]]`, *optional*):
-                List of lists of text labels for each image in the batch. If unset, "text_labels" in output will be
-                set to `None`.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
             - "scores": The confidence scores for each predicted box on the image.
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
-            - "text_labels": The text labels for each predicted bounding box on the image.
         """
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         batch_size = len(batch_logits)
 
         if target_sizes is not None and len(target_sizes) != batch_size:
             raise ValueError("Make sure that you pass in as many target sizes as images")
-
-        if text_labels is not None and len(text_labels) != batch_size:
-            raise ValueError("Make sure that you pass in as many lists of text labels as images")
 
         # batch_logits of shape (batch_size, num_queries, num_classes)
         batch_class_logits = torch.max(batch_logits, dim=-1)
@@ -540,17 +532,13 @@ class OwlViTImageProcessor(BaseImageProcessor):
         if target_sizes is not None:
             batch_boxes = _scale_boxes(batch_boxes, target_sizes)
 
-        # to safely iterate over text labels
-        batch_text_labels = text_labels if text_labels is not None else [[]] * batch_size
-
         results = []
-        for scores, labels, boxes, names in zip(batch_scores, batch_labels, batch_boxes, batch_text_labels):
+        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
             keep = scores > threshold
             scores = scores[keep]
             labels = labels[keep]
             boxes = boxes[keep]
-            names = [names[i] for i in labels] if names else None
-            results.append({"scores": scores, "labels": labels, "boxes": boxes, "text_labels": names})
+            results.append({"scores": scores, "labels": labels, "boxes": boxes})
 
         return results
 

@@ -225,9 +225,23 @@ class OwlViTProcessor(ProcessorMixin):
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
             - "text_labels": The text labels for each predicted bounding box on the image.
         """
-        return self.image_processor.post_process_object_detection(
-            outputs=outputs, threshold=threshold, target_sizes=target_sizes, text_labels=text_labels
+        output = self.image_processor.post_process_object_detection(
+            outputs=outputs, threshold=threshold, target_sizes=target_sizes
         )
+
+        if text_labels is not None and len(text_labels) != len(output):
+            raise ValueError("Make sure that you pass in as many lists of text labels as images")
+
+        # adding text labels to the output
+        if text_labels is not None:
+            for image_output, image_text_labels in zip(output, text_labels):
+                object_text_labels = [image_text_labels[i] for i in image_output["labels"]]
+                image_output["text_labels"] = object_text_labels
+        else:
+            for image_output in output:
+                image_output["text_labels"] = None
+
+        return output
 
     def post_process_image_guided_detection(self, *args, **kwargs):
         """
