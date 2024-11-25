@@ -49,33 +49,33 @@ def verify_model_outputs(model, model_name):
     predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
 
     if "outdoor" in model_name:
-        expected_max_number_keypoints = 866
+        expected_max_number_keypoints = 865
         expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
         expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
         expected_matches_values = torch.tensor(
-            [125, -1, 137, 138, 19, -1, 135, -1, 160, 153], dtype=torch.int64, device=predicted_matches_values.device
+            [125, -1, 137, 138, 136, 143, 135, -1, -1, 153], dtype=torch.int64, device=predicted_matches_values.device
         )
         expected_matching_scores_values = torch.tensor(
-            [0.2406, 0, 0.8879, 0.7491, 0.3161, 0, 0.6232, 0, 0.2723, 0.9559],
+            [0.9899, 0, 0.9897, 0.9889, 0.9879, 0.7464, 0.7109, 0, 0, 0.9841],
             device=predicted_matches_values.device,
         )
 
-        expected_number_of_matches = 162
+        expected_number_of_matches = 167
     elif "indoor" in model_name:
-        expected_max_number_keypoints = 866
+        expected_max_number_keypoints = 865
         expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
         expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
         expected_matches_values = torch.tensor(
-            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1], dtype=torch.int64, device=predicted_matches_values.device
+            [125, -1, 137, 138, 136, 155, 135, -1, -1, 153], dtype=torch.int64, device=predicted_matches_values.device
         )
         expected_matching_scores_values = torch.tensor(
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.9694, 0.0, 0.9006, 0.8753, 0.8521, 0.5688, 0.6321, 0.0, 0.0, 0.7235],
             device=predicted_matches_values.device,
         )
 
-        expected_number_of_matches = 0
+        expected_number_of_matches = 209
 
     assert outputs.matches.shape == expected_matches_shape
     assert outputs.matching_scores.shape == expected_matching_scores_shape
