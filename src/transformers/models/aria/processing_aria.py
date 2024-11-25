@@ -11,8 +11,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType, logging
-from ..auto import AutoTokenizer
-from .image_processing_aria import AriaImageProcessor
+from ..auto import AutoImageProcessor, AutoTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -54,7 +53,7 @@ class AriaProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: AriaImageProcessor = None,
+        image_processor=None,
         tokenizer: Union[AutoTokenizer, str] = None,
         patch_size: int = 490,
         chat_template: str = None,
@@ -171,7 +170,7 @@ class AriaProcessor(ProcessorMixin):
         image_processor_path = (
             image_processor_path if image_processor_path is not None else pretrained_model_name_or_path
         )
-        image_processor = AriaImageProcessor.from_pretrained(
+        image_processor = AutoImageProcessor.from_pretrained(
             image_processor_path,
             **kwargs,
         )
@@ -213,3 +212,6 @@ class AriaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["AriaProcessor"]

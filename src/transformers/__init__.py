@@ -171,8 +171,8 @@ _import_structure = {
     ],
     "models.aria": [
         "AriaConfig",
-        "AriaTextConfig",
         "AriaProcessor",
+        "AriaTextConfig",
     ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
@@ -2468,8 +2468,8 @@ else:
             "Idefics3Model",
             "Idefics3PreTrainedModel",
             "Idefics3Processor",
-            "Idefics3VisionTransformer",
             "Idefics3VisionConfig",
+            "Idefics3VisionTransformer",
         ]
     )
     _import_structure["models.imagegpt"].extend(

@@ -359,3 +359,6 @@ class AriaImageProcessor(BaseImageProcessor):
             for patch in patches
         ]
         return patches
+
+
+__all__ = ["AriaImageProcessor"]

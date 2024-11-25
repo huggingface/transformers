@@ -166,7 +166,8 @@ class AriaCrossAttention(nn.Module):
                 Whether to add residual connection.
 
         Returns:
-            `torch.Tensor`: Output tensor after cross-attention.
+            torch.Tensor:
+                Output tensor after cross-attention.
         """
         query = self.q_proj(self.layer_norm(hidden_states))
 
@@ -1955,3 +1956,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["AriaForConditionalGeneration", "AriaPreTrainedModel", "AriaTextModel", "AriaTextForCausalLM"]
