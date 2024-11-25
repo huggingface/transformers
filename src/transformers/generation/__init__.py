@@ -25,7 +25,7 @@ _import_structure = {
         "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
     ],
-    "streamers": ["TextIteratorStreamer", "TextStreamer"],
+    "streamers": ["AsyncTextIteratorStreamer", "TextIteratorStreamer", "TextStreamer"],
 }
 
 try:
