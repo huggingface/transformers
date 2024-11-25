@@ -1149,6 +1149,7 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
 
+
 RELATION_DETR_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
