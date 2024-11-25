@@ -676,10 +676,10 @@ def prepare_img():
 class RelationDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("xiuqhou/relation-detr-resnet50") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = RelationDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device)
+        model = RelationDetrForObjectDetection.from_pretrained("xiuqhou/relation-detr-resnet50").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -694,10 +694,10 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_logits = torch.tensor(
-            [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
+            [[-5.2373, -3.9001, -5.3898], [-5.7824, -5.0136, -6.6365], [-6.4270, -4.7108, -6.6168]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]
+            [[0.7682, 0.4131, 0.4621], [0.1684, 0.1995, 0.2116], [0.5491, 0.2751, 0.0573]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
@@ -710,44 +710,14 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(torch_device)
+        expected_scores = torch.tensor([0.9558, 0.9530, 0.9457, 0.8974, 0.8956]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(torch_device)
+        expected_slice_boxes = torch.tensor([343.7997, 24.9038, 639.5161, 371.7106]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-
-    def test_inference_object_detection_head_with_box_refine_two_stage(self):
-        model = RelationDetrForObjectDetection.from_pretrained(
-            "SenseTime/deformable-detr-with-box-refine-two-stage"
-        ).to(torch_device)
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-
-        expected_logits = torch.tensor(
-            [[-6.7108, -4.3213, -6.3777], [-8.9014, -6.1799, -6.7240], [-6.9315, -4.4735, -6.2298]]
-        ).to(torch_device)
-        expected_boxes = torch.tensor(
-            [[0.2583, 0.5499, 0.4683], [0.7652, 0.9068, 0.4882], [0.5490, 0.2763, 0.0564]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
     @require_torch_accelerator
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
@@ -758,7 +728,7 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
         pixel_mask = encoding["pixel_mask"]
 
         # 1. run model on CPU
-        model = RelationDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr-single-scale")
+        model = RelationDetrForObjectDetection.from_pretrained("xiuqhou/relation-detr-resnet50")
 
         with torch.no_grad():
             cpu_outputs = model(pixel_values, pixel_mask)
@@ -774,6 +744,6 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
             assert torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4)
 
         expected_logits = torch.tensor(
-            [[-9.9051, -4.2541, -6.4852], [-9.6947, -4.0854, -6.8033], [-10.0665, -5.8470, -7.7003]]
+            [[-5.2373, -3.9001, -5.3898], [-5.7824, -5.0136, -6.6365], [-6.4270, -4.7108, -6.6168]]
         )
         assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
