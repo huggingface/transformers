@@ -17,9 +17,9 @@ import gc
 import importlib
 import tempfile
 import unittest
+from unittest import skip
 
 from packaging import version
-from unittest import skip
 
 from transformers import AqlmConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
 from transformers.testing_utils import (
@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_aqlm,
     require_torch_gpu,
     require_torch_multi_gpu,
-    skip_if_aqlm_inference_not_fixed,
     slow,
     torch_device,
 )
