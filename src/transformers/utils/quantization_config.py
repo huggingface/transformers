@@ -1090,7 +1090,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        run_compressed (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        run_compressed (`bool`, *optional*, defaults to `True`): compress weights (usually linear) modules
+            as compressed weights, using `format` method
     """
 
     def __init__(
