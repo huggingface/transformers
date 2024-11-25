@@ -39,7 +39,7 @@ class SpQRHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-    required_packages = ["spqr"]
+    required_packages = ["spqr_quant"]
     optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -51,7 +51,7 @@ class SpQRHfQuantizer(HfQuantizer):
             raise ImportError("Using `spqr` quantization requires Accelerate: `pip install accelerate`")
 
         if not is_spqr_available():
-            raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr[gpu,cpu]`")
+            raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant`")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         return torch.float16
