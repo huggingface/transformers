@@ -21,7 +21,6 @@ import copy
 import json
 import os
 from collections import defaultdict
-from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast

@@ -27,8 +27,8 @@ def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
     output_file_absolute = str(tokenizer_file.absolute())
 
     try:
-        from tiktoken.load import dump_tiktoken_bpe
         from tiktoken import get_encoding
+        from tiktoken.load import dump_tiktoken_bpe
 
         if isinstance(encoding, str):
             encoding = get_encoding(encoding)
