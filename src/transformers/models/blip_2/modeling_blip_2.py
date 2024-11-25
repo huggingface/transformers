@@ -2315,7 +2315,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             )
             if getattr(self.config, "image_token_index", None) is not None:
                 image_token_ids = (
-                    torch.LongTensor([[self.config.image_token_index]])
+                    torch.tensor([[self.config.image_token_index]], device=image_embeds.device, dtype=torch.long)
                     .repeat(batch_size, self.config.num_query_tokens)
                     .to(image_embeds.device)
                 )
