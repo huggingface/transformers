@@ -40,8 +40,10 @@ def concat_pairs(tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.
     Concatenate two tuples of tensors pairwise
 
     Args:
-        tensor_tuple0 (`Tuple[torch.Tensor]`): Tuple of tensors.
-        tensor_tuple1 (`Tuple[torch.Tensor]`): Tuple of tensors.
+        tensor_tuple0 (`Tuple[torch.Tensor]`):
+            Tuple of tensors.
+        tensor_tuple1 (`Tuple[torch.Tensor]`):
+            Tuple of tensors.
 
     Returns:
         (`Tuple[torch.Tensor]`): Tuple of concatenated tensors.
@@ -54,11 +56,15 @@ def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> tor
     Normalize keypoints locations based on image image_shape
 
     Args:
-        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`): Keypoints locations in (x, y) format.
-        height (`int`): Image height.
-        width (`int`): Image width.
+        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
+            Keypoints locations in (x, y) format.
+        height (`int`):
+            Image height.
+        width (`int`):
+            Image width.
+    
     Returns:
-          Normalized keypoints locations of shape (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`).
+        Normalized keypoints locations of shape (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`).
     """
     size = torch.tensor([width, height], device=keypoints.device, dtype=keypoints.dtype)[None]
     center = size / 2
@@ -76,11 +82,12 @@ def log_sinkhorn_iterations(
     Perform Sinkhorn Normalization in Log-space for stability
 
     Args:
-        log_cost_matrix (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Logarithm of the cost matrix.
-        log_source_distribution (`torch.Tensor` of shape `(batch_size, num_rows)`): Logarithm of the source
-        distribution.
-        log_target_distribution (`torch.Tensor` of shape `(batch_size, num_columns)`): Logarithm of the target
-        distribution.
+        log_cost_matrix (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`):
+            Logarithm of the cost matrix.
+        log_source_distribution (`torch.Tensor` of shape `(batch_size, num_rows)`):
+            Logarithm of the source distribution.
+        log_target_distribution (`torch.Tensor` of shape `(batch_size, num_columns)`):
+            Logarithm of the target distribution.
 
     Returns:
         log_cost_matrix (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Logarithm of the optimal
@@ -99,9 +106,12 @@ def log_optimal_transport(scores: torch.Tensor, reg_param: torch.Tensor, iterati
     Perform Differentiable Optimal Transport in Log-space for stability
 
     Args:
-        scores: (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Cost matrix.
-        reg_param: (`torch.Tensor` of shape `(batch_size, 1, 1)`): Regularization parameter.
-        iterations: (`int`): Number of Sinkhorn iterations.
+        scores: (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`):
+            Cost matrix.
+        reg_param: (`torch.Tensor` of shape `(batch_size, 1, 1)`):
+            Regularization parameter.
+        iterations: (`int`):
+            Number of Sinkhorn iterations.
 
     Returns:
         log_optimal_transport_matrix: (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Logarithm of the
@@ -160,11 +170,11 @@ class KeypointMatchingOutput(ModelOutput):
             Scores of predicted matches.
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
             Absolute (x, y) coordinates of predicted keypoints in a given image.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*:
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
             num_keypoints)`, returned when `output_hidden_states=True` is passed or when
             `config.output_hidden_states=True`)
-        attentions (`tuple(torch.FloatTensor)`, *optional*:
+        attentions (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
             num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
@@ -634,6 +644,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     ) -> Tuple[torch.Tensor, torch.Tensor, Tuple, Tuple]:
         """
         Perform keypoint matching between two images.
+        
         Args:
             keypoints (`torch.Tensor` of shape `(batch_size, 2, num_keypoints, 2)`):
                 Keypoints detected in the pair of image.
@@ -650,6 +661,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 Whether or not to return the attentions tensors. Default to `config.output_attentions`.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. Default to `config.output_hidden_states`.
+        
         Returns:
             matches (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
                 For each image pair, for each keypoint in image0, the index of the keypoint in image1 that was matched

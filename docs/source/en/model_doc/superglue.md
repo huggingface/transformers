@@ -45,10 +45,10 @@ import torch
 from PIL import Image
 import requests
 
-url_image_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
-image_1 = Image.open(requests.get(url_image_1, stream=True).raw)
-url_image_2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
-image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
+url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+image1 = Image.open(requests.get(url_image1, stream=True).raw)
+url_image2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+image_2 = Image.open(requests.get(url_image2, stream=True).raw)
 
 images = [image1, image2]
 
