@@ -1860,13 +1860,14 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, suppress_tokens, device: str = "cpu"):
-        self.suppress_tokens = torch.tensor(list(suppress_tokens), device=device)
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = suppress_tokens
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        suppress_tokens = torch.tensor(list(self.suppress_tokens), device=scores.device)
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, suppress_tokens)
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 

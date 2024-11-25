@@ -824,25 +824,27 @@ class AssistantToTargetTranslator:
         Note that we have already the target ids for the prompt and we only need to find the target ids for the new tokens.
         Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
         """
-        target_candidate_ids = assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].apply_(
+        device = assistant_candidate_ids.device
+        target_candidate_ids = assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].cpu().apply_(
             lambda x: self._assistant_to_target_input_ids.get(x, x)
-        )
+        ).to(device)
         return torch.cat((target_input_ids, target_candidate_ids.unsqueeze(0)), dim=1)
 
     def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
         """
         Return the target logits that correspond to the assistant logits.
         """
+        device = assistant_logits.device
         target_vocab_size: int = len(self._target_tokenizer.get_vocab())
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], target_vocab_size)
-        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf"))
+        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(device)
         assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
         assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
             -1
         ]
-        target_logits_supported_indices: torch.IntTensor = assistant_logits_supported_indices.apply_(
+        target_logits_supported_indices: torch.IntTensor = assistant_logits_supported_indices.cpu().apply_(
             lambda x: self._assistant_to_target_input_ids[x]
-        )
+        ).to(device)
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
         return target_logits
 
