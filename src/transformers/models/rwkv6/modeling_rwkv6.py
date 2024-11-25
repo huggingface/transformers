@@ -17,16 +17,14 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-from pathlib import Path
-
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers.modeling_utils import PreTrainedModel
 from transformers.generation import GenerationMixin
+from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -42,14 +40,14 @@ def check_dependencies():
     missing_deps = []
 
     try:
-        import triton
+        import triton  # noqa: F401
     except ImportError:
-        missing_deps.append('triton>=3.0.0')
+        missing_deps.append("triton>=3.0.0")
 
     try:
-        import rwkvfla
+        import rwkvfla  # noqa: F401
     except ImportError:
-        missing_deps.append('rwkv-fla')
+        missing_deps.append("rwkv-fla")
 
     if missing_deps:
         install_instructions = """
@@ -58,16 +56,16 @@ Required dependencies are missing. Please install them using:
 {}
 
 """.strip()
-        install_commands = '\n'.join(
-            f'pip install "{dep}"' for dep in missing_deps)
+        install_commands = "\n".join(f'pip install "{dep}"' for dep in missing_deps)
         print(install_instructions.format(install_commands))
         raise ImportError(f"Missing dependencies: {', '.join(missing_deps)}")
 
+
 check_dependencies()
-from rwkvfla.utils import device # pylint: disable=C0411
-from rwkvfla.ops.rwkv6.fused_recurrent import fused_recurrent_rwkv6 # pylint: disable=C0411
-from rwkvfla.ops.rwkv6.chunk import chunk_rwkv6 # pylint: disable=C0411
-from rwkvfla.ops.rwkv6.recurrent_naive import native_recurrent_rwkv6 # pylint: disable=C0411
+# flake8: noqa: E402
+from rwkvfla.ops.rwkv6.chunk import chunk_rwkv6  # pylint: disable=C0411
+from rwkvfla.ops.rwkv6.fused_recurrent import fused_recurrent_rwkv6  # pylint: disable=C0411
+from rwkvfla.ops.rwkv6.recurrent_naive import native_recurrent_rwkv6  # pylint: disable=C0411
 
 
 logger = logging.get_logger(__name__)
@@ -89,20 +87,25 @@ def rwkv6_linear_attention(
     batch, seq_length, _ = receptance.shape
     num_heads, head_size = time_first.shape
     # pylint: disable=line-too-long
-    key = key.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, T, H, K -> B, H, T, K
-    value = value.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, T, H, K - > B, H, T, V
-    receptance = receptance.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2) # B, H, T, K
-    time_decay = -torch.exp(time_decay.float()).view(batch, seq_length, num_heads, head_size).permute(0, 2, 1, 3) # B, T, H, K -> B, H, T, K
-    time_first = time_first.float().reshape(num_heads, head_size) # H, K
-    if device == 'cpu':
+    key = key.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, T, H, K -> B, H, T, K
+    value = value.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, T, H, K - > B, H, T, V
+    receptance = receptance.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, H, T, K
+    time_decay = (
+        -torch.exp(time_decay.float()).view(batch, seq_length, num_heads, head_size).permute(0, 2, 1, 3)
+    )  # B, T, H, K -> B, H, T, K
+    time_first = time_first.float().reshape(num_heads, head_size)  # H, K
+    if receptance.device.type == "cpu":
         out, state = native_recurrent_rwkv6(
-            receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True)
+            receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True
+        )
     elif one_token:
         out, state = fused_recurrent_rwkv6(
-            receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True)
+            receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True
+        )
     else:
-        out, state = chunk_rwkv6(receptance, key, value, time_decay, time_first,
-                                 scale=1.0, initial_state=state, output_final_state=True)
+        out, state = chunk_rwkv6(
+            receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True
+        )
     return out.transpose(1, 2), state
 
 
@@ -127,36 +130,26 @@ class Rwkv6SelfAttention(nn.Module):
         time_mix_extra_dim = 32  # generate TIME_MIX for w,k,v,r,g
         if hidden_size == 4096:  # 7b
             time_mix_extra_dim = 64
-        self.time_maa_w1 = nn.Parameter(
-            torch.empty(hidden_size, time_mix_extra_dim * 5))
-        self.time_maa_w2 = nn.Parameter(
-            torch.empty(5, time_mix_extra_dim, hidden_size))
+        self.time_maa_w1 = nn.Parameter(torch.empty(hidden_size, time_mix_extra_dim * 5))
+        self.time_maa_w2 = nn.Parameter(torch.empty(5, time_mix_extra_dim, hidden_size))
 
-        self.time_decay = nn.Parameter(
-            torch.empty(1, 1, attention_hidden_size))
+        self.time_decay = nn.Parameter(torch.empty(1, 1, attention_hidden_size))
 
         time_decay_extra_dim = 64
         if hidden_size == 4096:  # 7b
             time_decay_extra_dim = 128
-        self.time_decay_w1 = nn.Parameter(
-            torch.empty(hidden_size, time_decay_extra_dim))
-        self.time_decay_w2 = nn.Parameter(
-            torch.empty(
-                time_decay_extra_dim,
-                attention_hidden_size))
+        self.time_decay_w1 = nn.Parameter(torch.empty(hidden_size, time_decay_extra_dim))
+        self.time_decay_w2 = nn.Parameter(torch.empty(time_decay_extra_dim, attention_hidden_size))
 
-        self.time_faaaa = nn.Parameter(
-            torch.empty(num_heads, config.head_size))
+        self.time_faaaa = nn.Parameter(torch.empty(num_heads, config.head_size))
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-        self.receptance = nn.Linear(
-            hidden_size, attention_hidden_size, bias=False)
+        self.receptance = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.key = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.value = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.gate = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.output = nn.Linear(attention_hidden_size, hidden_size, bias=False)
-        self.ln_x = nn.GroupNorm(num_heads, hidden_size, eps=(
-            1e-5) * (config.head_size_divisor**2))
+        self.ln_x = nn.GroupNorm(num_heads, hidden_size, eps=(1e-5) * (config.head_size_divisor**2))
 
     def extract_key_value(self, hidden, state=None):
         # Mix hidden with the previous timestep to produce key, value,
@@ -177,8 +170,7 @@ class Rwkv6SelfAttention(nn.Module):
         xx = shifted - x
 
         xxx = x + xx * self.time_maa_x
-        xxx = torch.tanh(xxx @ self.time_maa_w1).view(B *
-                                                      T, 5, -1).transpose(0, 1)
+        xxx = torch.tanh(xxx @ self.time_maa_w1).view(B * T, 5, -1).transpose(0, 1)
         xxx = torch.bmm(xxx, self.time_maa_w2).view(5, B, T, -1)
         mw, mk, mv, mr, mg = xxx.unbind(dim=0)
 
@@ -193,8 +185,7 @@ class Rwkv6SelfAttention(nn.Module):
         value = self.value(value)
         gate = F.silu(self.gate(gate))
 
-        time_decay = torch.tanh(
-            time_decay @ self.time_decay_w1) @ self.time_decay_w2
+        time_decay = torch.tanh(time_decay @ self.time_decay_w1) @ self.time_decay_w2
         time_decay = self.time_decay + time_decay
 
         if state is not None:
@@ -203,16 +194,20 @@ class Rwkv6SelfAttention(nn.Module):
         return receptance, key, value, gate, time_decay, state
 
     def forward(self, hidden, state=None, use_cache=False, seq_mode=True):
-        receptance, key, value, gate, time_decay, state = self.extract_key_value(
-            hidden, state=state)
+        receptance, key, value, gate, time_decay, state = self.extract_key_value(hidden, state=state)
 
         B, T, _ = receptance.shape
         H, S = self.time_faaaa.shape
 
-        layer_state = state[1][:, :, :, :,
-                               self.layer_id] if state is not None else None
+        layer_state = state[1][:, :, :, :, self.layer_id] if state is not None else None
         out, layer_state = rwkv6_linear_attention(
-            self.training, receptance, key, value, time_decay, self.time_faaaa, layer_state,
+            self.training,
+            receptance,
+            key,
+            value,
+            time_decay,
+            self.time_faaaa,
+            layer_state,
         )
 
         if layer_state is not None:
@@ -220,10 +215,12 @@ class Rwkv6SelfAttention(nn.Module):
 
         out = out.reshape(B * T, H * S)
         out = F.group_norm(
-            out, num_groups=H, weight=self.ln_x.weight.to(
-                out.dtype), bias=self.ln_x.bias.to(
-                out.dtype), eps=self.ln_x.eps).reshape(
-            B, T, H * S)
+            out,
+            num_groups=H,
+            weight=self.ln_x.weight.to(out.dtype),
+            bias=self.ln_x.bias.to(out.dtype),
+            eps=self.ln_x.eps,
+        ).reshape(B, T, H * S)
         out = out.to(dtype=hidden.dtype) * gate
         out = self.output(out)
         return out, state
@@ -281,26 +278,18 @@ class Rwkv6Block(nn.Module):
         self.layer_id = layer_id
 
         if layer_id == 0:
-            self.pre_ln = nn.LayerNorm(
-                config.hidden_size,
-                eps=config.layer_norm_epsilon)
+            self.pre_ln = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-        self.ln1 = nn.LayerNorm(
-            config.hidden_size,
-            eps=config.layer_norm_epsilon)
-        self.ln2 = nn.LayerNorm(
-            config.hidden_size,
-            eps=config.layer_norm_epsilon)
+        self.ln1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.ln2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
         self.attention = Rwkv6SelfAttention(config, layer_id)
         self.feed_forward = Rwkv6FeedForward(config, layer_id)
 
-    def forward(self, hidden, state=None, use_cache=False,
-                output_attentions=False, seq_mode=True):
+    def forward(self, hidden, state=None, use_cache=False, output_attentions=False, seq_mode=True):
         if self.layer_id == 0:
             hidden = self.pre_ln(hidden)
-        attention, state = self.attention(
-            self.ln1(hidden), state=state, use_cache=use_cache, seq_mode=seq_mode)
+        attention, state = self.attention(self.ln1(hidden), state=state, use_cache=use_cache, seq_mode=seq_mode)
         hidden = hidden + attention
 
         feed_forward, state = self.feed_forward(self.ln2(hidden), state=state)
@@ -339,8 +328,7 @@ class Rwkv6PreTrainedModel(PreTrainedModel):
             num_heads = attention_hidden_size // head_size
 
             ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
-            ratio_1_to_almost0 = 1.0 - \
-                (layer_id / num_hidden_layers)  # 1 to ~0
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
 
             time_weight = torch.tensor(
                 [i / hidden_size for i in range(hidden_size)],
@@ -353,14 +341,10 @@ class Rwkv6PreTrainedModel(PreTrainedModel):
                 -6.0 + 5.0 * (h / (attention_hidden_size - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
                 for h in range(attention_hidden_size)
             ]
-            decay_speed = torch.tensor(
-                decay_speed,
-                dtype=module.time_decay.dtype,
-                device=module.time_decay.device)
+            decay_speed = torch.tensor(decay_speed, dtype=module.time_decay.dtype, device=module.time_decay.device)
             tmp = torch.tensor(
                 [
-                    (1.0 - (i / (attention_hidden_size - 1.0))) *
-                    ratio_0_to_1 + 0.1 * ((i + 1) % 3 - 1)
+                    (1.0 - (i / (attention_hidden_size - 1.0))) * ratio_0_to_1 + 0.1 * ((i + 1) % 3 - 1)
                     for i in range(attention_hidden_size)
                 ],
                 dtype=module.time_faaaa.dtype,
@@ -368,54 +352,43 @@ class Rwkv6PreTrainedModel(PreTrainedModel):
             )
 
             with torch.no_grad():
-                module.time_maa_x.data = 1.0 - \
-                    torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_maa_w.data = 1.0 - \
-                    torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_maa_k.data = 1.0 - \
-                    torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_maa_v.data = 1.0 - \
-                    (torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
-                module.time_maa_r.data = 1.0 - \
-                    torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
-                module.time_maa_g.data = 1.0 - \
-                    torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+                module.time_maa_x.data = 1.0 - torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_maa_w.data = 1.0 - torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_maa_k.data = 1.0 - torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_maa_v.data = 1.0 - (torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
+                module.time_maa_r.data = 1.0 - torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+                module.time_maa_g.data = 1.0 - torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
 
                 TIME_MIX_EXTRA_DIM = 32  # generate TIME_MIX for w,k,v,r,g
                 module.time_maa_w1.data = torch.zeros(
                     hidden_size,
                     TIME_MIX_EXTRA_DIM * 5,
                     dtype=module.time_maa_w1.dtype,
-                    device=module.time_maa_w1.device).uniform_(
-                    -1e-4,
-                    1e-4)
+                    device=module.time_maa_w1.device,
+                ).uniform_(-1e-4, 1e-4)
                 module.time_maa_w2.data = torch.zeros(
                     5,
                     TIME_MIX_EXTRA_DIM,
                     hidden_size,
                     dtype=module.time_maa_w2.dtype,
-                    device=module.time_maa_w2.device).uniform_(
-                    -1e-4,
-                    1e-4)
+                    device=module.time_maa_w2.device,
+                ).uniform_(-1e-4, 1e-4)
 
                 TIME_DECAY_EXTRA_DIM = 64
                 module.time_decay_w1.data = torch.zeros(
                     hidden_size,
                     TIME_DECAY_EXTRA_DIM,
                     dtype=module.time_decay_w1.dtype,
-                    device=module.time_decay_w1.device).uniform_(
-                    -1e-4,
-                    1e-4)
+                    device=module.time_decay_w1.device,
+                ).uniform_(-1e-4, 1e-4)
                 module.time_decay_w2.data = torch.zeros(
                     TIME_DECAY_EXTRA_DIM,
                     attention_hidden_size,
                     dtype=module.time_decay_w2.dtype,
-                    device=module.time_decay_w2.device).uniform_(
-                    -1e-4,
-                    1e-4)
+                    device=module.time_decay_w2.device,
+                ).uniform_(-1e-4, 1e-4)
 
-                module.time_decay.data = decay_speed.reshape(
-                    num_heads, head_size)
+                module.time_decay.data = decay_speed.reshape(num_heads, head_size)
                 module.time_faaaa.data = tmp.reshape(num_heads, head_size)
 
         elif isinstance(module, Rwkv6FeedForward):
@@ -423,8 +396,7 @@ class Rwkv6PreTrainedModel(PreTrainedModel):
             num_hidden_layers = module.config.num_hidden_layers
             hidden_size = module.config.hidden_size
 
-            ratio_1_to_almost0 = 1.0 - \
-                (layer_id / num_hidden_layers)  # 1 to ~0
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
 
             time_weight = torch.tensor(
                 [i / hidden_size for i in range(hidden_size)],
@@ -434,10 +406,8 @@ class Rwkv6PreTrainedModel(PreTrainedModel):
             time_weight = time_weight[None, None, :]
 
             with torch.no_grad():
-                module.time_maa_k.data = 1.0 - \
-                    torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_maa_r.data = 1.0 - \
-                    torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_maa_k.data = 1.0 - torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_maa_r.data = 1.0 - torch.pow(time_weight, ratio_1_to_almost0)
 
 
 @dataclass
@@ -549,8 +519,7 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.blocks = nn.ModuleList(
-            [Rwkv6Block(config, layer_id=idx) for idx in range(config.num_hidden_layers)])
+        self.blocks = nn.ModuleList([Rwkv6Block(config, layer_id=idx) for idx in range(config.num_hidden_layers)])
         self.ln_out = nn.LayerNorm(config.hidden_size)
 
         self.layers_are_rescaled = False
@@ -597,11 +566,9 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
             self._rescale_layers()
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is None and inputs_embeds is None:
-            raise ValueError(
-                "You have to specify either input_ids or inputs_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
@@ -611,9 +578,7 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
             head_size = self.config.head_size
             num_heads = self.config.attention_hidden_size // head_size
             state_attn_x = torch.zeros(
-                (inputs_embeds.size(0),
-                 self.config.hidden_size,
-                 self.config.num_hidden_layers),
+                (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers),
                 dtype=inputs_embeds.dtype,
                 requires_grad=False,
                 device=inputs_embeds.device,
@@ -631,9 +596,7 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
                 device=inputs_embeds.device,
             ).contiguous()
             state_ffn_x = torch.zeros(
-                (inputs_embeds.size(0),
-                 self.config.hidden_size,
-                 self.config.num_hidden_layers),
+                (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers),
                 dtype=inputs_embeds.dtype,
                 requires_grad=False,
                 device=inputs_embeds.device,
@@ -670,8 +633,7 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return (hidden_states, state,
-                    all_hidden_states, all_self_attentions)
+            return (hidden_states, state, all_hidden_states, all_self_attentions)
 
         return Rwkv6Output(
             last_hidden_state=hidden_states,
@@ -688,27 +650,19 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
             with torch.no_grad():
                 for block_id, block in enumerate(self.blocks):
                     if self.training:
-                        block.attention.output.weight.mul_(
-                            2 ** int(block_id // self.config.rescale_every))
-                        block.feed_forward.value.weight.mul_(
-                            2 ** int(block_id // self.config.rescale_every))
+                        block.attention.output.weight.mul_(2 ** int(block_id // self.config.rescale_every))
+                        block.feed_forward.value.weight.mul_(2 ** int(block_id // self.config.rescale_every))
                     else:
                         # Deal with quantization statistics
                         if hasattr(block.attention.output.weight, "SCB"):
-                            block.attention.output.weight.SCB.div_(
-                                2 ** int(block_id // self.config.rescale_every))
-                            block.feed_forward.value.weight.SCB.div_(
-                                2 ** int(block_id // self.config.rescale_every))
+                            block.attention.output.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
+                            block.feed_forward.value.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
                         elif hasattr(block.attention.output.weight, "quant_state"):
-                            self._bnb_4bit_dequantize_and_rescale(
-                                block.attention.output, block_id)
-                            self._bnb_4bit_dequantize_and_rescale(
-                                block.feed_forward.value, block_id)
+                            self._bnb_4bit_dequantize_and_rescale(block.attention.output, block_id)
+                            self._bnb_4bit_dequantize_and_rescale(block.feed_forward.value, block_id)
                         else:
-                            block.attention.output.weight.div_(
-                                2 ** int(block_id // self.config.rescale_every))
-                            block.feed_forward.value.weight.div_(
-                                2 ** int(block_id // self.config.rescale_every))
+                            block.attention.output.weight.div_(2 ** int(block_id // self.config.rescale_every))
+                            block.feed_forward.value.weight.div_(2 ** int(block_id // self.config.rescale_every))
 
         self.layers_are_rescaled = not self.training
 
@@ -720,11 +674,9 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
         try:
             import bitsandbytes as bnb
         except ImportError:
-            raise ImportError(
-                "Please install bitsandbytes to use this method.")
+            raise ImportError("Please install bitsandbytes to use this method.")
 
-        dequant_weights = bnb.functional.dequantize_4bit(
-            target_layer.weight.data, target_layer.weight.quant_state)
+        dequant_weights = bnb.functional.dequantize_4bit(target_layer.weight.data, target_layer.weight.quant_state)
 
         dequant_weights.div_(2 ** int(block_id // self.config.rescale_every))
 
@@ -733,10 +685,7 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
         # this will create an overhead :/
         # We set requires_grad=False as we cannot compute gradients on top of 4bit parameters anyway and to avoid
         # bugs with bnb
-        quant_weight = bnb.nn.Params4bit(
-            dequant_weights.to("cpu"),
-            requires_grad=False).to(
-            dequant_weights.device)
+        quant_weight = bnb.nn.Params4bit(dequant_weights.to("cpu"), requires_grad=False).to(dequant_weights.device)
         setattr(target_layer, "weight", quant_weight)
 
 
@@ -755,10 +704,7 @@ class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.rwkv = Rwkv6Model(config)
-        self.head = nn.Linear(
-            config.hidden_size,
-            config.vocab_size,
-            bias=False)
+        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -769,8 +715,7 @@ class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
 
-    def prepare_inputs_for_generation(
-            self, input_ids, state=None, inputs_embeds=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, **kwargs):
         # only last token for inputs_ids if the state is passed along.
         if state is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
@@ -834,8 +779,7 @@ class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, GenerationMixin):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]

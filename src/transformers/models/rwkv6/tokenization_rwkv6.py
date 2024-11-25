@@ -15,7 +15,6 @@
 """Tokenization classes for RWKV6."""
 
 import os
-import re
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -77,10 +76,10 @@ class TRIE:
             if idx == len(key):
                 break
             ch = key[idx]
-        
+
         if ret is None:
             raise ValueError("No match found")
-        return ret 
+        return ret
 
 
 class RwkvTokenizer:
@@ -91,15 +90,15 @@ class RwkvTokenizer:
             lines = f.readlines()
         for l in lines:
             idx = int(l[: l.index(" ")])
-            x = eval(l[l.index(" "): l.rindex(" ")])
+            x = eval(l[l.index(" ") : l.rindex(" ")])
             x = x.encode("utf-8") if isinstance(x, str) else x
             assert isinstance(x, bytes)
 
-            assert len(x) == int(l[l.rindex(" "):])
+            assert len(x) == int(l[l.rindex(" ") :])
             sorted_token += [x]
             self.idx2token[idx] = x
 
-        self.idx2token[0] = b'<|endoftext|>'  # use a special token
+        self.idx2token[0] = b"<|endoftext|>"  # use a special token
         self.token2idx = {}
         for k, v in self.idx2token.items():
             self.token2idx[v] = int(k)
@@ -129,10 +128,7 @@ class RwkvTokenizer:
             return [self.encode_bytes(s.encode("utf-8")) for s in src]
 
     def decode(self, tokens):
-        return [
-            self.decode_bytes(batch).decode(
-                'utf-8',
-                errors='replace') for batch in tokens]
+        return [self.decode_bytes(batch).decode("utf-8", errors="replace") for batch in tokens]
 
     def print_tokens(self, tokens):
         for i in tokens:
@@ -149,9 +145,7 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(
-        self, vocab_file, bos_token="<s>", eos_token="<s>", unk_token="<s>", **kwargs
-    ):
+    def __init__(self, vocab_file, bos_token="<s>", eos_token="<s>", unk_token="<s>", **kwargs):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -167,16 +161,14 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
         self.encoder = vocab
         self.decoder = {v: k for k, v in vocab.items()}
         self._added_tokens_decoder = {0: AddedToken(str(bos_token))}
-        super().__init__(
-            bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs
-        )
+        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
     @property
     def vocab_size(self):
         return len(self.encoder)
 
     def get_vocab(self):
-        vocab = {str(self.convert_ids_to_tokens(i))                 : i for i in range(self.vocab_size)}
+        vocab = {str(self.convert_ids_to_tokens(i)): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
@@ -196,15 +188,12 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (bytes) in a single string. Additional tokens are encoded to bytes"""
-        out_string = b"".join(
-            [k.encode(errors="replace") if isinstance(
-                k, str) else k for k in tokens]
-        ).decode("utf-8")
+        out_string = b"".join([k.encode(errors="replace") if isinstance(k, str) else k for k in tokens]).decode(
+            "utf-8"
+        )
         return out_string
 
-    def save_vocabulary(
-        self, save_directory: str, filename_prefix: Optional[str] = None
-    ) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -212,13 +201,9 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
                 (filename_prefix + "-" if filename_prefix else "") + "vocab.txt",
             )
         else:
-            vocab_file = (
-                filename_prefix + "-" if filename_prefix else ""
-            ) + save_directory
+            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
-            for token, token_index in sorted(
-                self.encoder.items(), key=lambda kv: kv[1]
-            ):
+            for token, token_index in sorted(self.encoder.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
                         f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."

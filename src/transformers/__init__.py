@@ -5970,6 +5970,7 @@ if TYPE_CHECKING:
         from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
+        from .models.rwkv6 import Rwkv6Tokenizer
         from .models.seamless_m4t import SeamlessM4TTokenizer
         from .models.siglip import SiglipTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
@@ -5979,7 +5980,6 @@ if TYPE_CHECKING:
         from .models.xglm import XGLMTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
         from .models.xlnet import XLNetTokenizer
-        from .models.rwkv6 import Rwkv6Tokenizer
 
     try:
         if not is_tokenizers_available():
