@@ -62,7 +62,7 @@ def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> tor
             Image height.
         width (`int`):
             Image width.
-    
+
     Returns:
         Normalized keypoints locations of shape (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`).
     """
@@ -644,7 +644,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     ) -> Tuple[torch.Tensor, torch.Tensor, Tuple, Tuple]:
         """
         Perform keypoint matching between two images.
-        
+
         Args:
             keypoints (`torch.Tensor` of shape `(batch_size, 2, num_keypoints, 2)`):
                 Keypoints detected in the pair of image.
@@ -661,7 +661,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 Whether or not to return the attentions tensors. Default to `config.output_attentions`.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. Default to `config.output_hidden_states`.
-        
+
         Returns:
             matches (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
                 For each image pair, for each keypoint in image0, the index of the keypoint in image1 that was matched
