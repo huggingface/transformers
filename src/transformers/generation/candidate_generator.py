@@ -571,6 +571,12 @@ class AssistantToTargetTranslator:
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
         self._assistant_to_target_input_ids: dict[int, int] = self._get_assistant_to_target_input_ids()
         self.suppress_input_ids: list[int] = self._get_suppress_input_ids()
+        self.logits_processors: LogitsProcessorList = LogitsProcessorList(
+            [
+                SuppressTokensLogitsProcessor(self.suppress_input_ids),
+                LogitNormalization(),
+            ]
+        )
 
     def _get_assistant_to_target_input_ids(self) -> dict[int, int]:
         """
@@ -674,14 +680,6 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         logits_processor: "LogitsProcessorList" = None,
     ):
         self._atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer)
-        logits_processor += [
-            SuppressTokensLogitsProcessor(
-                suppress_tokens=self._atm_translator.suppress_input_ids,
-                device=assistant_model.device,
-            ),
-            LogitNormalization(),
-        ]
-
         super().__init__(
             input_ids,
             assistant_model,
@@ -731,7 +729,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
-        if max_new_tokens <= 0:
+        if max_new_tokens == 0:
             return input_ids, None
 
         # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
@@ -752,20 +750,27 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # 2. Forecast next N tokens using the assistant model.
         assistant_generation_kwargs = {
             self.input_ids_key: input_ids,
-            "min_new_tokens": min_new_tokens,
-            "max_new_tokens": max_new_tokens,
+            # "min_new_tokens": min_new_tokens,
+            # "max_new_tokens": max_new_tokens,
+            "min_new_tokens": 100,
+            "max_new_tokens": 100,
             "generation_config": self.generation_config,
             "logits_processor": self.logits_processor,
         }
 
-        assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
+        assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs, output_logits=True)
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
         # 4. Prepare variables for output
-        candidate_logits = torch.stack(assistant_output.scores, dim=1)
+        # candidate_logits = torch.stack(assistant_output.scores, dim=1)
+        candidate_logits = torch.stack(assistant_output.logits, dim=1)
+        if not candidate_logits.shape[1] > 1:
+            msg = f"Since we set min_new_tokens to {assistant_generation_kwargs['min_new_tokens']} and max_new_tokens to {assistant_generation_kwargs['max_new_tokens']}, we expect at least 2 candidates, but seems like we got {candidate_logits.shape[1]} candidates."
+            raise Exception(msg)
         candidate_ids = assistant_output.sequences
+        candidate_logits = self._atm_translator.logits_processors(input_ids=candidate_ids, scores=candidate_logits)
         target_ids = self._atm_translator.get_target_input_ids(candidate_ids)
 
         target_logits = self._atm_translator.get_target_logits(candidate_logits)
