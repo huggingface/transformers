@@ -5084,10 +5084,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return LOSS_MAPPING[loss_type]
 
     @property
-    def compiled_forward(self):
-        if not hasattr(self, "_compiled_forward"):
-            self._compiled_forward = torch.compile(self.__call__, mode="reduce-overhead", fullgraph=True)
-        return self._compiled_forward
+    def compiled_call(self):
+        """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
+        non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
+        want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
+        (where we want the speed-ups of compiled version with static shapes)."""
+        if not hasattr(self, "_compiled_call"):
+            self._compiled_call = torch.compile(self.__call__, mode="reduce-overhead", fullgraph=True)
+        return self._compiled_call
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
