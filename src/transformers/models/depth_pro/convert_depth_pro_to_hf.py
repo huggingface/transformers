@@ -83,6 +83,7 @@ def create_vit_rename_keys(config):
     # fmt: on
     return rename_keys
 
+
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config):
     state_dict_keys = state_dict.keys()
@@ -101,6 +102,7 @@ def read_in_q_k_v(state_dict, config):
             state_dict[key.replace("attn.qkv", "attention.attention.key")] = k
             state_dict[key.replace("attn.qkv", "attention.attention.value")] = v
     return state_dict
+
 
 # hard coded upsample keys
 def update_hard_coded_keys(state_dict):
@@ -134,13 +136,24 @@ def update_hard_coded_keys(state_dict):
     return state_dict
 
 
-
 # We will verify our results on an image of cute cats
-def prepare_img():
+def inference_test(processor, model):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    return image
 
+    inputs = processor(image)
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    predicted_depth = outputs.predicted_depth
+    fov = outputs.fov
+
+    predicted_depth, fov = processor.post_process_depth_estimation(predicted_depth, fov)
+
+    print("predicted_depth.shape:", predicted_depth.shape)
+    print("fov.shape:", fov.shape)
+    print("fov:", fov)
+    print("Inference was Successfull!")
 
 
 @torch.no_grad()
@@ -150,12 +163,10 @@ def convert_depth_pro_checkpoint(repo_id, filename, pytorch_dump_folder_path, pu
     """
 
     # define default DepthPro configuration
-    config = DepthProConfig()
+    config = DepthProConfig(use_fov_model=True)
 
     # load original weights from huggingface hub
-    # TODO: download from hub
-    # file_path = hf_hub_download(repo_id, filename)
-    file_path = "/home/geetu/work/hf/depth_pro/depth_pro.pt"
+    file_path = hf_hub_download(repo_id, filename)
     state_dict = torch.load(file_path, weights_only=True)
 
     # enumerate fusion layers
@@ -224,108 +235,50 @@ def convert_depth_pro_checkpoint(repo_id, filename, pytorch_dump_folder_path, pu
     model = DepthProForDepthEstimation(config, use_fov_model=True).eval()
     model.load_state_dict(state_dict)
 
-    exit()
-
-    # ----------------
-
-    
-
-    for key, val in state_dict.copy().items():
-        val = state_dict.pop(key)
-        if "w12" in key:
-            key = key.replace("w12", "weights_in")
-        if "w3" in key:
-            key = key.replace("w3", "weights_out")
-        state_dict[key] = val
-
-    # load HuggingFace model
-    if image_classifier:
-        model = Dinov2ForImageClassification(config).eval()
-        model.dinov2.load_state_dict(state_dict)
-        model_name_to_classifier_dict_url = {
-            "dinov2_vits14_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_linear_head.pth",
-            "dinov2_vitb14_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_linear_head.pth",
-            "dinov2_vitl14_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_linear_head.pth",
-            "dinov2_vitg14_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_linear_head.pth",
-        }
-        url = model_name_to_classifier_dict_url[model_name]
-        classifier_state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
-        model.classifier.weight = nn.Parameter(classifier_state_dict["weight"])
-        model.classifier.bias = nn.Parameter(classifier_state_dict["bias"])
-    else:
-        model = Dinov2Model(config).eval()
-        model.load_state_dict(state_dict)
-
-    # load image
-    image = prepare_img()
-
-    # preprocess image
-    transformations = transforms.Compose(
-        [
-            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
-                std=IMAGENET_DEFAULT_STD,  # across a large photo dataset.
-            ),
-        ]
-    )
-
-    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
-
-    processor = BitImageProcessor(
-        size={"shortest_edge": 256},
-        resample=PILImageResampling.BICUBIC,
-        image_mean=IMAGENET_DEFAULT_MEAN,
-        image_std=IMAGENET_DEFAULT_STD,
-    )
-    pixel_values = processor(image, return_tensors="pt").pixel_values
-
-    assert torch.allclose(original_pixel_values, pixel_values)
-
-    with torch.no_grad():
-        outputs = model(pixel_values, output_hidden_states=True)
-        original_outputs = original_model(pixel_values)
-
-    # assert values
-    if image_classifier:
-        print("Predicted class:")
-        class_idx = outputs.logits.argmax(-1).item()
-        print(model.config.id2label[class_idx])
-    else:
-        assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape
-        assert torch.allclose(outputs.last_hidden_state[:, 0], original_outputs, atol=1e-3)
-    print("Looks ok!")
+    # TODO
+    processor = ...
+    # inference_test(processor, model)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving image processor to {pytorch_dump_folder_path}")
-        processor.save_pretrained(pytorch_dump_folder_path)
-
-    if push_to_hub:
-        model_name_to_hf_name = {
-            "dinov2_vits14": "dinov2-small",
-            "dinov2_vitb14": "dinov2-base",
-            "dinov2_vitl14": "dinov2-large",
-            "dinov2_vitg14": "dinov2-giant",
-            "dinov2_vits14_1layer": "dinov2-small-imagenet1k-1-layer",
-            "dinov2_vitb14_1layer": "dinov2-base-imagenet1k-1-layer",
-            "dinov2_vitl14_1layer": "dinov2-large-imagenet1k-1-layer",
-            "dinov2_vitg14_1layer": "dinov2-giant-imagenet1k-1-layer",
-        }
-
-        name = model_name_to_hf_name[model_name]
-        model.push_to_hub(f"facebook/{name}")
-        processor.push_to_hub(f"facebook/{name}")
+        # TODO
+        # print(f"Saving image processor to {pytorch_dump_folder_path}")
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
 
-convert_depth_pro_checkpoint("apple/DepthPro", "depth_pro.pt", "yooo_torch_dump", False)
-exit()
+    # TODO
+    # if push_to_hub:
+    #     model.push_to_hub("...")
+    #     processor.push_to_hub("...")
+
+
+"""
+- create files locally using function
+```py
+convert_depth_pro_checkpoint(
+    "apple/DepthPro",
+    "depth_pro.pt",
+    "my_local_dump",
+    False,
+)
+```
+
+- create files locally using command line args
+```cmd
+python transformers/src/transformers/models/depth_pro/convert_depth_pro_to_hf.py \
+    --repo_id "apple/DepthPro" \
+    --filename "depth_pro.pt" \
+    --pytorch_dump_folder_path "my_local_dump" \
+    --push_to_hub 0
+```
+"""
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
     # Required parameters
     parser.add_argument(
         "--repo_id", default="apple/DepthPro", type=str, help="Name of the repo from huggingface you'd like to convert."
@@ -341,4 +294,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_depth_pro_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_depth_pro_checkpoint(
+        args.repo_id,
+        args.filename,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+    )
