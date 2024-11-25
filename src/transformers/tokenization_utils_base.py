@@ -1000,7 +1000,7 @@ class SpecialTokensMixin:
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary and and will be isolated before the tokenization
+        it with indices starting from length of the current vocabulary and will be isolated before the tokenization
         algorithm is applied. Added tokens and tokens from the vocabulary of the tokenization algorithm are therefore
         not treated in the same way.
 
@@ -1690,8 +1690,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 final_message = chat[-1]["content"]
                 if isinstance(final_message, (list, tuple)):
                     final_message = final_message[-1]["text"]
-                final_message = final_message.strip()
-                rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
+                try:
+                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
+                except:  # noqa: E722
+                    # Some chat templates like Llama-3.1 trim messages before rendering, so we must do the same here.
+                    final_message = final_message.strip()
+                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
             rendered.append(rendered_chat)
 
         if not is_batched:
