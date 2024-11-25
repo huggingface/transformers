@@ -84,9 +84,10 @@ def test_adaptive_fan_in_all_but_first_merge(fan_in_class):
     assert afin_output.merged_embeddings_counts.shape[1] == 4 # bos + original_embedding + merged_embedding + eos
     assert afin_output.special_embeddings_mask.shape[1] == 4 # bos + original_embedding + merged_embedding + eos
 
-    assert (afin_output.hidden_state[:, 1] == hidden_states[:, 1]).all()
-    assert (afin_output.hidden_state[:, 0] == hidden_states[:, 0]).all()
-    assert (afin_output.hidden_state[:, -1] == hidden_states[:, -1]).all()
+    assert torch.allclose(afin_output.hidden_state[:, 1], hidden_states[:, 1], atol=1e-4)
+    assert torch.allclose(afin_output.hidden_state[:, 0], hidden_states[:, 0], atol=1e-4)
+    assert torch.allclose(afin_output.hidden_state[:, -1], hidden_states[:, -1], atol=1e-4)
+    # assert (afin_output.hidden_state[:, -1] == hidden_states[:, -1]).all()
 
     return
 

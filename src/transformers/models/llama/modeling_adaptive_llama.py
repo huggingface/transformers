@@ -368,6 +368,7 @@ class AdaptiveFanInGumbel(nn.Module):
         #   [ 1, 2, 2, 1, 0, 0 ],
         # ]
         merged_embeddings_counts = torch.zeros([batch_size, seq_len], device=device)
+        merged_embeddings_counts[:, 0] = 1
 
         # [
         #   [ 1, 1, 1, 1, 1, 0 ],
@@ -376,6 +377,7 @@ class AdaptiveFanInGumbel(nn.Module):
         merged_attention_mask = torch.zeros([batch_size, seq_len], device=device)
 
         aggregated_embeddings_transform = torch.zeros([batch_size, seq_len, seq_len], device=device)
+        aggregated_embeddings_transform[:, 0, 0] = 1
 
         total_initial_num_embeddings = attention_mask.sum(dim=-1).to(torch.long)
 
@@ -515,7 +517,7 @@ class AdaptiveFanOut(nn.Module):
 
                 current_hidden_state = hidden_states[batch_i, seq_len_i]
 
-                restored_idx = restored_seq_len + num_repeats - 1
+                restored_idx = int(restored_seq_len + num_repeats - 1)
                 restored_hidden_states[batch_i, restored_idx] += current_hidden_state
                 restored_seq_len += num_repeats
 
@@ -882,7 +884,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.adaptive_down = nn.ModuleList(
-            [AdaptiveFanIn(config) for _ in range(num_hidden_layers_half)]
+            [AdaptiveFanInGumbel(config) for _ in range(num_hidden_layers_half)]
         )
         self.layers_down = nn.ModuleList(
             [AdaptiveLlamaDecoderLayer(config, layer_idx) for layer_idx in range(num_hidden_layers_half)]
