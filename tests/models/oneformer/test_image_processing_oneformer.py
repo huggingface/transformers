@@ -59,6 +59,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         class_info_file="ade20k_panoptic.json",
         num_text=10,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

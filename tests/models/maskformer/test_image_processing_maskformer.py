@@ -55,6 +55,7 @@ class MaskFormerImageProcessingTester(unittest.TestCase):
         do_reduce_labels=True,
         ignore_index=255,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

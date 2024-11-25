@@ -61,6 +61,7 @@ class Pop2PianoFeatureExtractionTester(unittest.TestCase):
         vocab_size_velocity=2,
         vocab_size_time=100,
     ):
+        super().__init__()
         self.parent = parent
         self.n_bars = n_bars
         self.sample_rate = sample_rate

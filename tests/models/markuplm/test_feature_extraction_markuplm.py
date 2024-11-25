@@ -28,6 +28,7 @@ if is_bs4_available():
 
 class MarkupLMFeatureExtractionTester(unittest.TestCase):
     def __init__(self, parent):
+        super().__init__()
         self.parent = parent
 
     def prepare_feat_extract_dict(self):
