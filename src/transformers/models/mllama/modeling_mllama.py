@@ -24,7 +24,7 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -1618,6 +1618,9 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -1845,7 +1848,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         super().__init__(config.get_text_config())
         self.text_config = config.get_text_config()
         self.vocab_size = self.text_config.vocab_size
-        self.model = MllamaTextModel._from_config(self.text_config, attn_implementation=config._attn_implementation)
+        self.model = MllamaTextModel._from_config(self.text_config)
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)
 
         self.post_init()
