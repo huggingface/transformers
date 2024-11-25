@@ -294,6 +294,7 @@ class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_pt_tf_model_equivalence(self):
         pass
 
+
 @require_tf
 class TFDeBERTaV2ModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="Model not available yet")

@@ -273,6 +273,8 @@ class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
     def test_pt_tf_model_equivalence(self):
         pass
+
+
 @require_tf
 class TFDeBERTaModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="Model not available yet")
