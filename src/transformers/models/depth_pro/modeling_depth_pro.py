@@ -1294,7 +1294,7 @@ class DepthProFOVModel(nn.Module):
 
         last_hidden_state = last_hidden_state + global_features
         fov_output = self.head(last_hidden_state)
-        fov_output = fov_output.reshape(1)
+        fov_output = fov_output.reshape(B)
 
         if not return_dict:
             head_outputs = (fov_output,)
