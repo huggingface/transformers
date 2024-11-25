@@ -348,6 +348,99 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+### Fine-Tuning with torch.compile and Padding-Free Data Collation
+
+In addition to optimizing inference, you can also enhance the training efficiency of large language models by leveraging torch.compile during fine-tuning and using a padding-free data collator. This approach can significantly speed up training and reduce computational overhead.
+
+Here's how you can fine-tune a Llama model using SFTTrainer from the TRL library, with torch_compile enabled and a padding-free data collator:
+
+```
+#################### IMPORTS ###################
+
+import math
+import datasets
+import dataclasses
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments
+)
+from trl import SFTConfig, SFTTrainer, DataCollatorForCompletionOnlyLM
+
+#################### MODEL LOADING WITH FLASH ATTENTION ###################
+
+model_name = "meta-llama/Llama-3.2-1B"
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    attn_implementation="flash_attention_2"  # Enables FlashAttention-2
+)
+tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+
+#################### DATA PREPROCESSING (PADDING-FREE) ###################
+
+response_template = "\n### Label:"
+response_template_ids = tokenizer.encode(
+    response_template, add_special_tokens=False
+)[2:]  # Exclude special tokens
+
+data_collator = DataCollatorForCompletionOnlyLM(
+    response_template_ids=response_template_ids,
+    tokenizer=tokenizer,
+    ignore_index=-100,
+    padding_free=True  # Enables padding-free collation
+)
+
+def format_dataset(example):
+    return {
+        "output": example["output"] + tokenizer.eos_token
+    }
+
+data_files = {"train": "path/to/dataset"}  # Replace with your dataset path
+json_dataset = datasets.load_dataset("json", data_files=data_files)
+formatted_train_dataset = json_dataset["train"].map(format_dataset)
+
+################# TRAINING CONFIGURATION ############################
+
+train_args = TrainingArguments(
+    num_train_epochs=5,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+    gradient_accumulation_steps=4,
+    learning_rate=1e-5,
+    weight_decay=0.0,
+    warmup_ratio=0.03,
+    lr_scheduler_type="cosine",
+    logging_steps=1,
+    include_tokens_per_second=True,
+    save_strategy="epoch",
+    output_dir="output",
+    torch_compile=True,  # Enables torch.compile
+    torch_compile_backend="inductor",
+    torch_compile_mode="default"
+)
+
+# Convert TrainingArguments to SFTConfig
+transformer_train_arg_fields = [x.name for x in dataclasses.fields(SFTConfig)]
+transformer_kwargs = {
+    k: v
+    for k, v in train_args.to_dict().items()
+    if k in transformer_train_arg_fields
+}
+training_args = SFTConfig(**transformer_kwargs)
+
+####################### FINE-TUNING #####################
+
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=formatted_train_dataset,
+    data_collator=data_collator,
+    dataset_text_field="output",
+    args=training_args,
+)
+trainer.train()
+```
+
 ### PyTorch scaled dot product attention
 
 Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and PyTorch's C++ implementation. SDPA chooses the most performant attention algorithm if you're using a CUDA backend. For other backends, SDPA defaults to the PyTorch C++ implementation.

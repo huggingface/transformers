@@ -16,10 +16,12 @@
 
 import unittest
 
+from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, HybridCache, is_torch_available, pipeline
+from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
@@ -76,7 +78,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-    _torch_compile_test_ckpt = "google/gemma-2-9b"
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)
@@ -84,6 +85,10 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
+        pass
+
+    @unittest.skip("Gemma2's forcefully disables sdpa due to softcapping")
+    def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
@@ -194,19 +199,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_sdpa_equivalence(self):
         pass
 
-    def test_eager_attention_loaded_by_default(self):
-        """Gemma 2 + SDPA = inferior results, because of the logit softcapping. Eager is the default."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Usually we enable SDPA by default, but not for Gemma2
-        model = Gemma2Model(config)
-        self.assertTrue(model.config._attn_implementation == "eager")
-
-        # We can still force SDPA
-        config._attn_implementation = "sdpa"
-        model = Gemma2Model(config)
-        self.assertTrue(model.config._attn_implementation == "sdpa")
-
 
 @slow
 @require_torch_gpu
@@ -272,9 +264,30 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
+
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+
+    @require_read_token
+    def test_model_2b_pipeline_bf16_flex_attention(self):
+        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
+        model_id = "google/gemma-2-2b"
+        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1960s and I am trying to find out what the average",
+            "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
@@ -303,6 +316,80 @@ class Gemma2IntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @slow
+    @require_read_token
+    def test_export_static_cache(self):
+        if version.parse(torch.__version__) < version.parse("2.5.0"):
+            self.skipTest(reason="This test requires torch >= 2.5 to run.")
+
+        from transformers.integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
+        EXPECTED_TEXT_COMPLETION = [
+            "Hello I am doing a project for my school and I need to know how to make a program that will take a number",
+        ]
+        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
+            "input_ids"
+        ].shape[-1]
+
+        # Load model
+        device = "cpu"
+        dtype = torch.bfloat16
+        cache_implementation = "static"
+        attn_implementation = "sdpa"
+        batch_size = 1
+        model = AutoModelForCausalLM.from_pretrained(
+            "google/gemma-2-2b",
+            device_map=device,
+            torch_dtype=dtype,
+            attn_implementation=attn_implementation,
+            generation_config=GenerationConfig(
+                use_cache=True,
+                cache_implementation=cache_implementation,
+                max_length=max_generation_length,
+                cache_config={
+                    "batch_size": batch_size,
+                    "max_cache_len": max_generation_length,
+                },
+            ),
+        )
+
+        prompts = ["Hello I am doing"]
+        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        prompt_token_ids = prompt_tokens["input_ids"]
+        max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
+
+        # Static Cache + export
+        exported_program = convert_and_export_with_cache(model)
+        ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
+            exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
+        )
+        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+    @require_read_token
+    def test_model_9b_bf16_flex_attention(self):
+        model_id = "google/gemma-2-9b"
+        EXPECTED_TEXTS = [
+            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)

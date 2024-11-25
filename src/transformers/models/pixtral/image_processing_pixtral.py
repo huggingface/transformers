@@ -86,10 +86,10 @@ class BatchMixFeature(BatchFeature):
                 new_data[k] = [
                     element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
                 ]
-            elif torch.is_floating_point(v):
+            elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
-            elif device is not None:
+            elif isinstance(v, torch.Tensor) and device is not None:
                 new_data[k] = v.to(device=device)
             else:
                 new_data[k] = v
@@ -120,6 +120,7 @@ def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
         isinstance(images, (list, tuple))
         and len(images) > 0
         and isinstance(images[0], (list, tuple))
+        and len(images[0]) > 0
         and is_valid_image(images[0][0])
     ):
         pass

@@ -98,8 +98,8 @@ Take a look at an example now:
 
 There are two fields:
 
-- `audio`: a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file. 
-- `intent_class`: represents the class id of the speaker's intent. 
+- `audio`: a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file.
+- `intent_class`: represents the class id of the speaker's intent.
 
 To make it easier for the model to get the label name from the label id, create a dictionary that maps the label name to an integer and vice versa:
 
@@ -235,7 +235,7 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=feature_extractor,
+...     processing_class=feature_extractor,
 ...     compute_metrics=compute_metrics,
 ... )
 

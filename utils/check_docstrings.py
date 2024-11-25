@@ -335,6 +335,7 @@ OBJECTS_TO_IGNORE = [
     "ImageFeatureExtractionPipeline",
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
+    "ImageTextToTextPipeline",
     "ImageToImagePipeline",
     "ImageToTextPipeline",
     "InformerConfig",

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
-import gc
 import unittest
 
 import requests
@@ -28,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     slow,
@@ -90,7 +90,7 @@ class LlavaNextVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 16,
+            "image_size": 8,
             "patch_size": 4,
             "num_channels": 3,
             "is_training": True,
@@ -123,10 +123,10 @@ class LlavaNextVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 95
-        self.image_grid_pinpoints = [[32, 32]]
-        self.num_image_tokens = 88
+        self.image_grid_pinpoints = [[16, 16]]
+        self.num_image_tokens = 24
         self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return LlavaNextConfig(
@@ -216,12 +216,20 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": LlavaNextForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = LlavaNextVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaNextConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaNextConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -282,6 +290,38 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs through an error with explicit message saying what is wrong
+        when number of images don't match number of image tokens in the text.
+        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            _ = model(**input_dict)  # successfull forward with no modifications
+
+            # remove one image but leave the image token in text
+            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            input_dict["image_sizes"] = input_dict["image_sizes"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**input_dict)
+
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = input_dict["input_ids"][:1]
+            pixel_values = input_dict["pixel_values"][:1]
+            image_sizes = input_dict["image_sizes"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
+            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -316,6 +356,16 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -327,8 +377,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes
@@ -573,6 +622,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
+        processor.num_additional_image_tokens = 1
         inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )
@@ -581,6 +631,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
+        processor.num_additional_image_tokens = None
         inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )
@@ -607,12 +658,14 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
+        processor.num_additional_image_tokens = 1
         inputs_expanded = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2356)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
+        processor.num_additional_image_tokens = None
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 17)
 
