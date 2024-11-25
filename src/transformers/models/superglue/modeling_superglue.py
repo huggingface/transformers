@@ -225,7 +225,6 @@ class SuperGlueKeypointEncoder(nn.Module):
         return hidden_state, all_hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->SuperGlue
 class SuperGlueSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -254,9 +253,9 @@ class SuperGlueSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (self.attention_head_size, self.num_attention_heads)
         x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        return x.permute(0, 3, 1, 2)
 
     def forward(
         self,
@@ -349,7 +348,7 @@ class SuperGlueSelfAttention(nn.Module):
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        context_layer = context_layer.permute(0, 2, 3, 1).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 

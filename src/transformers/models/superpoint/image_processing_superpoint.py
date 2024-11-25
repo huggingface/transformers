@@ -113,7 +113,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
             method.
-        do_grayscale (`bool`, *optional*, defaults to `True`):
+        do_grayscale (`bool`, *optional*, defaults to `False`):
             Whether to convert the image to grayscale. Can be overriden by `do_grayscale` in the `preprocess` method.
     """
 
@@ -125,7 +125,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
-        do_grayscale: bool = True,
+        do_grayscale: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
