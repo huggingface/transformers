@@ -131,7 +131,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         post_processed = processor.post_process_grounded_object_detection(grounding_dino_output)
 
         self.assertEqual(len(post_processed), self.batch_size)
-        self.assertEqual(list(post_processed[0].keys()), ["scores", "labels", "boxes"])
+        self.assertEqual(list(post_processed[0].keys()), ["scores", "labels", "boxes", "text_labels"])
         self.assertEqual(post_processed[0]["boxes"].shape, (self.num_queries, 4))
         self.assertEqual(post_processed[0]["scores"].shape, (self.num_queries,))
 
