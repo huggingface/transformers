@@ -352,6 +352,44 @@ class AdaptiveFanIn(nn.Module):
         return res
 
 
+class NoOpFanIn(nn.Module):
+    def __init__(self, config: LlamaConfig):
+        super().__init__()
+
+    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor, special_embeddings_mask: torch.Tensor, merging_log_probas: torch.Tensor=None, inverted_merging_map = None) -> AdaptiveFanInOutput:
+        res = AdaptiveFanInOutput(
+            hidden_state=hidden_state,
+            attention_mask=attention_mask,
+            merged_embeddings_counts=attention_mask,
+            special_embeddings_mask=special_embeddings_mask,
+            merging_map=None,
+        )
+
+        return res
+
+def scaled_gumbel_softmax(
+        logits,
+        tau: float = 1,
+        scale = 1.0,
+        dim: int = -1,
+    ):
+    gumbels = (
+        -torch.empty_like(logits, memory_format=torch.legacy_contiguous_format)
+        .exponential_()
+        .log()
+    )  # ~Gumbel(0,1)
+    gumbels = (logits + gumbels) / tau  # ~Gumbel(logits,tau)
+    y_soft = gumbels.softmax(dim) * scale
+
+    # Straight through.
+    index = y_soft.max(dim, keepdim=True)[1]
+    y_hard = torch.zeros_like(
+        logits, memory_format=torch.legacy_contiguous_format
+    ).scatter_(dim, index, 1.0)
+    ret = y_hard - y_soft.detach() + y_soft
+
+    return ret
+
 class AdaptiveFanInGumbel(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
@@ -443,20 +481,42 @@ class AdaptiveFanInGumbel(nn.Module):
 
         if merging_log_probas is None:
             merging_log_probas = self.fan_in_mlp(attn_output_pairs)
+            if merging_log_probas.isnan().any() or not merging_log_probas.isfinite().all():
+                print("found nan merging_log_probas!")
+                breakpoint()
+                raise Exception("found nan merging_log_probas!")
+
+            # merge all by default
+            merging_log_probas_bias = torch.ones_like(merging_log_probas) * 10
+            merging_log_probas_bias[:, :, 0] = 0
+            merging_log_probas += merging_log_probas_bias
         else:
             merging_log_probas_stub = torch.zeros([batch_size, 1, 2], device=hidden_state.device) + 1e-6
             merging_log_probas = torch.cat([ merging_log_probas, merging_log_probas_stub ], dim=1)
 
+        if merging_log_probas.isnan().any() or not merging_log_probas.isfinite().all():
+            print("found nan merging_log_probas!")
+            breakpoint()
+            raise Exception("found nan merging_log_probas!")
+
         # OHE: [ bs, seq_len, 2 ]
-        merging_map = nn.functional.gumbel_softmax(merging_log_probas, hard=True)
-        merging_map[:, -1, 0] = 1
-        merging_map[:, -1, 1] = 0
+        merging_map = scaled_gumbel_softmax(merging_log_probas, scale=1000, dim=-1)
+        # merging_map[:, -1, 0] = 1
+        # merging_map[:, -1, 1] = 0
         merging_map[special_embeddings_mask.bool()] = torch.tensor([1., 0.], device=merging_map.device)
+        merging_map[~attention_mask.bool()] = 0
+        merging_map.sum(dim=-1)
+        # print("attention_mask", attention_mask.sum())
+        # print("merged tokens:", merging_map[:, :, 1].sum())
 
         # merging_log_probas[special_embeddings_mask[:, :-1]] = 0
 
         # [ bs, new_seq_len, seq_len ]
         merged_embeddings_transform, merged_embeddings_counts, merged_attention_mask = self.generate_merges_transform(merging_map, attention_mask)
+        if merged_embeddings_transform.isnan().any() or not merged_embeddings_transform.isfinite().all():
+            print("found nan merged_embeddings_transform!")
+            breakpoint()
+            raise Exception("found nan merged_embeddings_transform!")
 
         merged_special_embeddings_mask = torch.zeros([batch_size, merged_embeddings_transform.shape[1]], device=hidden_state.device)
         merged_special_embeddings_mask[:, 0] = 1
@@ -465,6 +525,15 @@ class AdaptiveFanInGumbel(nn.Module):
         # [ bs, new_seq_len, emb_dim ] = [ bs, new_seq_len, seq_len ] @ [ bs, seq_len, emb_dim ]
         merged_attention_outputs = torch.bmm(merged_embeddings_transform, hidden_state)
         merged_attention_outputs = merged_attention_outputs / (merged_embeddings_counts.unsqueeze(-1) + 1e-6)
+
+        sum_merged_tokens = merged_embeddings_counts[(merged_embeddings_counts > 1)].sum()
+        # print("sum_merged_tokens", sum_merged_tokens)
+        # breakpoint()
+
+        if merged_attention_outputs.isnan().any():
+            print("found nan merged_attention_outputs!")
+            breakpoint()
+            raise Exception("found nan merged_attention_outputs!")
 
         res = AdaptiveFanInOutput(
             hidden_state=merged_attention_outputs,
@@ -1078,7 +1147,7 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         all_loop_down_attention_mask.append(loop_down_attention_mask)
 
         #     print("Total count of merged tokens:", [ (x > 1).sum() for x in all_loop_down_merged_embeddings_counts if x is not None ])
-        mean_merged_tokens = sum([ (x > 1).sum() for x in all_loop_down_merged_embeddings_counts if x is not None ]).item()
+        mean_merged_tokens = sum([ x[x > 1].sum() for x in all_loop_down_merged_embeddings_counts if x is not None ]).item()
 
         # all_loop_down_causal_mask.append(loop_down_causal_mask)
         # all_loop_down_position_embeddings.append(loop_down_position_embeddings)
@@ -1414,6 +1483,9 @@ class AdaptiveLlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
+            if loss.isnan().any():
+                print("Found nan loss!")
+                breakpoint()
 
         if not return_dict:
             output = (logits,) + outputs[1:]

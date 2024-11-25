@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import dataclass, field
 
 import torch
 
@@ -21,7 +22,7 @@ from transformers import TrainingArguments
 from accelerate.tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 
 class SequentialNumbersDataset():
-    def __init__(self, length=1000, num_numbers=100, max_sequence_length=10):
+    def __init__(self, length=10000, num_numbers=100, max_sequence_length=20):
         self.length = length
         self.num_numbers = num_numbers
         self.max_sequence_length = max_sequence_length
@@ -56,7 +57,7 @@ class SequentialNumbersDataset():
 
 
 class AdaptiveLlamaTrainer(Trainer):
-    def compute_loss(self, model: AdaptiveLlamaForCausalLM, inputs, return_outputs=False, log_metrics=True):
+    def compute_loss(self, model: AdaptiveLlamaForCausalLM, inputs, return_outputs=False):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
@@ -70,60 +71,66 @@ class AdaptiveLlamaTrainer(Trainer):
             attention_mask=inputs['attention_mask'],
         )
 
-        inverted_merging_map = [ 1 - x for x in outputs.fan_in_merging_maps]
-        # print([ x.shape for x in inverted_merging_map ])
-
-        outputs_inversed = model.forward(
-            input_ids=inputs['input_ids'],
-            labels=inputs['labels'],
-            special_embeddings_mask=inputs['special_embeddings_mask'],
-            attention_mask=inputs['attention_mask'],
-            use_cache=False,
-            inverted_merging_map=inverted_merging_map
-        )
-
-        # TODO Lambda for inversed outputs?
-        outputs_inversed_loss = outputs_inversed.loss / 2
-        loss = outputs.loss + outputs_inversed_loss + 0.1 * sum([x.fan_in_mlp.weight.norm(2) for x in model.model.adaptive_down])
+        loss = outputs.loss # + 0.01 * sum([x.fan_in_mlp.weight.norm(2) for x in model.model.adaptive_down])
         # loss = outputs.loss # + (outputs_inversed.loss / 10)
 
-        log_info = {
-            "debug/straight_loss": loss.detach().item(),
-            "debug/inverse_loss": outputs_inversed_loss.detach().item(),
-            "debug/mean_merged_tokens": outputs.mean_merged_tokens,
-        }
-        self.log(log_info)
+        assert ~ loss.isnan().any(), 'loss cant be none'
+
+        if not return_outputs:
+            log_info = {
+                "debug/straight_loss": loss.detach().item(),
+                # "debug/inverse_loss": outputs_inversed_loss.detach().item(),
+                "debug/mean_merged_tokens": outputs.mean_merged_tokens,
+                "debug/total_tokens": inputs['attention_mask'].sum().item(),
+            }
+            self.log(log_info)
 
         return (loss, outputs) if return_outputs else loss
 
     def training_step(self, model: AdaptiveLlamaForCausalLM, *args, **kwargs):
         result = super().training_step(model, *args, **kwargs)
 
-        merger_mpl_grad = model.model.adaptive_down[0].fan_in_mlp.weight.grad.norm(2)
-
-        assert merger_mpl_grad is not None, "merger_mpl_grad is expected to be not none"
-
         # if merger_mpl_grad > 5:
         #     breakpoint()
 
         extra_log = dict()
-        extra_log["train/merger_mpl_grad_norm"] = merger_mpl_grad.detach().item()
+        for i, adown in enumerate(model.model.adaptive_down):
+            merger_mpl_grad = adown.fan_in_mlp.weight.grad.norm(2).item()
+            assert merger_mpl_grad is not None, "merger_mpl_grad is expected to be not none"
+            extra_log[f"merger_mpl_grad_norm_{i}"] = merger_mpl_grad
 
         self.log(extra_log)
 
         return result
 
 
+@dataclass
+class AdaptiveTrainingArguments(TrainingArguments):
+    output_dir: str = field(default="llama_for_sequential_numbers",)
+    learning_rate: float = field(default=1e-4)
+    warmup_steps: int = field(default=100)
+    per_device_train_batch_size: int = field(default=32)
+    per_device_eval_batch_size: int = field(default=64)
+    num_train_epochs: int = field(default=50)
+    weight_decay: float = field(default=0.01)
+    eval_strategy: str = field(default="epoch")
+    save_strategy: str = field(default="epoch")
+    push_to_hub: bool = field(default=False)
+    optim: str = field(default="adamw_torch")
+    report_to: str = field(default="wandb")
+    logging_steps: int = field(default=5)
+    dataloader_drop_last: bool = field(default=True)
+
 
 if __name__ == "__main__":
-    snd = SequentialNumbersDataset(length=1000, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
+    snd = SequentialNumbersDataset(length=20000, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
     snd_eval = SequentialNumbersDataset(length=100, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
 
     llama_config = LlamaConfig(
         hidden_size=128,
         vocab_size=VOCAB_SIZE,
         intermediate_size=256,
-        num_hidden_layers=2,
+        num_hidden_layers=8,
         num_attention_heads=8,
         max_position_embeddings=MAX_SEQ_LEN,
         use_cache=False,
@@ -135,21 +142,9 @@ if __name__ == "__main__":
 
     print("num model parameters:", sum(p.numel() for p in model.parameters()))
 
-    training_args = TrainingArguments(
-        output_dir="llama_for_sequential_numbers",
-        learning_rate=1e-4,
-        warmup_steps=100,
-        per_device_train_batch_size=32,
-        per_device_eval_batch_size=8,
-        num_train_epochs=20,
-        weight_decay=0.01,
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        push_to_hub=False,
-        optim="adamw_torch",
-        report_to="wandb",
-        logging_steps=5,
-    )
+    hf_parser = transformers.HfArgumentParser(AdaptiveTrainingArguments)
+    (training_args,) = hf_parser.parse_args_into_dataclasses()
+
 
     trainer = AdaptiveLlamaTrainer(
         model,
@@ -168,4 +163,8 @@ if __name__ == "__main__":
         project_name="llama_for_sequential_numbers",
     )
 
-    trainer.train()
+    with torch.autograd.set_detect_anomaly(True):
+        trainer.train(
+            resume_from_checkpoint=None,
+            # resume_from_checkpoint="llama_for_sequential_numbers/checkpoint-1170"
+        )
