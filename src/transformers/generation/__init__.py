@@ -197,7 +197,7 @@ if TYPE_CHECKING:
         SynthIDTextWatermarkingConfig,
         WatermarkingConfig,
     )
-    from .streamers import TextIteratorStreamer, TextStreamer
+    from .streamers import AsyncTextIteratorStreamer, TextIteratorStreamer, TextStreamer
 
     try:
         if not is_torch_available():
