@@ -5082,6 +5082,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             loss_type = "ForCausalLM"
         return LOSS_MAPPING[loss_type]
+    
+
+    @property
+    def compiled_forward(self):
+        if not hasattr(self, "_compiled_forward"):
+            self._compiled_forward = torch.compile(self._call_impl, mode="reduce-overhead", fullgraph=True)
+        return self._compiled_forward
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
