@@ -24,6 +24,7 @@ _import_structure = {
         "GenerationMode",
         "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
+        "CompileConfig",
     ],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }

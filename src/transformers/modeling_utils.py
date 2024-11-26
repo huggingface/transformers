@@ -43,7 +43,7 @@ from torch.utils.checkpoint import checkpoint
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import GenerationConfig, GenerationMixin, CompileConfig
+from .generation import CompileConfig, GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401

@@ -126,6 +126,7 @@ _import_structure = {
         "TextIteratorStreamer",
         "TextStreamer",
         "WatermarkingConfig",
+        "CompileConfig",
     ],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],

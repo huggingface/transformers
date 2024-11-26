@@ -20,7 +20,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -771,7 +771,9 @@ class GenerationConfig(PushToHubMixin):
                         UserWarning,
                     )
         if not isinstance(self.compile_config, CompileConfig):
-            raise ValueError(f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`.")
+            raise ValueError(
+                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`."
+            )
 
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
@@ -1552,6 +1554,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             skip_first_ngram_calls=self.skip_first_ngram_calls,
             debug_mode=self.debug_mode,
         )
+
 
 @dataclass
 class CompileConfig(object):
