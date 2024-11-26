@@ -193,6 +193,9 @@ def _post_process_boxes_for_image(
     scores_per_image = scores_per_image[keep]
     labels_per_image = labels_per_image[keep]
 
+    # Clip to image size
+    boxes_per_image = clip_boxes(boxes_per_image, image_size)
+
     return boxes_per_image, scores_per_image, labels_per_image
 
 
