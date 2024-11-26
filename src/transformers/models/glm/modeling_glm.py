@@ -171,12 +171,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
     # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]
-    q, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
     # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
 
     # Concatenate back to full shape
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
@@ -713,7 +713,6 @@ class GlmModel(GlmPreTrainedModel):
         self.gradient_checkpointing = False
         if getattr(config, "pretraining_tp", 1) != 1:
             logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
-        self.partial_rotary_factor = config.partial_rotary_factor
 
         # Initialize weights and apply final processing
         self.post_init()
