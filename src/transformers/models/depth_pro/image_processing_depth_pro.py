@@ -14,6 +14,7 @@
 # limitations under the License.
 """Image processor class for DepthPro."""
 
+import functools
 from typing import Dict, List, Optional, Union
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -33,7 +34,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments,
+    pil_torch_interpolation_mapping,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
@@ -62,7 +63,6 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -99,6 +99,9 @@ class DepthProImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
+        antialias (`bool`, *optional*, defaults to `False`):
+            Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+            bilinear or bicubic modes and it is ignored otherwise.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
@@ -123,6 +126,7 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
+        antialias: bool = False,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -138,15 +142,17 @@ class DepthProImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.size = size
         self.resample = resample
+        self.antialias = antialias
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def resize(
         self,
-        image: np.ndarray,
+        images: List[np.ndarray],
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
+        antialias: bool = False,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -155,12 +161,15 @@ class DepthProImageProcessor(BaseImageProcessor):
         Resize an image to `(size["height"], size["width"])`.
 
         Args:
-            image (`np.ndarray`):
-                Image to resize.
+            images (`List[np.ndarray]`):
+                Images to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            antialias (`bool`, *optional*, defaults to `False`):
+				Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+				bilinear or bicubic modes and it is ignored otherwise.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
@@ -175,41 +184,49 @@ class DepthProImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         Returns:
-            `np.ndarray`: The resized image.
+            `np.ndarray`: The resized images.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         output_size = (size["height"], size["width"])
 
-        # ic(image.dtype)
-        # ic(type(image))
-        # ic(image.shape)
-        # ic(image.mean())
-        # ic(image.std())
-        # ic(image.min())
-        # ic(image.max())
-        # ic(output_size)
-        # ic(resample)
-        # ic(data_format)
-        # ic(input_data_format)
-        # # exit()
+        images = np.stack(images)
+        images = torch.from_numpy(images)
 
-        # return torch.nn.functional.interpolate(
-        #     input=torch.from_numpy(image),
-        #     size=output_size,
-        #     mode=resample,
-        #     align_corners=True,
-        # )
-
-        return resize(
-            image,
+        return torch.nn.functional.interpolate(
+            # input should be (B, C, H, W)
+            input=images,
             size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
+            # mode=pil_torch_interpolation_mapping[resample],
+            mode="bilinear",
+            antialias=antialias,
+        ).numpy()
+
+    def _validate_input_arguments(
+        self,
+        do_resize: bool,
+        size: Dict[str, int],
+        resample: PILImageResampling,
+        antialias: bool,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Union[float, List[float]],
+        image_std: Union[float, List[float]],
+        data_format: Union[str, ChannelDimension],
+    ):
+        if data_format != ChannelDimension.FIRST:
+            raise ValueError("Only channel first data format is currently supported.")
+
+        if do_resize and None in (size, resample, antialias):
+            raise ValueError("Size, resample and antialias must be specified if do_resize is True.")
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+
+        if do_normalize and None in (image_mean, image_std):
+            raise ValueError("Image mean and standard deviation must be specified if do_normalize is True.")
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -218,6 +235,7 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
+        antialias: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -242,6 +260,9 @@ class DepthProImageProcessor(BaseImageProcessor):
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
                 `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
                 an effect if `do_resize` is set to `True`.
+            antialias (`bool`, *optional*, defaults to `False`):
+				Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+				bilinear or bicubic modes and it is ignored otherwise.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -275,6 +296,7 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
+        antialias = antialias if antialias is not None else self.antialias
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -289,15 +311,17 @@ class DepthProImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_preprocess_arguments(
+        self._validate_input_arguments(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            antialias=antialias,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+            data_format=data_format,
         )
 
         # All transformations expect numpy arrays.
@@ -312,15 +336,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
-
-        # TODO
-        # depth-pro image preprocessing scales the image before resizing it
-
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size_dict, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
 
         if do_rescale:
             images = [
@@ -337,6 +352,11 @@ class DepthProImageProcessor(BaseImageProcessor):
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
+
+		# depth-pro scales the image before resizing it
+        # uses torch interpolation which requires ChannelDimension.FIRST
+        if do_resize:
+            images = self.resize(images, size=size_dict, resample=resample, antialias=antialias)
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
