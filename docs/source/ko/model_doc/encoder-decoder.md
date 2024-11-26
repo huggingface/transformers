@@ -96,7 +96,7 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
 >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
 ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
 ... )
->>> # This is only for copying some specific attributes of this particular model.
+>>> # 이 부분은 특정 모델의 구체적인 세부사항을 복사할 때에만 사용합니다.
 >>> model.config = _model.config
 ```
 
