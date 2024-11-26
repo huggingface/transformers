@@ -590,7 +590,6 @@ class GenerationConfig(PushToHubMixin):
         pos_int_args = [
             "top_k",
             "bos_token_id",
-            "forced_bos_token_id",
             "max_new_tokens",
             "min_new_tokens",
             "max_length",
@@ -618,6 +617,7 @@ class GenerationConfig(PushToHubMixin):
             "forced_eos_token_id",
             "eos_token_id",
             "decoder_start_token_id",
+            "forced_bos_token_id",
         ]
 
         nested_lists_args = ["bad_words_ids", "force_words_ids"]
@@ -743,6 +743,28 @@ class GenerationConfig(PushToHubMixin):
                         raise ValueError(
                             f"`{arg}` must be either a `List[List[List[int]]]` or `List[List[int]]`, but got {value}."
                         )
+        if self.sequence_bias is not None:
+            if (
+                not isinstance(self.sequence_bias, dict)
+                and not isinstance(self.sequence_bias, list)
+                or len(self.sequence_bias) == 0
+            ):
+                raise ValueError(
+                    f"`sequence_bias` has to be a non-empty dictionary, or non-empty list of lists but is {self.sequence_bias}."
+                )
+            if isinstance(self.sequence_bias, dict) and any(
+                not isinstance(sequence_ids, tuple) for sequence_ids in self.sequence_bias.keys()
+            ):
+                raise ValueError(f"`sequence_bias` has to be a dict with tuples as keys, but is {self.sequence_bias}.")
+            if isinstance(self.sequence_bias, dict) and any(
+                any((not isinstance(token_id, int) or token_id < 0) for token_id in sequence_ids)
+                or len(sequence_ids) == 0
+                for sequence_ids in self.sequence_bias.keys()
+            ):
+                raise ValueError(
+                    f"Each key in `sequence_bias` has to be a non-empty tuple of positive integers, but is "
+                    f"{self.sequence_bias}."
+                )
 
         # Validation of attribute relations:
         fix_location = ""
