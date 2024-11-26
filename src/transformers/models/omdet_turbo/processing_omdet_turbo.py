@@ -131,7 +131,7 @@ def _post_process_boxes_for_image(
     threshold: float,
     nms_threshold: float,
     max_num_det: Optional[int] = None,
-) -> dict:
+) -> Tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Filter predicted results using given thresholds and NMS.
 
@@ -156,11 +156,10 @@ def _post_process_boxes_for_image(
             The maximum number of detections to return. Default is None.
 
     Returns:
-        dict: A dictionary the following keys:
+        Tuple: A tuple the following:
             "boxes" (Tensor): A tensor of shape (num_filtered_objects, 4), containing the predicted boxes in (x1, y1, x2, y2) format.
             "scores" (Tensor): A tensor of shape (num_filtered_objects,), containing the predicted confidence scores for each detection.
-            "classes" (List[str]): A list of strings, where each string is the predicted class for the
-                corresponding detection
+            "labels" (Tensor): A tensor of ids, where each id is the predicted class id for the corresponding detection
     """
 
     # Filter by max number of detections
@@ -395,9 +394,7 @@ class OmDetTurboProcessor(ProcessorMixin):
                 nms_threshold=nms_threshold,
                 max_num_det=max_num_det,
             )
-            result = _dict_with_warning(
-                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
-            )
+            result = _dict_with_warning({"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None})
             results.append(result)
 
         # Add text labels
