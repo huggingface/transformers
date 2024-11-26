@@ -197,6 +197,7 @@ if TYPE_CHECKING:
         GenerationMode,
         SynthIDTextWatermarkingConfig,
         WatermarkingConfig,
+        CompileConfig,
     )
     from .streamers import TextIteratorStreamer, TextStreamer
 
