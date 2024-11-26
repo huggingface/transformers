@@ -16,7 +16,7 @@
 
 from copy import deepcopy
 
-from ...modeling_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING
 
 
