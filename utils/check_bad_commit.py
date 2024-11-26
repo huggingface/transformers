@@ -59,7 +59,7 @@ elif f"{target_test} FAILED" in result.stdout:
 exit(0)
 """
 
-    with open("target_script..py", "w") as fp:
+    with open("target_script.py", "w") as fp:
         fp.write(script.strip())
 
 
