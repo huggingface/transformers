@@ -85,6 +85,12 @@ couch: 0.90 [0.45, 0.53, 640.44, 475.54]
     - preprocess
     - post_process_object_detection
 
+## RelationDetrImageProcessorFast
+
+[[autodoc]] RelationDetrImageProcessorFast
+    - preprocess
+    - post_process_object_detection
+
 ## RelationDetrModel
 
 [[autodoc]] RelationDetrModel
