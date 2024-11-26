@@ -1575,23 +1575,14 @@ class CompileConfig(object):
             A dictionary of options to pass to the backend.
     """
 
-    def __init__(
-        self,
-        fullgraph: bool = True,
-        dynamic: Optional[bool] = None,
-        backend: Union[str, Callable] = "inductor",
-        mode: str = "reduce-overhead",
-        options: Optional[dict] = None,
-    ):
-        self.fullgraph = fullgraph
-        self.dynamic = dynamic
-        self.backend = backend
-        self.mode = mode
-        self.options = options
+    fullgraph: bool = True
+    dynamic: Optional[bool] = None
+    backend: Union[str, Callable] = "inductor"
+    mode: str = "reduce-overhead"
+    options: Optional[dict] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
         """
-        output = copy.deepcopy(self.__dict__)
-        return output
+        return copy.deepcopy(self.__dict__)
