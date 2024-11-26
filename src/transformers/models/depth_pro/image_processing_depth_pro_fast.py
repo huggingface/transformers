@@ -154,7 +154,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         elif do_normalize:
             transforms.append(Normalize(image_mean, image_std))
 
-		# depth-pro scales the image before resizing it
+        # depth-pro scales the image before resizing it
         if do_resize:
             transforms.append(
                 Resize(
@@ -229,9 +229,9 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
                 `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
                 an effect if `do_resize` is set to `True`.
-			antialias (`bool`, *optional*, defaults to `False`):
-				Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-				bilinear or bicubic modes and it is ignored otherwise.
+            antialias (`bool`, *optional*, defaults to `False`):
+                Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+                bilinear or bicubic modes and it is ignored otherwise.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -308,8 +308,9 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_depth_estimation(
         self,
-        predicted_depth,
-        fov=None,
+        predicted_depths,
+        fovs=None,
+        target_sizes=None,
     ) -> List[Dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
@@ -328,35 +329,46 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         """
         requires_backends(self, "torch")
 
-        self.size = {
-            'width': 3024,
-            'height': 2268,
-        }
-        W = self.size['width']
-        H = self.size['height']
-
-        if (fov is not None) and (len(predicted_depth) != len(fov)):
+        if (fovs is not None) and (len(predicted_depths) != len(fovs)):
+            raise ValueError(
+                "Make sure that you pass in as many fov values as the batch dimension of the predicted depth"
+            )
+        if (target_sizes is not None) and (len(predicted_depths) != len(target_sizes)):
             raise ValueError(
                 "Make sure that you pass in as many fov values as the batch dimension of the predicted depth"
             )
 
-        output_depths = []
-        output_fovs = None if fov is None else []
-        fov = [None] * len(predicted_depth) if fov is None else fov
-        for depth, fov_value in zip(predicted_depth, fov):
+        outputs = {
+            "predicted_depth": [],
+            "fov": [] if fovs is not None else None
+        }
 
-            if fov_value is not None:
-                fov_value = 0.5 * W / torch.tan(0.5 * torch.deg2rad(fov_value))
-                depth = depth * W / fov_value
+        fovs = [None] * len(predicted_depths) if fovs is None else fovs
+        target_sizes = [None] * len(predicted_depths) if target_sizes is None else target_sizes
 
-            depth = torch.nn.functional.interpolate(
-                depth.unsqueeze(0).unsqueeze(1), size=(H, W), mode="bilinear", align_corners=False
-            ).squeeze()
+        for predicted_depth, fov, target_size in zip(predicted_depths, fovs, target_sizes):
 
-            if fov_value is not None:
-                depth = 1.0 / torch.clamp(depth, min=1e-4, max=1e4)
-                output_fovs.append(fov_value)
+            if target_size is not None:
 
-            output_depths.append(depth)
+                # scale image w.r.t fov
+                if fov is not None:
+                    width = target_size[1]
+                    fov = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov))
+                    predicted_depth = predicted_depth * width / fov
+                    outputs["fov"].append(fov)
 
-        return output_depths, output_fovs
+                # interpolate
+                predicted_depth = torch.nn.functional.interpolate(
+                    # input should be (B, C, H, W)
+                    input=predicted_depth.unsqueeze(0).unsqueeze(1),
+                    size=target_size,
+                    mode=pil_torch_interpolation_mapping[self.resample].value,
+                    antialias=self.antialias,
+                ).squeeze()
+
+            # inverse the depth
+            predicted_depth = 1.0 / torch.clamp(predicted_depth, min=1e-4, max=1e4)
+
+            outputs["predicted_depth"].append(predicted_depth)
+
+        return outputs

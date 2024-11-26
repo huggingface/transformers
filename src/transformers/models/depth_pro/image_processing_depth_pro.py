@@ -14,12 +14,12 @@
 # limitations under the License.
 """Image processor class for DepthPro."""
 
-import functools
 from typing import Dict, List, Optional, Union
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from icecream import ic
+
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
@@ -186,6 +186,8 @@ class DepthProImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized images.
         """
+        requires_backends(self, "torch")
+
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
@@ -198,10 +200,9 @@ class DepthProImageProcessor(BaseImageProcessor):
             # input should be (B, C, H, W)
             input=images,
             size=output_size,
-            # mode=pil_torch_interpolation_mapping[resample],
-            mode="bilinear",
+            mode=pil_torch_interpolation_mapping[resample].value,
             antialias=antialias,
-        ).numpy()
+        )
 
     def _validate_input_arguments(
         self,
@@ -357,14 +358,16 @@ class DepthProImageProcessor(BaseImageProcessor):
         # uses torch interpolation which requires ChannelDimension.FIRST
         if do_resize:
             images = self.resize(images, size=size_dict, resample=resample, antialias=antialias)
+            images = images.numpy()
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_depth_estimation(
         self,
-        predicted_depth,
-        fov=None,
+        predicted_depths,
+        fovs=None,
+        target_sizes=None,
     ) -> List[Dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
@@ -383,35 +386,45 @@ class DepthProImageProcessor(BaseImageProcessor):
         """
         requires_backends(self, "torch")
 
-        self.size = {
-            'width': 3024,
-            'height': 2268,
-        }
-        W = self.size['width']
-        H = self.size['height']
-
-        if (fov is not None) and (len(predicted_depth) != len(fov)):
+        if (fovs is not None) and (len(predicted_depths) != len(fovs)):
+            raise ValueError(
+                "Make sure that you pass in as many fov values as the batch dimension of the predicted depth"
+            )
+        if (target_sizes is not None) and (len(predicted_depths) != len(target_sizes)):
             raise ValueError(
                 "Make sure that you pass in as many fov values as the batch dimension of the predicted depth"
             )
 
-        output_depths = []
-        output_fovs = None if fov is None else []
-        fov = [None] * len(predicted_depth) if fov is None else fov
-        for depth, fov_value in zip(predicted_depth, fov):
+        outputs = {
+            "predicted_depth": [],
+            "fov": [] if fovs is not None else None
+        }
 
-            if fov_value is not None:
-                fov_value = 0.5 * W / torch.tan(0.5 * torch.deg2rad(fov_value))
-                depth = depth * W / fov_value
+        fovs = [None] * len(predicted_depths) if fovs is None else fovs
+        target_sizes = [None] * len(predicted_depths) if target_sizes is None else target_sizes
 
-            depth = torch.nn.functional.interpolate(
-                depth.unsqueeze(0).unsqueeze(1), size=(H, W), mode="bilinear", align_corners=False
-            ).squeeze()
+        for predicted_depth, fov, target_size in zip(predicted_depths, fovs, target_sizes):
 
-            if fov_value is not None:
-                depth = 1.0 / torch.clamp(depth, min=1e-4, max=1e4)
-                output_fovs.append(fov_value)
+            if target_size is not None:
 
-            output_depths.append(depth)
+                # scale image w.r.t fov
+                if fov is not None:
+                    width = target_size[1]
+                    fov = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov))
+                    predicted_depth = predicted_depth * width / fov
+                    outputs["fov"].append(fov)
 
-        return output_depths, output_fovs
+                # interpolate
+                predicted_depth = self.resize(
+                    predicted_depth.unsqueeze(0).unsqueeze(1),
+                    size=target_size,
+                    resample=self.resample,
+                    antialias=self.antialias
+                ).squeeze()
+
+            # inverse the depth
+            predicted_depth = 1.0 / torch.clamp(predicted_depth, min=1e-4, max=1e4)
+
+            outputs["predicted_depth"].append(predicted_depth)
+
+        return outputs
