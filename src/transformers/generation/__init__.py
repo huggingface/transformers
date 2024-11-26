@@ -193,11 +193,11 @@ else:
 if TYPE_CHECKING:
     from .configuration_utils import (
         BaseWatermarkingConfig,
+        CompileConfig,
         GenerationConfig,
         GenerationMode,
         SynthIDTextWatermarkingConfig,
         WatermarkingConfig,
-        CompileConfig,
     )
     from .streamers import TextIteratorStreamer, TextStreamer
 
