@@ -102,7 +102,7 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
 
 ## 학습[[Training]]
 
-모델이 생성된 후에는 BARY, T5 또는 기타 인코더-디코더 모델과 유사한 방식으로 미세 조정(fine-tuning)할 수 있습니다.
+모델이 생성된 후에는 BART, T5 또는 기타 인코더-디코더 모델과 유사한 방식으로 미세 조정(fine-tuning)할 수 있습니다.
 보시다시피, 손실(loss)을 계산하려면 단 2개의 입력만 필요합니다: `input_ids`(입력 시퀀스를 인코딩한 `input_ids`)와 `labels`(목표 시퀀스를 인코딩한 `input_ids`).
 
 ```python
