@@ -279,7 +279,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
 
-
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     """
     `CandidateGenerator` class to be used for Universal Assisted Generation (UAD): assisted generation with different tokenizers
