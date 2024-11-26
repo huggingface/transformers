@@ -261,16 +261,17 @@ class AsyncTextIteratorStreamer(TextStreamer):
         >>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
-        >>> streamer = AsyncTextIteratorStreamer(tok)
 
         >>> # Run the generation in a separate thread, so that we can fetch the generated text in a non-blocking way.
         >>> async def main():
+        ...   # Important: AsyncTextIteratorStreamer must be initialized inside a coroutine!
+        ...   streamer = AsyncTextIteratorStreamer(tok)
         ...   generation_kwargs = dict(inputs, streamer=streamer, max_new_tokens=20)
         ...   thread = Thread(target=model.generate, kwargs=generation_kwargs)
         ...   thread.start()
         ...   generated_text = ""
         ...   async for new_text in streamer:
-        ...       generated_text += new_text
+        ...     generated_text += new_text
         >>>   generated_text
         >>> asyncio.run(main())
         'An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,'
