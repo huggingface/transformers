@@ -1930,6 +1930,11 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         # extract higher features matching proto_levels
         multi_level_feats = self.backbone(pixel_values)
 
+        # in case some backbone (e.g., swin in timm) return [N, H, W, C] format, convert it to [N, C, H, W]
+        multi_level_channels = self.backbone.intermediate_channel_sizes
+        if all(feat.shape[-1] == channel for feat, channel in zip(multi_level_feats, multi_level_channels)):
+            multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
+
         # apply neck to get multi_level_feats
         multi_level_feats = self.neck(multi_level_feats)
 
