@@ -73,7 +73,7 @@ rendered properly in your Markdown viewer.
 ... )
 >>> input_ids = tokenizer(ARTICLE_TO_SUMMARIZE, return_tensors="pt").input_ids
 
->>> # autoregressively generate summary (uses greedy decoding by default)
+>>> # 자기회귀적으로 요약 생성 (기본적으로 그리디 디코딩 사용)
 >>> generated_ids = model.generate(input_ids)
 >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 >>> print(generated_text)
