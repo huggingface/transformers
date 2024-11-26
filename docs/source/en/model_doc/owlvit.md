@@ -93,16 +93,12 @@ A demo notebook on using OWL-ViT for zero- and one-shot (image-guided) object de
     - post_process_object_detection
     - post_process_image_guided_detection
 
-## OwlViTFeatureExtractor
-
-[[autodoc]] OwlViTFeatureExtractor
-    - __call__
-    - post_process
-    - post_process_image_guided_detection
-
 ## OwlViTProcessor
 
 [[autodoc]] OwlViTProcessor
+    - __call__
+    - post_process_grounded_object_detection
+    - post_process_image_guided_detection
 
 ## OwlViTModel
 

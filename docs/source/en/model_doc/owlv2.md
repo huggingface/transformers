@@ -105,6 +105,9 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 ## Owlv2Processor
 
 [[autodoc]] Owlv2Processor
+    - __call__
+    - post_process_grounded_object_detection
+    - post_process_image_guided_detection
 
 ## Owlv2Model
 
