@@ -685,13 +685,6 @@ class AltCLIPVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class AriaTextForCausalLM(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class AriaForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -700,6 +693,13 @@ class AriaForConditionalGeneration(metaclass=DummyObject):
 
 
 class AriaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AriaTextForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
