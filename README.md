@@ -61,7 +61,7 @@ limitations under the License.
     <a href="https://hf.co/course"><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/course_banner.png"></a>
 </h3>
 
-🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio.
+🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio. 🤗
 
 These models can be applied on:
 
