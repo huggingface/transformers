@@ -1595,9 +1595,7 @@ class CompileConfig(object):
         self.options = options
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary.
-        """
+        """Serializes this instance to a Python dictionary."""
         return copy.deepcopy(self.__dict__)
     
     def __eq__(self, other) -> bool:
