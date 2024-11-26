@@ -193,12 +193,7 @@ def custom_attn(
     return torch.einsum("bhqk,bkhd->bqhd", attn_weight, values)
 
 
-def get_attn_func(
-    attn_name,
-    attn_activation=None,
-    attn_seq_scalar=None,
-    alpha=None,
-):
+def get_attn_func(attn_name):
     if attn_name == "auto":
         return xformers_attn if torch.cuda.is_available() else torch_attn
     elif attn_name == "xformers_attn":
@@ -211,15 +206,5 @@ def get_attn_func(
         return lambda *args, **kwargs: xformers_attn(*args, **kwargs).contiguous()
     elif attn_name == "torch_attn":
         return torch_attn
-    elif attn_name == "custom_attn":
-        assert (
-            attn_activation is not None and attn_seq_scalar is not None and alpha is not None
-        ), "must provide attn-activation, attn-seq-scalar, attn-seq-scalar-alpha"
-        return partial(
-            custom_attn,
-            attn_activation,
-            attn_seq_scalar,
-            alpha,
-        )
     else:
         raise ValueError(f"Unsupported attn-name: {attn_name}")
