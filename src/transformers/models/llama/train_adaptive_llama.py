@@ -125,27 +125,30 @@ class AdaptiveLlamaTrainer(Trainer):
             attention_mask=inputs['attention_mask'],
         )
 
-        outputs_inverted = model.forward(
-            input_ids=inputs['input_ids'],
-            labels=inputs['labels'],
-            special_embeddings_mask=inputs['special_embeddings_mask'],
-            attention_mask=inputs['attention_mask'],
-            inverted_merging_map=[ True ]
-        )
+        outputs_inverted = None
+        # outputs_inverted = model.forward(
+        #     input_ids=inputs['input_ids'],
+        #     labels=inputs['labels'],
+        #     special_embeddings_mask=inputs['special_embeddings_mask'],
+        #     attention_mask=inputs['attention_mask'],
+        #     inverted_merging_map=[ True ]
+        # )
 
-        loss = outputs.loss + outputs_inverted.loss # + 0.01 * sum([x.fan_in_mlp.weight.norm(2) for x in model.model.adaptive_down])
-        # loss = outputs.loss # + (outputs_inversed.loss / 10)
+        # loss = outputs.loss + outputs_inverted.loss # + 0.01 * sum([x.fan_in_mlp.weight.norm(2) for x in model.model.adaptive_down])
+        loss = outputs.loss # + (outputs_inversed.loss / 10)
 
         assert ~ loss.isnan().any(), 'loss cant be none'
 
         if log_metrics:
             log_info = {
                 "debug/straight_loss": outputs.loss.detach().item(),
-                "debug/inverted_loss": outputs_inverted.loss.detach().item(),
                 "debug/mean_merged_tokens": outputs.mean_merged_tokens,
-                "debug/inverted_mean_merged_tokens": outputs_inverted.mean_merged_tokens,
                 "debug/total_tokens": inputs['attention_mask'].sum().item(),
             }
+            if outputs_inverted is not None:
+                log_info["debug/inverted_loss"] = outputs_inverted.loss.detach().item()
+                log_info["debug/inverted_mean_merged_tokens"] = outputs_inverted.mean_merged_tokens
+
             self.log(log_info)
 
         return (loss, outputs) if return_outputs else loss
@@ -158,9 +161,10 @@ class AdaptiveLlamaTrainer(Trainer):
 
         extra_log = dict()
         for i, adown in enumerate(model.model.adaptive_down):
-            merger_mpl_grad = adown.fan_in_mlp.weight.grad.norm(2).item()
-            assert merger_mpl_grad is not None, "merger_mpl_grad is expected to be not none"
-            extra_log[f"merger_mpl_grad_norm_{i}"] = merger_mpl_grad
+            if isinstance(adown, AdaptiveFanIn):
+                merger_mpl_grad = adown.fan_in_mlp.weight.grad.norm(2).item()
+                assert merger_mpl_grad is not None, "merger_mpl_grad is expected to be not none"
+                extra_log[f"merger_mpl_grad_norm_{i}"] = merger_mpl_grad
 
         self.log(extra_log)
 
@@ -519,18 +523,21 @@ class AdaptiveTrainingArguments(TrainingArguments):
 
 
 if __name__ == "__main__":
-    snd = SequentialNumbersDataset(length=5000, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
+    snd = SequentialNumbersDataset(length=1000, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
     snd_eval = SequentialNumbersDataset(length=100, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
 
+    num_layers = 8
+    num_layers_half = 8 // 2
     llama_config = LlamaConfig(
         hidden_size=128,
         vocab_size=VOCAB_SIZE,
         intermediate_size=256,
-        num_hidden_layers=2,
+        num_hidden_layers=num_layers,
         num_attention_heads=8,
         max_position_embeddings=MAX_SEQ_LEN,
         use_cache=False,
-        attn_implementation = 'eager'
+        attn_implementation = 'eager',
+        dummy_adaptive_fan_in = [ True ] * num_layers_half,
     )
 
     model = AdaptiveLlamaForCausalLM(llama_config)

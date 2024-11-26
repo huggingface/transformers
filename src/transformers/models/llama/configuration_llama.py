@@ -166,6 +166,7 @@ class LlamaConfig(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        dummy_adaptive_fan_in=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -174,6 +175,7 @@ class LlamaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.dummy_adaptive_fan_in = dummy_adaptive_fan_in
 
         # for backward compatibility
         if num_key_value_heads is None:

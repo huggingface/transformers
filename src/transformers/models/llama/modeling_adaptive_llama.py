@@ -960,9 +960,20 @@ class AdaptiveLlamaModel(LlamaPreTrainedModel):
         assert config.num_hidden_layers % 2 == 0
         num_hidden_layers_half = config.num_hidden_layers // 2
 
+
+        is_dummy_fan_in = config.dummy_adaptive_fan_in
+        if is_dummy_fan_in is None:
+            is_dummy_fan_in = [ False ] * num_hidden_layers_half
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
+        def get_fan_in_module(is_dummy):
+            if is_dummy:
+                return NoOpFanIn(config)
+
+            return AdaptiveFanInGumbel(config)
         self.adaptive_down = nn.ModuleList(
-            [AdaptiveFanInGumbel(config) for _ in range(num_hidden_layers_half)]
+            [get_fan_in_module(is_dummy_fan_in[i]) for i in range(num_hidden_layers_half)]
         )
         self.layers_down = nn.ModuleList(
             [AdaptiveLlamaDecoderLayer(config, layer_idx) for layer_idx in range(num_hidden_layers_half)]
