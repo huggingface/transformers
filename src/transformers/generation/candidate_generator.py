@@ -857,6 +857,11 @@ class AssistantToTargetTranslator:
 
 
 class AssistantVocabTranslatorCache:
+    """
+    Cache for `AssistantToTargetTranslator` instances. The instances are computed at
+    pre-processing time, and this cache allows us to avoid recomputing them.
+    """
+
     _lock = threading.Lock()
     _cache = weakref.WeakKeyDictionary()
 
@@ -876,6 +881,25 @@ class AssistantVocabTranslatorCache:
                 assistant_dict[assistant_tokenizer] = mapping
 
             return mapping
+
+    @classmethod
+    def cleanup(cls):
+        """
+        Clean up dead references in the cache.
+        This removes entries where either the target_tokenizer or assistant_tokenizer
+        has been garbage collected.
+        """
+        with cls._lock:
+            # Remove entries from the outer cache where the target_tokenizer is no longer alive
+            dead_keys = [key for key in cls._cache if key is None]
+            for key in dead_keys:
+                del cls._cache[key]
+
+            # For each assistant_dict, remove entries where assistant_tokenizer is no longer alive
+            for assistant_dict in cls._cache.values():
+                dead_keys = [key for key in assistant_dict if key is None]
+                for key in dead_keys:
+                    del assistant_dict[key]
 
 
 class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):
@@ -970,7 +994,8 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
-        min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
+        # TODO: Debug
+        # min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         if max_new_tokens == 0:
             return input_ids, None
 
