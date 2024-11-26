@@ -189,9 +189,6 @@ class GenerationConfig(PushToHubMixin):
             Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
         return_legacy_cache (`bool`, *optional*, default to `True`):
             Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
-        compile_config (CompileConfig, *optional*):
-            If using a static cache, this parameterize how `generate` will `compile` the forward pass for performance
-            gains.
 
         > Parameters for manipulation of the model output logits
 
@@ -364,6 +361,12 @@ class GenerationConfig(PushToHubMixin):
             If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
             models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
 
+        > Parameters related to performances and compilation
+         
+        compile_config (CompileConfig, *optional*):
+            If using a static cache, this controls how `generate` will `compile` the forward pass for performance
+            gains.
+
         > Wild card
 
         generation_kwargs:
@@ -401,7 +404,6 @@ class GenerationConfig(PushToHubMixin):
             elif isinstance(self.cache_config, dict):
                 self.cache_config = cache_config_class.from_dict(self.cache_config)
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
-        self.compile_config = kwargs.pop("compile_config", CompileConfig())
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
@@ -464,6 +466,9 @@ class GenerationConfig(PushToHubMixin):
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
+
+        # Performances
+        self.compile_config = kwargs.pop("compile_config", CompileConfig())
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -770,10 +775,6 @@ class GenerationConfig(PushToHubMixin):
                         no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)),
                         UserWarning,
                     )
-        if not isinstance(self.compile_config, CompileConfig):
-            raise ValueError(
-                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`."
-            )
 
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
@@ -789,7 +790,13 @@ class GenerationConfig(PushToHubMixin):
                 self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
-        # 7. other incorrect combinations
+        # 7. performances arguments
+        if not isinstance(self.compile_config, CompileConfig):
+            raise ValueError(
+                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`."
+            )
+
+        # 8. other incorrect combinations
         if self.return_dict_in_generate is not True:
             for extra_output_flag in self.extra_output_flags:
                 if getattr(self, extra_output_flag) is True:
@@ -1559,7 +1566,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
 @dataclass
 class CompileConfig(object):
     """
-    Class that holds arguments for model compilation with `torch.compile`, when using automatic compilation in `generate`.
+    Class that holds arguments relative to `torch.compile` behavior, when using automatic compilation in `generate`.
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
 
     Args:
