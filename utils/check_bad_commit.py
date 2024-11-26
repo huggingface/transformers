@@ -46,7 +46,7 @@ result = subprocess.run(
 print(result.stdout)
 
 if len(result.stderr) > 0:
-    if "ERROR: not found: " in result.stderr:
+    if "ERROR: file or directory not found: " in result.stderr:
         print("test not found in this commit")
         exit(0)
     else:
@@ -59,7 +59,7 @@ elif f"{target_test} FAILED" in result.stdout:
 exit(0)
 """
 
-    with open("target_script.py", "w") as fp:
+    with open("target_script..py", "w") as fp:
         fp.write(script.strip())
 
 
