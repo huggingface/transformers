@@ -951,7 +951,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # Standard generation steps
         min_new_tokens, max_new_tokens = self._calculate_new_tokens(assistant_input_ids)
-        if max_new_tokens == 0:
+        if max_new_tokens <= 0:
             return input_ids, None
 
         self._update_past_and_masks(assistant_input_ids)
@@ -966,11 +966,6 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
-        if candidate_logits.shape[1] <= 1:
-            raise ValueError(
-                f"Expected at least 2 candidate tokens, but got {candidate_logits.shape[1]}. "
-                f"min_new_tokens: {generation_args['min_new_tokens']}, max_new_tokens: {generation_args['max_new_tokens']}."
-            )
 
         # Use translator to convert tokens and logits
         candidate_ids = assistant_output.sequences
