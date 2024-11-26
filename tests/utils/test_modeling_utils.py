@@ -37,6 +37,7 @@ from transformers import (
     AutoModel,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
+    LlavaForConditionalGeneration,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -300,6 +301,7 @@ TINY_T5 = "patrickvonplaten/t5-tiny-random"
 TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-classification"
 TINY_MISTRAL = "hf-internal-testing/tiny-random-MistralForCausalLM"
 TINY_IMAGE_CLASSIF = "hf-internal-testing/tiny-random-SiglipForImageClassification"
+TINY_LLAVA = "hf-internal-testing/tiny-random-LlavaForConditionalGeneration"
 
 LOG = logging.get_logger(__name__)
 
@@ -459,6 +461,38 @@ class ModelUtilsTest(TestCasePlus):
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
             model = AutoModel.from_pretrained(TINY_T5, torch_dtype="int64")
+
+    def test_model_from_config_torch_dtype_composite(self):
+        """
+        Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
+        """
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.float32)
+
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float16")
+        self.assertEqual(model.language_model.dtype, torch.float16)
+        self.assertEqual(model.vision_tower.dtype, torch.float16)
+
+        model = LlavaForConditionalGeneration.from_pretrained(
+            TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "float16"}
+        )
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.float16)
+
+        config = copy.deepcopy(model.config)
+        config.torch_dtype = torch.float32
+        config.vision_config.torch_dtype = "float16"
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, torch_dtype="auto")
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.float16)
+
+        # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
+        with self.assertRaises(ValueError):
+            model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="int64")
+            model = LlavaForConditionalGeneration.from_pretrained(
+                TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64"}
+            )
 
     @require_torch
     def test_model_from_pretrained_meta_device(self):

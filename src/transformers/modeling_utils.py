@@ -4017,15 +4017,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         for sub_config_key in config.sub_configs.keys():
                             sub_config = getattr(config, sub_config_key)
                             sub_config.torch_dtype = torch_dtype
-                    elif isinstance(torch_dtype, dict):
-                        for key, curr_dtype in torch_dtype.items():
-                            if hasattr(config, key):
-                                value = getattr(config, key)
-                                value.torch_dtype = curr_dtype
-                    else:
-                        raise ValueError(
-                            f'`torch_dtype` can be one of: `torch.dtype`, `"auto"` or a string of a valid `torch.dtype`, but received {torch_dtype}'
-                        )
+                elif isinstance(torch_dtype, torch.dtype):
+                    pass
+                elif isinstance(torch_dtype, dict):
+                    for key, curr_dtype in torch_dtype.items():
+                        if hasattr(config, key):
+                            value = getattr(config, key)
+                            value.torch_dtype = curr_dtype
+                    # the main dtype by default will be the text model's dtype
+                    torch_dtype = config.get_text_config().torch_dtype
+                    if hasattr(torch, torch_dtype):
+                        torch_dtype = getattr(torch, torch_dtype)
+                    elif torch_dtype is None:
+                        torch_dtype = torch.float32
+                else:
+                    raise ValueError(
+                        f'`torch_dtype` can be one of: `torch.dtype`, `"auto"`, a string of a valid `torch.dtype` or '
+                        f"a `dict` with valid `torch_dtype` for each sub-config in composite configs, but received {torch_dtype}"
+                    )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             # Check if `_keep_in_fp32_modules` is not None
