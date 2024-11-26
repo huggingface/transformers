@@ -134,12 +134,12 @@ class VptqTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         modules_to_not_convert = ["lm_head"]
         names = [
-            "model.decoder.layers.{layer_idx}.self_attn.q_proj",
-            "model.decoder.layers.{layer_idx}.self_attn.k_proj",
-            "model.decoder.layers.{layer_idx}.self_attn.v_proj",
-            "model.decoder.layers.{layer_idx}.self_attn.out_proj",
-            "model.decoder.layers.{layer_idx}.fc1",
-            "model.decoder.layers.{layer_idx}.fc2",
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "out_proj",
+            "fc1",
+            "fc2",
         ]
         value = {
             "enable_norm": True,
@@ -152,14 +152,15 @@ class VptqTest(unittest.TestCase):
             "outlier_size": 0,
             "vector_lens": [-1, 12],
         }
-        layer_configs = {}
+        shared_layer_config = {}
+        for name in names:
+            shared_layer_config[name] = value
         for i in range(24):
-            for name in names:
-                layer_configs[name.format(layer_idx=i)] = value
             modules_to_not_convert.append("model.decoder.layers.{layer_idx}.fc1".format(layer_idx=i))
+        layer_configs = {}
         layer_configs["model.decoder.project_out"] = value
         layer_configs["model.decoder.project_in"] = value
-        quantization_config = VptqConfig(config_for_layers=layer_configs)
+        quantization_config = VptqConfig(config_for_layers=layer_configs, shared_layer_config=shared_layer_config)
 
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(config)
@@ -180,7 +181,7 @@ class VptqTest(unittest.TestCase):
         # Try with `linear_weights_not_to_quantize`
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(config)
-        quantization_config = VptqConfig(config_for_layers=layer_configs)
+        quantization_config = VptqConfig(config_for_layers=layer_configs, shared_layer_config=shared_layer_config)
         model, _ = replace_with_vptq_linear(
             model, quantization_config=quantization_config, modules_to_not_convert=modules_to_not_convert
         )
@@ -191,3 +192,6 @@ class VptqTest(unittest.TestCase):
         # 25 comes from 24 decoder.layers.{layer_idx}.fc1
         # and the last lm_head
         self.assertEqual(nb_linears - 25, nb_vptq_linear)
+
+
+VptqTest().test_quantized_model_conversion()

@@ -1000,16 +1000,16 @@ class VptqLayerConfig(QuantizationConfigMixin):
     """
     This is used to explain vptq config params for each layer
     Args:
-        enable_norm: to control if we have scale/bias for fp-weight
-        enable_perm: to perm input_channel or not
-        group_num: how many single groups for vector-quantization
-        group_size:depends on out-features
-        indices_as_float: for Finetuning
-        is_indice_packed: should always be True
-        num_centroids: centriod numbers of clusters
-        num_res_centroids: ditto for residual
-        outlier_size: outliers
-        vector_lens: centroid vector length in quantization
+        enable_norm (`bool`, *optional*, defaults to `True`): to control if we have scale/bias for fp-weight
+        enable_perm (`bool`, *optional*, defaults to `True`): to perm input_channel or not
+        group_num (`int`, *optional*, defaults to `1`): how many single groups for vector-quantization
+        group_size (`int`, *optional*, defaults to `-1`): depends on out-features
+        indices_as_float (`bool`, *optional*, defaults to `False`): for Finetuning
+        is_indice_packed (`bool`, *optional*, defaults to `True`): should always be True
+        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centriod numbers of clusters
+        num_res_centroids (`list`, *optional*, defaults to `[-1, -1]`): ditto for residual
+        outlier_size (`int`, *optional*, defaults to `1`): outliers
+        vector_lens (`list`, *optional*, defaults to `[-1, -1]`): centroid vector length in quantization
     """
 
     def __init__(
@@ -1058,6 +1058,10 @@ class VptqConfig(QuantizationConfigMixin):
     Args:
         enable_proxy_error (`bool`, *optional*, defaults to `False`): calculate proxy error for each layer
         config_for_layers (`Dict`, *optional*, defaults to `{}`): quantization params for each layer
+        shared_layer_config (`Dict`, *optional*, defaults to `{}`): shared quantization params among layers
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -1066,12 +1070,15 @@ class VptqConfig(QuantizationConfigMixin):
         self,
         enable_proxy_error: bool = False,
         config_for_layers: Dict[str, Any] = {},
+        shared_layer_config: Dict[str, Any] = {},
+        modules_to_not_convert: Optional[List] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.VPTQ
         self.enable_proxy_error = enable_proxy_error
-        kwargs.pop("quant_method", None)
         self.config_for_layers: Dict[str, Any] = config_for_layers
+        self.shared_layer_config: Dict[str, Any] = shared_layer_config
+        self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
     def post_init(self):

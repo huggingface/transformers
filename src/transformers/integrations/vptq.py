@@ -45,20 +45,25 @@ def replace_with_vptq_linear(
             should not be passed by the user.
     """
 
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    modules_to_not_convert = ["lm_head"] if not modules_to_not_convert else modules_to_not_convert
 
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
         current_key_name.append(name)
         layer_name = ".".join(current_key_name)
+        shared_layer_config = quantization_config.shared_layer_config
+        config_for_layers = quantization_config.config_for_layers
 
         if (
             isinstance(module, nn.Linear)
-            and layer_name in quantization_config.config_for_layers
             and layer_name not in modules_to_not_convert
+            and ((layer_name in config_for_layers) or (current_key_name[-1] in shared_layer_config))
         ):
-            layer_params = quantization_config.config_for_layers[layer_name]
+            layer_params = config_for_layers.get(layer_name, None) or shared_layer_config.get(
+                current_key_name[-1], None
+            )
+
             with init_empty_weights():
                 in_features = module.in_features
                 out_features = module.out_features

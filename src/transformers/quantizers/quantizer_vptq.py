@@ -36,7 +36,6 @@ class VptqHfQuantizer(HfQuantizer):
 
     requires_calibration = True
     required_packages = ["vptq"]
-    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -57,7 +56,13 @@ class VptqHfQuantizer(HfQuantizer):
                     "CUDA available. Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
                 )
             else:
-                raise RuntimeError("No GPU found. Please wait for the next release of VPTQ to use CPU inference")
+                import vptq
+
+                device_availability = getattr(vptq, "device_availability", lambda device: False)
+                if device_availability("cpu") is True:
+                    raise RuntimeError("No GPU found. Please wait for the next release of VPTQ to use CPU inference")
+                torch_dtype = torch.float32
+                logger.info("No GPU found. Assuming VPTQ inference on CPU and loading the model in `torch.float32`.")
         return torch_dtype
 
     def _process_model_before_weight_loading(
@@ -71,7 +76,9 @@ class VptqHfQuantizer(HfQuantizer):
         """
         from ..integrations import replace_with_vptq_linear
 
-        modules_to_not_convert = kwargs.get("modules_to_not_convert", None)
+        modules_to_not_convert = kwargs.get("modules_to_not_convert", []) + (
+            self.quantization_config.modules_to_not_convert or []
+        )
 
         replace_with_vptq_linear(
             model,
