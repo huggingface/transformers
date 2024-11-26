@@ -107,8 +107,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
         input_ids = input_ids.to(device)
         if inputs_tensor is not None:
             inputs_tensor = inputs_tensor.to(device)
-            
-        print("I am here:", model_kwargs.keys())
 
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
@@ -276,11 +274,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if self.is_mamba:
             # This is the mamba model used as assistant for draft generation.
             # We now need to roll back state of the mamba to the state of the last accepted token.
-            print("saeed")
-            print(self.assistant_kwargs.keys())
-            print(num_matches.item())
-            print("len of snapshots:", len(self.assistant_model.backbone.cache_snapshots))
-            print("\n")
             for idx, snapshot in enumerate(self.assistant_model.backbone.cache_snapshots):
                 if idx == num_matches:
                     snapshot_to_revive = snapshot

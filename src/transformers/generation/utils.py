@@ -1565,8 +1565,6 @@ class GenerationMixin:
             # This is basically another call to generate after the first generation.
             # If this is Mamba, then we should only use len as the new cache position.
             # This is for draft generation using a mamba model.
-            print("Implementing this function.")
-
             # Cache position should be a tensor.
             cache_position = torch.tensor([input_ids.size()[1]], device=input_ids.device, dtype=input_ids.dtype)
             
@@ -2114,7 +2112,6 @@ class GenerationMixin:
         # - `max_length`, prepared above, is used to determine the maximum cache length
         # TODO (joao): remove `user_defined_cache` after v4.47 (remove default conversion to legacy format)
         cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
-        print("cache_name is:", cache_name)
         user_defined_cache = model_kwargs.get(cache_name)
         max_cache_length = generation_config.max_length
         if (
@@ -2167,7 +2164,6 @@ class GenerationMixin:
 
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
-            print("I am the generation config inside assistant mode:", generation_config.is_assistant)
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -2252,7 +2248,6 @@ class GenerationMixin:
             )
 
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            print("I am the generation config inside sample mode:", generation_config.is_assistant)
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -3241,8 +3236,6 @@ class GenerationMixin:
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
-        print("Hasan: 1", model_kwargs.keys())
-        print("are you assistant", generation_config.is_assistant)
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -3262,7 +3255,6 @@ class GenerationMixin:
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
-            print("I am inside while:", model_kwargs.keys())
             if synced_gpus and this_peer_finished:
                 continue
 

@@ -721,9 +721,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
     ):
         # Overwitten -- uses `cache_params` as opposed to `past_key_values`
 
-        print("I am inside mamba code for input generation.")
-        if cache_position is not None:
-            print("cache_position:", cache_position)
         if use_cache:
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
@@ -744,9 +741,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 # will be applied when it is longer, so it will be equivalent to always have it match
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
-
-            print(input_ids)
-
             
 
         if inputs_embeds is not None and cache_params is None:
