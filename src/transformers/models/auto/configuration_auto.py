@@ -22,10 +22,7 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import (
-    get_class_from_dynamic_module,
-    resolve_trust_remote_code,
-)
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
 
@@ -882,11 +879,7 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
             indent = re.search(r"^(\s*)List options\s*$", lines[i]).groups()[0]
             if use_model_types:
                 indent = f"{indent}    "
-            lines[i] = _list_model_options(
-                indent,
-                config_to_class=config_to_class,
-                use_model_types=use_model_types,
-            )
+            lines[i] = _list_model_options(indent, config_to_class=config_to_class, use_model_types=use_model_types)
             docstrings = "\n".join(lines)
         else:
             raise ValueError(
@@ -1027,19 +1020,13 @@ class AutoConfig:
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code,
-            pretrained_model_name_or_path,
-            has_local_code,
-            has_remote_code,
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
 
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(
-                class_ref,
-                pretrained_model_name_or_path,
-                code_revision=code_revision,
-                **kwargs,
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
             if os.path.isdir(pretrained_model_name_or_path):
                 config_class.register_for_auto_class()

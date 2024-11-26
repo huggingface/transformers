@@ -23,10 +23,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import (
-    get_class_from_dynamic_module,
-    resolve_trust_remote_code,
-)
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...image_processing_utils import BaseImageProcessor, ImageProcessingMixin
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
@@ -169,10 +166,7 @@ for model_type, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
     else:
         fast_image_processor_class = fast_image_processor_class[0]
 
-    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (
-        slow_image_processor_class,
-        fast_image_processor_class,
-    )
+    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_image_processor_class, fast_image_processor_class)
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
@@ -461,10 +455,7 @@ class AutoImageProcessor:
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code,
-            pretrained_model_name_or_path,
-            has_local_code,
-            has_remote_code,
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
 
         if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
@@ -565,7 +556,5 @@ class AutoImageProcessor:
                 fast_image_processor_class = existing_fast
 
         IMAGE_PROCESSOR_MAPPING.register(
-            config_class,
-            (slow_image_processor_class, fast_image_processor_class),
-            exist_ok=exist_ok,
+            config_class, (slow_image_processor_class, fast_image_processor_class), exist_ok=exist_ok
         )

@@ -641,10 +641,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         (
             "deit",
-            (
-                "DeiTForImageClassification",
-                "DeiTForImageClassificationWithTeacher",
-            ),
+            ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher"),
         ),
         ("dinat", "DinatForImageClassification"),
         ("dinov2", "Dinov2ForImageClassification"),
@@ -662,10 +659,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("imagegpt", "ImageGPTForImageClassification"),
         (
             "levit",
-            (
-                "LevitForImageClassification",
-                "LevitForImageClassificationWithTeacher",
-            ),
+            ("LevitForImageClassification", "LevitForImageClassificationWithTeacher"),
         ),
         ("mobilenet_v1", "MobileNetV1ForImageClassification"),
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
@@ -1000,10 +994,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("reformer", "ReformerForSequenceClassification"),
         ("rembert", "RemBertForSequenceClassification"),
         ("roberta", "RobertaForSequenceClassification"),
-        (
-            "roberta-prelayernorm",
-            "RobertaPreLayerNormForSequenceClassification",
-        ),
+        ("roberta-prelayernorm", "RobertaPreLayerNormForSequenceClassification"),
         ("roc_bert", "RoCBertForSequenceClassification"),
         ("roformer", "RoFormerForSequenceClassification"),
         ("squeezebert", "SqueezeBertForSequenceClassification"),
@@ -1449,8 +1440,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
-    CONFIG_MAPPING_NAMES,
-    MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    CONFIG_MAPPING_NAMES, MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES
@@ -1690,8 +1680,7 @@ class AutoModelForZeroShotImageClassification(_BaseAutoModelClass):
 
 
 AutoModelForZeroShotImageClassification = auto_class_update(
-    AutoModelForZeroShotImageClassification,
-    head_doc="zero-shot image classification",
+    AutoModelForZeroShotImageClassification, head_doc="zero-shot image classification"
 )
 
 
@@ -1792,8 +1781,7 @@ class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 
 
 AutoModelForSpeechSeq2Seq = auto_class_update(
-    AutoModelForSpeechSeq2Seq,
-    head_doc="sequence-to-sequence speech-to-text modeling",
+    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
 )
 
 
@@ -1802,8 +1790,7 @@ class AutoModelForAudioFrameClassification(_BaseAutoModelClass):
 
 
 AutoModelForAudioFrameClassification = auto_class_update(
-    AutoModelForAudioFrameClassification,
-    head_doc="audio frame (token) classification",
+    AutoModelForAudioFrameClassification, head_doc="audio frame (token) classification"
 )
 
 
