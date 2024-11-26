@@ -1,4 +1,3 @@
-import warnings
 from typing import List, Union
 
 from ..utils import (
@@ -72,6 +71,9 @@ class DepthEstimationPipeline(Pipeline):
                 A dictionary of argument names to parameter values, to control pipeline behaviour.
                 The only parameter available right now is `timeout`, which is the length of time, in seconds,
                 that the pipeline should wait before giving up on trying to download an image.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
@@ -93,9 +95,6 @@ class DepthEstimationPipeline(Pipeline):
     def _sanitize_parameters(self, timeout=None, parameters=None, **kwargs):
         preprocess_params = {}
         if timeout is not None:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_params["timeout"] = timeout
         if isinstance(parameters, dict) and "timeout" in parameters:
             preprocess_params["timeout"] = parameters["timeout"]
