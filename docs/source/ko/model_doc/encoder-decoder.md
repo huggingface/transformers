@@ -124,7 +124,7 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
 ...     return_tensors="pt",
 ... ).input_ids
 
->>> # the forward function automatically creates the correct decoder_input_ids
+>>> # forward 함수가 자동으로 적합한 decoder_input_ids를 생성합니다.
 >>> loss = model(input_ids=input_ids, labels=labels).loss
 ```
 훈련에 대한 자세한 내용은 [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) 노트북을 참조하세요. 
