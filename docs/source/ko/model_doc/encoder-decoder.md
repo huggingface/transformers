@@ -61,7 +61,7 @@ rendered properly in your Markdown viewer.
 ```python
 >>> from transformers import AutoTokenizer, EncoderDecoderModel
 
->>> # load a fine-tuned seq2seq model and corresponding tokenizer
+>>> # 미세 조정된 seq2seq 모델과 대응하는 토크나이저 가져오기
 >>> model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert_cnn_daily_mail")
 >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert_cnn_daily_mail")
 
