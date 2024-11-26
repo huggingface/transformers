@@ -164,6 +164,7 @@ class Rwkv6Tokenizer(PreTrainedTokenizer):
         ...     unk_token='<unk>'
         ... )
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
