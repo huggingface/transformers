@@ -20,7 +20,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, Callable
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -189,6 +189,9 @@ class GenerationConfig(PushToHubMixin):
             Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
         return_legacy_cache (`bool`, *optional*, default to `True`):
             Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
+        compile_config (CompileConfig, *optional*):
+            If using a static cache, this parameterize how `generate` will `compile` the forward pass for performance
+            gains.
 
         > Parameters for manipulation of the model output logits
 
@@ -398,6 +401,7 @@ class GenerationConfig(PushToHubMixin):
             elif isinstance(self.cache_config, dict):
                 self.cache_config = cache_config_class.from_dict(self.cache_config)
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
+        self.compile_config = kwargs.pop("compile_config", CompileConfig())
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
@@ -766,6 +770,8 @@ class GenerationConfig(PushToHubMixin):
                         no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)),
                         UserWarning,
                     )
+        if not isinstance(self.compile_config, CompileConfig):
+            raise ValueError(f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`.")
 
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
@@ -1546,3 +1552,43 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             skip_first_ngram_calls=self.skip_first_ngram_calls,
             debug_mode=self.debug_mode,
         )
+
+@dataclass
+class CompileConfig(object):
+    """
+    Class that holds arguments for model compilation with `torch.compile`, when using automatic compilation in `generate`.
+    See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
+
+    Args:
+        - fullgraph (`bool`, *optional*, defaults to True):
+            If `True`, requires that the whole forward be capturable in a single graph.
+        - dynamic (`bool` or `None`, *optional*, defaults to None):
+            Whether to try to use dynamic shape graphs.
+        - backend (`str` or `Callable`, *optional*, defaults to "inductor"):
+            Backend to be used.
+        - mode (`str`, *optional*, defaults to "reduce-overhead"):
+            Controls balance between performance and overhead.
+        - options (`dict`, *optional*, defaults to None):
+            A dictionary of options to pass to the backend.
+    """
+
+    def __init__(
+        self,
+        fullgraph: bool = True,
+        dynamic: Optional[bool] = None,
+        backend: Union[str, Callable] = "inductor",
+        mode: str = "reduce-overhead",
+        options: Optional[dict] = None,
+    ):
+        self.fullgraph = fullgraph
+        self.dynamic = dynamic
+        self.backend = backend
+        self.mode = mode
+        self.options = options
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+        """
+        output = copy.deepcopy(self.__dict__)
+        return output

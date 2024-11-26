@@ -43,7 +43,7 @@ from torch.utils.checkpoint import checkpoint
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import GenerationConfig, GenerationMixin
+from .generation import GenerationConfig, GenerationMixin, CompileConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -5090,17 +5090,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
         if not hasattr(self, "_compiled_call"):
-            self._compiled_call = torch.compile(self.__call__, mode="reduce-overhead", fullgraph=True)
+            self._last_compile_config = getattr(self.generation_config, "compile_config", CompileConfig())
+            self._compiled_call = torch.compile(self.__call__, **self._last_compile_config.to_dict())
         return self._compiled_call
 
-    def compile_call(self, *args, **kwargs):
-        """Set the mode for the automatic `compile` in `generate`, if using a static cache. Note that contrary to using
-        `model.compile(...)`, calling this function does NOT mean that subsequent calls to forward with `model(input,...)`
-        will use the compiled version, it will only set the compile arguments for later automatic usage.
-
-        See `torch.compile` for details on the arguments of this function.
-        """
-        self._compiled_call = torch.compile(self.__call__, *args, **kwargs)
+    def _set_compile_call(self, compile_config: CompileConfig):
+        """Set the mode (arguments) for the compiled version of `self.__call__`."""
+        # Only reset it if different from previous config
+        if getattr(self, "_last_compile_config", CompileConfig()) != compile_config:
+            self._last_compile_config = compile_config
+            self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
