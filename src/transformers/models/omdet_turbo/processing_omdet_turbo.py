@@ -16,6 +16,7 @@
 Processor class for OmDet-Turbo.
 """
 
+import warnings
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -39,6 +40,14 @@ class OmDetTurboTextKwargs(TextKwargs, total=False):
     task: Optional[Union[str, List[str], TextInput, PreTokenizedInput]]
 
 
+if is_torch_available():
+    import torch
+
+
+if is_torchvision_available():
+    from torchvision.ops.boxes import batched_nms
+
+
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: OmDetTurboTextKwargs
     _defaults = {
@@ -60,11 +69,23 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-if is_torch_available():
-    import torch
+class _dict_with_warning(dict):
+    message = (
+        "The `classes` key is deprecated for `OmDetTurboProcessor.post_process_grounded_object_detection` "
+        "output dict and will be removed in a 4.51.0 version. Please use `text_labels` instead."
+    )
 
-if is_torchvision_available():
-    from torchvision.ops.boxes import batched_nms
+    def __getitem__(self, key):
+        if key == "classes":
+            warnings.warn(self.message, FutureWarning)
+            return super().__getitem__("text_labels")
+        return super().__getitem__(key)
+
+    def get(self, key, *args, **kwargs):
+        if key == "classes":
+            warnings.warn(self.message, FutureWarning)
+            return super().get("text_labels", *args, **kwargs)
+        return super().get(key, *args, **kwargs)
 
 
 def clip_boxes(box, box_size: Tuple[int, int]):
@@ -374,7 +395,10 @@ class OmDetTurboProcessor(ProcessorMixin):
                 nms_threshold=nms_threshold,
                 max_num_det=max_num_det,
             )
-            results.append({"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None})
+            result = _dict_with_warning(
+                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
+            )
+            results.append(result)
 
         # Add text labels
         if text_labels is not None:
