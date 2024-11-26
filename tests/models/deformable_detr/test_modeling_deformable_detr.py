@@ -445,12 +445,12 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                 check_equivalence(
                     model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
                 )
-        
+
         check_model_equivalence(self, config, inputs_dict)
-    
+
         config.auxiliary_loss = True
         check_model_equivalence(self, config, inputs_dict)
-        
+
         config.two_stage = True
         config.auxiliary_loss = True
         config.with_box_refine = True
