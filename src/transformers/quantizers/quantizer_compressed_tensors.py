@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import os
+
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 from .base import HfQuantizer
@@ -36,13 +38,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
         from compressed_tensors.compressors import ModelCompressor
-        from compressed_tensors.quantization.quant_config import QuantizationStatus
+        from compressed_tensors.quantization import QuantizationStatus
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
         self.run_compressed = quantization_config.run_compressed
 
-        self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
-        self.run_compressed = quantization_config.run_compressed
+        self.is_compressed = (
+            quantization_config.quantization_config is not None
+            and quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        )
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -68,22 +72,37 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.quantization import apply_quantization_config
 
         ct_quantization_config = self.compressor.quantization_config
-        apply_quantization_config(model, ct_quantization_config, run_compressed=self.run_compressed)
 
-        if self.run_compressed is False:
+        if self.run_compressed and self.is_compressed:
+            apply_quantization_config(model, ct_quantization_config, run_compressed=True)
+
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        """Decompress loaded model if necessary - need for qat"""
+
+        if not self.run_compressed or not self.is_compressed:
+            config = kwargs.get("config", None)
+            cache_path = config._name_or_path
+            if not os.path.exists(cache_path):
+                from huggingface_hub import hf_hub_download
+
+                from transformers import TRANSFORMERS_CACHE
+                from transformers.utils import http_user_agent
+
+                user_agent = http_user_agent()
+                config_file_path = hf_hub_download(
+                    repo_id=cache_path,
+                    filename="config.json",
+                    cache_dir=TRANSFORMERS_CACHE,
+                    force_download=False,
+                    user_agent=user_agent,
+                )
+                cache_path = os.path.sep.join(config_file_path.split(os.path.sep)[:-1])
+
             from compressed_tensors.quantization import QuantizationStatus
 
             self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
 
-        apply_quantization_config(
-            model,
-            ct_quantization_config,
-            run_compressed=self.run_compressed,
-        )
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        # decompress here
-        pass
+            self.compressor.decompress(model_path=cache_path, model=model)
 
     @property
     def is_trainable(self):
@@ -91,7 +110,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
-        return self.run_compressed
+        # models need to be decompressed carry out run qat
+        return not self.run_compressed or not self.is_compressed
 
     def is_serializable(self, safe_serialization=None):
         return False

@@ -19,7 +19,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     prompt = "Paris is the capital of which country?"
 
-    stubs = [tinyllama_w4a16, tinyllama_w8a8, llama3_8b_fp8]
+    stubs = [tinyllama_w4a16, tinyllama_w4a16, tinyllama_w8a8, llama3_8b_fp8]
 
     def tearDown(self):
         gc.collect()
