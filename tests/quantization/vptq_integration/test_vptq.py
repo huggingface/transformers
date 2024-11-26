@@ -192,6 +192,3 @@ class VptqTest(unittest.TestCase):
         # 25 comes from 24 decoder.layers.{layer_idx}.fc1
         # and the last lm_head
         self.assertEqual(nb_linears - 25, nb_vptq_linear)
-
-
-VptqTest().test_quantized_model_conversion()
