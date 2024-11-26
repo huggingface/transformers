@@ -5092,7 +5092,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not hasattr(self, "_compiled_call"):
             self._compiled_call = torch.compile(self.__call__, mode="reduce-overhead", fullgraph=True)
         return self._compiled_call
-    
+
     def compile_call(self, *args, **kwargs):
         """Set the mode for the automatic `compile` in `generate`, if using a static cache. Note that contrary to using
         `model.compile(...)`, calling this function does NOT mean that subsequent calls to forward with `model(input,...)`
