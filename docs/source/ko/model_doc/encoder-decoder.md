@@ -85,7 +85,7 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
 [`TFEncoderDecoderModel.from_pretrained`] 메서드는 현재 Pytorch 체크포인트를 사용한 모델 초기화를 지원하지 않습니다. 이 메서드에 `from_pt=True`를 전달하면 예외(exception)가 발생합니다. 특정 인코더-디코더 모델에 대한 Pytorch 체크포인트만 존재하는 경우, 다음과 같은 해결 방법을 사용할 수 있습니다:
 
 ```python
->>> # a workaround to load from pytorch checkpoint
+>>> # 파이토치 체크포인트에서 로드하는 해결 방법
 >>> from transformers import EncoderDecoderModel, TFEncoderDecoderModel
 
 >>> _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
