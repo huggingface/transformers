@@ -14,15 +14,8 @@
 # limitations under the License.
 """DepthPro model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
-from transformers.configuration_utils import PretrainedConfig
-from transformers.onnx import OnnxConfig
-from transformers.utils import logging
-from transformers.utils.backbone_utils import get_aligned_output_features_output_indices
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -41,6 +34,8 @@ class DepthProConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
+        fusion_hidden_size
+            TODO
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
@@ -65,6 +60,8 @@ class DepthProConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
+        patch_embeddings_size
+            TODO
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -73,22 +70,28 @@ class DepthProConfig(PretrainedConfig):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
         use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
             Whether to use the SwiGLU feedforward neural network.
-        out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
         apply_layernorm (`bool`, *optional*, defaults to `True`):
             Whether to apply layer normalization to the feature maps in case the model is used as backbone.
         reshape_hidden_states (`bool`, *optional*, defaults to `True`):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
+        intermediate_hook_ids
+            TODO
+        intermediate_feature_dims
+            TODO
+        scaled_images_ratios
+            TODO
+        scaled_images_overlap_ratios
+            TODO
+        scaled_images_feature_dims
+            TODO
+        use_batch_norm_in_fusion
+            TODO
+        use_fov_model
+            TODO
+        num_fov_head_layers
+            TODO
 
     Example:
 
@@ -127,8 +130,6 @@ class DepthProConfig(PretrainedConfig):
         layerscale_value=1.0,
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
-        out_features=None,
-        out_indices=None,
         apply_layernorm=True,
         reshape_hidden_states=True,
         intermediate_hook_ids = [11, 5],
@@ -137,7 +138,7 @@ class DepthProConfig(PretrainedConfig):
         scaled_images_overlap_ratios = [0.0, 0.5, 0.25],
         scaled_images_feature_dims = [1024, 1024, 512],
         use_batch_norm_in_fusion=False,
-        use_fov_model=False,
+        use_fov_model=True,
         num_fov_head_layers=2,
         **kwargs,
     ):
@@ -161,10 +162,6 @@ class DepthProConfig(PretrainedConfig):
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
         self.use_batch_norm_in_fusion = use_batch_norm_in_fusion
