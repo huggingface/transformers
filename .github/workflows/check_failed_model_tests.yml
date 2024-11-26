@@ -42,7 +42,7 @@ jobs:
       - name: Get target commit
         working-directory: /transformers/utils
         run: |
-          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'commit = "eed11f34abe558c76590366a21316318e5f820ed"; print(commit)')" >> $GITHUB_ENV
+          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'commit = "3a8eb74668e9c2cc563b2f5c62fac174797063e0"; print(commit)')" >> $GITHUB_ENV
 
       - name: Checkout to `start_sha`
         working-directory: /transformers
@@ -69,7 +69,7 @@ jobs:
         working-directory: /transformers
         run: |
           apt-get install -y curl
-          curl -o new_model_failures.json https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/main/2024-11-20/ci_results_run_models_gpu/new_model_failures.json
+          curl -o new_model_failures.json https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/main/2024-11-26/ci_results_run_models_gpu/new_model_failures.json
           python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file new_model_failures.json --output_file new_model_failures_with_bad_commit.json
 
       - name: Show results
