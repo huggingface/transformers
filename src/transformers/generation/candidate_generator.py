@@ -454,7 +454,14 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
-        max_new_tokens = int(self.num_assistant_tokens)
+        input_ids = input_ids.to(self.assistant_model.device)
+        remove_from_pkv = 0
+
+        # New helper methods
+        assistant_input_ids, remove_from_pkv = self._prepare_assistant_input_ids(input_ids)
+        self.prev_assistant_ids = assistant_input_ids
+
+        min_new_tokens, max_new_tokens = self._calculate_new_tokens(assistant_input_ids)
         if max_new_tokens == 0:
             return input_ids, None
 
@@ -514,7 +521,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                     elif discrepancy_length > discrepancy_only.shape[1]:
                         discrepancy_length_diff = discrepancy_length - discrepancy_only.shape[1]
                         assistant_input_ids = assistant_input_ids[:, :-discrepancy_length_diff]
-                        assistant_input_ids[:, -discrepancy_only.shape[1] :] = discrepancy_only
+                        assistant_input_ids[:, -discrepancy_only.shape[1]:] = discrepancy_only
 
                     remove_from_pkv = discrepancy_length
 
@@ -1024,9 +1031,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             "logits_processor": self.logits_processor,
         }
 
-        assistant_output = self.assistant_model.generate(
-            **assistant_generation_kwargs, **self.assistant_kwargs, output_logits=True
-        )
+        assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs, output_logits=True)
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
