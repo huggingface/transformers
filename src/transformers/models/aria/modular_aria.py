@@ -35,7 +35,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_torch_available
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoImageProcessor, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LLAMA_ATTENTION_CLASSES,
@@ -112,16 +112,14 @@ class AriaTextConfig(LlamaConfig):
             The number of experts in the MoE layer.
         moe_topk (`int`, *optional*, defaults to 2):
             The number of top experts to route to for each token.
-        moe_z_loss_coeff (`float`, *optional*, defaults to 1e-5):
+        moe_z_loss_coeff (`float`, *optional*, defaults to 1e-05):
             The coefficient for the auxiliary z-loss.
-        moe_aux_loss_coeff (`float`, *optional*, defaults to 1e-3):
+        moe_aux_loss_coeff (`float`, *optional*, defaults to 0.001):
             The coefficient for the auxiliary load balancing loss.
         moe_num_shared_experts (`int`, *optional*, defaults to 2):
             The number of shared experts.
         pad_token_id (`int`, *optional*, defaults to 2):
             The padding token ID.
-        **kwargs:
-            Additional keyword arguments to be passed to the parent `LlamaConfig`.
     """
 
     model_type = "aria_text_model"
@@ -169,8 +167,6 @@ class AriaConfig(PretrainedConfig):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        **kwargs:
-            Additional keyword arguments passed to the parent class.
 
     Attributes:
         model_type (`str`):
@@ -782,7 +778,7 @@ class AriaProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: AriaImageProcessor = None,
+        image_processor=None,
         tokenizer: Union[AutoTokenizer, str] = None,
         patch_size: int = 490,
         chat_template: str = None,
@@ -899,7 +895,7 @@ class AriaProcessor(ProcessorMixin):
         image_processor_path = (
             image_processor_path if image_processor_path is not None else pretrained_model_name_or_path
         )
-        image_processor = AriaImageProcessor.from_pretrained(
+        image_processor = AutoImageProcessor.from_pretrained(
             image_processor_path,
             **kwargs,
         )
