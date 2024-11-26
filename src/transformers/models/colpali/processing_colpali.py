@@ -376,12 +376,12 @@ class ColPaliProcessor(ProcessorMixin):
 
     def score_retrieval(
         self,
-        query_embeddings: Union[torch.Tensor, List[torch.Tensor]],
-        passage_embeddings: Union[torch.Tensor, List[torch.Tensor]],
+        query_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
+        passage_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
         batch_size: int = 128,
-        output_dtype: Optional[torch.dtype] = torch.float32,
-        output_device: Union[torch.device, str] = "cpu",
-    ) -> torch.Tensor:
+        output_dtype: Optional["torch.dtype"] = None,
+        output_device: Union["torch.device", str] = "cpu",
+    ) -> "torch.Tensor":
         """
         Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
         query embeddings (`qs`) and passage embeddings (`ps`). For ColPali, a passage is the
