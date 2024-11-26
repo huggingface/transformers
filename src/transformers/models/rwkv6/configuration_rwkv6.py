@@ -45,9 +45,11 @@ class Rwkv6Config(PretrainedConfig):
             Number of hidden layers in the model.
         attention_hidden_size (`int`, *optional*):
             Dimensionality of the attention hidden states. Will default to `hidden_size` if unset.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            The attention heads to use in rwkv6 self_attention module.
         head_size (`int`, *optional*, defaults to 64): head_size of rwkv6 self_attention module.
+        head_size_divisor (`float`, *optional*, defaults to 8):
+            A scaling factor used to adjust the epsilon value in GroupNorm layers. The final epsilon will be
+             calculated as base_epsilon * (head_size_divisor**2). A larger value leads to more numerical stability
+             during training. For example, with the default value of 8, the effective epsilon becomes 1e-5 * 64.
         intermediate_size (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. Will default to 4 times `hidden_size` if unset.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):

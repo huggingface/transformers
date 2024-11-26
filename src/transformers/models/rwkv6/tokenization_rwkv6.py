@@ -142,6 +142,28 @@ class RwkvTokenizer:
 
 
 class Rwkv6Tokenizer(PreTrainedTokenizer):
+    r"""
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        bos_token (:obj:`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining.
+            Can be used as sequence classifier token.
+        eos_token (:obj:`str`, *optional*, defaults to `"<s>"`):
+            The end of sequence token.
+        unk_token (:obj:`str`, *optional*, defaults to `"<s>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+
+    Example::
+        >>> from transformers import Rwkv6Tokenizer
+        >>> tokenizer = Rwkv6Tokenizer(
+        ...     vocab_file='vocab.txt',
+        ...     bos_token='<s>',
+        ...     eos_token='</s>',
+        ...     unk_token='<unk>'
+        ... )
+    """
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
