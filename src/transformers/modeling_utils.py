@@ -1437,16 +1437,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config, torch_dtype=torch.get_default_dtype(), check_device_map=False
             )
         self.config = config
-        if getattr(config, "loss_type", None) is None:
-            loss_type = self.__class__.__name__
-            if loss_type not in LOSS_MAPPING:
-                loss_groups = f"({'|'.join(LOSS_MAPPING)})"
-                loss_type = re.findall(loss_groups, self.__class__.__name__)
-                if len(loss_type) > 0:
-                    loss_type = loss_type[0]
-                else:
-                    loss_type = None
-            self.config.loss_type = loss_type
+
+        # for initialization of the loss
+        loss_type = self.__class__.__name__
+        if loss_type not in LOSS_MAPPING:
+            loss_groups = f"({'|'.join(LOSS_MAPPING)})"
+            loss_type = re.findall(loss_groups, self.__class__.__name__)
+            if len(loss_type) > 0:
+                loss_type = loss_type[0]
+            else:
+                loss_type = None
+        self.loss_type = loss_type
 
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
@@ -5038,7 +5039,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @property
     def loss_function(self):
-        loss_type = getattr(self.config, "loss_type", None)
+        loss_type = getattr(self, "loss_type", None)
 
         if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
