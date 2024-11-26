@@ -818,16 +818,21 @@ class AssistantToTargetTranslator:
         assistant_vocab = self._assistant_tokenizer.get_vocab()
         return list(set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.keys()))
 
-    def get_target_ids(self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor) -> torch.LongTensor:
+    def get_target_ids(
+        self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor
+    ) -> torch.LongTensor:
         """
         Return the target candidate ids that correspond to the assistant candidate ids.
         Note that we have already the target ids for the prompt and we only need to find the target ids for the new tokens.
         Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
         """
         device = assistant_candidate_ids.device
-        target_candidate_ids = assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].cpu().apply_(
-            lambda x: self._assistant_to_target_input_ids.get(x, x)
-        ).to(device)
+        target_candidate_ids = (
+            assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :]
+            .cpu()
+            .apply_(lambda x: self._assistant_to_target_input_ids.get(x, x))
+            .to(device)
+        )
         return torch.cat((target_input_ids, target_candidate_ids.unsqueeze(0)), dim=1)
 
     def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
@@ -842,9 +847,11 @@ class AssistantToTargetTranslator:
         assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
             -1
         ]
-        target_logits_supported_indices: torch.IntTensor = assistant_logits_supported_indices.cpu().apply_(
-            lambda x: self._assistant_to_target_input_ids[x]
-        ).to(device)
+        target_logits_supported_indices: torch.IntTensor = (
+            assistant_logits_supported_indices.cpu()
+            .apply_(lambda x: self._assistant_to_target_input_ids[x])
+            .to(device)
+        )
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
         return target_logits
 
@@ -944,9 +951,13 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             target_new_ids = target_input_ids[:, -(target_seq_len - self._prev_target_seq_len) :]
             self._prev_target_seq_len = target_seq_len
             # Convert target_new_ids to string
-            target_new_toks = self.target_tokenizer.batch_decode(target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            target_new_toks = self.target_tokenizer.batch_decode(
+                target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            )
             # Convert the string to assistant_new_ids
-            assistant_new_ids = self.assistant_tokenizer(target_new_toks, add_special_tokens=False, return_tensors="pt")["input_ids"]
+            assistant_new_ids = self.assistant_tokenizer(
+                target_new_toks, add_special_tokens=False, return_tensors="pt"
+            )["input_ids"]
             if self._prev_assistant_ids is None:
                 self._prev_assistant_ids = assistant_new_ids
             else:
@@ -989,7 +1000,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             "logits_processor": self.logits_processor,
         }
 
-        assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs, output_logits=True)
+        assistant_output = self.assistant_model.generate(
+            **assistant_generation_kwargs, **self.assistant_kwargs, output_logits=True
+        )
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
