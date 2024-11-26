@@ -171,6 +171,7 @@ _import_structure = {
     ],
     "models.aria": [
         "AriaConfig",
+        "AriaImageProcessor",
         "AriaProcessor",
         "AriaTextConfig",
     ],
@@ -5037,6 +5038,7 @@ if TYPE_CHECKING:
     )
     from .models.aria import (
         AriaConfig,
+        AriaImageProcessor,
         AriaProcessor,
         AriaTextConfig,
     )
