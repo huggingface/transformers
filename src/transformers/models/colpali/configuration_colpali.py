@@ -38,7 +38,7 @@ class ColPaliConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vlm_backbone_config (`PretrainedConfig`, *optional*):
+        vlm_config (`PretrainedConfig`, *optional*):
             Configuration of the VLM backbone model.
         embedding_dim (`int`, *optional*, defaults to 128):
             Dimension of the multi-vector embeddings produced by the model.
@@ -55,19 +55,17 @@ class ColPaliConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vlm_backbone_config=None,
+        vlm_config=None,
         embedding_dim: int = 128,
         **kwargs,
     ):
-        if isinstance(vlm_backbone_config, dict):
-            vlm_backbone_config = deepcopy(vlm_backbone_config)
-            vlm_backbone_config["model_type"] = (
-                vlm_backbone_config["model_type"] if "model_type" in vlm_backbone_config else "paligemma"
-            )
-            vlm_backbone_config = CONFIG_MAPPING[vlm_backbone_config["model_type"]](**vlm_backbone_config)
-        elif vlm_backbone_config is None:
-            vlm_backbone_config = CONFIG_MAPPING["paligemma"]()
-        self.vlm_backbone_config = vlm_backbone_config
+        if isinstance(vlm_config, dict):
+            vlm_config = deepcopy(vlm_config)
+            vlm_config["model_type"] = vlm_config["model_type"] if "model_type" in vlm_config else "paligemma"
+            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
+        elif vlm_config is None:
+            vlm_config = CONFIG_MAPPING["paligemma"]()
+        self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
 
         super().__init__(**kwargs)

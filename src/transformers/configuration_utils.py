@@ -1124,14 +1124,14 @@ class PretrainedConfig(PushToHubMixin):
             return getattr(self, valid_text_config_names[0])
         else:
             # In case no valid text config is found, we might have a model with a vlm backbone
-            if hasattr(self, "vlm_backbone_config"):
+            if hasattr(self, "vlm_config"):
                 for text_config_name in possible_text_config_names:
-                    if hasattr(self.vlm_backbone_config, text_config_name):
-                        text_config = getattr(self.vlm_backbone_config, text_config_name, None)
+                    if hasattr(self.vlm_config, text_config_name):
+                        text_config = getattr(self.vlm_config, text_config_name, None)
                         if text_config is not None:
                             valid_text_config_names += [text_config_name]
             if len(valid_text_config_names) == 1:
-                return getattr(self.vlm_backbone_config, valid_text_config_names[0])
+                return getattr(self.vlm_config, valid_text_config_names[0])
         return self
 
 

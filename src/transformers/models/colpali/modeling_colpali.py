@@ -62,7 +62,7 @@ class ColPaliPreTrainedModel(PreTrainedModel):
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.vlm_backbone_config.text_config.initializer_range
+            else self.config.vlm_config.text_config.initializer_range
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -211,16 +211,16 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config
-        self.vocab_size = config.vlm_backbone_config.text_config.vocab_size
+        self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        vlm = AutoModelForImageTextToText.from_config(config.vlm_backbone_config)
+        vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
         if vlm.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"vlm.language_model.{k}" for k in vlm.language_model._tied_weights_keys]
         self.vlm = vlm
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
-            self.config.vlm_backbone_config.text_config.hidden_size,
+            self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
 
@@ -356,8 +356,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             mean_resizing=mean_resizing,
         )
 
-        self.config.vlm_backbone_config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vlm_backbone_config.vocab_size = model_embeds.num_embeddings
+        self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
+        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
         self.vlm.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
 

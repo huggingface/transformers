@@ -136,11 +136,15 @@ class ColPaliProcessor(ProcessorMixin):
 
         self.image_seq_length = image_processor.image_seq_length
 
-        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
-        tokens_to_add = {"additional_special_tokens": [image_token]}
-        tokenizer.add_special_tokens(tokens_to_add)
+        if not hasattr(tokenizer, "image_token"):
+            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        else:
+            self.image_token_id = tokenizer.image_token_id
+
         tokenizer.add_tokens(EXTRA_TOKENS)
-        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
 
@@ -372,12 +376,12 @@ class ColPaliProcessor(ProcessorMixin):
 
     def score_retrieval(
         self,
-        query_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
-        passage_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
+        query_embeddings: Union[torch.Tensor, List[torch.Tensor]],
+        passage_embeddings: Union[torch.Tensor, List[torch.Tensor]],
         batch_size: int = 128,
-        output_dtype: Optional["torch.dtype"] = None,
-        output_device: Union["torch.device", str] = "cpu",
-    ) -> "torch.Tensor":
+        output_dtype: Optional[torch.dtype] = torch.float32,
+        output_device: Union[torch.device, str] = "cpu",
+    ) -> torch.Tensor:
         """
         Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
         query embeddings (`qs`) and passage embeddings (`ps`). For ColPali, a passage is the

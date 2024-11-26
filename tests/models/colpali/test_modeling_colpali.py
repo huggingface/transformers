@@ -129,7 +129,7 @@ class ColPaliForRetrievalModelTester:
         self.use_cache = use_cache
 
         self.embedding_dim = embedding_dim
-        self.vlm_backbone_config = {
+        self.vlm_config = {
             "model_type": "paligemma",
             "text_config": self.text_config,
             "vision_config": self.vision_config,
@@ -143,7 +143,7 @@ class ColPaliForRetrievalModelTester:
 
     def get_config(self):
         return ColPaliConfig(
-            vlm_backbone_config=self.vlm_backbone_config,
+            vlm_config=self.vlm_config,
             embedding_dim=self.embedding_dim,
         )
 
@@ -163,14 +163,12 @@ class ColPaliForRetrievalModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = (
-            ids_tensor([self.batch_size, self.seq_length], config.vlm_backbone_config.text_config.vocab_size - 1) + 1
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.vlm_config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
-        input_ids[input_ids == config.vlm_backbone_config.image_token_index] = self.pad_token_id
-        input_ids[:, :16] = config.vlm_backbone_config.image_token_index
+        input_ids[input_ids == config.vlm_config.image_token_index] = self.pad_token_id
+        input_ids[:, :16] = config.vlm_config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,

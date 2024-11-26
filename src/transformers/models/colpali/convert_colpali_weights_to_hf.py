@@ -363,7 +363,7 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
 
     # Add the extra attributes for the new model
     new_config = {
-        "vlm_backbone_config": ORIGINAL_CONFIG.copy(),
+        "vlm_config": ORIGINAL_CONFIG.copy(),
         "model_type": "colpali",
         "is_composition": False,
         "embedding_dim": 128,
