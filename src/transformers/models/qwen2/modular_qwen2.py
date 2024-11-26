@@ -70,7 +70,7 @@ class Qwen2Model(LlamaModel):
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__()
         self.layers = nn.ModuleList(
-            [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Qwen2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
 
