@@ -1577,7 +1577,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         quantized_features, codevector_perplexity = self.quantizer(extract_features)
 
         # project quantized features twice
-        quantized_features = self.project_q(quantized_features)
+        quantized_features = self.project_q(quantized_features.to(self.project_q.weight.dtype))
         quantized_features = self.project_hid(quantized_features)
 
         prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
