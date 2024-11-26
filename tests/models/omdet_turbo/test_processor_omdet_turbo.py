@@ -76,9 +76,9 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(self.tmpdirname)
 
     def get_fake_omdet_turbo_output(self):
-        torch.manual_seed(42)
         classes = self.get_fake_omdet_turbo_classes()
         classes_structure = torch.tensor([len(sublist) for sublist in classes])
+        torch.manual_seed(42)
         return OmDetTurboObjectDetectionOutput(
             decoder_coord_logits=torch.rand(self.batch_size, self.num_queries, 4),
             decoder_class_logits=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
