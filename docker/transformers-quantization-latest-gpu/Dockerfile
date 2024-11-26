@@ -54,6 +54,7 @@ RUN python3 -m pip install --no-cache-dir gguf
 # Add autoawq for quantization testing
 # >=v0.2.7 needed for compatibility with transformers > 4.46
 RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.7.post2/autoawq-0.2.7.post2-py3-none-any.whl
+RUN python3 -m pip install autoawq[kernels]
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
