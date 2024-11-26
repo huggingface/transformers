@@ -16,9 +16,6 @@
 
 from typing import ClassVar, List, Optional, Union
 
-import torch
-import torch.utils.checkpoint
-
 from transformers.models.paligemma.processing_paligemma import (
     IMAGE_TOKEN,
     PaliGemmaProcessor,
@@ -37,13 +34,13 @@ from ...tokenization_utils_base import (
     TextInput,
 )
 from ...utils import (
-    is_flash_attn_2_available,
+    is_torch_available,
     logging,
 )
 
 
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)

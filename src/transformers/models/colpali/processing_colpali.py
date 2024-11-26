@@ -22,12 +22,15 @@
 
 from typing import ClassVar, List, Optional, Union
 
-import torch
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
