@@ -56,7 +56,7 @@ Required dependencies are missing. Please install them using:
 {}
 
 """.strip()
-        install_commands = "\n".join(f'pip install {dep}' for dep in missing_deps)
+        install_commands = "\n".join(f"pip install {dep}" for dep in missing_deps)
         print(install_instructions.format(install_commands))
         return False
     else:
@@ -70,6 +70,7 @@ if check_dependencies():
     from rwkvfla.ops.rwkv6.recurrent_naive import native_recurrent_rwkv6  # pylint: disable=C0411
 else:
     from .wkv6 import native_recurrent_rwkv6
+
     chunk_rwkv6 = native_recurrent_rwkv6
     fused_recurrent_rwkv6 = native_recurrent_rwkv6
 
