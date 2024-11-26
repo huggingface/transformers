@@ -68,8 +68,7 @@ from functools import cached_property
 class ComputeMetrics():
 
     def __call__(self, predictions=None, label_ids=None, losses=None, inputs=None, prefix_ids=None, generated_ids=None, **kwargs) -> Dict:
-        accuracy = (generated_ids == label_ids).sum() / generated_ids.numel()
-        breakpoint()
+        accuracy = (generated_ids == kwargs['input_ids'][:, :generated_ids.shape[1]]).sum() / generated_ids.size
 
         return {
             "accuracy": accuracy
@@ -172,31 +171,35 @@ class AdaptiveLlamaTrainer(Trainer):
 
         gen_params = {
             "do_sample": False,
-            "early_stopping": True,
-            "num_beams": 3,
+            "early_stopping": False,
+            "num_beams": 1,
             "repetition_penalty": 2.5,
             "remove_invalid_values": True,
             "bos_token_id": 1,
             "eos_token_id": 2,
             "pad_token_id": 0,
             "forced_eos_token_id": 2,
-            "use_cache": True,
+            "use_cache": False,
             "no_repeat_ngram_size": 4,
             "num_return_sequences": 1,
         }
         genconfig = GenerationConfig()
 
-        caption_legth = inputs['input_ids'].shape[1]
+        caption_legth = inputs['input_ids'].shape[1] - 2
         genconfig.max_length = caption_legth
 
         batch_size, seq_len = inputs['input_ids'].shape[0], 2
         special_embeddings_mask = torch.ones([batch_size, seq_len], device=inputs['input_ids'].device)
         special_embeddings_mask[:, 1] = 0
+        attention_mask = torch.ones([batch_size, seq_len], device=inputs['input_ids'].device)
+
+        prefix_ids = inputs['input_ids'][:, :2]
         all_generation_params = {
             'generation_config': genconfig,
             'max_new_tokens': caption_legth,
-            'input_ids': inputs['input_ids'][:, :2],
+            'inputs': prefix_ids,
             'special_embeddings_mask': special_embeddings_mask,
+            'attention_mask': attention_mask,
             **gen_params,
         }
 
@@ -204,7 +207,8 @@ class AdaptiveLlamaTrainer(Trainer):
 
         return {
             "generated_ids": model_generation,
-            "prefix_ids": inputs['prefix_input_ids'],
+            "prefix_ids": prefix_ids,
+            "input_ids": inputs['input_ids'],
         }
 
     def prediction_step(
@@ -270,8 +274,6 @@ class AdaptiveLlamaTrainer(Trainer):
         labels = None
 
         return (loss, logits, labels)
-
-
 
     def evaluation_loop(
         self,
@@ -517,7 +519,7 @@ class AdaptiveTrainingArguments(TrainingArguments):
 
 
 if __name__ == "__main__":
-    snd = SequentialNumbersDataset(length=128, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
+    snd = SequentialNumbersDataset(length=5000, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
     snd_eval = SequentialNumbersDataset(length=100, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
 
     llama_config = LlamaConfig(

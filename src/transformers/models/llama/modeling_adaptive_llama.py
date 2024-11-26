@@ -440,7 +440,7 @@ class AdaptiveFanInGumbel(nn.Module):
 
             for seq_len_i in range(1, total_tokens_count):
                 want_merge = merging_map[batch_i, seq_len_i, 1].item() > 0.5
-                if want_merge:
+                if want_merge and seq_len_i < total_tokens_count - 1:
                     if buffer_length == 0:
                         start_want_merge = seq_len_i
                     buffer_length += 1
@@ -454,6 +454,7 @@ class AdaptiveFanInGumbel(nn.Module):
                     aggregated_embeddings_transform[batch_i, new_seq_len_i, seq_len_i] = merging_map[batch_i, seq_len_i, 0]
                     merged_embeddings_counts[batch_i, new_seq_len_i] = 1
                     new_seq_len_i += 1
+
 
             merged_attention_mask[batch_i, :new_seq_len_i] = 1
             max_new_seq_len = max(max_new_seq_len, new_seq_len_i)

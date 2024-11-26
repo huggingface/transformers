@@ -449,6 +449,9 @@ class GenerationMixin:
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
 
+        if 'special_embeddings_mask' in kwargs:
+            kwargs["special_embeddings_mask"] = (model_inputs["input_ids"] == 1).to(torch.float32) + (model_inputs["input_ids"] == 2).to(torch.float32)
+
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
             if key not in model_inputs:
