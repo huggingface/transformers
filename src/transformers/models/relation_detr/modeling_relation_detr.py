@@ -2747,3 +2747,10 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         )
 
         return dict_outputs
+
+
+__all__ = [
+    "RelationDetrForObjectDetection",
+    "RelationDetrModel",
+    "RelationDetrPreTrainedModel",
+]
