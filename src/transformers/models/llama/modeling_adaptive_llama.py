@@ -134,9 +134,9 @@ class AdaptiveFanInFunction(torch.autograd.Function):
 
         # is merging_map has been passed
         # it should be inverted
-        merging_bias = torch.ones_like(merging_log_probas) * 2
-        merging_bias[:, :, 1] = 0
-        merging_log_probas += merging_bias
+        # merging_bias = torch.ones_like(merging_log_probas) * 2
+        # merging_bias[:, :, 1] = 0
+        # merging_log_probas += merging_bias
 
         if merging_map is None:
             merging_map = Categorical(logits=merging_log_probas).sample()
@@ -509,7 +509,15 @@ class AdaptiveFanInGumbel(nn.Module):
             raise Exception("found nan merging_log_probas!")
 
         # OHE: [ bs, seq_len, 2 ]
-        merging_map = scaled_gumbel_softmax(merging_log_probas, hard=True, dim=-1, invert=inverted_merging_map)
+        if self.training:
+            merging_map = scaled_gumbel_softmax(merging_log_probas, hard=True, dim=-1, invert=inverted_merging_map)
+        else:
+            merging_map = torch.zeros_like(merging_log_probas)
+            merging_map[:, :, 0] = (merging_log_probas[:, :, 0] > merging_log_probas[:, :, 1]).to(torch.float32)
+            merging_map[:, :, 1] = 1 - merging_map[:, :, 0]
+            # merging_map = torch.zeros_like(merging_log_probas)
+            # merging_map.masked_fill_()
+
         # merging_map[:, -1, 0] = 1
         # merging_map[:, -1, 1] = 0
         merging_map[special_embeddings_mask.bool()] = torch.tensor([1., 0.], device=merging_map.device)
@@ -533,6 +541,7 @@ class AdaptiveFanInGumbel(nn.Module):
 
         # [ bs, new_seq_len, emb_dim ] = [ bs, new_seq_len, seq_len ] @ [ bs, seq_len, emb_dim ]
         merged_attention_outputs = torch.bmm(merged_embeddings_transform, hidden_state)
+        # Sum is better than mean
         # merged_attention_outputs = merged_attention_outputs / (merged_embeddings_counts.unsqueeze(-1) + 1e-6)
 
         # sum_merged_tokens = merged_embeddings_counts[(merged_embeddings_counts > 1)].sum()

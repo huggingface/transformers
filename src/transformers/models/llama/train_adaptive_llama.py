@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import torch
 
 from transformers.models.llama.configuration_llama import LlamaConfig
-from transformers.models.llama.modeling_adaptive_llama import AdaptiveFanIn, AdaptiveFanOut, AdaptiveFanInOutput, AdaptiveFanOutOutput, AdaptiveLlamaModel
+from transformers.models.llama.modeling_adaptive_llama import AdaptiveFanIn, AdaptiveFanInGumbel, AdaptiveFanInGumbel, AdaptiveLlamaForCausalLM, AdaptiveFanOut, AdaptiveFanInOutput, AdaptiveFanOutOutput, AdaptiveLlamaModel
 
 
 from transformers import GenerationConfig
@@ -15,8 +15,7 @@ MAX_SEQ_LEN = 10
 import random
 import torch
 import transformers
-from transformers import LlamaForCausalLM, LlamaConfig
-from transformers.models.llama.modeling_adaptive_llama import AdaptiveLlamaForCausalLM
+from transformers import LlamaConfig
 
 from transformers import Trainer
 from transformers import TrainingArguments
@@ -69,6 +68,8 @@ class ComputeMetrics():
 
     def __call__(self, predictions=None, label_ids=None, losses=None, inputs=None, prefix_ids=None, generated_ids=None, **kwargs) -> Dict:
         accuracy = (generated_ids == kwargs['input_ids'][:, :generated_ids.shape[1]]).sum() / generated_ids.size
+        # print("generated_ids: ", generated_ids)
+        # print("input_ids    : ", kwargs['input_ids'])
 
         return {
             "accuracy": accuracy
@@ -161,7 +162,7 @@ class AdaptiveLlamaTrainer(Trainer):
 
         extra_log = dict()
         for i, adown in enumerate(model.model.adaptive_down):
-            if isinstance(adown, AdaptiveFanIn):
+            if isinstance(adown, (AdaptiveFanIn, AdaptiveFanInGumbel)):
                 merger_mpl_grad = adown.fan_in_mlp.weight.grad.norm(2).item()
                 assert merger_mpl_grad is not None, "merger_mpl_grad is expected to be not none"
                 extra_log[f"merger_mpl_grad_norm_{i}"] = merger_mpl_grad
@@ -527,7 +528,11 @@ if __name__ == "__main__":
     snd_eval = SequentialNumbersDataset(length=100, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
 
     num_layers = 8
-    num_layers_half = 8 // 2
+    num_layers_half = num_layers // 2
+    # dummy_adaptive_fan_in = [ False, False, False, False ]
+    # dummy_adaptive_fan_in = [ True, True, True, False ]
+    dummy_adaptive_fan_in = [ False, True, True, True ]
+    assert len(dummy_adaptive_fan_in) == num_layers_half
     llama_config = LlamaConfig(
         hidden_size=128,
         vocab_size=VOCAB_SIZE,
@@ -537,7 +542,7 @@ if __name__ == "__main__":
         max_position_embeddings=MAX_SEQ_LEN,
         use_cache=False,
         attn_implementation = 'eager',
-        dummy_adaptive_fan_in = [ True ] * num_layers_half,
+        dummy_adaptive_fan_in = dummy_adaptive_fan_in,
     )
 
     model = AdaptiveLlamaForCausalLM(llama_config)
