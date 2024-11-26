@@ -286,7 +286,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~GroundingDinoProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~GroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`List[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -2551,30 +2551,41 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoProcessor, GroundingDinoForObjectDetection
-        >>> from PIL import Image
         >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "a cat."
+        >>> import torch
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
-        >>> processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
-        >>> model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny")
+        >>> model_id = "IDEA-Research/grounding-dino-tiny"
+        >>> device = "cuda"
 
-        >>> inputs = processor(images=image, text=text, return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = processor.image_processor.post_process_object_detection(
-        ...     outputs, threshold=0.35, target_sizes=target_sizes
-        ... )[0]
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 1) for i in box.tolist()]
-        ...     print(f"Detected {label.item()} with confidence " f"{round(score.item(), 2)} at location {box}")
-        Detected 1 with confidence 0.45 at location [344.8, 23.2, 637.4, 373.8]
-        Detected 1 with confidence 0.41 at location [11.9, 51.6, 316.6, 472.9]
+        >>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(image_url, stream=True).raw)
+        >>> # Check for cats and remote controls
+        >>> text_labels = [["a cat", "a remote control"]]
+
+        >>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> results = processor.post_process_grounded_object_detection(
+        ...     outputs,
+        ...     box_threshold=0.4,
+        ...     text_threshold=0.3,
+        ...     target_sizes=[(image.height, image.width)]
+        ... )
+        >>> # Retrieve the first image result
+        >>> result = results[0]
+        >>> for box, score, text_label in zip(result["boxes"], result["scores"], result["text_labels"]):
+        ...     box = [round(x, 2) for x in box.tolist()]
+        ...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
+        Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.28]
+        Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
+        Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
