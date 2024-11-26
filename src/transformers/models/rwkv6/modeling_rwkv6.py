@@ -56,16 +56,22 @@ Required dependencies are missing. Please install them using:
 {}
 
 """.strip()
-        install_commands = "\n".join(f'pip install "{dep}"' for dep in missing_deps)
+        install_commands = "\n".join(f'pip install {dep}' for dep in missing_deps)
         print(install_instructions.format(install_commands))
-        raise ImportError(f"Missing dependencies: {', '.join(missing_deps)}")
+        return False
+    else:
+        return True
 
 
-check_dependencies()
-# flake8: noqa: E402
-from rwkvfla.ops.rwkv6.chunk import chunk_rwkv6  # pylint: disable=C0411
-from rwkvfla.ops.rwkv6.fused_recurrent import fused_recurrent_rwkv6  # pylint: disable=C0411
-from rwkvfla.ops.rwkv6.recurrent_naive import native_recurrent_rwkv6  # pylint: disable=C0411
+if check_dependencies():
+    # flake8: noqa: E402
+    from rwkvfla.ops.rwkv6.chunk import chunk_rwkv6  # pylint: disable=C0411
+    from rwkvfla.ops.rwkv6.fused_recurrent import fused_recurrent_rwkv6  # pylint: disable=C0411
+    from rwkvfla.ops.rwkv6.recurrent_naive import native_recurrent_rwkv6  # pylint: disable=C0411
+else:
+    from .wkv6 import native_recurrent_rwkv6
+    chunk_rwkv6 = native_recurrent_rwkv6
+    fused_recurrent_rwkv6 = native_recurrent_rwkv6
 
 
 logger = logging.get_logger(__name__)
