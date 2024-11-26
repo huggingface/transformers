@@ -13,19 +13,9 @@ from ...utils import (
     torch_int,
 )
 from ..vit.modeling_vit import (
-    ViTAttention,
     ViTEmbeddings,
-    ViTEncoder,
     ViTForImageClassification,
-    ViTIntermediate,
-    ViTLayer,
     ViTModel,
-    ViTPatchEmbeddings,
-    ViTPooler,
-    ViTSdpaAttention,
-    ViTSdpaSelfAttention,
-    ViTSelfAttention,
-    ViTSelfOutput,
 )
 
 
@@ -106,48 +96,6 @@ class IJepaEmbeddings(ViTEmbeddings):
         return embeddings
 
 
-class IJepaPatchEmbeddings(ViTPatchEmbeddings):
-    pass
-
-
-class IJepaSelfAttention(ViTSelfAttention):
-    pass
-
-
-class IJepaSdpaSelfAttention(ViTSdpaSelfAttention):
-    pass
-
-
-class IJepaSelfOutput(ViTSelfOutput):
-    pass
-
-
-class IJepaAttention(ViTAttention):
-    pass
-
-
-class IJepaSdpaAttention(ViTSdpaAttention):
-    pass
-
-
-class IJepaIntermediate(ViTIntermediate):
-    pass
-
-
-IJepa_ATTENTION_CLASSES = {
-    "eager": IJepaAttention,
-    "sdpa": IJepaSdpaAttention,
-}
-
-
-class IJepaLayer(ViTLayer):
-    pass
-
-
-class IJepaEncoder(ViTEncoder):
-    pass
-
-
 class IJepaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -205,15 +153,6 @@ class IJepaModel(IJepaPreTrainedModel, ViTModel):
         super().__init__(config)
         self.config = config
         self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = IJepaEncoder(config)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = IJepaPooler(config) if add_pooling_layer else None
-        # Initialize weights and apply final processing
-        self.post_init()
-
-
-class IJepaPooler(ViTPooler):
-    pass
 
 
 _IMAGE_CLASS_CHECKPOINT = "jmtzt/ijepa_vith14_1k"
