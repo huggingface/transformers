@@ -115,7 +115,6 @@ class GlmAttention(GraniteAttention):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)
-        self.partial_rotary_factor = config.partial_rotary_factor
 
 
 class GlmFlashAttention2(GlmAttention, GraniteFlashAttention2):
