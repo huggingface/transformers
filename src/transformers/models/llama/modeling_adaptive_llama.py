@@ -371,18 +371,30 @@ def scaled_gumbel_softmax(
         logits,
         tau: float = 1,
         scale = 1.0,
+        invert = False,
+        hard = True,
         dim: int = -1,
     ):
+
+    assert hard, 'soft mode is not supported'
+
     gumbels = (
         -torch.empty_like(logits, memory_format=torch.legacy_contiguous_format)
         .exponential_()
         .log()
     )  # ~Gumbel(0,1)
+    if not gumbels.isfinite().all():
+        print("gumbels are infinite")
+        breakpoint()
+
     gumbels = (logits + gumbels) / tau  # ~Gumbel(logits,tau)
     y_soft = gumbels.softmax(dim) * scale
 
     # Straight through.
     index = y_soft.max(dim, keepdim=True)[1]
+    if invert:
+        index = 1 - index
+
     y_hard = torch.zeros_like(
         logits, memory_format=torch.legacy_contiguous_format
     ).scatter_(dim, index, 1.0)
@@ -427,7 +439,7 @@ class AdaptiveFanInGumbel(nn.Module):
             total_tokens_count = total_initial_num_embeddings[batch_i].item()
 
             for seq_len_i in range(1, total_tokens_count):
-                want_merge = merging_map[batch_i, seq_len_i, 1].item()
+                want_merge = merging_map[batch_i, seq_len_i, 1].item() > 0.5
                 if want_merge:
                     if buffer_length == 0:
                         start_want_merge = seq_len_i
@@ -479,20 +491,16 @@ class AdaptiveFanInGumbel(nn.Module):
         attn_output_pairs = torch.cat([ attn_output_pairs, merging_mask_stub ], dim=1)
         # [ bs, seq_len, 2 ] # should be merged or not (probas)?
 
-        if merging_log_probas is None:
-            merging_log_probas = self.fan_in_mlp(attn_output_pairs)
-            if merging_log_probas.isnan().any() or not merging_log_probas.isfinite().all():
-                print("found nan merging_log_probas!")
-                breakpoint()
-                raise Exception("found nan merging_log_probas!")
+        merging_log_probas = self.fan_in_mlp(attn_output_pairs)
+        if merging_log_probas.isnan().any() or not merging_log_probas.isfinite().all():
+            print("found nan merging_log_probas!")
+            breakpoint()
+            raise Exception("found nan merging_log_probas!")
 
-            # merge all by default
-            merging_log_probas_bias = torch.ones_like(merging_log_probas) * 10
-            merging_log_probas_bias[:, :, 0] = 0
-            merging_log_probas += merging_log_probas_bias
-        else:
-            merging_log_probas_stub = torch.zeros([batch_size, 1, 2], device=hidden_state.device) + 1e-6
-            merging_log_probas = torch.cat([ merging_log_probas, merging_log_probas_stub ], dim=1)
+        # merge all by default
+        # merging_log_probas_bias = torch.ones_like(merging_log_probas) * 10
+        # merging_log_probas_bias[:, :, 0] = 0
+        # merging_log_probas += merging_log_probas_bias
 
         if merging_log_probas.isnan().any() or not merging_log_probas.isfinite().all():
             print("found nan merging_log_probas!")
@@ -500,12 +508,12 @@ class AdaptiveFanInGumbel(nn.Module):
             raise Exception("found nan merging_log_probas!")
 
         # OHE: [ bs, seq_len, 2 ]
-        merging_map = scaled_gumbel_softmax(merging_log_probas, scale=1000, dim=-1)
+        merging_map = scaled_gumbel_softmax(merging_log_probas, hard=True, dim=-1, invert=inverted_merging_map)
         # merging_map[:, -1, 0] = 1
         # merging_map[:, -1, 1] = 0
         merging_map[special_embeddings_mask.bool()] = torch.tensor([1., 0.], device=merging_map.device)
         merging_map[~attention_mask.bool()] = 0
-        merging_map.sum(dim=-1)
+        assert (merging_map.sum(dim=-1) == 1).sum().item() == attention_mask.sum().item()
         # print("attention_mask", attention_mask.sum())
         # print("merged tokens:", merging_map[:, :, 1].sum())
 
@@ -524,9 +532,9 @@ class AdaptiveFanInGumbel(nn.Module):
 
         # [ bs, new_seq_len, emb_dim ] = [ bs, new_seq_len, seq_len ] @ [ bs, seq_len, emb_dim ]
         merged_attention_outputs = torch.bmm(merged_embeddings_transform, hidden_state)
-        merged_attention_outputs = merged_attention_outputs / (merged_embeddings_counts.unsqueeze(-1) + 1e-6)
+        # merged_attention_outputs = merged_attention_outputs / (merged_embeddings_counts.unsqueeze(-1) + 1e-6)
 
-        sum_merged_tokens = merged_embeddings_counts[(merged_embeddings_counts > 1)].sum()
+        # sum_merged_tokens = merged_embeddings_counts[(merged_embeddings_counts > 1)].sum()
         # print("sum_merged_tokens", sum_merged_tokens)
         # breakpoint()
 
