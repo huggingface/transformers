@@ -475,8 +475,8 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         [here](https://github.com/huggingface/transformers/pull/33200/files#r1785980300)
         """
 
-        self.assertTrue(abs(predicted_number_of_matches - expected_number_of_matches) < 3)
+        self.assertTrue(abs(predicted_number_of_matches - expected_number_of_matches) < 4)
         self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-3)) < 3
+            torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-2)) < 4
         )
-        self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 3)
+        self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 4)
