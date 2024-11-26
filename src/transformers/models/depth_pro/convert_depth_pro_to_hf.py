@@ -18,24 +18,22 @@ URL: https://huggingface.co/apple/DepthPro/tree/main
 """
 
 import argparse
-import json
 from pathlib import Path
 import re
 
 import requests
 import torch
-import torch.nn as nn
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from torchvision import transforms
 
-from transformers import BitImageProcessor, Dinov2Config, Dinov2ForImageClassification, Dinov2Model
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
+# from transformers import DepthProConfig, DepthProImageProcessorFast, DepthProForDepthEstimation
 # TODO: import directly from transformers
 from transformers.models.depth_pro.configuration_depth_pro import DepthProConfig
 from transformers.models.depth_pro.modeling_depth_pro import DepthProForDepthEstimation
+from transformers.models.depth_pro.image_processing_depth_pro_fast import DepthProImageProcessorFast
 
 
 logging.set_verbosity_info()
@@ -147,13 +145,21 @@ def inference_test(processor, model):
 
     predicted_depth = outputs.predicted_depth
     fov = outputs.fov
+    target_sizes = [[image.height, image.width]] * len(predicted_depth)
 
-    predicted_depth, fov = processor.post_process_depth_estimation(predicted_depth, fov)
+    outputs = processor.post_process_depth_estimation(
+        predicted_depths=predicted_depth,
+        fovs=fov,
+        target_sizes=target_sizes,
+    )
+    predicted_depth = outputs['predicted_depth']
+    fov = outputs['fov']
 
-    print("predicted_depth.shape:", predicted_depth.shape)
-    print("fov.shape:", fov.shape)
+    print("\nInference ...")
+    print("predicted_depth:", predicted_depth)
+    print("predicted_depth[0].shape:", predicted_depth[0].shape)
     print("fov:", fov)
-    print("Inference was Successfull!")
+    print("Inference was Successfull!\n")
 
 
 @torch.no_grad()
@@ -167,6 +173,7 @@ def convert_depth_pro_checkpoint(repo_id, filename, pytorch_dump_folder_path, pu
 
     # load original weights from huggingface hub
     file_path = hf_hub_download(repo_id, filename)
+    # file_path = "/home/geetu/work/hf/depth_pro/depth_pro.pt"
     state_dict = torch.load(file_path, weights_only=True)
 
     # enumerate fusion layers
@@ -235,23 +242,31 @@ def convert_depth_pro_checkpoint(repo_id, filename, pytorch_dump_folder_path, pu
     model = DepthProForDepthEstimation(config, use_fov_model=True).eval()
     model.load_state_dict(state_dict)
 
-    # TODO
-    processor = ...
-    # inference_test(processor, model)
+    processor = DepthProImageProcessorFast(
+        do_resize = True,
+        size = {"height": 1536, "width": 1536},
+        resample = PILImageResampling.BILINEAR,
+        antialias = False,
+        do_rescale = True,
+        rescale_factor = 1 / 255,
+        do_normalize = True,
+        image_mean = 0.5,
+        image_std = 0.5,
+        return_tensors = "pt",
+    )
+    inference_test(processor, model)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # TODO
-        # print(f"Saving image processor to {pytorch_dump_folder_path}")
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
-
-    # TODO
-    # if push_to_hub:
-    #     model.push_to_hub("...")
-    #     processor.push_to_hub("...")
+    if push_to_hub:
+        hub_path = "geetu040/DepthPro"
+        model.push_to_hub(hub_path)
+        processor.push_to_hub(hub_path)
 
 
 """
@@ -260,8 +275,8 @@ def convert_depth_pro_checkpoint(repo_id, filename, pytorch_dump_folder_path, pu
 convert_depth_pro_checkpoint(
     "apple/DepthPro",
     "depth_pro.pt",
-    "my_local_dump",
-    False,
+    "my_local_depth_pro_dump",
+    True,
 )
 ```
 
@@ -270,8 +285,8 @@ convert_depth_pro_checkpoint(
 python transformers/src/transformers/models/depth_pro/convert_depth_pro_to_hf.py \
     --repo_id "apple/DepthPro" \
     --filename "depth_pro.pt" \
-    --pytorch_dump_folder_path "my_local_dump" \
-    --push_to_hub 0
+    --pytorch_dump_folder_path "my_local_depth_pro_dump" \
+    --push_to_hub
 ```
 """
 
