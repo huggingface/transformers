@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Transformers与Tiktonken的互操作性
 
-在🤗 transformers中，当使用`from_pretrained`方法从Hub加载模型时，如果模型包含tiktoken格式的`tokenizer.model`文件，框架会无缝支持tiktoken模型文件，并将其自动转换为我们的[快速词符化器](https://huggingface.co/docs/transformers/main/en/main_classes/tokenizer#transformers.PreTrainedTokenizerFast)。
+在🤗 transformers中，当使用`from_pretrained`方法从Hub加载模型时，如果模型包含tiktoken格式的`tokenizer.model`文件，框架可以无缝支持tiktoken模型文件，并将其自动转换为我们的[快速词符化器](https://huggingface.co/docs/transformers/main/en/main_classes/tokenizer#transformers.PreTrainedTokenizerFast)。
 
 ### 已知包含`tiktoken.model`文件发布的模型：
     - gpt2
