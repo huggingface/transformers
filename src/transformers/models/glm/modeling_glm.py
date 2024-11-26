@@ -142,7 +142,7 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, partial_rotary_factor=0.5):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -158,8 +158,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, par
             that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
             k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
             cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor by which the rotary embedding.
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_d
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
@@ -171,7 +170,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, par
     sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
 
     # Keep half or full tensor for later concatenation
-    rotary_dim = int(q.shape[-1] * partial_rotary_factor)
+    rotary_dim = cos.shape[-1]
     q, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
     k, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
@@ -243,9 +242,7 @@ class GlmAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -325,9 +322,7 @@ class GlmFlashAttention2(GlmAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -439,9 +434,7 @@ class GlmSdpaAttention(GlmAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, partial_rotary_factor=self.partial_rotary_factor
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -714,7 +707,7 @@ class GlmModel(GlmPreTrainedModel):
         )
         self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim * config.partial_rotary_factor,
+            dim=int(config.head_dim * config.partial_rotary_factor),
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
         )
