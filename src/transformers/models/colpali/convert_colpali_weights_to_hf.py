@@ -15,11 +15,14 @@
 """Convert ColPali weights."""
 
 import argparse
+import glob
 from pathlib import Path
 from typing import Any, Dict, cast
 
 import torch
+from huggingface_hub import snapshot_download
 from PIL import Image
+from safetensors import safe_open
 
 from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
@@ -260,14 +263,14 @@ ORIGINAL_IMAGE_OUTPUTS_SLICE = {
     "value": torch.tensor(
         [
             [
-                [-0.0610, 0.0850, 0.1943],
-                [-0.0520, 0.0859, 0.1250],
-                [-0.0874, 0.0703, 0.1895],
+                [-0.0874, 0.0674, 0.2148],
+                [-0.0417, 0.0540, 0.2021],
+                [-0.0952, 0.0723, 0.1953],
             ],
             [
-                [0.0432, 0.0211, 0.0669],
-                [0.0461, 0.0142, 0.1416],
-                [-0.0742, 0.1035, 0.1670],
+                [0.0500, 0.0210, 0.0884],
+                [0.0530, 0.0267, 0.1196],
+                [-0.0708, 0.1089, 0.1631],
             ],
         ],
         dtype=ORIGINAL_DTYPE,
@@ -278,14 +281,14 @@ ORIGINAL_QUERY_OUTPUTS_SLICE = {
     "value": torch.tensor(
         [
             [
-                [0.1621, -0.0206, 0.0972],
-                [-0.1074, -0.1162, 0.0281],
-                [-0.0459, -0.1123, -0.0559],
+                [0.1631, -0.0227, 0.0962],
+                [-0.1108, -0.1147, 0.0334],
+                [-0.0496, -0.1108, -0.0525],
             ],
             [
-                [0.1650, -0.0198, 0.0967],
-                [-0.0923, -0.1118, 0.0640],
-                [-0.1299, -0.0640, 0.1172],
+                [0.1650, -0.0200, 0.0967],
+                [-0.0879, -0.1108, 0.0613],
+                [-0.1260, -0.0630, 0.1157],
             ],
         ],
         dtype=ORIGINAL_DTYPE,
@@ -321,8 +324,29 @@ def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
         new_key = key
         if key.startswith("custom_text_proj"):
             new_key = key.replace("custom_text_proj", "embedding_proj_layer")
+        if key.startswith("model."):
+            new_key = key.replace("model.", "vlm.", 1)
         new_state_dict[new_key] = value
     return new_state_dict
+
+
+def load_original_state_dict(model_id):
+    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+
+    original_state_dict = {}
+    for path in glob.glob(f"{directory_path}/*"):
+        if path.endswith(".safetensors"):
+            with safe_open(path, framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    original_state_dict[key] = f.get_tensor(key)
+
+    # tied wieghts so lm.head is not saved. Let's clone to load state dict
+    if "lm_head.weight" not in original_state_dict:
+        original_state_dict["vlm.language_model.lm_head.weight"] = original_state_dict[
+            "model.language_model.model.embed_tokens.weight"
+        ].clone()
+
+    return original_state_dict
 
 
 @torch.no_grad()
@@ -332,10 +356,7 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     print(f"Device: {device}")
 
     # Load the original model's state_dict
-    original_state_dict: Dict[str, torch.Tensor] = torch.hub.load_state_dict_from_url(
-        "https://huggingface.co/vidore/colpali-v1.2-merged-state_dict/resolve/main/colpali_v1_2_merged_state_dict.pth",
-        map_location="cpu",
-    )
+    original_state_dict = load_original_state_dict("vidore/colpali-v1.2-merged")
 
     # Format the state_dict keys
     original_state_dict = rename_state_dict_keys(original_state_dict)
@@ -371,8 +392,8 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     print("Loaded original model weights")
 
     # Tie the weights (following ColPali's `__init__`` step)
-    if model.model.language_model._tied_weights_keys is not None:
-        model._tied_weights_keys = [f"model.language_model.{k}" for k in model.model.language_model._tied_weights_keys]
+    if model.vlm.language_model._tied_weights_keys is not None:
+        model._tied_weights_keys = [f"vlm.language_model.{k}" for k in model.vlm.language_model._tied_weights_keys]
 
     # Sanity check: ensure all keys are the same
     state_dict_keys_old = set(original_state_dict.keys())
@@ -425,8 +446,6 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     ):
         raise ValueError("Outputs for queries do not match the original model's outputs")
 
-    breakpoint()
-
     # Save the model
     if push_to_hub:
         model.push_to_hub(output_dir, private=True)
@@ -434,6 +453,7 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     else:
         Path(output_dir).mkdir(exist_ok=True, parents=True)
         model.save_pretrained(output_dir)
+        processor.save_pretrained(output_dir)
         print(f"Model saved to `{output_dir}`")
 
 

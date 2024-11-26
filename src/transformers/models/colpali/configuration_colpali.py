@@ -55,7 +55,7 @@ class ColPaliConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vlm_backbone_config: PretrainedConfig = None,
+        vlm_backbone_config=None,
         embedding_dim: int = 128,
         **kwargs,
     ):
@@ -67,7 +67,6 @@ class ColPaliConfig(PretrainedConfig):
             vlm_backbone_config = CONFIG_MAPPING[vlm_backbone_config["model_type"]](**vlm_backbone_config)
         elif vlm_backbone_config is None:
             vlm_backbone_config = CONFIG_MAPPING["paligemma"]()
-
         self.vlm_backbone_config = vlm_backbone_config
         self.embedding_dim = embedding_dim
 

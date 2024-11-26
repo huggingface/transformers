@@ -20,9 +20,10 @@ from typing import List, Optional, Tuple, Union
 import torch
 from torch import nn
 
+from transformers import AutoModelForImageTextToText
+
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...models.paligemma import PaliGemmaForConditionalGeneration
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -56,27 +57,13 @@ COLPALI_START_DOCSTRING = r"""
 class ColPaliPreTrainedModel(PreTrainedModel):
     config_class = ColPaliConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
-        std = None
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        elif hasattr(self.config, "vlm_backbone_config"):
-            vlm_backbone_config = self.config.vlm_backbone_config
-            if hasattr(vlm_backbone_config, "initializer_range"):
-                std = vlm_backbone_config.initializer_range
-            elif hasattr(vlm_backbone_config, "vision_config"):
-                vision_config = vlm_backbone_config.vision_config
-                if hasattr(vision_config, "initializer_range"):
-                    std = vision_config.initializer_range
-            elif hasattr(vlm_backbone_config, "text_config"):
-                text_config = vlm_backbone_config.text_config
-                if hasattr(text_config, "initializer_range"):
-                    std = text_config.initializer_range
-        if std is None:
-            raise ValueError("initializer_range not found in any config level")
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.vlm_backbone_config.text_config.initializer_range
+        )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -224,12 +211,12 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config
+        self.vocab_size = config.vlm_backbone_config.text_config.vocab_size
 
-        # FIXME: uncomment when PaliGemmaForConditionalGeneration is available in AutoModel
-        # self.model = AutoModel.from_config(config.vlm_backbone_config)
-        self.model = PaliGemmaForConditionalGeneration(config.vlm_backbone_config)
-        if self.model.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.model.language_model._tied_weights_keys]
+        vlm = AutoModelForImageTextToText.from_config(config.vlm_backbone_config)
+        if vlm.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"vlm.language_model.{k}" for k in vlm.language_model._tied_weights_keys]
+        self.vlm = vlm
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -302,8 +289,9 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs = self.vlm(
             input_ids=input_ids,
+            attention_mask=attention_mask,
             pixel_values=pixel_values,
             output_hidden_states=True,
             return_dict=return_dict,
@@ -335,13 +323,34 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             image_hidden_states=outputs.image_hidden_states if pixel_values is not None else None,
         )
 
+    def get_input_embeddings(self):
+        return self.vlm.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.vlm.language_model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.vlm.language_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.vlm.language_model.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.vlm.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.vlm.language_model.get_decoder()
+
+    def tie_weights(self):
+        return self.vlm.language_model.tie_weights()
+
     def resize_token_embeddings(
         self,
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        model_embeds = self.model.language_model.resize_token_embeddings(
+        model_embeds = self.vlm.language_model.resize_token_embeddings(
             new_num_tokens=new_num_tokens,
             pad_to_multiple_of=pad_to_multiple_of,
             mean_resizing=mean_resizing,
@@ -349,7 +358,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         self.config.vlm_backbone_config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vlm_backbone_config.vocab_size = model_embeds.num_embeddings
-        self.model.vocab_size = model_embeds.num_embeddings
+        self.vlm.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
 
