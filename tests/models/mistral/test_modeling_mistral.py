@@ -485,7 +485,7 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_model_7b_generation_with_flex_attention(self):
+    def test_model_7b_generation_flex_attention(self):
         EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,"
 
         prompt = "My favourite condiment is "
@@ -560,6 +560,45 @@ class MistralIntegrationTest(unittest.TestCase):
         input_ids = [1] + [306, 338] * 2048
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.float16
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        # Assisted generation
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 2
+        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        del assistant_model
+
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    @require_torch_sdpa
+    def test_model_7b_long_prompt_flex_attention(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        # An input with 4097 tokens that is above the size of the sliding window
+        input_ids = [1] + [306, 338] * 2048
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1",
+            device_map="auto",
+            attn_implementation="flex_attention",
+            torch_dtype=torch.float16,
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)

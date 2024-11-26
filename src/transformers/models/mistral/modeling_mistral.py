@@ -199,6 +199,7 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
             f" {attn_output.size()}"
         )
 
+    attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
 
@@ -372,15 +373,12 @@ class MistralAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         if output_attentions and self._attn_implementation in ("sdpa", "flash_attention_2"):
-            logger.warning_once("Setting `attention_type` to `eager` because `output_attentions=True`")
-            attention_type = "eager"
+            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
+            attention_type = "flex_attention"
         else:
             attention_type = self._attn_implementation
 
-        _kwargs = {"batch_size": bsz, "query_length": q_len}
-        if self._attn_implementation == "flash_attention_2":
-            _kwargs["position_ids"] = position_ids
-
+        _kwargs = {"batch_size": bsz, "query_length": q_len, "position_ids": position_ids}
         attn_output, attn_weights = MISTRAL_ATTENTION_FUNCTION[attention_type](
             self,
             query_states,
@@ -391,8 +389,7 @@ class MistralAttention(nn.Module):
             **_kwargs,
         )
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
