@@ -1562,8 +1562,6 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             debug_mode=self.debug_mode,
         )
 
-
-@dataclass
 class CompileConfig(object):
     """
     Class that holds arguments relative to `torch.compile` behavior, when using automatic compilation in `generate`.
@@ -1582,14 +1580,27 @@ class CompileConfig(object):
             A dictionary of options to pass to the backend.
     """
 
-    fullgraph: bool = True
-    dynamic: Optional[bool] = None
-    backend: Union[str, Callable] = "inductor"
-    mode: str = "reduce-overhead"
-    options: Optional[dict] = None
+    def __init__(
+        self,
+        fullgraph: bool = True,
+        dynamic: Optional[bool] = None,
+        backend: Union[str, Callable] = "inductor",
+        mode: str = "reduce-overhead",
+        options: Optional[dict] = None,
+    ):
+        self.fullgraph = fullgraph
+        self.dynamic = dynamic
+        self.backend = backend
+        self.mode = mode
+        self.options = options
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
         """
         return copy.deepcopy(self.__dict__)
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, CompileConfig):
+            raise ValueError(f"Equality not defined between CompileConfig and {type(other)}")
+        return self.to_dict() == other.to_dict()
