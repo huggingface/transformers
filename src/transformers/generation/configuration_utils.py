@@ -362,7 +362,7 @@ class GenerationConfig(PushToHubMixin):
             models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
 
         > Parameters related to performances and compilation
-         
+
         compile_config (CompileConfig, *optional*):
             If using a static cache, this controls how `generate` will `compile` the forward pass for performance
             gains.
