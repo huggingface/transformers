@@ -55,6 +55,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
+    translate_to_torch_parallel_style,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
@@ -88,6 +89,7 @@ from .utils import (
     is_peft_available,
     is_remote_url,
     is_safetensors_available,
+    is_torch_greater_or_equal,
     is_torch_sdpa_available,
     is_torch_xla_available,
     logging,
@@ -137,6 +139,7 @@ logger = logging.get_logger(__name__)
 
 _init_weights = True
 _is_quantized = False
+_is_ds_init_called = False
 
 
 def is_fsdp_enabled():
@@ -222,6 +225,19 @@ def set_quantized_state():
         yield
     finally:
         _is_quantized = False
+
+
+# Skip recursive calls to deepspeed.zero.Init to avoid pinning errors.
+# This issue occurs with ZeRO stage 3 when using NVMe offloading.
+# For more details, refer to issue #34429.
+@contextmanager
+def set_zero3_state():
+    global _is_ds_init_called
+    _is_ds_init_called = True
+    try:
+        yield
+    finally:
+        _is_ds_init_called = False
 
 
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
@@ -359,6 +375,9 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
 
     Note: We fully disable this if we are using `deepspeed`
     """
+    if model_to_load.device.type == "meta":
+        return False
+
     if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
         return False
 
@@ -373,7 +392,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
         return False
 
     # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
-    first_key = list(model_to_load.state_dict().keys())[0]
+    first_key = next(iter(model_to_load.state_dict().keys()))
     if start_prefix + first_key in state_dict:
         return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
 
@@ -927,7 +946,10 @@ def _load_state_dict_into_meta_model(
                 param_to = "cpu"
                 if is_fsdp_enabled() and not is_local_dist_rank_0():
                     param_to = "meta"
-                value = type(value)(value.data.to(param_to), **value.__dict__)
+                val_kwargs = {}
+                if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                    val_kwargs["requires_grad"] = False
+                value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                 setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
@@ -1323,6 +1345,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # Has support for a `QuantoQuantizedCache` instance as `past_key_values`
     _supports_quantized_cache = False
 
+    # A tensor parallel plan to be applied to the model when TP is enabled. For
+    # top-level models, this attribute is currently defined in respective model
+    # code. For base models, this attribute comes from
+    # `config.base_model_tp_plan` during `post_init`.
+    _tp_plan = None
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
@@ -1367,6 +1395,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+        # If current model is a base model, attach `base_model_tp_plan` from config
+        if self.base_model is self:
+            self._tp_plan = self.config.base_model_tp_plan
 
     def dequantize(self):
         """
@@ -1456,13 +1487,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch_dtype=torch_dtype,
             )
 
-        if is_deepspeed_zero3_enabled() and not _is_quantized:
+        if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
+            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
+            with ContextManagers(init_contexts):
                 model = cls(config, **kwargs)
 
         else:
@@ -1505,6 +1537,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "eager",
                 "sdpa",
                 "flash_attention_2",
+                "flex_attention",
             ]:
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
@@ -3396,6 +3429,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Cache path to the GGUF file
         gguf_path = None
 
+        tp_plan = kwargs.pop("tp_plan", None)
+        if tp_plan is not None and tp_plan != "auto":
+            # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
+            raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -3579,7 +3617,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if hf_quantizer is not None:
             hf_quantizer.validate_environment(
-                torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax, device_map=device_map
+                torch_dtype=torch_dtype,
+                from_tf=from_tf,
+                from_flax=from_flax,
+                device_map=device_map,
+                weights_only=weights_only,
             )
             torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
             device_map = hf_quantizer.update_device_map(device_map)
@@ -3997,18 +4039,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
+        tp_device = None
 
-        if is_deepspeed_zero3_enabled() and not is_quantized:
+        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
+            init_contexts = [
+                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                set_zero3_state(),
+            ] + init_contexts
         elif low_cpu_mem_usage:
             if not is_accelerate_available():
                 raise ImportError(
                     f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
             init_contexts.append(init_empty_weights())
+        elif tp_plan is not None:
+            if not torch.distributed.is_initialized():
+                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
+
+            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+            device_type = torch._C._get_accelerator().type
+            device_module = torch.get_device_module(device_type)
+            # Get device with index assuming equal number of devices per host
+            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            init_contexts.append(tp_device)
 
         if is_deepspeed_zero3_enabled() and is_quantized:
             init_contexts.append(set_quantized_state())
@@ -4142,32 +4198,38 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
-            (
-                model,
-                missing_keys,
-                unexpected_keys,
-                mismatched_keys,
-                offload_index,
-                error_msgs,
-            ) = cls._load_pretrained_model(
-                model,
-                state_dict,
-                loaded_state_dict_keys,  # XXX: rename?
-                resolved_archive_file,
-                pretrained_model_name_or_path,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-                sharded_metadata=sharded_metadata,
-                _fast_init=_fast_init,
-                low_cpu_mem_usage=low_cpu_mem_usage,
-                device_map=device_map,
-                offload_folder=offload_folder,
-                offload_state_dict=offload_state_dict,
-                dtype=torch_dtype,
-                hf_quantizer=hf_quantizer,
-                keep_in_fp32_modules=keep_in_fp32_modules,
-                gguf_path=gguf_path,
-                weights_only=weights_only,
-            )
+            load_contexts = []
+            # Make sure we load onto targeted device
+            if tp_device is not None:
+                load_contexts.append(tp_device)
+
+            with ContextManagers(load_contexts):
+                (
+                    model,
+                    missing_keys,
+                    unexpected_keys,
+                    mismatched_keys,
+                    offload_index,
+                    error_msgs,
+                ) = cls._load_pretrained_model(
+                    model,
+                    state_dict,
+                    loaded_state_dict_keys,  # XXX: rename?
+                    resolved_archive_file,
+                    pretrained_model_name_or_path,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    sharded_metadata=sharded_metadata,
+                    _fast_init=_fast_init,
+                    low_cpu_mem_usage=low_cpu_mem_usage,
+                    device_map=device_map,
+                    offload_folder=offload_folder,
+                    offload_state_dict=offload_state_dict,
+                    dtype=torch_dtype,
+                    hf_quantizer=hf_quantizer,
+                    keep_in_fp32_modules=keep_in_fp32_modules,
+                    gguf_path=gguf_path,
+                    weights_only=weights_only,
+                )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -4250,6 +4312,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "error_msgs": error_msgs,
                 }
             return model, loading_info
+
+        if tp_plan is not None:
+            assert tp_device is not None, "tp_device not set!"
+            if not model.supports_tp_plan:
+                raise NotImplementedError("This model does not have a tensor parallel plan.")
+            # Assuming sharding the model onto the world
+            world_size = torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
+            # Apply Tensor Parallelism
+            model.tensor_parallel(device_mesh)
 
         return model
 
@@ -4939,6 +5011,56 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return False
 
         return self.hf_quantizer.is_trainable
+
+    @property
+    def supports_tp_plan(self):
+        """
+        Returns whether the model has a tensor parallelism plan.
+        """
+        if self._tp_plan is not None:
+            return True
+        # Check if base model has a TP plan
+        if getattr(self.base_model, "_tp_plan", None) is not None:
+            return True
+        return False
+
+    def tensor_parallel(self, device_mesh):
+        """
+        Tensor parallelize the model across the given device mesh.
+
+        Args:
+            device_mesh (`torch.distributed.DeviceMesh`):
+                The device mesh to use for tensor parallelism.
+        """
+        if not is_torch_greater_or_equal("2.5"):
+            raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
+
+        # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
+        # No op if `_tp_plan` attribute does not exist under the module.
+        # This is a helper function to be used with `model.apply` to recursively
+        # parallelize a model.
+        def tplize(mod: torch.nn.Module) -> None:
+            tp_plan = getattr(mod, "_tp_plan", None)
+            if tp_plan is None:
+                return
+            logger.debug(f"Applying tensor parallel to {mod.__class__.__name__}: {tp_plan}")
+            # In model configs, we use a neutral type (string) to specify
+            # parallel styles, here we translate them into torch TP types.
+            # Using tree_map because `tp_plan` is a dict.
+            tp_plan = torch.utils._pytree.tree_map(
+                translate_to_torch_parallel_style,
+                tp_plan,
+            )
+            # Apply TP to current module.
+            torch.distributed.tensor.parallel.parallelize_module(
+                mod,
+                device_mesh=device_mesh,
+                parallelize_plan=tp_plan,
+            )
+
+        # `apply` is a native method of `nn.Module` that recursively applies a
+        # function to every submodule.
+        self.apply(tplize)
 
     @property
     def loss_function(self):
