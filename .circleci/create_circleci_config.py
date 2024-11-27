@@ -175,20 +175,6 @@ class CircleCIJob:
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
-            {"run": 'mkdir -p outputs'},
-            {"attach_workspace": {"at": "outputs"}},
-            {"run": 'ls -la outputs'},
-            {"run": 'echo $CIRCLE_NODE_INDEX'},
-            {"run": f'mv reports/tests_{self.name} reports/tests_{self.name}_$CIRCLE_NODE_INDEX'},
-            {"run": {"name": "Move reports", "command": "cp -r reports outputs"}},
-            {"run": 'ls -la outputs'},
-            {"run": 'ls -la outputs/reports'},
-            {
-                "persist_to_workspace": {
-                    "root": "outputs",
-                    "paths": ["reports"]
-                }
-            },
         ]
         if self.parallelism:
             job["parallelism"] = parallel
