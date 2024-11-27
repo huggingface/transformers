@@ -29,38 +29,54 @@ from transformers.models.depth_pro.modeling_depth_pro import DepthProForDepthEst
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
-    # patch_encoder/image_encoder (ViT based)
-    r"encoder.(patch|image)_encoder.cls_token": r"depth_pro.encoder.\1_encoder.embeddings.cls_token",
-    r"encoder.(patch|image)_encoder.pos_embed": r"depth_pro.encoder.\1_encoder.embeddings.position_embeddings",
-    r"encoder.(patch|image)_encoder.patch_embed.proj.(weight|bias)": r"depth_pro.encoder.\1_encoder.embeddings.patch_embeddings.projection.\2",
-    r"encoder.(patch|image)_encoder.blocks.(\d+).norm(\d+).(weight|bias)": r"depth_pro.encoder.\1_encoder.encoder.layer.\2.norm\3.\4",
-    r"encoder.(patch|image)_encoder.blocks.(\d+).attn.qkv.(weight|bias)": r"depth_pro.encoder.\1_encoder.encoder.layer.\2.attention.attention.(query|key|value).\3",
-    r"encoder.(patch|image)_encoder.blocks.(\d+).attn.proj.(weight|bias)": r"depth_pro.encoder.\1_encoder.encoder.layer.\2.attention.output.dense.\3",
-    r"encoder.(patch|image)_encoder.blocks.(\d+).ls(\d+).gamma": r"depth_pro.encoder.\1_encoder.encoder.layer.\2.layer_scale\3.lambda1",
-    r"encoder.(patch|image)_encoder.blocks.(\d+).mlp.fc(\d+).(weight|bias)": r"depth_pro.encoder.\1_encoder.encoder.layer.\2.mlp.fc\3.\4",
-    r"encoder.(patch|image)_encoder.norm.(weight|bias)": r"depth_pro.encoder.\1_encoder.layernorm.\2",
+    # encoder and head
+    r"encoder.(patch|image)_encoder.cls_token":                                 r"depth_pro.encoder.\1_encoder.embeddings.cls_token",
+    r"encoder.(patch|image)_encoder.pos_embed":                                 r"depth_pro.encoder.\1_encoder.embeddings.position_embeddings",
+    r"encoder.(patch|image)_encoder.patch_embed.proj.(weight|bias)":            r"depth_pro.encoder.\1_encoder.embeddings.patch_embeddings.projection.\2",
+    r"encoder.(patch|image)_encoder.blocks.(\d+).norm(\d+).(weight|bias)":      r"depth_pro.encoder.\1_encoder.encoder.layer.\2.norm\3.\4",
+    r"encoder.(patch|image)_encoder.blocks.(\d+).attn.qkv.(weight|bias)":       r"depth_pro.encoder.\1_encoder.encoder.layer.\2.attention.attention.(query|key|value).\3",
+    r"encoder.(patch|image)_encoder.blocks.(\d+).attn.proj.(weight|bias)":      r"depth_pro.encoder.\1_encoder.encoder.layer.\2.attention.output.dense.\3",
+    r"encoder.(patch|image)_encoder.blocks.(\d+).ls(\d+).gamma":                r"depth_pro.encoder.\1_encoder.encoder.layer.\2.layer_scale\3.lambda1",
+    r"encoder.(patch|image)_encoder.blocks.(\d+).mlp.fc(\d+).(weight|bias)":    r"depth_pro.encoder.\1_encoder.encoder.layer.\2.mlp.fc\3.\4",
+    r"encoder.(patch|image)_encoder.norm.(weight|bias)":                        r"depth_pro.encoder.\1_encoder.layernorm.\2",
+	r"encoder.fuse_lowres.(weight|bias)":                                       r"depth_pro.encoder.fuse_image_with_low_res.\1",
+    r"head.(\d+).(weight|bias)":                                                r"head.head.\1.\2",
 
-	r"encoder.fuse_lowres.(weight|bias)": r"depth_pro.encoder.fuse_image_with_low_res.\1",
-    r"head.(\d+).(weight|bias)": r"head.head.\1.\2",
+    # fov
+    r"fov.encoder.0.cls_token":                                                 r"fov_model.encoder.embeddings.cls_token",
+    r"fov.encoder.0.pos_embed":                                                 r"fov_model.encoder.embeddings.position_embeddings",
+    r"fov.encoder.0.patch_embed.proj.(weight|bias)":                            r"fov_model.encoder.embeddings.patch_embeddings.projection.\1",
+    r"fov.encoder.0.blocks.(\d+).norm(\d+).(weight|bias)":                      r"fov_model.encoder.encoder.layer.\1.norm\2.\3",
+    r"fov.encoder.0.blocks.(\d+).attn.qkv.(weight|bias)":                       r"fov_model.encoder.encoder.layer.\1.attention.attention.(query|key|value).\2",
+    r"fov.encoder.0.blocks.(\d+).attn.proj.(weight|bias)":                      r"fov_model.encoder.encoder.layer.\1.attention.output.dense.\2",
+    r"fov.encoder.0.blocks.(\d+).ls(\d+).gamma":                                r"fov_model.encoder.encoder.layer.\1.layer_scale\2.lambda1",
+    r"fov.encoder.0.blocks.(\d+).mlp.fc(\d+).(weight|bias)":                    r"fov_model.encoder.encoder.layer.\1.mlp.fc\2.\3",
+    r"fov.encoder.0.norm.(weight|bias)":                                        r"fov_model.encoder.layernorm.\1",
+    r"fov.downsample.(\d+).(weight|bias)":                                      r"fov_model.global_neck.\1.\2",
+    r"fov.encoder.1.(weight|bias)":                                             r"fov_model.encoder_neck.\1",
+    r"fov.head.head.(\d+).(weight|bias)":                                       r"fov_model.head.\1.\2",
+
+    # upsamples (hard coded; regex is not very feasible here)
+	"encoder.upsample_latent0.0.weight":                                        "depth_pro.encoder.upsample_intermediate.1.proj.weight",
+	"encoder.upsample_latent0.1.weight":                                        "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.0.weight",
+	"encoder.upsample_latent0.2.weight":                                        "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.1.weight",
+	"encoder.upsample_latent0.3.weight":                                        "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.2.weight",
+	"encoder.upsample_latent1.0.weight":                                        "depth_pro.encoder.upsample_intermediate.0.proj.weight",
+	"encoder.upsample_latent1.1.weight":                                        "depth_pro.encoder.upsample_intermediate.0.upsample_blocks.0.weight",
+	"encoder.upsample_latent1.2.weight":                                        "depth_pro.encoder.upsample_intermediate.0.upsample_blocks.1.weight",
+	"encoder.upsample0.0.weight":                                               "depth_pro.encoder.upsample_scaled_images.2.proj.weight",
+	"encoder.upsample0.1.weight":                                               "depth_pro.encoder.upsample_scaled_images.2.upsample_blocks.0.weight",
+	"encoder.upsample1.0.weight":                                               "depth_pro.encoder.upsample_scaled_images.1.proj.weight",
+	"encoder.upsample1.1.weight":                                               "depth_pro.encoder.upsample_scaled_images.1.upsample_blocks.0.weight",
+	"encoder.upsample2.0.weight":                                               "depth_pro.encoder.upsample_scaled_images.0.proj.weight",
+	"encoder.upsample2.1.weight":                                               "depth_pro.encoder.upsample_scaled_images.0.upsample_blocks.0.weight",
+    "encoder.upsample_lowres.weight":                                           "depth_pro.encoder.upsample_image.upsample_blocks.0.weight",
+    "encoder.upsample_lowres.bias":                                             "depth_pro.encoder.upsample_image.upsample_blocks.0.bias",
+
+    # projections between encoder and fusion
     r"decoder.convs.(\d+).weight": lambda match: (
         f"projections.{4-int(match.group(1))}.weight"
     ),
-
-    # fov_model.encoder (ViT based)
-    r"fov.encoder.0.cls_token": r"fov_model.encoder.embeddings.cls_token",
-    r"fov.encoder.0.pos_embed": r"fov_model.encoder.embeddings.position_embeddings",
-    r"fov.encoder.0.patch_embed.proj.(weight|bias)": r"fov_model.encoder.embeddings.patch_embeddings.projection.\1",
-    r"fov.encoder.0.blocks.(\d+).norm(\d+).(weight|bias)": r"fov_model.encoder.encoder.layer.\1.norm\2.\3",
-    r"fov.encoder.0.blocks.(\d+).attn.qkv.(weight|bias)": r"fov_model.encoder.encoder.layer.\1.attention.attention.(query|key|value).\2",
-    r"fov.encoder.0.blocks.(\d+).attn.proj.(weight|bias)": r"fov_model.encoder.encoder.layer.\1.attention.output.dense.\2",
-    r"fov.encoder.0.blocks.(\d+).ls(\d+).gamma": r"fov_model.encoder.encoder.layer.\1.layer_scale\2.lambda1",
-    r"fov.encoder.0.blocks.(\d+).mlp.fc(\d+).(weight|bias)": r"fov_model.encoder.encoder.layer.\1.mlp.fc\2.\3",
-    r"fov.encoder.0.norm.(weight|bias)": r"fov_model.encoder.layernorm.\1",
-
-    # fov head
-    r"fov.downsample.(\d+).(weight|bias)": r"fov_model.global_neck.\1.\2",
-    r"fov.encoder.1.(weight|bias)": r"fov_model.encoder_neck.\1",
-    r"fov.head.head.(\d+).(weight|bias)": r"fov_model.head.\1.\2",
 
     # fusion stage
     r"decoder.fusions.(\d+).resnet(\d+).residual.(\d+).(weight|bias)": lambda match: (
@@ -72,25 +88,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"decoder.fusions.(\d+).deconv.(weight|bias)": lambda match: (
         f"fusion_stage.layers.{4-int(match.group(1))}.deconv.{match.group(2)}"
     ),
-
-    # qkv attentions blocks
-
-    # upsamples (hard coded; regex is not very feasible here)
-	"encoder.upsample_latent0.0.weight": "depth_pro.encoder.upsample_intermediate.1.proj.weight",
-	"encoder.upsample_latent0.1.weight": "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.0.weight",
-	"encoder.upsample_latent0.2.weight": "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.1.weight",
-	"encoder.upsample_latent0.3.weight": "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.2.weight",
-	"encoder.upsample_latent1.0.weight": "depth_pro.encoder.upsample_intermediate.0.proj.weight",
-	"encoder.upsample_latent1.1.weight": "depth_pro.encoder.upsample_intermediate.0.upsample_blocks.0.weight",
-	"encoder.upsample_latent1.2.weight": "depth_pro.encoder.upsample_intermediate.0.upsample_blocks.1.weight",
-	"encoder.upsample0.0.weight": "depth_pro.encoder.upsample_scaled_images.2.proj.weight",
-	"encoder.upsample0.1.weight": "depth_pro.encoder.upsample_scaled_images.2.upsample_blocks.0.weight",
-	"encoder.upsample1.0.weight": "depth_pro.encoder.upsample_scaled_images.1.proj.weight",
-	"encoder.upsample1.1.weight": "depth_pro.encoder.upsample_scaled_images.1.upsample_blocks.0.weight",
-	"encoder.upsample2.0.weight": "depth_pro.encoder.upsample_scaled_images.0.proj.weight",
-	"encoder.upsample2.1.weight": "depth_pro.encoder.upsample_scaled_images.0.upsample_blocks.0.weight",
-    "encoder.upsample_lowres.weight": "depth_pro.encoder.upsample_image.upsample_blocks.0.weight",
-    "encoder.upsample_lowres.bias": "depth_pro.encoder.upsample_image.upsample_blocks.0.bias",
 }
 # fmt: on
 
@@ -108,9 +105,18 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     return output_dict
 
 def get_qkv_state_dict(key, parameter):
+    """
+    new key which looks like this
+    xxxx.(q|k|v).xxx    (m, n)
+
+    is converted to
+    xxxx.q.xxxx         (m//3, n)
+    xxxx.k.xxxx         (m//3, n)
+    xxxx.v.xxxx         (m//3, n)
+    """
     qkv_state_dict = {}
-    placeholder = re.search(r'(\(.*?\))', key).group(1)
-    replacements_keys = placeholder[1:-1].split("|")
+    placeholder = re.search(r'(\(.*?\))', key).group(1) # finds   "(query|key|value)"
+    replacements_keys = placeholder[1:-1].split("|")    # creates ['query', 'key', 'value']
     replacements_vals = torch.split(
         parameter,
         split_size_or_sections=parameter.size(0)//len(replacements_keys),
