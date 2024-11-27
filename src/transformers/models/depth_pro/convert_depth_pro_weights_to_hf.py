@@ -93,6 +93,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
+
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     output_dict = {}
     if state_dict_keys is not None:
@@ -106,6 +107,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
         output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
     return output_dict
 
+
 def get_qkv_state_dict(key, parameter):
     """
     new key which looks like this
@@ -117,21 +119,20 @@ def get_qkv_state_dict(key, parameter):
     xxxx.v.xxxx         (m//3, n)
     """
     qkv_state_dict = {}
-    placeholder = re.search(r'(\(.*?\))', key).group(1) # finds   "(query|key|value)"
-    replacements_keys = placeholder[1:-1].split("|")    # creates ['query', 'key', 'value']
+    placeholder = re.search(r"(\(.*?\))", key).group(1)  # finds   "(query|key|value)"
+    replacements_keys = placeholder[1:-1].split("|")  # creates ['query', 'key', 'value']
     replacements_vals = torch.split(
-        parameter,
-        split_size_or_sections=parameter.size(0)//len(replacements_keys),
-        dim=0
+        parameter, split_size_or_sections=parameter.size(0) // len(replacements_keys), dim=0
     )
     for replacement_key, replacement_val in zip(replacements_keys, replacements_vals):
         qkv_state_dict[key.replace(placeholder, replacement_key)] = replacement_val
     return qkv_state_dict
 
+
 def write_model(
     hf_repo_id: str,
     output_dir: str,
-    safe_serialization: bool=True,
+    safe_serialization: bool = True,
 ):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -162,11 +163,11 @@ def write_model(
         use_swiglu_ffn=False,
         apply_layernorm=True,
         reshape_hidden_states=True,
-        intermediate_hook_ids = [11, 5],
-        intermediate_feature_dims = [256, 256],
-        scaled_images_ratios = [0.25, 0.5, 1],
-        scaled_images_overlap_ratios = [0.0, 0.5, 0.25],
-        scaled_images_feature_dims = [1024, 1024, 512],
+        intermediate_hook_ids=[11, 5],
+        intermediate_feature_dims=[256, 256],
+        scaled_images_ratios=[0.25, 0.5, 1],
+        scaled_images_overlap_ratios=[0.0, 0.5, 0.25],
+        scaled_images_feature_dims=[1024, 1024, 512],
         use_batch_norm_in_fusion=False,
         use_fov_model=True,
         num_fov_head_layers=2,
@@ -215,18 +216,19 @@ def write_model(
     DepthProForDepthEstimation.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
+
 def write_image_processor(output_dir: str):
     image_processor = DepthProImageProcessorFast(
-        do_resize = True,
-        size = {"height": 1536, "width": 1536},
-        resample = PILImageResampling.BILINEAR,
-        antialias = False,
-        do_rescale = True,
-        rescale_factor = 1 / 255,
-        do_normalize = True,
-        image_mean = 0.5,
-        image_std = 0.5,
-        return_tensors = "pt",
+        do_resize=True,
+        size={"height": 1536, "width": 1536},
+        resample=PILImageResampling.BILINEAR,
+        antialias=False,
+        do_rescale=True,
+        rescale_factor=1 / 255,
+        do_normalize=True,
+        image_mean=0.5,
+        image_std=0.5,
+        return_tensors="pt",
     )
     image_processor.save_pretrained(output_dir)
 

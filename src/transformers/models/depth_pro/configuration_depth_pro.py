@@ -78,22 +78,22 @@ class DepthProConfig(PretrainedConfig):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
-        intermediate_hook_ids
-            Indices of the intermediate hidden states from patch_encoder to use for fusion.
-        intermediate_feature_dims
-            Hidden state during upsampling for each intermediate hidden states in intermediate_hook_ids.
-        scaled_images_ratios
-            Use images of these ratios for patch_encoder.
-        scaled_images_overlap_ratios
-            Overlap ratio between patches for each scaled image in scaled_image_ratios.
-        scaled_images_feature_dims
-            Hidden state during upsampling for each scaled image in scaled_images_ratios.
-        use_batch_norm_in_fusion
-            Whether to use batch normalization in the residual units of the fusion blocks.
-        use_fov_model
-            Whether to use `DepthProFOVModel` to generate Field of View.
-        num_fov_head_layers
-            No of convolution layers in head of `DepthProFOVModel`.
+        intermediate_hook_ids (`List[int]`, *optional*, defaults to `[11, 5]`):
+            Indices of the intermediate hidden states from the patch encoder to use for fusion.
+        intermediate_feature_dims (`List[int]`, *optional*, defaults to `[256, 256]`):
+            Hidden state dimensions during upsampling for each intermediate hidden state in `intermediate_hook_ids`.
+        scaled_images_ratios (`List[float]`, *optional*, defaults to `[0.25, 0.5, 1]`):
+            Ratios of scaled images to be used by the patch encoder.
+        scaled_images_overlap_ratios (`List[float]`, *optional*, defaults to `[0.0, 0.5, 0.25]`):
+            Overlap ratios between patches for each scaled image in `scaled_images_ratios`.
+        scaled_images_feature_dims (`List[int]`, *optional*, defaults to `[1024, 1024, 512]`):
+            Hidden state dimensions during upsampling for each scaled image in `scaled_images_ratios`.
+        use_batch_norm_in_fusion_residual (`bool`, *optional*, defaults to `False`):
+            Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
+        use_fov_model (`bool`, *optional*, defaults to `True`):
+            Whether to use `DepthProFOVModel` to generate the field of view.
+        num_fov_head_layers (`int`, *optional*, defaults to `2`):
+            Number of convolution layers in the head of `DepthProFOVModel`.
 
     Example:
 
@@ -134,12 +134,13 @@ class DepthProConfig(PretrainedConfig):
         use_swiglu_ffn=False,
         apply_layernorm=True,
         reshape_hidden_states=True,
-        intermediate_hook_ids = [11, 5],
-        intermediate_feature_dims = [256, 256],
-        scaled_images_ratios = [0.25, 0.5, 1],
-        scaled_images_overlap_ratios = [0.0, 0.5, 0.25],
-        scaled_images_feature_dims = [1024, 1024, 512],
-        use_batch_norm_in_fusion=False,
+        intermediate_hook_ids=[11, 5],
+        intermediate_feature_dims=[256, 256],
+        scaled_images_ratios=[0.25, 0.5, 1],
+        scaled_images_overlap_ratios=[0.0, 0.5, 0.25],
+        scaled_images_feature_dims=[1024, 1024, 512],
+        use_batch_norm_in_fusion_residual=False,
+        use_bias_in_fusion_residual=True,
         use_fov_model=True,
         num_fov_head_layers=2,
         **kwargs,
@@ -166,7 +167,8 @@ class DepthProConfig(PretrainedConfig):
         self.use_swiglu_ffn = use_swiglu_ffn
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
-        self.use_batch_norm_in_fusion = use_batch_norm_in_fusion
+        self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
+        self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
         self.use_fov_model = use_fov_model
         self.num_fov_head_layers = num_fov_head_layers
         self.intermediate_hook_ids = intermediate_hook_ids

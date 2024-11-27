@@ -371,18 +371,13 @@ class DepthProImageProcessor(BaseImageProcessor):
                 "Make sure that you pass in as many fov values as the batch dimension of the predicted depth"
             )
 
-        outputs = {
-            "predicted_depth": [],
-            "fov": [] if fovs is not None else None
-        }
+        outputs = {"predicted_depth": [], "fov": [] if fovs is not None else None}
 
         fovs = [None] * len(predicted_depths) if fovs is None else fovs
         target_sizes = [None] * len(predicted_depths) if target_sizes is None else target_sizes
 
         for predicted_depth, fov, target_size in zip(predicted_depths, fovs, target_sizes):
-
             if target_size is not None:
-
                 # scale image w.r.t fov
                 if fov is not None:
                     width = target_size[1]
@@ -395,7 +390,7 @@ class DepthProImageProcessor(BaseImageProcessor):
                     predicted_depth.unsqueeze(0).unsqueeze(1),
                     size=target_size,
                     resample=self.resample,
-                    antialias=self.antialias
+                    antialias=self.antialias,
                 ).squeeze()
 
             # inverse the depth
