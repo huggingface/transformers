@@ -23,7 +23,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations import replace_with_higgs_linear, quantize_with_higgs
+from ..integrations import HiggsLinear, replace_with_higgs_linear, quantize_with_higgs
 from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
@@ -43,13 +43,14 @@ def find_parent(model, name):
     return parent
 
 
-class AqlmHfQuantizer(HfQuantizer):
+class HiggsHfQuantizer(HfQuantizer):
     """
-    Quantizer of the AQLM method. Enables the loading of prequantized models.
+    Quantizer of the HIGGS method. Enables the loading of prequantized models.
     """
 
-    requires_calibration = True
-    required_packages = ["aqlm"]
+    requires_calibration = False
+    requires_parameters_quantization = True
+    required_packages = ["flute-kernel", "fast_hadamard_transform"]
     optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -91,21 +92,24 @@ class AqlmHfQuantizer(HfQuantizer):
         """
         
         flute_dict = quantize_with_higgs(
-            param_value,
+            param_value.to(target_device),
             self.quantization_config.bits,
             self.quantization_config.p,
         )
         
-        raise NotImplementedError("This function is not implemented yet.")
-
+        del param_value
+        
         module, tensor_name = get_module_from_name(model, param_name)
-        module._buffers[tensor_name] = new_value.to(target_device)
-        # to have the right output shape -> (out_features, 1)
-        module._buffers["weight_scale"] = weight_scale.view(weight_scale.shape[0], 1).to(target_device)
+        for key, value in flute_dict.items():
+            if key in module._parameters:
+                module._parameters[key] = value
+            elif key in module._buffers:
+                module._buffers[key] = value
+            else:
+                raise ValueError(f"Unexpected key {key} in module {module}")
 
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)
-        del param_name
 
     def _process_model_before_weight_loading(
         self,
@@ -128,3 +132,20 @@ class AqlmHfQuantizer(HfQuantizer):
 
     def is_serializable(self, safe_serialization=None):
         return True
+    
+    def check_quantized_param(
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
+    ) -> bool:
+        import bitsandbytes as bnb
+
+        module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, HiggsLinear) and tensor_name == "weight":
+            # Add here check for loaded components' dtypes once serialization is implemented
+            return True
+        else:
+            return False

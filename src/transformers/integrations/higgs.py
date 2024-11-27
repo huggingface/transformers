@@ -314,6 +314,7 @@ def quantize_with_higgs(weight: torch.Tensor, bits: int=4, p: int=2):
     grid = get_higgs_grid(p, 2**(p * bits)).to(weight.device)
     grid_norm_2 = torch.linalg.norm(grid, axis=-1) ** 2
     
+    device = weight.device
     weight = weight.clone().float()
     # Pad to Hadamard transform size
     weight = pad_to_block(weight, [1], 1024)
@@ -322,17 +323,18 @@ def quantize_with_higgs(weight: torch.Tensor, bits: int=4, p: int=2):
     mult = weight.shape[1] // 1024
     weight = weight.reshape(-1, mult, 1024)
     scales = torch.linalg.norm(weight, axis=-1)
-    weight = torch.ops.fast_hadamard_transform.fast_hadamard_transform(weight, 1) / scales[:, :, None]
+    weight = hadamard_transform(weight, 1) / scales[:, :, None]
     
     # Pad to edenn_d and project
     weight = pad_to_block(weight, [2], p).reshape(weight.shape[0], mult, -1, p)
 
     # Quantize
-    codes = torch.empty(weight.shape[:-1], device=weight.device, dtype=torch.uint8)
+    codes = torch.empty(weight.shape[:-1], device=device, dtype=torch.uint8)
     for i in range(0, weight.shape[0], 64):
         codes[i:i+64] = torch.argmax(
             2 * weight[i:i+64] @ grid.T - grid_norm_2, dim=-1
         ).to(torch.uint8)
+    del weight
         
     codes = codes.reshape(codes.shape[0], -1)
     scales = scales / 32
@@ -345,7 +347,7 @@ def quantize_with_higgs(weight: torch.Tensor, bits: int=4, p: int=2):
         group_size=256,
         vector_size=p,
         dtype=torch.float16,
-        device=weight.device,
+        device=device,
     )
     
     return {
@@ -354,7 +356,8 @@ def quantize_with_higgs(weight: torch.Tensor, bits: int=4, p: int=2):
         "tables": tables,
         "tables2": tables2,
     }
-
+    
+WORKSPACE = flute.utils.make_workspace_streamk(device="cuda")
 
 class HiggsLinear(nn.Module):
     def __init__(
@@ -362,7 +365,6 @@ class HiggsLinear(nn.Module):
         in_features: int,
         out_features: int,
         num_bits: int,
-        group_size: int,
         num_sms_packed: int,
         bias=True,
         dtype: torch.dtype=None,
@@ -372,17 +374,13 @@ class HiggsLinear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.num_bits = num_bits
-        self.group_size = group_size
         self.num_sms_packed = num_sms_packed
-        
-        self.workspace = flute.utils.make_workspace_streamk(device=device)
-        
-        assert in_features % 16 == 0
-        assert in_features % group_size == 0
+
+        assert in_features % 256 == 0
         assert num_bits in [2, 3, 4]
         
         self.weight = nn.Parameter(torch.empty((in_features * num_bits // 16, out_features), dtype=torch.int16, device=device), requires_grad=False)
-        self.scales = nn.Parameter(torch.empty((out_features, in_features//group_size), dtype=dtype, device=device), requires_grad=False)
+        self.scales = nn.Parameter(torch.empty((out_features, in_features//256), dtype=dtype, device=device), requires_grad=False)
         self.tables = nn.Parameter(torch.empty((2**num_bits,), dtype=dtype, device=device), requires_grad=False)
         self.tables2 = nn.Parameter(torch.empty((2**num_bits, 2**num_bits, 1), dtype=torch.float32, device=device), requires_grad=False)
         
@@ -405,9 +403,9 @@ class HiggsLinear(nn.Module):
             self.scales,
             self.tables,
             self.tables2,
-            self.workspace,
+            WORKSPACE,
             self.num_bits,
-            self.group_size,
+            256,
         )
 
 
@@ -449,7 +447,7 @@ def replace_with_higgs_linear(
         )
 
     if linear_weights_not_to_quantize is None:
-        linear_weights_not_to_quantize = []
+        linear_weights_not_to_quantize = ["lm_head.weight"]
 
     from accelerate import init_empty_weights
 
@@ -469,8 +467,7 @@ def replace_with_higgs_linear(
                         in_features,
                         out_features,
                         bias=module.bias is not None,
-                        num_bits=quantization_config.num_bits,
-                        group_size=quantization_config.group_size,
+                        num_bits=quantization_config.bits,
                         num_sms_packed=quantization_config.num_sms_packed,
                     )
                     has_been_replaced = True

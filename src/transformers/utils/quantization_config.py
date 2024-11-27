@@ -41,6 +41,7 @@ class QuantizationMethod(str, Enum):
     AQLM = "aqlm"
     QUANTO = "quanto"
     EETQ = "eetq"
+    HIGGS = "higgs"
     HQQ = "hqq"
     COMPRESSED_TENSORS = "compressed-tensors"
     FBGEMM_FP8 = "fbgemm_fp8"
@@ -1222,6 +1223,48 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         loading_attibutes = ["activation_scale_ub"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
+    
+
+@dataclass
+class HiggsConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `aqlm` parameters.
+
+    Args:
+        in_group_size (`int`, *optional*, defaults to 8):
+            The group size along the input dimension.
+        out_group_size (`int`, *optional*, defaults to 1):
+            The group size along the output dimension. It's recommended to always use 1.
+        num_codebooks (`int`, *optional*, defaults to 1):
+            Number of codebooks for the Additive Quantization procedure.
+        nbits_per_codebook (`int`, *optional*, defaults to 16):
+            Number of bits encoding a single codebook vector. Codebooks size is 2**nbits_per_codebook.
+        linear_weights_not_to_quantize (`Optional[List[str]]`, *optional*):
+            List of full paths of `nn.Linear` weight parameters that shall not be quantized.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        bits: int = 4,
+        p: int = 2,
+        linear_weights_not_to_quantize: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.HIGGS
+        self.bits = bits
+        self.p = p
+        self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
+        self.num_sms_packed=128
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        return
 
 
 @dataclass

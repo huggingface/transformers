@@ -54,6 +54,7 @@ AUTO_QUANTIZER_MAPPING = {
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
+    "higgs": HiggsHfQuantizer,
     "hqq": HqqHfQuantizer,
     "compressed-tensors": CompressedTensorsHfQuantizer,
     "fbgemm_fp8": FbgemmFp8HfQuantizer,
