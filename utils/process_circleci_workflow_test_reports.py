@@ -37,7 +37,7 @@ if __name__ == '__main__':
                         node_index = artifact["node_index"]
                         url = artifact["url"]
                         fn = f'{job["name"]}/test_summary_{node_index}.txt'
-                        command = f'curl -o {fn} {url} --header "Circle-Token: $CIRCLE_TOKEN"'
+                        command = f'wget -O {fn} {url}'
                         os.system(command)
 
                         # add each
