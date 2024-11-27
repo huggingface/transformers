@@ -1872,16 +1872,13 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         # 2. Merge text and images
         if pixel_values is not None and inputs_embeds.shape[1] != 1:
             if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device))
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                )
                 n_image_tokens = (special_image_mask).sum(dim=1)[0][0].item()
             else:
-                image_embeds = (input_ids == self.config.image_token_index)
-                special_image_mask = (
-                    image_embeds
-                    .unsqueeze(-1)
-                    .expand_as(inputs_embeds)
-                    .to(inputs_embeds.device)
-                )
+                image_embeds = input_ids == self.config.image_token_index
+                special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
                 n_image_tokens = (image_embeds).sum(dim=-1)[0].item()
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
@@ -1896,7 +1893,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
 
         outputs = self.language_model(
             attention_mask=attention_mask,

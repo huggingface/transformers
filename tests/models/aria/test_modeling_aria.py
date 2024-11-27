@@ -91,7 +91,7 @@ class AriaVisionText2TextModelTester:
             rope_theta=5000000,
             vocab_size=99,
             eos_token_id=2,
-            head_dim=2
+            head_dim=2,
         ),
         is_training=True,
         vision_config=Idefics3VisionConfig(
