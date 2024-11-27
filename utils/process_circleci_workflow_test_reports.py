@@ -50,10 +50,10 @@ if __name__ == '__main__':
                 for node_index, node_test_summary in job_test_summaries.items():
                     for line in test_summary.splitlines():
                         if line.startswith("PASSED "):
-                            test = line["PASSED "]
+                            test = line[len("PASSED "):]
                             summary[test] = "passed"
                         elif line.startswith("FAILED "):
-                            test = line["FAILED "].split()[0]
+                            test = line[len("FAILED "):].split()[0]
                             summary[test] = "failed"
                 summary = {k: v for k, v in sorted(summary.items())}
 
