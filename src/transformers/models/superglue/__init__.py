@@ -13,58 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ... import is_vision_available
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-# rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
-
-
-_import_structure = {"configuration_superglue": ["SuperGlueConfig"]}
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_superglue"] = ["SuperGlueImageProcessor"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_superglue"] = [
-        "SuperGlueForKeypointMatching",
-        "SuperGluePreTrainedModel",
-    ]
 
 if TYPE_CHECKING:
-    from .configuration_superglue import (
-        SuperGlueConfig,
-    )
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_superglue import SuperGlueImageProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_superglue import (
-            SuperGlueForKeypointMatching,
-            SuperGluePreTrainedModel,
-        )
-
+    from .configuration_superglue import *
+    from .image_processing_superglue import *
+    from .modeling_superglue import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

@@ -767,3 +767,6 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             hidden_states=hidden_states,
             attentions=attentions,
         )
+
+
+__all__ = ["SuperGluePreTrainedModel", "SuperGlueForKeypointMatching"]

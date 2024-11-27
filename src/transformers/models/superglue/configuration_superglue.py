@@ -107,3 +107,6 @@ class SuperGlueConfig(PretrainedConfig):
         self.is_decoder = False
 
         super().__init__(**kwargs)
+
+
+__all__ = ["SuperGlueConfig"]

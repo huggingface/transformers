@@ -516,3 +516,6 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             )
 
         return results
+
+
+__all__ = ["SuperGlueImageProcessor"]
