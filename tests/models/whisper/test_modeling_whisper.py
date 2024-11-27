@@ -194,6 +194,31 @@ def prepare_whisper_inputs_dict(
     }
 
 
+# Whisper's generate method does not return the decoder input token ids.
+# To keep compatibility with generic GenerationTesterMixin, we'll need to patch generate with this decorator.
+def with_decoder_input_ids(func):
+    def wrapper(self, *args, **kwargs):
+        if func is None:
+            return
+        all_generative_model_classes = self.all_generative_model_classes
+
+        class PatchedWhisperForConditionalGeneration(WhisperForConditionalGeneration):
+            _generate_with_input_tokens = True
+
+            def generate(self, *args, **kwargs):
+                return self.generate_add_decoder_input_ids(WhisperForConditionalGeneration.generate)(
+                    self, *args, **kwargs
+                )
+
+        self.all_generative_model_classes = (PatchedWhisperForConditionalGeneration,)
+        result = func(self, *args, **kwargs)
+        # Restore original model classes
+        self.all_generative_model_classes = all_generative_model_classes
+        return result
+
+    return wrapper
+
+
 @require_torch
 class WhisperModelTester:
     def __init__(
@@ -1833,6 +1858,87 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self._check_similar_generate_outputs(output_greedy, output_prompt_lookup)
             for output in (output_greedy, output_prompt_lookup):
                 self._check_outputs(output, model.config, use_cache=True)
+
+    @with_decoder_input_ids
+    def test_greedy_generate(self):
+        super().test_greedy_generate()
+
+    @with_decoder_input_ids
+    def test_greedy_generate_dict_outputs(self):
+        super().test_greedy_generate_dict_outputs()
+
+    @with_decoder_input_ids
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        super().test_greedy_generate_dict_outputs_use_cache()
+
+    @with_decoder_input_ids
+    def test_sample_generate(self):
+        super().test_sample_generate()
+
+    @with_decoder_input_ids
+    def test_sample_generate_dict_output(self):
+        super().test_sample_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_beam_search_generate(self):
+        super().test_beam_search_generate()
+
+    @with_decoder_input_ids
+    def test_beam_search_generate_dict_output(self):
+        super().test_beam_search_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        super().test_beam_search_generate_dict_outputs_use_cache()
+
+    @with_decoder_input_ids
+    def test_beam_sample_generate(self):
+        super().test_beam_sample_generate()
+
+    @with_decoder_input_ids
+    def test_beam_sample_generate_dict_output(self):
+        super().test_beam_sample_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_group_beam_search_generate(self):
+        super().test_group_beam_search_generate()
+
+    @with_decoder_input_ids
+    def test_group_beam_search_generate_dict_output(self):
+        super().test_group_beam_search_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_constrained_beam_search_generate(self):
+        super().test_constrained_beam_search_generate()
+
+    @with_decoder_input_ids
+    def test_constrained_beam_search_generate_dict_output(self):
+        super().test_constrained_beam_search_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_contrastive_generate(self):
+        super().test_contrastive_generate()
+
+    @with_decoder_input_ids
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        super().test_contrastive_generate_dict_outputs_use_cache()
+
+    @with_decoder_input_ids
+    def test_generate_continue_from_past_key_values(self):
+        super().test_generate_continue_from_past_key_values()
+
+    @with_decoder_input_ids
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        super().test_prompt_lookup_decoding_matches_greedy_search()
+
+    @with_decoder_input_ids
+    @parameterized.expand([("random",), ("same",)])
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        super().test_assisted_decoding_matches_greedy_search(assistant_type)
+
+    @with_decoder_input_ids
+    def test_assisted_decoding_sample(self):
+        super().test_assisted_decoding_sample()
 
 
 @require_torch
