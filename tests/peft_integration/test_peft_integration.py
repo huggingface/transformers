@@ -421,13 +421,11 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertFalse(model._hf_peft_config_loaded)
 
                 # Test edge cases
-                with self.assertRaises(ValueError) as context:
+                with self.assertRaisesRegex(ValueError, "The following adapter\\(s\\) are not present"):
                     model.delete_adapter("nonexistent_adapter")
-                self.assertIn("The following adapter(s) are not present", str(context.exception))
-
-                with self.assertRaises(ValueError) as context:
+                    
+               with self.assertRaisesRegex(ValueError, "The following adapter\\(s\\) are not present"):
                     model.delete_adapter(["adapter_1", "nonexistent_adapter"])
-                self.assertIn("The following adapter(s) are not present", str(context.exception))
 
                 # Deleting with an empty list or None should not raise errors
                 model.add_adapter(peft_config_1, adapter_name="adapter_1")
