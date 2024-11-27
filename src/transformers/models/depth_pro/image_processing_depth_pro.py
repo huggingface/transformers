@@ -15,14 +15,13 @@
 """Image processor class for DepthPro."""
 
 from typing import Dict, List, Optional, Union
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-from icecream import ic
 
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format
+from ...image_transforms import to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -39,7 +38,7 @@ from ...image_utils import (
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 import math
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 
 if TYPE_CHECKING:

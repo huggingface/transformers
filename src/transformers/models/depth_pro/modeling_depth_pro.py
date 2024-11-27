@@ -14,23 +14,18 @@
 # limitations under the License.
 """PyTorch DepthPro model."""
 
-from icecream import ic
-
-import collections.abc
 import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import List, Optional, Set, Tuple, Union
 
 import torch
 from torch import nn
 from dataclasses import dataclass
 
-from ...utils import ModelOutput
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput, DepthEstimatorOutput
 )
 from ...utils import (
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
