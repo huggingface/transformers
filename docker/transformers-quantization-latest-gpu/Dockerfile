@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.4.1'
+ARG PYTORCH='2.5.1'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu118'
 
@@ -42,6 +42,9 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
+# Add PEFT
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
+
 # Add aqlm for quantization testing
 RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 
@@ -52,8 +55,8 @@ RUN python3 -m pip install --no-cache-dir hqq
 RUN python3 -m pip install --no-cache-dir gguf
 
 # Add autoawq for quantization testing
-# >=v0.2.3 needed for compatibility with torch 2.2.1
-RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.3/autoawq-0.2.3+cu118-cp310-cp310-linux_x86_64.whl
+# >=v0.2.7 needed for compatibility with transformers > 4.46
+RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.7.post2/autoawq-0.2.7.post2-py3-none-any.whl
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
