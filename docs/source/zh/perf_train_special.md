@@ -8,7 +8,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 rendered properly in your Markdown viewer.
 -->
 
-# 在Apple芯片(Apple silicon)上进行PyTorch训练
+# 在 Apple Silicon 芯片上进行 PyTorch 训练
 
 之前，在 Mac 上训练模型仅限于使用 CPU 训练。不过随着PyTorch v1.12的发布，您可以通过在 Apple Silicon 芯片的 GPU 上训练模型来显著提高性能和训练速度。这是通过将 Apple 的 Metal 性能着色器 (Metal Performance Shaders, MPS) 作为后端集成到PyTorch中实现的。[MPS后端](https://pytorch.org/docs/stable/notes/mps.html) 将 PyTorch 操作视为自定义的 Metal 着色器来实现，并将对应模块部署到`mps`设备上。
 
