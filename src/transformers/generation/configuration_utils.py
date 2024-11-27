@@ -1621,3 +1621,17 @@ class CompileConfig(object):
         if not isinstance(other, CompileConfig):
             raise ValueError(f"Equality not defined between CompileConfig and {type(other)}")
         return self.to_dict() == other.to_dict()
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
+    
+    def to_json_string(self) -> str:
+        """Serializes this instance to a JSON formatted string."""
+        return json.dumps(self.__dict__, indent=2) + "\n"
+    
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """Save this instance to a JSON file."""
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            config_dict = self.to_dict()
+            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+            writer.write(json_string)
