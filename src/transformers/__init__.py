@@ -5262,6 +5262,7 @@ if TYPE_CHECKING:
         XLMProphetNetConfig,
     )
     from .models.depth_anything import DepthAnythingConfig
+    from .models.depth_pro import DepthProConfig
     from .models.detr import DetrConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
@@ -5281,7 +5282,6 @@ if TYPE_CHECKING:
         DPRReaderTokenizer,
     )
     from .models.dpt import DPTConfig
-    from .models.depth_pro import DepthProConfig
     from .models.efficientnet import (
         EfficientNetConfig,
     )
@@ -6107,10 +6107,10 @@ if TYPE_CHECKING:
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
+        from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor, DetrImageProcessorFast
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
-        from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
@@ -6872,6 +6872,11 @@ if TYPE_CHECKING:
             DepthAnythingForDepthEstimation,
             DepthAnythingPreTrainedModel,
         )
+        from .models.depth_pro import (
+            DepthProForDepthEstimation,
+            DepthProModel,
+            DepthProPreTrainedModel,
+        )
         from .models.detr import (
             DetrForObjectDetection,
             DetrForSegmentation,
@@ -6917,11 +6922,6 @@ if TYPE_CHECKING:
             DPTForSemanticSegmentation,
             DPTModel,
             DPTPreTrainedModel,
-        )
-        from .models.depth_pro import (
-            DepthProForDepthEstimation,
-            DepthProModel,
-            DepthProPreTrainedModel,
         )
         from .models.efficientnet import (
             EfficientNetForImageClassification,
