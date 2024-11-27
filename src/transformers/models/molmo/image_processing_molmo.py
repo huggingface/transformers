@@ -99,7 +99,6 @@ def pad_to_bounding_box(
     )
 
 
-
 class MolmoImageProcessor(BaseImageProcessor):
     """
     Image processor for the Molmo model.
@@ -522,6 +521,17 @@ class MolmoImageProcessor(BaseImageProcessor):
 
         data["pixel_values"] = batched_crops
 
+        # pad image_masks with -1
+        image_masks = data["image_masks"]
+        mask_shape = image_masks[0].shape[1:]
+        batched_image_masks = np.full(
+            (batch_size, max_num_crops) + mask_shape, fill_value=-1, dtype=image_masks[0].dtype
+        )
+        for idx, mask in enumerate(image_masks):
+            num_crops = mask.shape[0]
+            batched_image_masks[idx, :num_crops, ...] = mask
+
+        data["image_masks"] = batched_image_masks
         self._pad_patch_orderings(data)
 
         self._prepare_crop_grids(data)
@@ -664,7 +674,6 @@ class MolmoImageProcessor(BaseImageProcessor):
             global_image = self.reshape_into_patches(global_image)
             # 5. Concatenate patches and the global image
             crops = np.concatenate([np.expand_dims(global_image, 0), crops], 0)
-            cropped_masks = np.pad(cropped_masks, [[0, 1], [0, 0]], constant_values=-1)
 
             # 6. Global image goes first, so the order of patches in previous crops gets increased
             # by an amount corresponding to the number of tokens per image
