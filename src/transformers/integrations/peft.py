@@ -518,7 +518,7 @@ class PeftAdapterMixin:
             **dispatch_model_kwargs,
         )
 
-    def delete_adapters(self, adapter_names: Union[List[str], str]):
+    def delete_adapter(self, adapter_names: Union[List[str], str]) -> None:
         """
         Delete an adapter's LoRA layers from the underlying model.
     
@@ -541,19 +541,23 @@ class PeftAdapterMixin:
         pipeline.delete_adapters("cinematic")
         ```
         """
-
+    
         check_peft_version(min_version=MIN_PEFT_VERSION)
-
-        if not is_peft_available():
-            raise ImportError("PEFT is not available. Please install PEFT to use this function: `pip install peft`.")
-
+    
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
-
+    
         from peft.tuners.tuners_utils import BaseTunerLayer
     
         if isinstance(adapter_names, str):
             adapter_names = [adapter_names]
+    
+        # Check that all adapter names are present in the config
+        missing_adapters = [name for name in adapter_names if name not in self.peft_config]
+        if missing_adapters:
+            raise ValueError(
+                f"The following adapter(s) are not present and cannot be deleted: {', '.join(missing_adapters)}"
+            )
     
         for adapter_name in adapter_names:
             for module in self.modules():
@@ -568,8 +572,9 @@ class PeftAdapterMixin:
             # For transformers integration - we need to pop the adapter from the config
             if getattr(self, "_hf_peft_config_loaded", False) and hasattr(self, "peft_config"):
                 self.peft_config.pop(adapter_name, None)
-                # In case all adapters are deleted, we need to delete the config
-                # and make sure to set the flag to False
-                if len(self.peft_config) == 0:
-                    del self.peft_config
-                    self._hf_peft_config_loaded = False
+    
+        # In case all adapters are deleted, we need to delete the config
+        # and make sure to set the flag to False
+        if len(self.peft_config) == 0:
+            del self.peft_config
+            self._hf_peft_config_loaded = False
