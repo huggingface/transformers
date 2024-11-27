@@ -1155,7 +1155,7 @@ def require_vptq(test_case):
     return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
 def require_spqr(test_case):
     """
-    Decorator marking a test that requires aqlm
+    Decorator marking a test that requires spqr
     """
     return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
 
