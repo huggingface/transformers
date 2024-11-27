@@ -88,7 +88,7 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_chat_template(self):
         processor = MolmoProcessor.from_pretrained("allenai/Molmo-7B-D-0924-hf")
-        expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
+        expected_prompt = "User: <image> What is shown in this image? Assistant:"
 
         messages = [
             {

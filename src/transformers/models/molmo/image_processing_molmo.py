@@ -630,8 +630,6 @@ class MolmoImageProcessor(BaseImageProcessor):
             # We need to keep track of a few values here.
             crop_grid = self.find_best_crop_grid_for_image_size(image)
             # 2. Then, resize and pad, figure out number of crops (large ones) and patches (small ones)
-            if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
             if do_resize:
                 # we resize both the global image to the wanted size, as well as the crops.
                 global_image_size = get_resize_output_image_size(image, size)
@@ -658,6 +656,11 @@ class MolmoImageProcessor(BaseImageProcessor):
                 # 2.2 (from original code) the image mask padding is increased by 1 dim
                 global_image, _ = self.pad(
                     image=global_image, size=size, input_data_format=input_data_format, constant_values=0
+                )
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                global_image = self.rescale(
+                    image=global_image, scale=rescale_factor, input_data_format=input_data_format
                 )
             if do_normalize:
                 image = normalize(image=image, mean=image_mean, std=image_std)
