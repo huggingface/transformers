@@ -41,6 +41,8 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
+
+# Add PEFT
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
 
 # Add aqlm for quantization testing
