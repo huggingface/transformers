@@ -438,6 +438,34 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
+class RelationDetrConvEncoderPostProcess(nn.Module):
+    """Post process for the ConvEncoder. This is used to be compatible with the FocalNet backbone in official repo."""
+
+    def __init__(self, in_channels: int, post_layer_norm: bool = False):
+        super().__init__()
+        self.in_channels = in_channels
+        self.post_layer_norm = post_layer_norm
+        if self.post_layer_norm:
+            for idx, channel in enumerate(in_channels):
+                self.add_module(f"norm{idx}", nn.LayerNorm(channel))
+
+    def forward(self, multi_level_feats: List[Tensor]):
+        if self.post_layer_norm:
+            # convert N C H W to N H W C
+            if all(feat.shape[1] == channel for feat, channel in zip(multi_level_feats, self.in_channels)):
+                multi_level_feats = [feat.permute(0, 2, 3, 1) for feat in multi_level_feats]
+
+            for idx, feat in enumerate(multi_level_feats):
+                feat = getattr(self, f"norm{idx}")(feat)
+                multi_level_feats[idx] = feat
+
+        # convert N H W C to N C H W
+        if all(feat.shape[-1] == channel for feat, channel in zip(multi_level_feats, self.in_channels)):
+            multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
+
+        return multi_level_feats
+
+
 class RelationDetrConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -498,10 +526,14 @@ class RelationDetrConvEncoder(nn.Module):
                     if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
                         parameter.requires_grad_(False)
 
+        self.post_process = RelationDetrConvEncoderPostProcess(
+            self.intermediate_channel_sizes, config.backbone_post_layer_norm
+        )
+
     def forward(self, pixel_values: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
-
+        features = self.post_process(features)
         return features
 
 
@@ -1929,11 +1961,6 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
     def get_multi_levels(self, pixel_values: Tensor, pixel_mask: Tensor):
         # extract higher features matching proto_levels
         multi_level_feats = self.backbone(pixel_values)
-
-        # in case some backbone (e.g., swin in timm) return [N, H, W, C] format, convert it to [N, C, H, W]
-        multi_level_channels = self.backbone.intermediate_channel_sizes
-        if all(feat.shape[-1] == channel for feat, channel in zip(multi_level_feats, multi_level_channels)):
-            multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
 
         # apply neck to get multi_level_feats
         multi_level_feats = self.neck(multi_level_feats)

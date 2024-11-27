@@ -42,6 +42,9 @@ class RelationDetrConfig(PretrainedConfig):
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
+        backbone_post_layer_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply layer normalization after the backbone. Mainly used for the `FocalNet` backbone to be compatible
+            with official implementation.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 900):
@@ -167,6 +170,7 @@ class RelationDetrConfig(PretrainedConfig):
         self,
         use_timm_backbone=True,
         backbone_config=None,
+        backbone_post_layer_norm=False,
         num_channels=3,
         num_queries=900,
         hybrid_queries=1500,
@@ -243,6 +247,7 @@ class RelationDetrConfig(PretrainedConfig):
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
+        self.backbone_post_layer_norm = backbone_post_layer_norm
         self.sin_cos_temperature = sin_cos_temperature
         self.sin_cos_normalize = sin_cos_normalize
         self.sin_cos_scale = sin_cos_scale
