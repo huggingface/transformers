@@ -14,6 +14,7 @@
 # limitations under the License.
 import copy
 import math
+import types
 import warnings
 import zlib
 from typing import Callable, Iterator, List, Optional, Tuple, Union
@@ -570,6 +571,10 @@ class WhisperGenerationMixin(GenerationMixin):
         num_beams = (
             generation_config.num_beams if generation_config.num_beams is not None else kwargs.get("num_beams", 1)
         )
+        if "assistant_model" in kwargs:
+            # speculative decoding: the model should be able to return
+            generation_config.begin_suppress_tokens = None
+
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
@@ -618,6 +623,23 @@ class WhisperGenerationMixin(GenerationMixin):
             batch_size=cur_bsz,
             generation_config=generation_config,
         )
+
+        # 5bis speculative decoding: patch generate to make sure the assistant model returns the input tokens
+        if "assistant_model" in kwargs:
+            from .modeling_whisper import WhisperForCausalLM
+
+            assistant_model = kwargs["assistant_model"]
+            if assistant_model is self:
+                assistant_model = copy.deepcopy(kwargs["assistant_model"])
+            if (
+                not hasattr(assistant_model, "_generate_with_input_tokens")
+                and type(assistant_model) != WhisperForCausalLM
+            ):
+                assistant_model.generate = types.MethodType(
+                    self.generate_add_decoder_input_ids(assistant_model.generate.__func__), assistant_model
+                )
+                assistant_model._generate_with_input_tokens = True
+                kwargs["assistant_model"] = assistant_model
 
         # 6 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
@@ -1864,3 +1886,30 @@ class WhisperGenerationMixin(GenerationMixin):
             segment_offset = seek_num_frames[prev_idx]
 
         return segments, segment_offset
+
+    @staticmethod
+    def generate_add_decoder_input_ids(func):
+        """
+        Wrapper to add decoder input token ids to the generated sequence.
+        Whisper's generate method does not return the decoder input token ids.
+        This wrapper can be used to add the decoder input token ids to the generated sequence.
+        Args:
+            func: The original generate function to be wrapped.
+        Returns:
+            A wrapped function that adds decoder input token ids to the output.
+        """
+
+        def wrapper(self, *args, **kwargs):
+            out_generate = func(self, *args, **kwargs)
+            out_sequence = out_generate.sequences if hasattr(out_generate, "sequences") else out_generate
+            batch_size = out_sequence.shape[0]
+            init_tokens = kwargs.get("decoder_input_ids", [self.generation_config.decoder_start_token_id])
+            init_tokens = torch.as_tensor(init_tokens, dtype=torch.long, device=out_sequence.device)
+            init_tokens = init_tokens.expand(batch_size, -1)
+            if hasattr(out_generate, "sequences"):
+                out_generate.sequences = torch.cat([init_tokens, out_generate.sequences], dim=-1)
+            else:
+                out_generate = torch.cat([init_tokens, out_generate], dim=-1)
+            return out_generate
+
+        return wrapper
