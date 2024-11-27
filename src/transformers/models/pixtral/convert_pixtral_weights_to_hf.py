@@ -220,6 +220,8 @@ def convert_mistral_model(input_dir, output_dir):
         for k,v in MISTRAL_CONFIG_MAPPING.items():
             value = param_json.pop(k)
             param_json[v] = value
+        if "hidden_act" not in vision_config:
+            vision_config["hidden_act"] = "silu"
         text_config = MistralConfig(**param_json, hidden_act="silu", sliding_window=None,tie_word_embeddings=False, is_composition=True)
     else:
         text_config = MistralConfig(
