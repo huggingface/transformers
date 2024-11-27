@@ -48,6 +48,46 @@ The original code for vision can be found [here](https://github.com/facebookrese
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
 
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+The SDPA implementation is currently available for the Data2VecAudio and Data2VecVision models.
+
+```
+from transformers import Data2VecVisionForImageClassification
+model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", torch_dtype=torch.float16)
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+For the Data2VecVision model, on a local benchmark (NVIDIA GeForce RTX 2060-8GB, PyTorch 2.5.1, OS Ubuntu 20.04)
+with `float16` and `facebook/data2vec-vision-base` model, we saw the following improvements during training and
+inference:
+
+#### Training
+
+| num_training_steps | batch_size | image_size   | is_cuda | Time per batch (eager - s) | Time per batch (sdpa - s) | Speedup (%) | Eager peak mem (MB) | SDPA peak mem (MB) | Mem saving (%) |
+|--------------------|------------|--------------|---------|----------------------------|---------------------------|-------------|----------------------|--------------------|----------------|
+| 50                 | 2          | (1048, 640)  | True    | 0.996                      | 0.754                     | 32.147      | 6722.198            | 4264.653          | 57.626         |
+
+#### Inference
+
+| num_batches | batch_size | image_size   | is_cuda | is_half | use_mask | Per token latency eager (ms) | Per token latency SDPA (ms) | Speedup (%) | Mem eager (MB) | Mem BT (MB) | Mem saved (%) |
+|-------------|------------|--------------|---------|---------|----------|-----------------------------|----------------------------|-------------|----------------|-------------|---------------|
+| 50          | 4          | (800, 600)   | True    | True    | False    | 3.603                       | 7.006                      | -48.572     | 1038.110       | 1001.150    | 3.692         |
+| 50          | 4          | (1024, 768)  | True    | True    | False    | 8.723                       | 7.003                      | 24.561      | 2409.457       | 1013.407    | 137.758       |
+| 50          | 8          | (800, 600)   | True    | True    | False    | 6.504                       | 7.011                      | -7.228      | 1805.455       | 1020.350    | 76.945        |
+| 50          | 8          | (1024, 768)  | True    | True    | False    | 15.624                      | 7.035                      | 122.074     | 4406.911       | 1044.865    | 321.769       |
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Data2Vec.

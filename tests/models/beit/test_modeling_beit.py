@@ -412,6 +412,12 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        # The common test modifies the num_hidden_layers to be 1. However, for Beit we want to
+        # avoid that because the num_hidden_layers is generally assumed to be 4. Also, the code
+        # related to attention masks in the original common tests is not required as the Beit
+        # model does not handle attention masks. Furthermore, some extra code like modifying
+        # the norm layers eps values for specialized configs and checking for the 'noise'
+        # has been omitted to simply the test.
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -475,16 +481,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.norm_epsilon = 1.0
             config.layer_norm_epsilon = 1.0
 
-            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
-            # (We don't need the original epsilon values to check eager/sdpa matches)
-            for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
-                if hasattr(config, attr):
-                    getattr(config, attr).rms_norm_eps = 1.0
-                    getattr(config, attr).layer_norm_eps = 1.0
-                    getattr(config, attr).norm_eps = 1.0
-                    getattr(config, attr).norm_epsilon = 1.0
-                    getattr(config, attr).layer_norm_epsilon = 1.0
-
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -524,63 +520,12 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                                     dummy_input = dummy_input.to(torch_dtype)
 
                                 dummy_input = dummy_input[:batch_size]
-                                if dummy_input.shape[0] != batch_size:
-                                    if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                                        extension = torch.rand(
-                                            batch_size - dummy_input.shape[0],
-                                            *dummy_input.shape[1:],
-                                            dtype=torch_dtype,
-                                            device=torch_device,
-                                        )
-                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-                                    else:
-                                        extension = torch.randint(
-                                            high=5,
-                                            size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
-                                            dtype=dummy_input.dtype,
-                                            device=torch_device,
-                                        )
-                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-
-                                if not use_mask:
-                                    dummy_attention_mask = None
-                                else:
-                                    dummy_attention_mask = inputs_dict.get("attention_mask", None)
-                                    if dummy_attention_mask is None:
-                                        seqlen = dummy_input.shape[-1]
-                                        dummy_attention_mask = (
-                                            torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
-                                        )
-
-                                    dummy_attention_mask = dummy_attention_mask[:batch_size]
-                                    if dummy_attention_mask.shape[0] != batch_size:
-                                        extension = torch.ones(
-                                            batch_size - dummy_attention_mask.shape[0],
-                                            *dummy_attention_mask.shape[1:],
-                                            dtype=dummy_attention_mask.dtype,
-                                            device=torch_device,
-                                        )
-                                        dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-                                        dummy_attention_mask = dummy_attention_mask.to(torch_device)
-
-                                    dummy_attention_mask[:] = 1
-                                    if padding_side == "left":
-                                        dummy_attention_mask[-1, :2] = 0
-                                        dummy_attention_mask[-1, 2:] = 1
-                                    elif padding_side == "right":
-                                        dummy_attention_mask[-1, -2:] = 0
-                                        dummy_attention_mask[-1, :-2] = 1
-
                                 for enable_kernels in [False, True]:
                                     failcase = f"padding_side={padding_side}, use_mask={use_mask}, enable_kernels={enable_kernels}"
                                     processed_inputs = {
                                         model.main_input_name: dummy_input,
                                         "output_hidden_states": True,
                                     }
-
-                                    # Otherwise fails for e.g. WhisperEncoderModel
-                                    if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                                        processed_inputs["attention_mask"] = dummy_attention_mask
 
                                     if (
                                         self.has_attentions
@@ -595,15 +540,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                                         dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
                                         processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
 
-                                    if "noise" in inspect.signature(model_eager.forward).parameters:
-                                        np.random.seed(2)
-                                        num_patches = int(
-                                            (self.model_tester.image_size // self.model_tester.patch_size) ** 2
-                                        )
-                                        noise = np.random.uniform(size=(batch_size, num_patches))
-                                        processed_inputs["noise"] = torch.from_numpy(noise)
-
-                                    # TODO: test gradients as well (& for FA2 as well!)
                                     with torch.no_grad():
                                         with torch.backends.cuda.sdp_kernel(
                                             enable_flash=enable_kernels,
