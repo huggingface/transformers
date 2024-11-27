@@ -23,13 +23,15 @@ import regex as re
 import torch
 from safetensors.torch import load_file
 
-from transformers import (
-    MolmoConfig,
-)
-
-# TODO why is this import not solved at modular parsing?
+from transformers import Qwen2TokenizerFast
 from transformers.models.molmo import MolmoForConditionalGeneration
-from transformers.models.molmo.configuration_molmo import MolmoPoolingConfig, MolmoTextConfig, MolmoVisionConfig
+from transformers.models.molmo.configuration_molmo import (
+    MolmoConfig,
+    MolmoPoolingConfig,
+    MolmoTextConfig,
+    MolmoVisionConfig,
+)
+from transformers.models.molmo.image_processing_molmo import MolmoImageProcessor
 from transformers.models.molmo.processing_molmo import MolmoProcessor
 
 
@@ -170,9 +172,9 @@ def write_model(
     vision_config = MolmoVisionConfig()
     pooling_config = MolmoPoolingConfig()
     config = MolmoConfig(
-        text_config=text_config,
-        vision_config=vision_config,
-        pooling_config=pooling_config,
+        text_config=text_config.to_dict(),
+        vision_config=vision_config.to_dict(),
+        pooling_config=pooling_config.to_dict(),
     )
 
     # ------------------------------------------------------------
@@ -252,16 +254,18 @@ def write_model(
     # ------------------------------------------------------------
     # Convert processor
     # ------------------------------------------------------------
-    processor = MolmoProcessor.from_pretrained(input_base_path, chat_template=CHAT_TEMPLATE)
-    processor.tokenizer.bos_token = processor.tokenizer.eos_token
-    processor.tokenizer.bos_token_id = processor.tokenizer.bos_token_id
-    processor.tokenizer.extra_special_tokens = {
+    extra_special_tokens = {
         "image_token": "<image>",
         "boi_token": "<im_patch>",
         "eoi_token": "<im_start>",
         "im_patch_token": "<im_end>",
         "im_col_token": "<im_col>",
     }
+    tokenizer = Qwen2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
+    tokenizer.bos_token = tokenizer.eos_token
+    tokenizer.bos_token_id = tokenizer.eos_token_id
+    image_processor = MolmoImageProcessor.from_pretrained(input_base_path)
+    processor = MolmoProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=CHAT_TEMPLATE)
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
 

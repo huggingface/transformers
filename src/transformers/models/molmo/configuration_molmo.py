@@ -136,6 +136,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         pooling_height=2,
         pooling_width=2,
         pad_embed_dim=2048,
+        image_num_patches=24,
         image_feature_dropout=0.0,
         text_intermediate_size=37888,
         text_hidden_size=3584,
@@ -153,6 +154,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
         self.pad_embed_dim = pad_embed_dim
+        self.image_num_patches = image_num_patches
         self.image_feature_dropout = image_feature_dropout
         self.text_intermediate_size = text_intermediate_size
         self.text_hidden_size = text_hidden_size
@@ -297,6 +299,7 @@ class MolmoTextConfig(PretrainedConfig):
             **kwargs,
         )
         self.additional_vocab_size = additional_vocab_size
+        self.head_dim = head_dim
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

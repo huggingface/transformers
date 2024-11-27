@@ -252,6 +252,7 @@ class MolmoTextConfig(Qwen2Config):
         **kwargs,
     ):
         self.additional_vocab_size = additional_vocab_size
+        self.head_dim = head_dim
         super().__init__(**kwargs)
 
 
