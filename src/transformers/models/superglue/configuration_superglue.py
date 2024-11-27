@@ -69,7 +69,7 @@ class SuperGlueConfig(PretrainedConfig):
         gnn_layers_types: List[str] = None,
         num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
-        matching_threshold: float = 0.2,
+        matching_threshold: float = 0.0,
         initializer_range: float = 0.02,
         **kwargs,
     ):

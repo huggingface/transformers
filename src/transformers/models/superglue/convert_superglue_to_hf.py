@@ -54,28 +54,28 @@ def verify_model_outputs(model, model_name):
         expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
         expected_matches_values = torch.tensor(
-            [125, -1, 137, 138, 136, 143, 135, -1, -1, 153], dtype=torch.int64, device=predicted_matches_values.device
+            [125, 630, 137, 138, 136, 143, 135, -1, -1, 153], dtype=torch.int64, device=predicted_matches_values.device
         )
         expected_matching_scores_values = torch.tensor(
-            [0.9899, 0, 0.9897, 0.9889, 0.9879, 0.7464, 0.7109, 0, 0, 0.9841],
+            [0.9899, 0.0033, 0.9897, 0.9889, 0.9879, 0.7464, 0.7109, 0, 0, 0.9841],
             device=predicted_matches_values.device,
         )
 
-        expected_number_of_matches = 167
+        expected_number_of_matches = 281
     elif "indoor" in model_name:
         expected_max_number_keypoints = 865
         expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
         expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
         expected_matches_values = torch.tensor(
-            [125, -1, 137, 138, 136, 155, 135, -1, -1, 153], dtype=torch.int64, device=predicted_matches_values.device
+            [125, 144, 137, 138, 136, 155, 135, -1, -1, 153], dtype=torch.int64, device=predicted_matches_values.device
         )
         expected_matching_scores_values = torch.tensor(
-            [0.9694, 0.0, 0.9006, 0.8753, 0.8521, 0.5688, 0.6321, 0.0, 0.0, 0.7235],
+            [0.9694, 0.0010, 0.9006, 0.8753, 0.8521, 0.5688, 0.6321, 0.0, 0.0, 0.7235],
             device=predicted_matches_values.device,
         )
 
-        expected_number_of_matches = 209
+        expected_number_of_matches = 282
 
     assert outputs.matches.shape == expected_matches_shape
     assert outputs.matching_scores.shape == expected_matching_scores_shape
@@ -202,7 +202,7 @@ def write_model(
         keypoint_encoder_sizes=[32, 64, 128, 256],
         gnn_layers_types=["self", "cross"] * 9,
         sinkhorn_iterations=100,
-        matching_threshold=0.2,
+        matching_threshold=0.0,
     )
     config.architectures = ["SuperGlueForKeypointMatching"]
     config.save_pretrained(model_path, push_to_hub=push_to_hub)
