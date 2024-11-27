@@ -168,7 +168,8 @@ def write_model(
         scaled_images_ratios=[0.25, 0.5, 1],
         scaled_images_overlap_ratios=[0.0, 0.5, 0.25],
         scaled_images_feature_dims=[1024, 1024, 512],
-        use_batch_norm_in_fusion=False,
+        use_batch_norm_in_fusion_residual=False,
+        use_bias_in_fusion_residual=True,
         use_fov_model=True,
         num_fov_head_layers=2,
     )
@@ -228,7 +229,6 @@ def write_image_processor(output_dir: str):
         do_normalize=True,
         image_mean=0.5,
         image_std=0.5,
-        return_tensors="pt",
     )
     image_processor.save_pretrained(output_dir)
 

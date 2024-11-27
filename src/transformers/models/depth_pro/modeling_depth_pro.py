@@ -1068,8 +1068,34 @@ class DepthProModel(DepthProPreTrainedModel):
         Returns:
 
         Examples:
-        TODO
+
         ```python
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, DepthProModel
+        >>>
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>>
+        >>> checkpoint = "geetu040/DepthPro"
+        >>> processor = AutoProcessor.from_pretrained(checkpoint)
+        >>> model = DepthProModel.from_pretrained(checkpoint)
+        >>>
+        >>> # prepare image for the model
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>>
+        >>> with torch.no_grad():
+        ...     output = model(**inputs)
+        ...
+        >>> for state in output.last_hidden_state:
+        ...     print(state.shape)
+        ...
+        torch.Size([1, 1024, 48, 48])
+        torch.Size([1, 1024, 96, 96])
+        torch.Size([1, 512, 192, 192])
+        torch.Size([1, 256, 384, 384])
+        torch.Size([1, 256, 768, 768])
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1433,8 +1459,36 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         Returns:
 
         Examples:
-        TODO
+
         ```python
+        >>> from transformers import AutoImageProcessor, DepthProForDepthEstimation
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+        >>>
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>>
+        >>> checkpoint = "geetu040/DepthPro"
+        >>> processor = AutoImageProcessor.from_pretrained(checkpoint)
+        >>> model = DepthProForDepthEstimation.from_pretrained(checkpoint)
+        >>>
+        >>> # prepare image for the model
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>>
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...
+        >>> # interpolate to original size
+        >>> post_processed_output = processor.post_process_depth_estimation(
+        ...     outputs.predicted_depth, outputs.fov, target_sizes=[(image.height, image.width)],
+        ... )
+        >>>
+        >>> # visualize the prediction
+        >>> predicted_depth = post_processed_output["predicted_depth"][0]
+        >>> depth = predicted_depth * 255 / predicted_depth.max()
+        >>> depth = depth.detach().cpu().numpy()
+        >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
         loss = None
         if labels is not None:
