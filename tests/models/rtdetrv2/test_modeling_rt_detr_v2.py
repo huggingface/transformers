@@ -24,7 +24,6 @@ from parameterized import parameterized
 from transformers import (
     RtDetrV2Config,
     RTDetrImageProcessor,
-    RTDetrv2ResNetConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -39,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RtDetrv2ForObjectDetection, RtDetrV2Model
+    from transformers import RtDetrV2ForObjectDetection, RtDetrV2Model
 
 if is_vision_available():
     from PIL import Image
@@ -77,7 +76,7 @@ class RtDetrV2ModelTester:
         activation_function="silu",
         eval_size=None,
         normalize_before=False,
-        # decoder RTDetrv2Transformer
+        # decoder RtDetrV2Transformer
         d_model=32,
         num_queries=30,
         decoder_in_channels=[32, 32, 32],
@@ -160,54 +159,47 @@ class RtDetrV2ModelTester:
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
                 labels.append(target)
 
-        config = self.get_config()
+        config = self.get_rt_detr_v2_config()
         config.num_labels = self.num_labels
         return config, pixel_values, pixel_mask, labels
 
-    def get_config(self):
-        hidden_sizes = [10, 20, 30, 40]
-        backbone_config = RTDetrv2ResNetConfig(
-            embeddings_size=10,
-            hidden_sizes=hidden_sizes,
-            depths=[1, 1, 2, 1],
-            out_features=["stage2", "stage3", "stage4"],
-            out_indices=[2, 3, 4],
-        )
-        return RTDetrv2Config.from_backbone_configs(
-            backbone_config=backbone_config,
-            encoder_hidden_dim=self.encoder_hidden_dim,
-            encoder_in_channels=hidden_sizes[1:],
-            feat_strides=self.feat_strides,
-            encoder_layers=self.encoder_layers,
-            encoder_ffn_dim=self.encoder_ffn_dim,
-            encoder_attention_heads=self.encoder_attention_heads,
-            dropout=self.dropout,
-            activation_dropout=self.activation_dropout,
-            encode_proj_layers=self.encode_proj_layers,
-            positional_encoding_temperature=self.positional_encoding_temperature,
-            encoder_activation_function=self.encoder_activation_function,
-            activation_function=self.activation_function,
-            eval_size=self.eval_size,
-            normalize_before=self.normalize_before,
-            d_model=self.d_model,
-            num_queries=self.num_queries,
-            decoder_in_channels=self.decoder_in_channels,
-            decoder_ffn_dim=self.decoder_ffn_dim,
-            num_feature_levels=self.num_feature_levels,
-            decoder_n_points=self.decoder_n_points,
-            decoder_layers=self.decoder_layers,
-            decoder_attention_heads=self.decoder_attention_heads,
-            decoder_activation_function=self.decoder_activation_function,
-            attention_dropout=self.attention_dropout,
-            num_denoising=self.num_denoising,
-            label_noise_ratio=self.label_noise_ratio,
-            box_noise_scale=self.box_noise_scale,
-            learn_initial_query=self.learn_initial_query,
-            anchor_image_size=self.anchor_image_size,
-            image_size=self.image_size,
-            disable_custom_kernels=self.disable_custom_kernels,
-            with_box_refine=self.with_box_refine,
-        )
+
+    def get_rt_detr_v2_config(model_name: str) -> RtDetrV2Config:
+        config = RtDetrV2Config()
+
+        config.num_labels = 80
+        repo_id = "huggingface/label-files"
+        filename = "coco-detection-mmdet-id2label.json"
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
+
+        if model_name == "rtdetr_v2_r18vd":
+            config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+            config.backbone_config.depths = [2, 2, 2, 2]
+            config.backbone_config.layer_type = "basic"
+            config.encoder_in_channels = [128, 256, 512]
+            config.hidden_expansion = 0.5
+            config.decoder_layers = 3
+        elif model_name == "rtdetr_v2_r34vd":
+            config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+            config.backbone_config.depths = [3, 4, 6, 3]
+            config.backbone_config.layer_type = "basic"
+            config.encoder_in_channels = [128, 256, 512]
+            config.hidden_expansion = 0.5
+            config.decoder_layers = 4
+        elif model_name == "rtdetr_v2_r50vd_m":
+            config.hidden_expansion = 0.5
+        elif model_name == "rtdetr_v2_r50vd":
+            pass
+        elif model_name == "rtdetr_v2_r101vd":
+            config.backbone_config.depths = [3, 4, 23, 3]
+            config.encoder_ffn_dim = 2048
+            config.encoder_hidden_dim = 384
+            config.decoder_in_channels = [384, 384, 384]
+
+        return config
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
@@ -225,7 +217,7 @@ class RtDetrV2ModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.d_model))
 
     def create_and_check_rtdetrv2_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = RtDetrv2ForObjectDetection(config=config)
+        model = RtDetrV2ForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -244,7 +236,7 @@ class RtDetrV2ModelTester:
 
 @require_torch
 class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RtDetrV2Model, RtDetrv2ForObjectDetection) if is_torch_available() else ()
+    all_model_classes = (RtDetrV2Model, RtDetrV2ForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
@@ -256,7 +248,7 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "RtDetrv2ForObjectDetection":
+            if model_class.__name__ == "RtDetrV2ForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -275,7 +267,7 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.model_tester = RtDetrV2ModelTester(self)
         self.config_tester = ConfigTester(
             self,
-            config_class=RTDetrv2Config,
+            config_class=RtDetrV2Config,
             has_text_modality=False,
             common_properties=["hidden_size", "num_attention_heads"],
         )
@@ -291,23 +283,23 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_rtdetrv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="RTDetrv2 does not use inputs_embeds")
+    @unittest.skip(reason="RtDetrV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="RTDetrv2 does not use test_inputs_embeds_matches_input_ids")
+    @unittest.skip(reason="RtDetrV2 does not use test_inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="RTDetrv2 does not support input and output embeddings")
+    @unittest.skip(reason="RtDetrV2 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="RTDetrv2 does not support input and output embeddings")
+    @unittest.skip(reason="RtDetrV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="RTDetrv2 does not use token embeddings")
+    @unittest.skip(reason="RtDetrV2 does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -358,7 +350,7 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Object Detection model returns pred_logits and pred_boxes
-            if model_class.__name__ == "RtDetrv2ForObjectDetection":
+            if model_class.__name__ == "RtDetrV2ForObjectDetection":
                 correct_outlen += 2
 
             self.assertEqual(out_len, correct_outlen)
@@ -401,7 +393,7 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
             else:
-                # RTDetrv2 should maintin encoder_hidden_states output
+                # RtDetrV2 should maintin encoder_hidden_states output
                 added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
@@ -528,7 +520,7 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "RtDetrv2ForObjectDetection":
+            if model_class.__name__ == "RtDetrV2ForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -560,7 +552,7 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "RtDetrv2ForObjectDetection":
+            if model_class.__name__ == "RtDetrV2ForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -588,7 +580,7 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = model_class(config=configs_no_init)
             # Skip the check for the backbone
             for name, module in model.named_modules():
-                if module.__class__.__name__ == "RTDetrv2ConvEncoder":
+                if module.__class__.__name__ == "RtDetrV2ConvEncoder":
                     backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
                     break
 
@@ -707,7 +699,7 @@ class RtDetrV2ModelIntegrationTest(unittest.TestCase):
         return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = RtDetrv2ForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+        model = RtDetrV2ForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

@@ -1,7 +1,7 @@
 from ..rt_detr.modeling_rt_detr import (
-    RTDetrDecoderLayer, RTDetrModelOutput, RTDetrObjectDetectionOutput, RTDetrConvEncoder, RTDetrHybridEncoder,
-    RTDetrEncoderLayer, RTDetrConvEncoder, RTDetrMLPPredictionHead, RTDetrDecoderOutput, RTDetrDecoderLayer, 
-    RTDetrMultiheadAttention, RTDetrMultiscaleDeformableAttention, MultiScaleDeformableAttentionFunction, get_contrastive_denoising_training_group,
+    RTDetrDecoderLayer, RTDetrModelOutput, RTDetrObjectDetectionOutput, RTDetrHybridEncoder,
+    RTDetrEncoderLayer, RTDetrConvEncoder, RTDetrMLPPredictionHead, RTDetrDecoderOutput, 
+    RTDetrMultiscaleDeformableAttention, MultiScaleDeformableAttentionFunction, get_contrastive_denoising_training_group,
     inverse_sigmoid
 )
 from ...modeling_utils import PreTrainedModel
@@ -38,22 +38,23 @@ class RtDetrV2Config(RTDetrConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
 
-# write the pass classes
-class RtDetrMLPPredictionHeadV2(RTDetrMLPPredictionHead):
+class RtDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
-class RtDetrDecoderOutputV2(RTDetrDecoderOutput):
+class RtDetrV2DecoderOutput(RTDetrDecoderOutput):
     pass
 
-class RtDetrHybridEncoderV2(RTDetrHybridEncoder):
+class RtDetrV2HybridEncoder(RTDetrHybridEncoder):
     pass
 
-class RtDetrModelOutputV2(RTDetrModelOutput):
+class RtDetrV2ModelOutput(RTDetrModelOutput):
     pass
 
-class RtDetrObjectDetectionOutputV2(RTDetrObjectDetectionOutput):
+class RtDetrV2ObjectDetectionOutput(RTDetrObjectDetectionOutput):
     pass
 
+class RtDetrV2ConvEncoder(RTDetrConvEncoder):
+    pass
 
 MultiScaleDeformableAttention = None
 def multi_scale_deformable_attention_v2(
@@ -132,7 +133,7 @@ def multi_scale_deformable_attention_v2(
 
 class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
     """
-    RTDETRv2 version of multiscale deformable attention, extending the base implementation
+    RTDETRV2 version of multiscale deformable attention, extending the base implementation
     with improved offset handling and initialization.
     """
 
@@ -373,7 +374,7 @@ class RtDetrV2Decoder(RtDetrV2PreTrainedModel):
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RtDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.query_pos_head = RtDetrMLPPredictionHeadV2(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+        self.query_pos_head = RtDetrV2MLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -512,7 +513,7 @@ class RtDetrV2Decoder(RtDetrV2PreTrainedModel):
                 ]
                 if v is not None
             )
-        return RtDetrDecoderOutputV2(
+        return RtDetrV2DecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
@@ -529,7 +530,7 @@ class RtDetrV2Model(RtDetrV2PreTrainedModel):
         super().__init__(config)
 
         # Create backbone
-        self.backbone = RTDetrConvEncoder(config)
+        self.backbone = RtDetrV2ConvEncoder(config)
         intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create encoder input projection layers
@@ -545,7 +546,7 @@ class RtDetrV2Model(RtDetrV2PreTrainedModel):
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
 
         # Create encoder
-        self.encoder = RtDetrHybridEncoderV2(config)
+        self.encoder = RtDetrV2HybridEncoder(config)
 
         # denoising part
         if config.num_denoising > 0:
@@ -563,7 +564,7 @@ class RtDetrV2Model(RtDetrV2PreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.encoder_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.encoder_bbox_head = RtDetrMLPPredictionHeadV2(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.encoder_bbox_head = RtDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -649,7 +650,7 @@ class RtDetrV2Model(RtDetrV2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RtDetrModelOutputV2]:
+    ) -> Union[Tuple[torch.FloatTensor], RtDetrV2ModelOutput]:
         r"""
         Returns:
 
@@ -827,7 +828,7 @@ class RtDetrV2Model(RtDetrV2PreTrainedModel):
 
             return tuple_outputs
 
-        return RtDetrModelOutputV2(
+        return RtDetrV2ModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
@@ -863,7 +864,7 @@ class RtDetrV2ForObjectDetection(RtDetrV2PreTrainedModel):
 
         # Detection heads on top
         self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        self.bbox_embed = partial(RtDetrMLPPredictionHeadV2, config, config.d_model, config.d_model, 4, num_layers=3)
+        self.bbox_embed = partial(RtDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
@@ -900,7 +901,7 @@ class RtDetrV2ForObjectDetection(RtDetrV2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **loss_kwargs,
-    ) -> Union[Tuple[torch.FloatTensor], RtDetrObjectDetectionOutputV2]:
+    ) -> Union[Tuple[torch.FloatTensor], RtDetrV2ObjectDetectionOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
@@ -1016,7 +1017,7 @@ class RtDetrV2ForObjectDetection(RtDetrV2PreTrainedModel):
                 output = (logits, pred_boxes) + outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
-        return RtDetrObjectDetectionOutputV2(
+        return RtDetrV2ObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,

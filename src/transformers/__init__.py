@@ -713,7 +713,7 @@ _import_structure = {
         "RoFormerTokenizer",
     ],
     "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
-    "models.rt_detr_v2": ["RtDetrV2Config", "RTDetrV2ResNetConfig"],
+    "models.rt_detr_v2": ["RtDetrV2Config"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
@@ -3274,9 +3274,7 @@ else:
         [
             "RtDetrV2ForObjectDetection",
             "RtDetrV2Model",
-            "RtDetrV2PreTrainedModel",
-            "RTDetrV2ResNetBackbone",
-            "RTDetrV2ResNetPreTrainedModel",
+            "RtDetrV2PreTrainedModel"
         ]
     )
     _import_structure["models.rwkv"].extend(
@@ -5627,8 +5625,7 @@ if TYPE_CHECKING:
         RTDetrResNetConfig,
     )
     from .models.rt_detr_v2 import (
-        RtDetrV2Config,
-        RTDetrV2ResNetConfig,
+        RtDetrV2Config
     )
     from .models.rwkv import RwkvConfig
     from .models.sam import (
@@ -7813,11 +7810,9 @@ if TYPE_CHECKING:
             RTDetrResNetPreTrainedModel,
         )
         from .models.rt_detr_v2 import (
-            RTDetrV2ForObjectDetection,
-            RTDetrV2Model,
-            RTDetrV2PreTrainedModel,
-            RTDetrV2ResNetBackbone,
-            RTDetrV2ResNetPreTrainedModel,
+            RtDetrV2ForObjectDetection,
+            RtDetrV2Model,
+            RtDetrV2PreTrainedModel
         )
         from .models.rwkv import (
             RwkvForCausalLM,
