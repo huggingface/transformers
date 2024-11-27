@@ -17,7 +17,7 @@ import gc
 import tempfile
 import unittest
 
-from transformers import SpQRConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, SpQRConfig, StaticCache
 from transformers.testing_utils import (
     require_accelerate,
     require_spqr,
