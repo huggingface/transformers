@@ -5090,14 +5090,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
         if not hasattr(self, "_compiled_call"):
-            self._last_compile_config = getattr(self.generation_config, "compile_config", CompileConfig())
-            self._compiled_call = torch.compile(self.__call__, **self._last_compile_config.to_dict())
+            default_config = getattr(self.generation_config, "compile_config", CompileConfig())
+            self._set_compile_call(default_config)
         return self._compiled_call
 
     def _set_compile_call(self, compile_config: CompileConfig):
         """Set the mode (arguments) for the compiled version of `self.__call__`."""
-        # Only reset it if different from previous config
-        if getattr(self, "_last_compile_config", CompileConfig()) != compile_config:
+        # Only reset it if not present or different from previous config
+        if (
+            not hasattr(self, "_compiled_call")
+            or getattr(self, "_last_compile_config", CompileConfig()) != compile_config
+        ):
             self._last_compile_config = compile_config
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
 
