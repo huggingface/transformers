@@ -1135,7 +1135,7 @@ JOB_TO_TEST_FILE = {
     # "tests_torch_and_tf": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
     # "tests_torch_and_flax": r"tests/models/.*/test_modeling_(?:flax|(?!tf)).*",
     # "tests_tf": r"tests/models/.*/test_modeling_tf_.*",
-    # "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+    "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     # "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     # "tests_tokenization": r"tests/models/.*/test_tokenization.*",
     # "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
