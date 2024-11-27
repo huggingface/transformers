@@ -43,7 +43,7 @@ class SuperGlueConfig(PretrainedConfig):
             The types of the GNN layers. Must be either 'self' or 'cross'.
         num_attention_heads (`int`, *optional*, defaults to 4): The number of heads in the GNN layers.
         sinkhorn_iterations (`int`, *optional*, defaults to 100): The number of Sinkhorn iterations.
-        matching_threshold (`float`, *optional*, defaults to 0.2): The matching threshold.
+        matching_threshold (`float`, *optional*, defaults to 0.0): The matching threshold.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
