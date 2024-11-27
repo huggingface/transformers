@@ -57,7 +57,7 @@ if __name__ == '__main__':
                             test = line[len("FAILED "):].split()[0]
                             summary[test] = "failed"
                 # failed before passed
-                summary = {k: v for k, v in sorted(summary.items(), key=lambda x: (v, k))}
+                summary = {k: v for k, v in sorted(summary.items(), key=lambda x: (x[1], x[0]))}
                 workflow_summary[job["name"]] = summary
 
                 # collected version
@@ -65,13 +65,13 @@ if __name__ == '__main__':
                     json.dump(summary, fp, indent=4)
                 print(summary)
 
-        new_workflow_summary = {}
-        for job_name, job_summary in workflow_summary.items():
-            for test, status in job_summary.items():
-                if test not in new_workflow_summary:
-                    new_workflow_summary[test] = {}
-                new_workflow_summary[test][job_name] = status
+    new_workflow_summary = {}
+    for job_name, job_summary in workflow_summary.items():
+        for test, status in job_summary.items():
+            if test not in new_workflow_summary:
+                new_workflow_summary[test] = {}
+            new_workflow_summary[test][job_name] = status
 
-        for test, result in workflow_summary.items():
-            workflow_summary[test] = sorted(result)
-        workflow_summary = sorted(workflow_summary)
+    for test, result in workflow_summary.items():
+        workflow_summary[test] = sorted(result)
+    workflow_summary = sorted(workflow_summary)
