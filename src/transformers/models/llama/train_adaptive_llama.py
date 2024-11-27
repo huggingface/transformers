@@ -9,8 +9,8 @@ from transformers.models.llama.modeling_adaptive_llama import AdaptiveFanIn, Ada
 
 from transformers import GenerationConfig
 
-VOCAB_SIZE = 20
-MAX_SEQ_LEN = 10
+VOCAB_SIZE = 1000
+MAX_SEQ_LEN = 100
 
 import random
 import torch
@@ -125,6 +125,15 @@ class AdaptiveLlamaTrainer(Trainer):
             special_embeddings_mask=inputs['special_embeddings_mask'],
             attention_mask=inputs['attention_mask'],
         )
+        # [ bs, seq_len, 2 ]
+
+        # fan_in_merging_logits_sum = sum(x.sum(dim=[0, 1]) for x in fan_in_merging_logits)
+
+        ce_merging_loss_sum = 0
+        for i, fan_in_merging_logits in enumerate(outputs.fan_in_merging_logits):
+            ce_targets = 1 - outputs.fan_in_merging_maps[i][:, :, 1].flatten()
+            fan_in_merging_logits = fan_in_merging_logits.flatten(0, 1)
+            ce_merging_loss_sum += torch.nn.functional.cross_entropy(fan_in_merging_logits, ce_targets)
 
         outputs_inverted = None
         # outputs_inverted = model.forward(
@@ -136,7 +145,8 @@ class AdaptiveLlamaTrainer(Trainer):
         # )
 
         # loss = outputs.loss + outputs_inverted.loss # + 0.01 * sum([x.fan_in_mlp.weight.norm(2) for x in model.model.adaptive_down])
-        loss = outputs.loss # + (outputs_inversed.loss / 10)
+        # loss = outputs.loss
+        loss = outputs.loss + ce_merging_loss_sum * 0.1
 
         assert ~ loss.isnan().any(), 'loss cant be none'
 
@@ -145,6 +155,7 @@ class AdaptiveLlamaTrainer(Trainer):
                 "debug/straight_loss": outputs.loss.detach().item(),
                 "debug/mean_merged_tokens": outputs.mean_merged_tokens,
                 "debug/total_tokens": inputs['attention_mask'].sum().item(),
+                "debug/ce_merging_loss_sum": ce_merging_loss_sum.item(),
             }
             if outputs_inverted is not None:
                 log_info["debug/inverted_loss"] = outputs_inverted.loss.detach().item()
@@ -527,11 +538,12 @@ if __name__ == "__main__":
     snd = SequentialNumbersDataset(length=1000, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
     snd_eval = SequentialNumbersDataset(length=100, num_numbers=VOCAB_SIZE, max_sequence_length=MAX_SEQ_LEN)
 
-    num_layers = 8
+    num_layers = 2
     num_layers_half = num_layers // 2
+    dummy_adaptive_fan_in = [ False ] * num_layers_half
     # dummy_adaptive_fan_in = [ False, False, False, False ]
     # dummy_adaptive_fan_in = [ True, True, True, False ]
-    dummy_adaptive_fan_in = [ False, True, True, True ]
+    # dummy_adaptive_fan_in = [ False, True, True, True ]
     assert len(dummy_adaptive_fan_in) == num_layers_half
     llama_config = LlamaConfig(
         hidden_size=128,
@@ -552,7 +564,6 @@ if __name__ == "__main__":
 
     hf_parser = transformers.HfArgumentParser(AdaptiveTrainingArguments)
     (training_args,) = hf_parser.parse_args_into_dataclasses()
-
 
     trainer = AdaptiveLlamaTrainer(
         model,
