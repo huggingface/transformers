@@ -559,9 +559,8 @@ python3 run_bert_flax.py --precision bfloat16
 ```bash
 export XLA_FLAGS=--xla_cpu_use_thunk_runtime=false
 ```
-Bfloat16 will give better performance on GPUs, and also Intel CPUs (Sapphire Rapids or later) with Advanced Matrix Extension (Intel AMX).  
-By changing the dtype for FlaxBertModel to jax.numpy.bfloat16, users will get the performance benefits of underling hardware support.
-on this Bert example.
+bfloat16 gives better performance on GPUs and also Intel CPUs (Sapphire Rapids or later) with Advanced Matrix Extension (Intel AMX).  
+By changing the dtype for `FlaxBertModel `to `jax.numpy.bfloat16`, you get the performance benefits of the underlying hardware.
 ```python
 import jax
 model = FlaxBertModel.from_pretrained("bert-base-uncased", config=config, dtype=jax.numpy.bfloat16)
