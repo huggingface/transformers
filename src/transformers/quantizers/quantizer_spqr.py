@@ -29,6 +29,7 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+
 # TODO(elvircrn): Copy from spqr repo.
 class SpQRHfQuantizer(HfQuantizer):
     """
