@@ -219,6 +219,13 @@ def write_model(
     processor = MolmoProcessor.from_pretrained(input_base_path)
     processor.tokenizer.bos_token = processor.tokenizer.eos_token
     processor.tokenizer.bos_token_id = processor.tokenizer.bos_token_id
+    processor.tokenizer.extra_special_tokens = {
+        "image_token": "<image>",
+        "boi_token": "<im_patch>",
+        "eoi_token": "<im_start>",
+        "im_patch_token": "<im_end>",
+        "im_col_token": "<im_col>",
+    }
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
 

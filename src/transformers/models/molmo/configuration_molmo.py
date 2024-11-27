@@ -20,15 +20,9 @@
 # limitations under the License.
 
 
-from typing import TYPE_CHECKING
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -36,8 +30,8 @@ logger = logging.get_logger(__name__)
 
 class MolmoVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MOLMOVisionModel`]. It is used to instantiate a
-    MOLMO vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`MolmoVisionModel`]. It is used to instantiate a
+    MolmoVisionEncoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the MOLMO
     [openai/molmo-vit-base-patch32](https://huggingface.co/openai/molmo-vit-base-patch32) architecture.
 
@@ -77,19 +71,20 @@ class MolmoVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MOLMOVisionConfig, MOLMOVisionModel
+    >>> from transformers import MolmoOVisionConfig, MolmoVisionModel
 
-    >>> # Initializing a MOLMOVisionConfig with openai/molmo-vit-base-patch32 style configuration
-    >>> configuration = MOLMOVisionConfig()
+    >>> # Initializing a MolmoVisionConfig with molmo-community/Molmo-7B-D-0924 style configuration
+    >>> configuration = MolmoVisionConfig()
 
-    >>> # Initializing a MOLMOVisionModel (with random weights) from the openai/molmo-vit-base-patch32 style configuration
-    >>> model = MOLMOVisionModel(configuration)
+    >>> # Initializing a MolmoVisionModel (with random weights) from the molmo-community/Molmo-7B-D-0924 style configuration
+    >>> model = MolmoVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
     model_type = "molmo_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -114,20 +109,20 @@ class MolmoVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
+        self.projection_dim = projection_dim
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
         self.image_num_key_value_heads = image_num_key_value_heads
         self.num_image_positions = num_image_positions
         self.residual_dropout = residual_dropout
-        self.hidden_act = hidden_act
 
 
 class MolmoPoolingConfig(PretrainedConfig):
@@ -168,10 +163,10 @@ class MolmoPoolingConfig(PretrainedConfig):
 
 class MolmoTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MolmoTextModel`]. It is used to instantiate a
-    MolmoText model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`MolmoModel`]. It is used to instantiate a
+    Molmo model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    MolmoText-7B-beta [Qwen/MolmoText-7B-beta](https://huggingface.co/Qwen/MolmoText-7B-beta).
+    Molmo-7B-beta [Qwen/Molmo-7B-beta](https://huggingface.co/Qwen/Molmo-7B-beta).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -179,8 +174,8 @@ class MolmoTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the MolmoText model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MolmoTextModel`]
+            Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`MolmoModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 22016):
@@ -209,7 +204,7 @@ class MolmoTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
+        rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -258,19 +253,19 @@ class MolmoTextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import MolmoTextModel, MolmoTextConfig
+    >>> from transformers import MolmoModel, MolmoConfig
 
-    >>> # Initializing a MolmoText style configuration
-    >>> configuration = MolmoTextConfig()
+    >>> # Initializing a Molmo style configuration
+    >>> configuration = MolmoConfig()
 
-    >>> # Initializing a model from the MolmoText-7B style configuration
-    >>> model = MolmoTextModel(configuration)
+    >>> # Initializing a model from the Molmo-7B style configuration
+    >>> model = MolmoModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "molmo_text"
+    model_type = "molmo"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -297,6 +292,11 @@ class MolmoTextConfig(PretrainedConfig):
         attention_dropout=0.0,
         **kwargs,
     ):
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+        self.additional_vocab_size = additional_vocab_size
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -310,8 +310,8 @@ class MolmoTextConfig(PretrainedConfig):
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
 
+        self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
@@ -319,15 +319,11 @@ class MolmoTextConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
-
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, move it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        self.head_dim = head_dim
-        self.additional_vocab_size = additional_vocab_size
-
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
 
 
 class MolmoConfig(PretrainedConfig):
@@ -342,14 +338,16 @@ class MolmoConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
+        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `MolmoVisionConfig`):
             The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MolmoTextConfig`):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
+        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
@@ -361,10 +359,10 @@ class MolmoConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import LlavaForConditionalGeneration, LlavaConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import LlavaForConditionalGeneration, LlavaConfig, SiglipVisionConfig, LlamaConfig
 
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> # Initializing a Siglip-vision config
+    >>> vision_config = SiglipVisionConfig()
 
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
@@ -392,7 +390,7 @@ class MolmoConfig(PretrainedConfig):
         image_seq_length=576,
         initializer_range=0.02,
         vision_feature_select_strategy="default",
-        vision_feature_layers=[-2, -9],
+        vision_feature_layers=(-2, -9),
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -409,6 +407,7 @@ class MolmoConfig(PretrainedConfig):
             logger.info("text_config is None. initializing the MolmoTextConfig with default values.")
         if pooling_config is None:
             pooling_config = {}
+            logger.info("pooling_config is None. initializing the MolmoPoolingConfig with default values.")
         self.vision_config = MolmoVisionConfig(**vision_config)
         self.text_config = MolmoTextConfig(**text_config)
         self.pooling_config = MolmoPoolingConfig(**pooling_config)
