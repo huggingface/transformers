@@ -76,6 +76,9 @@ class EmptyJob:
             steps.append(step)
 
             command = 'curl -o workflow_jobs.json --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"'
+            step = {"run": command}
+            steps.append(step)
+
             step = {"run": 'tail -1000 workflow_jobs.json'}
             steps.append(step)
 
