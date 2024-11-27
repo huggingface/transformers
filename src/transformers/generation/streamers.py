@@ -251,6 +251,9 @@ class AsyncTextIteratorStreamer(TextStreamer):
         decode_kwargs (`dict`, *optional*):
             Additional keyword arguments to pass to the tokenizer's `decode` method.
 
+    Raises:
+        TimeoutError: If token generation time exceeds timeout value.
+
     Examples:
 
         ```python
@@ -286,6 +289,7 @@ class AsyncTextIteratorStreamer(TextStreamer):
         self.stop_signal = None
         self.timeout = timeout
         self.loop = asyncio.get_running_loop()
+        self.has_asyncio_timeout = hasattr(asyncio, "timeout")
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
@@ -298,10 +302,13 @@ class AsyncTextIteratorStreamer(TextStreamer):
 
     async def __anext__(self):
         try:
-            async with asyncio.timeout(self.timeout):
-                value = await self.text_queue.get()
-        except TimeoutError:
-            raise StopAsyncIteration()
+            if self.has_asyncio_timeout:
+                async with asyncio.timeout(self.timeout):
+                    value = await self.text_queue.get()
+            else:
+                value = await asyncio.wait_for(self.text_queue.get(), timeout=self.timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError()
         else:
             if value == self.stop_signal:
                 raise StopAsyncIteration()
