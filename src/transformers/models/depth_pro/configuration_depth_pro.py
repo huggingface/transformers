@@ -34,8 +34,8 @@ class DepthProConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        fusion_hidden_size
-            TODO
+        fusion_hidden_size (`int`, *optional*, defaults to 256):
+            The number of channels before fusion.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
@@ -53,15 +53,17 @@ class DepthProConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            TODO: image_size / 2**n_fusion_blocks = patch_size / patch_embeddings_size
-            The size (resolution) of each image.
+        image_size (`int`, *optional*, defaults to 1536):
+            The size (resolution) of each image,
+            To generate depth of same size as image,
+            image_size / 2**n_fusion_blocks == patch_size / patch_embeddings_size
+            where n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
         patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_embeddings_size
-            TODO
+        patch_embeddings_size (`int`, *optional*, defaults to 16):
+            kernel_size and stride for convolution in PatchEmbeddings.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -77,21 +79,21 @@ class DepthProConfig(PretrainedConfig):
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
         intermediate_hook_ids
-            TODO
+            Indices of the intermediate hidden states from patch_encoder to use for fusion.
         intermediate_feature_dims
-            TODO
+            Hidden state during upsampling for each intermediate hidden states in intermediate_hook_ids.
         scaled_images_ratios
-            TODO
+            Use images of these ratios for patch_encoder.
         scaled_images_overlap_ratios
-            TODO
+            Overlap ratio between patches for each scaled image in scaled_image_ratios.
         scaled_images_feature_dims
-            TODO
+            Hidden state during upsampling for each scaled image in scaled_images_ratios.
         use_batch_norm_in_fusion
-            TODO
+            Whether to use batch normalization in the residual units of the fusion blocks.
         use_fov_model
-            TODO
+            Whether to use `DepthProFOVModel` to generate Field of View.
         num_fov_head_layers
-            TODO
+            No of convolution layers in head of `DepthProFOVModel`.
 
     Example:
 
