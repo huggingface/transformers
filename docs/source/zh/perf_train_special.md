@@ -14,19 +14,19 @@ rendered properly in your Markdown viewer.
 
 <Tip warning={true}>
 
-某些PyTorch操作目前还未在MPS上实现，可能会抛出错误提示。可以通过设置环境变量`PYTORCH_ENABLE_MPS_FALLBACK=1`来使用CPU内核以避免这种情况发生（您仍然会看到一个`UserWarning`）。
+某些 PyTorch 操作目前还未在 MPS 上实现，可能会抛出错误提示。可以通过设置环境变量`PYTORCH_ENABLE_MPS_FALLBACK=1`来使用CPU内核以避免这种情况发生（您仍然会看到一个`UserWarning`）。
 
 <br>
 
-如果您遇到任何其他错误，请在[PyTorch库](https://github.com/pytorch/pytorch/issues)中创建一个issue，因为[`Trainer`]类中只集成了MPS后端.
+如果您遇到任何其他错误，请在[PyTorch库](https://github.com/pytorch/pytorch/issues)中创建一个 issue，因为[`Trainer`]类中只集成了 MPS 后端.
 
 </Tip>
 
 配置好`mps`设备后，您可以：
 
 * 在本地训练更大的网络或更大的批量大小
-* 降低数据获取延迟，因为GPU的统一内存架构允许直接访问整个内存存储
-* 降低成本，因为您不需要再在云端GPU上训练或增加额外的本地GPU
+* 降低数据获取延迟，因为 GPU 的统一内存架构允许直接访问整个内存存储
+* 降低成本，因为您不需要再在云端 GPU 上训练或增加额外的本地 GPU
 
 在确保已安装PyTorch后就可以开始使用了。MPS加速支持macOS 12.3及以上版本。
 
@@ -53,6 +53,6 @@ python examples/pytorch/text-classification/run_glue.py \
   --overwrite_output_dir
 ```
 
-用于[分布式设置](https://pytorch.org/docs/stable/distributed.html#backends)的后端(如`gloo`和`nccl`)不支持`mps`设备，这也意味着使用MPS后端时只能在单个GPU上进行训练。
+用于[分布式设置](https://pytorch.org/docs/stable/distributed.html#backends)的后端(如`gloo`和`nccl`)不支持`mps`设备，这也意味着使用 MPS 后端时只能在单个 GPU 上进行训练。
 
-您可以在[Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)博客文章中了解有关MPS后端的更多信息。
+您可以在[Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)博客文章中了解有关 MPS 后端的更多信息。
