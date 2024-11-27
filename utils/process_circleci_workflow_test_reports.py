@@ -40,11 +40,12 @@ if __name__ == '__main__':
                         command = f'curl -o {fn} {url} --header "Circle-Token: $CIRCLE_TOKEN"'
                         os.system(command)
 
+                        # add each
                         with open(fn) as fp:
                             test_summary = fp.read()
                             job_test_summaries[node_index] = test_summary
 
+                # collected version
                 with open(f'{job["name"]}/test_summary.txt', "w") as fp:
                     json.dump(job_test_summaries, fp)
-
                 print(job_test_summaries)
