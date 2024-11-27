@@ -270,8 +270,6 @@ class MolmoConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MolmoTextConfig`):
             The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
@@ -305,15 +303,18 @@ class MolmoConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "llava"
-    is_composition = True
+    model_type = "molmo"
+    sub_configs = {
+        "text_config": MolmoTextConfig,
+        "vision_config": MolmoVisionConfig,
+        "pooling_config": MolmoPoolingConfig,
+    }
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
         pooling_config=None,
-        ignore_index=-100,
         image_token_index=32000,
         image_seq_length=576,
         initializer_range=0.02,
@@ -322,7 +323,6 @@ class MolmoConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
         self.vision_feature_select_strategy = vision_feature_select_strategy
@@ -342,16 +342,27 @@ class MolmoConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: MolmoTextConfig, vision_config: MolmoVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls,
+        text_config: MolmoTextConfig,
+        vision_config: MolmoVisionConfig,
+        pooling_config: MolmoPoolingConfig,
+        **kwargs,
+    ):
         r"""
-        Instantiate a [`MolmoConfig`] (or a derived class) from molmo text model configuration and molmo vision model
-        configuration.
+        Instantiate a [`MolmoConfig`] (or a derived class) from molmo text model configuration, molmo vision model
+        configuration and molmo pooling module conffiguration.
 
         Returns:
             [`MolmoConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            pooling_config=pooling_config.to_dict(),
+            **kwargs,
+        )
 
 
 # swiglu activation
@@ -1016,6 +1027,9 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
         image_features = self.adapter(image_features, image_masks)
 
         return image_features
+
+    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+        pass
 
     def forward(
         self,

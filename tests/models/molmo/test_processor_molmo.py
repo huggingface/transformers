@@ -35,7 +35,16 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = MolmoImageProcessor(do_center_crop=False)
-        tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
+        extra_special_tokens = {
+            "image_token": "<image>",
+            "boi_token": "<im_patch>",
+            "eoi_token": "<im_start>",
+            "im_patch_token": "<im_end>",
+            "im_col_token": "<im_col>",
+        }
+        tokenizer = LlamaTokenizerFast.from_pretrained(
+            "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
+        )
         processor_kwargs = self.prepare_processor_dict()
         processor = MolmoProcessor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(self.tmpdirname)
@@ -78,7 +87,7 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     def test_chat_template(self):
-        processor = MolmoProcessor.from_pretrained("allenai/Molmo-7B-D-0924")
+        processor = MolmoProcessor.from_pretrained("allenai/Molmo-7B-D-0924-hf")
         expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
 
         messages = [

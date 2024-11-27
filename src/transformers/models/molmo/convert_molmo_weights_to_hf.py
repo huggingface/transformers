@@ -29,11 +29,33 @@ from transformers import (
 
 # TODO why is this import not solved at modular parsing?
 from transformers.models.molmo import MolmoForConditionalGeneration
-from transformers.models.molmo.configuration_molmo import MolmoTextConfig, MolmoVisionConfig
+from transformers.models.molmo.configuration_molmo import MolmoPoolingConfig, MolmoTextConfig, MolmoVisionConfig
 from transformers.models.molmo.processing_molmo import MolmoProcessor
 
 
-# from transformers.models.molmo.configuration_molmo import MolmoTextConfig, MolmoVisionConfig
+CHAT_TEMPLATE = (
+    "{% for message in messages %}"
+    "{%- if (loop.index % 2 == 1 and message['role'] != 'user') or (loop.index % 2 == 0 and message['role'].lower() != 'assistant') -%}"
+    "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
+    "{%- endif -%}"
+    "{{ message['role'].capitalize() + ': '}}"
+    "{% if message['content'] is string %}"
+    "{{ message['content'] + ' ' }}"
+    "{% else %}"
+    "{% for content in message['content'] %}"
+    "{% if content['type'] == 'image' %}"
+    "{{ '<image> ' }}"
+    "{% elif content['type'] == 'text' %}"
+    "{{ content['text'] + ' ' }}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}"
+    "{{ 'Assistant:' }}"
+    "{% endif %}"
+)
+
 
 # fmt: off
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
@@ -119,41 +141,52 @@ def write_model(
     input_base_path,
     safe_serialization=True,
 ):
-    # os.makedirs(model_path, exist_ok=True)
-    # torch_dtype = torch.bfloat16
+    os.makedirs(model_path, exist_ok=True)
+    torch_dtype = torch.bfloat16
 
-    #
-    # Text model params and config
-    # TODO
-    text_config = MolmoTextConfig()
-    # ------------------------------------------------------------
-    # Vision model params and config
-    # ------------------------------------------------------------
-    # TODO
+    if os.path.isdir(input_base_path):
+        weight_files = glob.glob(os.path.join(input_base_path, "model-000*"))
+        config_file = os.path.join(input_base_path, "config.json")
+    else:
+        raise NotADirectoryError("Pass a directory for where the weights are found")
+
+    with open(config_file, "r") as f:
+        original_config = json.load(f)
+
+    text_config = MolmoTextConfig(
+        hidden_size=original_config["hidden_size"],
+        num_attention_heads=original_config["num_attention_heads"],
+        num_hidden_layers=original_config["num_hidden_layers"],
+        num_key_value_heads=original_config["num_key_value_heads"],
+        intermediate_size=original_config["intermediate_size"],
+        max_position_embeddings=original_config["max_position_embeddings"],
+        layer_norm_eps=original_config["layer_norm_eps"],
+        rope_theta=original_config["rope_theta"],
+        vocab_size=original_config["vocab_size"],
+        tie_word_embeddings=original_config["tie_word_embeddings"],
+    )
+
+    # vision and pooling args should be same across al model checkpoints which are the default values
     vision_config = MolmoVisionConfig()
-    # save config
-    # TODO adapt this depending on model variants
-    config = MolmoConfig.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
-
-    # config = MolmoConfig(vision_config=vision_config, text_config=text_config, torch_dtype=torch_dtype)
-    # config.architectures = ["MolmoForConditionalGeneration"]
-    # config.save_pretrained(model_path)
-    print("Model config saved successfully...")
+    pooling_config = MolmoPoolingConfig()
+    config = MolmoConfig(
+        text_config=text_config,
+        vision_config=vision_config,
+        pooling_config=pooling_config,
+    )
 
     # ------------------------------------------------------------
     # Convert weights
     # ------------------------------------------------------------
     state_dict = {}
-    if os.path.isdir(input_base_path):
-        weight_files = glob.glob(os.path.join(input_base_path, "model-000*"))
-    else:
-        raise NotADirectoryError("Pass a directory for where the weights are found")
     for file in weight_files:
         partial_state_dict = load_file(file)
         state_dict.update(partial_state_dict)
         del partial_state_dict
+
     print("Fetch keys from safetensors index map")
-    with open("/raid/pablo/molmo/model.safetensors.index.json", "r") as index_file:
+    safetensors_path = os.path.join(input_base_path, "model.safetensors.index.json")
+    with open(safetensors_path, "r") as index_file:
         original_weights_file = json.load(index_file)
 
     print("Converting model...")
@@ -213,10 +246,13 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    MolmoForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    MolmoForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch_dtype, device_map="auto")
     print("Model reloaded successfully.")
 
-    processor = MolmoProcessor.from_pretrained(input_base_path)
+    # ------------------------------------------------------------
+    # Convert processor
+    # ------------------------------------------------------------
+    processor = MolmoProcessor.from_pretrained(input_base_path, chat_template=CHAT_TEMPLATE)
     processor.tokenizer.bos_token = processor.tokenizer.eos_token
     processor.tokenizer.bos_token_id = processor.tokenizer.bos_token_id
     processor.tokenizer.extra_special_tokens = {
@@ -228,8 +264,6 @@ def write_model(
     }
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
-
-    # generation config
 
 
 def main():
