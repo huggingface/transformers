@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
                 summary = {}
                 for node_index, node_test_summary in job_test_summaries.items():
-                    for line in test_summary.splitlines():
+                    for line in node_test_summary.splitlines():
                         if line.startswith("PASSED "):
                             test = line[len("PASSED "):]
                             summary[test] = "passed"
