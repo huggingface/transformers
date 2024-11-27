@@ -178,7 +178,7 @@ from . import (
     nougat,
     nystromformer,
     olmo,
-    olmo_1124,
+    olmo2,
     olmoe,
     omdet_turbo,
     oneformer,
