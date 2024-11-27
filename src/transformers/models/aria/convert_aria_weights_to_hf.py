@@ -86,14 +86,13 @@ def convert_state_dict_to_hf(state_dict):
 def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
     torch.set_default_dtype(torch.float16)
 
-    # tokenizer = AutoTokenizer.from_pretrained(
-    #     text_model_id,
-    #     extra_special_tokens={
-    #         "image_token": "<|img|>",
-    #         "pad_token": "<pad>",
-    #     },
-    # )
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+    tokenizer = AutoTokenizer.from_pretrained(
+        text_model_id,
+        extra_special_tokens={
+            "image_token": "<|img|>",
+            "pad_token": "<pad>",
+        },
+    )
     tokenizer.add_tokens(AddedToken("<|img|>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
@@ -145,7 +144,7 @@ def main():
     )
     parser.add_argument(
         "--output_hub_path",
-        default="m-ric/Aria_hf_2",
+        default="m-ric/Aria_hf_3",
         help="Location on the hub of the converted model",
     )
     parser.add_argument(
@@ -166,7 +165,6 @@ def main():
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     tokenizer.push_to_hub(args.output_hub_path)
-
 
 if __name__ == "__main__":
     main()
