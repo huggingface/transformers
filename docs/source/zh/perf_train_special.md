@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 * 降低数据获取延迟，因为 GPU 的统一内存架构允许直接访问整个内存存储
 * 降低成本，因为您不需要再在云端 GPU 上训练或增加额外的本地 GPU
 
-在确保已安装PyTorch后就可以开始使用了。MPS加速支持macOS 12.3及以上版本。
+在确保已安装PyTorch后就可以开始使用了。 MPS 加速支持macOS 12.3及以上版本。
 
 ```bash
 pip install torch torchvision torchaudio
