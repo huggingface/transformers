@@ -940,8 +940,6 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # Track sequence lengths and previous assistant IDs
         self._prev_target_seq_len: int = 0
         self._prev_assistant_ids: Optional[torch.LongTensor] = None
-        # generation max length according to the assistant vocabulary
-        self.assistant_generation_max_length = -1
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -950,14 +948,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         input_ids = input_ids.to(self.assistant_model.device)
         target_input_ids = input_ids.clone()
         assistant_input_ids = self._prepare_assistant_input_ids(target_input_ids)
-        if self.assistant_generation_max_length == -1:
-            self.assistant_generation_max_length = self.generation_config.max_length - input_ids.shape[1] + assistant_input_ids.shape[1]
-
-        # Standard generation steps
-        target_generation_max_length = self.generation_config.max_length
-        self.generation_config.max_length = self.assistant_generation_max_length
-        min_new_tokens, max_new_tokens = self._calculate_new_tokens(assistant_input_ids)
-        self.generation_config.max_length = target_generation_max_length
+        min_new_tokens, max_new_tokens = self._calculate_new_tokens(target_input_ids)
 
         if max_new_tokens == 0:
             return input_ids, None
