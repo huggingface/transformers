@@ -72,9 +72,9 @@ if __name__ == '__main__':
                 new_workflow_summary[test] = {}
             new_workflow_summary[test][job_name] = status
 
-    for test, result in workflow_summary.items():
-        workflow_summary[test] = sorted(result)
-    workflow_summary = sorted(workflow_summary)
+    for test, result in new_workflow_summary.items():
+        new_workflow_summary[test] = {k: v for k, v in sorted(result.items())}
+    new_workflow_summary = {k: v for k, v in sorted(new_workflow_summary.items())}
 
     with open(f'test_summary.json', "w") as fp:
-        json.dump(workflow_summary, fp, indent=4)
+        json.dump(new_workflow_summary, fp, indent=4)
