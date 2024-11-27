@@ -31,6 +31,7 @@ if __name__ == '__main__':
                 job_artifacts = json.load(fp)["items"]
 
                 os.system(f'mkdir {job["name"]}')
+                os.system(f'mkdir outputs/{job["name"]}')
 
                 job_test_summaries = {}
                 for artifact in job_artifacts:
