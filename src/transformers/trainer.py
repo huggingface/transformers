@@ -3448,6 +3448,13 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
 
     def _save_scaler(self, output_dir):
+        # See if there is a scaler attribute
+        try:
+            scaler = self.accelerator.scaler
+        except AttributeError:
+            return
+        if scaler is None:
+            return
         if is_torch_xla_available():
             xm.rendezvous("saving_scaler_state")
             with warnings.catch_warnings(record=True) as caught_warnings:
