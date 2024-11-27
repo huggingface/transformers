@@ -15,7 +15,7 @@
 """Fast Image processor class for DepthPro."""
 
 import functools
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils import get_size_dict
@@ -308,24 +308,36 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_depth_estimation(
         self,
-        predicted_depths,
-        fovs=None,
-        target_sizes=None,
-    ) -> List[Dict[str, TensorType]]:
+        predicted_depths: Union[TensorType, List[TensorType]],
+        fovs: Optional[Union[TensorType, List[TensorType], None]] = None,
+        target_sizes: Optional[Union[TensorType, List[tuple[int, int]], None]] = None,
+    ) -> Dict[str, List[TensorType]]:
         """
-        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
-        Only supports PyTorch.
+        Post-processes the raw depth predictions from the model to generate final depth predictions and optionally
+        resizes them to specified target sizes. This function supports scaling based on the field of view (FoV)
+        and adjusts depth values accordingly.
 
         Args:
-            outputs ([`DepthEstimatorOutput`]):
-                Raw outputs of the model.
-            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
-                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            predicted_depths (`Union[TensorType, List[TensorType]]`):
+                Raw depth predictions output by the model. Can be a single tensor or a list of tensors, each
+                corresponding to an image in the batch.
+            fovs (`Optional[Union[TensorType, List[TensorType], None]]`, *optional*, defaults to `None`):
+                Field of view (FoV) values corresponding to each depth prediction. Should have the same length
+                as `predicted_depths` if provided. If `None`, FoV scaling is skipped.
+            target_sizes (`Optional[Union[TensorType, List[tuple[int, int]], None]]`, *optional*, defaults to `None`):
+                Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)` 
+                or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
+                is performed.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
-            predictions.
+            `Dict[str, List[TensorType]]`:
+                A dictionary containing:
+                    - `"predicted_depth"`: A list of processed depth tensors.
+                    - `"fov"`: A list of processed FoV values if provided, otherwise `None`.
+
+        Raises:
+            `ValueError`:
+                If the lengths of `predicted_depths`, `fovs`, or `target_sizes` are mismatched.
         """
         requires_backends(self, "torch")
 

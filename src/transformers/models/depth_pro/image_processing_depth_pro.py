@@ -166,8 +166,8 @@ class DepthProImageProcessor(BaseImageProcessor):
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             antialias (`bool`, *optional*, defaults to `False`):
-				Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-				bilinear or bicubic modes and it is ignored otherwise.
+                Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+                bilinear or bicubic modes and it is ignored otherwise.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
@@ -260,8 +260,8 @@ class DepthProImageProcessor(BaseImageProcessor):
                 `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
                 an effect if `do_resize` is set to `True`.
             antialias (`bool`, *optional*, defaults to `False`):
-				Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-				bilinear or bicubic modes and it is ignored otherwise.
+                Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+                bilinear or bicubic modes and it is ignored otherwise.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -352,7 +352,7 @@ class DepthProImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-		# depth-pro scales the image before resizing it
+        # depth-pro scales the image before resizing it
         # uses torch interpolation which requires ChannelDimension.FIRST
         if do_resize:
             images = self.resize(images, size=size_dict, resample=resample, antialias=antialias)
@@ -363,24 +363,36 @@ class DepthProImageProcessor(BaseImageProcessor):
 
     def post_process_depth_estimation(
         self,
-        predicted_depths,
-        fovs=None,
-        target_sizes=None,
-    ) -> List[Dict[str, TensorType]]:
+        predicted_depths: Union[TensorType, List[TensorType]],
+        fovs: Optional[Union[TensorType, List[TensorType], None]] = None,
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+    ) -> Dict[str, List[TensorType]]:
         """
-        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
-        Only supports PyTorch.
+        Post-processes the raw depth predictions from the model to generate final depth predictions and optionally
+        resizes them to specified target sizes. This function supports scaling based on the field of view (FoV)
+        and adjusts depth values accordingly.
 
         Args:
-            outputs ([`DepthEstimatorOutput`]):
-                Raw outputs of the model.
-            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
-                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            predicted_depths (`Union[TensorType, List[TensorType]]`):
+                Raw depth predictions output by the model. Can be a single tensor or a list of tensors, each
+                corresponding to an image in the batch.
+            fovs (`Optional[Union[TensorType, List[TensorType], None]]`, *optional*, defaults to `None`):
+                Field of view (FoV) values corresponding to each depth prediction. Should have the same length
+                as `predicted_depths` if provided. If `None`, FoV scaling is skipped.
+            target_sizes (`Optional[Union[TensorType, List[Tuple[int, int]], None]]`, *optional*, defaults to `None`):
+                Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)` 
+                or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
+                is performed.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
-            predictions.
+            `Dict[str, List[TensorType]]`:
+                A dictionary containing:
+                    - `"predicted_depth"`: A list of processed depth tensors.
+                    - `"fov"`: A list of processed FoV values if provided, otherwise `None`.
+
+        Raises:
+            `ValueError`:
+                If the lengths of `predicted_depths`, `fovs`, or `target_sizes` are mismatched.
         """
         requires_backends(self, "torch")
 

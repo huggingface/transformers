@@ -44,6 +44,13 @@ from .configuration_depth_pro import DepthProConfig
 
 logger = logging.get_logger(__name__)
 
+# General docstring
+_CONFIG_FOR_DOC = "DepthProConfig"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "geetu040/DepthPro"
+_EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
+
 
 # Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings with Dinov2->DepthProViT
 class DepthProViTPatchEmbeddings(nn.Module):
@@ -942,7 +949,7 @@ class DepthProEncoder(nn.Module):
         # STEP 8: return these features in order of increasing size as what fusion expects
         last_hidden_state = [
             # (B, self.scaled_images_feature_dims[i], self.out_size*2**(i+1), self.out_size*2**(i+1))
-            *scaled_images_features, 
+            *scaled_images_features,
             # (B, config.intermediate_feature_dims[i], self.out_size*2**(self.n_scaled_images+i+1), self.out_size*2**(self.n_scaled_images+i+1))
             *intermediate_features,
         ]
@@ -1049,14 +1056,7 @@ class DepthProModel(DepthProPreTrainedModel):
             self.encoder.image_encoder.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(DEPTH_PRO_INPUTS_DOCSTRING)
-    # TODO
-    # @add_code_sample_docstrings(
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=BaseModelOutputWithPoolingAndIntermediateActivations,
-    #     config_class=_CONFIG_FOR_DOC,
-    #     modality="vision",
-    #     expected_output=_EXPECTED_OUTPUT_SHAPE,
-    # )
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1065,6 +1065,13 @@ class DepthProModel(DepthProPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+        TODO
+        ```python
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1399,7 +1406,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
 
 
     @add_start_docstrings_to_model_forward(DEPTH_PRO_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DepthProDepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1418,37 +1425,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         Examples:
         TODO
         ```python
-        >>> from transformers import AutoImageProcessor, DPTForDepthEstimation
-        >>> import torch
-        >>> import numpy as np
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large")
-        >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
-
-        >>> # prepare image for the model
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-        ...     predicted_depth = outputs.predicted_depth
-
-        >>> # interpolate to original size
-        >>> prediction = torch.nn.functional.interpolate(
-        ...     predicted_depth.unsqueeze(1),
-        ...     size=image.size[::-1],
-        ...     mode="bicubic",
-        ...     align_corners=False,
-        ... )
-
-        >>> # visualize the prediction
-        >>> output = prediction.squeeze().cpu().numpy()
-        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
-        >>> depth = Image.fromarray(formatted)
         ```"""
         loss = None
         if labels is not None:
