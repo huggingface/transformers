@@ -917,7 +917,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
     _supports_cache_class = True
-    _supports_static_cache = True
 
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
