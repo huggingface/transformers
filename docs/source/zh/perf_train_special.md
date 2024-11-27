@@ -10,7 +10,7 @@ rendered properly in your Markdown viewer.
 
 # 在Apple芯片(Apple silicon)上进行PyTorch训练
 
-之前，在Mac上训练模型仅限于使用CPU。不过从PyTorch v1.12开始，通过将Apple的Metal性能着色器(MPS)作为后端集成到PyTorch中，[MPS后端](https://pytorch.org/docs/stable/notes/mps.html)能够把PyTorch操作视为自定义的Metal着色器来实现，并部署到`mps`设备上。所以您可以利用Apple芯片的GPU进行模型训练，大幅提升性能和训练速度。
+之前，在 Mac 上训练模型仅限于使用 CPU 训练。不过随着PyTorch v1.12的发布，您可以通过在 Apple Silicon 芯片的 GPU 上训练模型来显著提高性能和训练速度。这是通过将 Apple 的 Metal 性能着色器 (Metal Performance Shaders, MPS) 作为后端集成到PyTorch中实现的。[MPS后端](https://pytorch.org/docs/stable/notes/mps.html) 将 PyTorch 操作视为自定义的 Metal 着色器来实现，并将对应模块部署到`mps`设备上。
 
 <Tip warning={true}>
 
