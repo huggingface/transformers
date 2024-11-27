@@ -252,7 +252,7 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
         attn_output, attn_weights = attn_output
 
     attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output[0], attn_weights
+    return attn_output, attn_weights
 
 
 def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
