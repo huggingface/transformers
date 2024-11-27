@@ -73,9 +73,10 @@ image1_matching_scores = outputs.matching_scores[0, 1][image1_indices]
 ```
 
 You can use the `post_process_keypoint_matching` method from the `SuperGlueImageProcessor` to get the keypoints and matches in a more readable format:
+
 ```python
 image_sizes = [[(image.height, image.width) for image in images]]
-outputs = processor.post_process_keypoint_matching(outputs, image_sizes, matching_threshold=0.2)
+outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
 for i, output in enumerate(outputs):
     print("For the image pair", i)
     for keypoint0, keypoint1, matching_score in zip(
