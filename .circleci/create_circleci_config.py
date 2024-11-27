@@ -87,10 +87,10 @@ class EmptyJob:
             step = {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID'}
             steps.append(step)
 
-            step = {"store_artifacts": {"path": "tests_hub/test_summary.txt"}}
+            step = {"store_artifacts": {"path": "tests_hub/test_summary.json"}}
             steps.append(step)
 
-            step = {"store_artifacts": {"path": "tests_torch/test_summary.txt"}}
+            step = {"store_artifacts": {"path": "tests_torch/test_summary.json"}}
             steps.append(step)
 
         elif self.job_name == "waiter_job":

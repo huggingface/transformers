@@ -46,7 +46,18 @@ if __name__ == '__main__':
                             test_summary = fp.read()
                             job_test_summaries[node_index] = test_summary
 
+                summary = {}
+                for node_index, node_test_summary in job_test_summaries.items():
+                    for line in test_summary.splitlines():
+                        if line.startswith("PASSED "):
+                            test = line["PASSED "]
+                            summary[test] = "passed"
+                        elif line.startswith("FAILED "):
+                            test = line["FAILED "].split()[0]
+                            summary[test] = "failed"
+                summary = {k: v for k, v in sorted(summary.items())}
+
                 # collected version
-                with open(f'{job["name"]}/test_summary.txt', "w") as fp:
-                    json.dump(job_test_summaries, fp)
-                print(job_test_summaries)
+                with open(f'{job["name"]}/test_summary.json', "w") as fp:
+                    json.dump(summary, fp, indent=4)
+                print(summary)
