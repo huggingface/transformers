@@ -86,6 +86,13 @@ class EmptyJob:
             # python dealing with `workflow_jobs.json`: find all jobs and download all target artifacts from each job.
             step = {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID'}
             steps.append(step)
+
+            step = {"store_artifacts": {"path": "tests_hub/test_summary.txt"}},
+            steps.append(step)
+
+            step = {"store_artifacts": {"path": "tests_torch/test_summary.txt"}},
+            steps.append(step)
+
             #
             # project_slug = "gh/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME"
             # step = {"run": 'echo project_slug'}
