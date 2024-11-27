@@ -565,4 +565,4 @@ By changing the dtype for `FlaxBertModel `to `jax.numpy.bfloat16`, you get the p
 import jax
 model = FlaxBertModel.from_pretrained("bert-base-uncased", config=config, dtype=jax.numpy.bfloat16)
 ```
-On a AWS c7i.4xlarge with Intel Sapphire Rapids, we get  > 2X speedup by changing precision from float32 to bfloat16.
+Switching from float32 to bfloat16 can increase the speed of an AWS c7i.4xlarge with Intel Sapphire Rapids by more than 2x.
