@@ -59,31 +59,16 @@ class EmptyJob:
             }
             steps.append(step)
         elif self.job_name == "final_collection_job":
-            steps.append("checkout")
-            step = {"run": 'mkdir -p outputs'}
-            steps.append(step)
-            # step = {
-            #     "attach_workspace": {
-            #         "at": "outputs",
-            #     }
-            # }
-            # steps.append(step)
-            # step = {"run": 'ls -la outputs'}
-            # steps.append(step)
-            # step = {"run": 'ls -la outputs/reports'}
-            # steps.append(step)
-            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
-            step = {"run": 'mkdir -p outputs'}
+            step = {"run": 'ls -l'}
             steps.append(step)
 
-            # command = 'curl -o workflow_jobs.json --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"'
-            # step = {"run": command}
-            # steps.append(step)
-            #
-            # step = {"run": 'tail -1000 workflow_jobs.json'}
-            # steps.append(step)
-            #
-            # python dealing with `workflow_jobs.json`: find all jobs and download all target artifacts from each job.
+        elif self.job_name == "waiter_job":
+            steps.append("checkout")
+
+            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
+            step = {"run": wait_command}
+            steps.append(step)
+
             step = {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID'}
             steps.append(step)
 
@@ -96,20 +81,6 @@ class EmptyJob:
             step = {"store_artifacts": {"path": "test_summary.json"}}
             steps.append(step)
 
-        elif self.job_name == "waiter_job":
-            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
-            step = {"run": 'mkdir -p outputs'}
-            steps.append(step)
-            step = {
-                "attach_workspace": {
-                    "at": "outputs",
-                }
-            }
-            steps.append(step)
-            step = {"run": 'ls -la outputs'}
-            steps.append(step)
-            step = {"run": wait_command}
-            steps.append(step)
             step = {"run": 'echo "All required jobs have now completed"'}
             steps.append(step)
         return {
@@ -472,7 +443,7 @@ def create_circleci_config(folder=None):
         elif job is waiter_job:
             _jobs.append(job.job_name)
         elif job is final_collection_job:
-            _jobs.append({job.job_name: {"requires": [waiter_job.job_name]}})
+            _jobs.append(job.job_name)
         else:
             _jobs.append({job.job_name: {"requires": [first_collection_job.job_name]}})
 
