@@ -146,9 +146,7 @@ class PeftAdapterMixin:
         peft_load_kwargs = {}
         if low_cpu_mem_usage:
             min_version_lcmu = "0.13.0"
-            if version.parse(importlib.metadata.version("peft")) >= version.parse(
-                min_version_lcmu
-            ):
+            if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
                 peft_load_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
             else:
                 raise ValueError(
@@ -164,23 +162,15 @@ class PeftAdapterMixin:
         from peft.utils import set_peft_model_state_dict
 
         if self._hf_peft_config_loaded and adapter_name in self.peft_config:
-            raise ValueError(
-                f"Adapter with name {adapter_name} already exists. Please use a different name."
-            )
+            raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
-        if peft_model_id is None and (
-            adapter_state_dict is None and peft_config is None
-        ):
+        if peft_model_id is None and (adapter_state_dict is None and peft_config is None):
             raise ValueError(
                 "You should either pass a `peft_model_id` or a `peft_config` and `adapter_state_dict` to load an adapter."
             )
 
         if "device" not in adapter_kwargs:
-            device = (
-                self.device
-                if not hasattr(self, "hf_device_map")
-                else list(self.hf_device_map.values())[0]
-            )
+            device = self.device if not hasattr(self, "hf_device_map") else list(self.hf_device_map.values())[0]
         else:
             device = adapter_kwargs.pop("device")
 
@@ -191,11 +181,7 @@ class PeftAdapterMixin:
         # We keep `revision` in the signature for backward compatibility
         if revision is not None and "revision" not in adapter_kwargs:
             adapter_kwargs["revision"] = revision
-        elif (
-            revision is not None
-            and "revision" in adapter_kwargs
-            and revision != adapter_kwargs["revision"]
-        ):
+        elif revision is not None and "revision" in adapter_kwargs and revision != adapter_kwargs["revision"]:
             logger.error(
                 "You passed a `revision` argument both in `adapter_kwargs` and as a standalone argument. "
                 "The one in `adapter_kwargs` will be used."
@@ -231,9 +217,7 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
-            adapter_state_dict = load_peft_weights(
-                peft_model_id, token=token, device=device, **adapter_kwargs
-            )
+            adapter_state_dict = load_peft_weights(peft_model_id, token=token, device=device, **adapter_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
@@ -254,10 +238,7 @@ class PeftAdapterMixin:
             err_msg = ""
             origin_name = peft_model_id if peft_model_id is not None else "state_dict"
             # Check for unexpected keys.
-            if (
-                hasattr(incompatible_keys, "unexpected_keys")
-                and len(incompatible_keys.unexpected_keys) > 0
-            ):
+            if hasattr(incompatible_keys, "unexpected_keys") and len(incompatible_keys.unexpected_keys) > 0:
                 err_msg = (
                     f"Loading adapter weights from {origin_name} led to unexpected keys not found in the model: "
                     f"{', '.join(incompatible_keys.unexpected_keys)}. "
@@ -267,9 +248,7 @@ class PeftAdapterMixin:
             missing_keys = getattr(incompatible_keys, "missing_keys", None)
             if missing_keys:
                 # Filter missing keys specific to the current adapter, as missing base model keys are expected.
-                lora_missing_keys = [
-                    k for k in missing_keys if "lora_" in k and adapter_name in k
-                ]
+                lora_missing_keys = [k for k in missing_keys if "lora_" in k and adapter_name in k]
                 if lora_missing_keys:
                     err_msg += (
                         f"Loading adapter weights from {origin_name} led to missing keys in the model: "
@@ -282,9 +261,7 @@ class PeftAdapterMixin:
         # Re-dispatch model and hooks in case the model is offloaded to CPU / Disk.
         if (
             (getattr(self, "hf_device_map", None) is not None)
-            and (
-                len(set(self.hf_device_map.values()).intersection({"cpu", "disk"})) > 0
-            )
+            and (len(set(self.hf_device_map.values()).intersection({"cpu", "disk"})) > 0)
             and len(self.peft_config) == 1
         ):
             self._dispatch_accelerate_model(
@@ -319,14 +296,10 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
         elif adapter_name in self.peft_config:
-            raise ValueError(
-                f"Adapter with name {adapter_name} already exists. Please use a different name."
-            )
+            raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         if not isinstance(adapter_config, PeftConfig):
-            raise TypeError(
-                f"adapter_config should be an instance of PeftConfig. Got {type(adapter_config)} instead."
-            )
+            raise TypeError(f"adapter_config should be an instance of PeftConfig. Got {type(adapter_config)} instead.")
 
         # Retrieve the name or path of the model, one could also use self.config._name_or_path
         # but to be consistent with what we do in PEFT: https://github.com/huggingface/peft/blob/6e783780ca9df3a623992cc4d1d665001232eae0/src/peft/mapping.py#L100
@@ -439,9 +412,7 @@ class PeftAdapterMixin:
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
         if not is_peft_available():
-            raise ImportError(
-                "PEFT is not available. Please install PEFT to use this function: `pip install peft`."
-            )
+            raise ImportError("PEFT is not available. Please install PEFT to use this function: `pip install peft`.")
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -585,9 +556,7 @@ class PeftAdapterMixin:
             adapter_names = [adapter_names]
 
         # Check that all adapter names are present in the config
-        missing_adapters = [
-            name for name in adapter_names if name not in self.peft_config
-        ]
+        missing_adapters = [name for name in adapter_names if name not in self.peft_config]
         if missing_adapters:
             raise ValueError(
                 f"The following adapter(s) are not present and cannot be deleted: {', '.join(missing_adapters)}"
@@ -604,9 +573,7 @@ class PeftAdapterMixin:
                         )
 
             # For transformers integration - we need to pop the adapter from the config
-            if getattr(self, "_hf_peft_config_loaded", False) and hasattr(
-                self, "peft_config"
-            ):
+            if getattr(self, "_hf_peft_config_loaded", False) and hasattr(self, "peft_config"):
                 self.peft_config.pop(adapter_name, None)
 
         # In case all adapters are deleted, we need to delete the config
