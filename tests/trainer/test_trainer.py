@@ -161,10 +161,10 @@ class RNGStateManager:
     @contextlib.contextmanager
     def protect_main_rng_state():
         (random_state, torch_state, np_state, cuda_state,
-         cuda_deterministic, cublas_config) = RNGStateManager.get_rng_state()
+         torch_deterministic, cublas_config) = RNGStateManager.get_rng_state()
         yield
         RNGStateManager.set_rng_state(random_state, torch_state, np_state, cuda_state,
-                                      cuda_deterministic, cublas_config)
+                                      torch_deterministic, cublas_config)
 
     @staticmethod
     def get_rng_state():
@@ -173,18 +173,15 @@ class RNGStateManager:
         random_state = random.getstate()
         torch_state = torch.get_rng_state()
         np_state = np.random.get_state()
+        torch_deterministic = torch.are_deterministic_algorithms_enabled()
         try:
             cuda_state = torch.cuda.get_rng_state()
         except RuntimeError:
             cuda_state = None
-        try:
-            cuda_deterministic = torch.backends.cudnn.deterministic
-        except AttributeError:
-            cuda_deterministic = None
-        return random_state, torch_state, np_state, cuda_state, cuda_deterministic, cublas_config
+        return random_state, torch_state, np_state, cuda_state, torch_deterministic, cublas_config
 
     @staticmethod
-    def set_rng_state(random_state, torch_state, np_state, cuda_state, cuda_deterministic, cublas_config):
+    def set_rng_state(random_state, torch_state, np_state, cuda_state, torch_deterministic, cublas_config):
         # Load previous state
         if cublas_config is None:
             os.environ.pop("CUBLAS_WORKSPACE_CONFIG", None)
@@ -193,10 +190,9 @@ class RNGStateManager:
         random.setstate(random_state)
         torch.set_rng_state(torch_state)
         np.random.set_state(np_state)
+        torch.use_deterministic_algorithms(torch_deterministic)
         if cuda_state is not None:
             torch.cuda.set_rng_state(cuda_state)
-        if cuda_deterministic is not None:
-            torch.backends.cudnn.deterministic = cuda_deterministic
 
     @staticmethod
     def set_seed(seed):
@@ -205,9 +201,9 @@ class RNGStateManager:
         random.seed(seed)
         torch.manual_seed(seed)
         np.random.seed(seed)
+        torch.use_deterministic_algorithms(True)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
-            torch.use_deterministic_algorithms(True)
 
 class StoreLossCallback(TrainerCallback):
     """
