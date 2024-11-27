@@ -210,6 +210,14 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
     def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
+
+        if config.num_labels == 0:
+            raise ValueError(
+                "You are trying to load weights to `TimmWrapperForImageClassification` from the checkpoint with no classifier head. "
+                "Specify the number of classes, e.g. `model = TimmWrapperForImageClassification.from_pretrained(..., num_labels=10)`,"
+                "or use `TimmWrapperModel` for feature extraction."
+            )
+
         self.timm_model = _load_timm_model(config, add_classification_head=True)
         self.num_labels = config.num_labels
         self.post_init()

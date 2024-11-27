@@ -359,7 +359,9 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
 
-        for model_name in self.model_names_to_test:
+        models_to_test = ["vit_small_patch16_224.dino"] + self.model_names_to_test
+
+        for model_name in models_to_test:
             checkpoint = f"timm/{model_name}"
 
             with self.subTest(msg=model_name):
