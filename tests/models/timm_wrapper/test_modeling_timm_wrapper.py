@@ -231,6 +231,22 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_do_pooling_option(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.do_pooling = False
+
+        model = TimmWrapperModel._from_config(config)
+
+        # check there is no pooling
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNone(output.pooler_output)
+
+        # check there is pooler output
+        with torch.no_grad():
+            output = model(**inputs_dict, do_pooling=True)
+        self.assertIsNotNone(output.pooler_output)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
