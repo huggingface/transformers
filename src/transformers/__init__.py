@@ -6186,7 +6186,6 @@ if TYPE_CHECKING:
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.textnet import TextNetImageProcessor
-        from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
         from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
