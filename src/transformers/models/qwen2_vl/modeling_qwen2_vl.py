@@ -970,7 +970,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self.patch_embed = PatchEmbed(
             patch_size=config.patch_size,
             temporal_patch_size=config.temporal_patch_size,
-            in_channels=config.in_channels,
+            in_channels=config.in_chans,
             embed_dim=config.embed_dim,
         )
 
