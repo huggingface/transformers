@@ -59,6 +59,7 @@ class EmptyJob:
             }
             steps.append(step)
         elif self.job_name == "final_collection_job":
+            steps.append("checkout")
             step = {"run": 'mkdir -p outputs'}
             steps.append(step)
             # step = {
