@@ -84,16 +84,20 @@ def pad_to_bounding_box(
     Returns:
         A padded image of size (target_height, target_width).
     """
-    padding = (
-        (offset_height, target_height - offset_height - image.shape[0]),
-        (offset_width, target_width - offset_width - image.shape[1]),
+    height, width = image.shape[:2]
+    after_padding_height = target_height - offset_height - height
+    after_padding_width = target_width - offset_width - width
+    return np.pad(
+        image,
+        [
+            (offset_height, after_padding_height),
+            (offset_width, after_padding_width),
+            (0, 0),  # don't pad on the channel dim
+        ],
+        mode="constant",
+        constant_values=value,
     )
 
-    # use image_transformss `pad` function for constant padding
-    return pad(image, padding=padding, mode="constant", constant_values=value)
-
-
-# this should do the cutting into patches
 
 
 class MolmoImageProcessor(BaseImageProcessor):
@@ -310,7 +314,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         global_image = global_image.reshape(
             self.patches_per_image_height,
             self.image_patch_size,
-            self.patches_per_image_height,
+            self.patches_per_image_width,
             self.image_patch_size,
             channels,
         )
@@ -412,9 +416,7 @@ class MolmoImageProcessor(BaseImageProcessor):
 
                 # Update the patch index for ordering (there are several patches in a crop)
                 patch_index += pooled_height * pooled_width
-
         # Stack the crops, patch orderings, and masks into arrays
-        # crops does not match patches
         crops = np.stack(crops)
         patch_orderings = np.stack(patch_orderings)
         cropped_masks = np.stack(cropped_masks)
@@ -425,7 +427,7 @@ class MolmoImageProcessor(BaseImageProcessor):
             leading_crops_dim,
             self.patches_per_image_height,
             self.image_patch_size,
-            self.patches_per_image_height,
+            self.patches_per_image_width,
             self.image_patch_size,
             channels,
         )
@@ -440,7 +442,7 @@ class MolmoImageProcessor(BaseImageProcessor):
             leading_mask_dim,
             self.patches_per_image_height,
             self.image_patch_size,
-            self.patches_per_image_height,
+            self.patches_per_image_width,
             self.image_patch_size,
         )
         cropped_masks = cropped_masks.transpose(0, 1, 3, 2, 4)
@@ -451,6 +453,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         )
 
         cropped_masks = cropped_masks.astype(np.float32).mean(axis=-1)
+        cropped_masks = np.pad(cropped_masks, [[0, 1], [0, 0]], constant_values=-1)
         patch_orderings = np.reshape(patch_orderings, [-1])
         return crops, patch_orderings, cropped_masks
 
@@ -622,8 +625,9 @@ class MolmoImageProcessor(BaseImageProcessor):
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
             if do_resize:
                 # we resize both the global image to the wanted size, as well as the crops.
+                global_image_size = get_resize_output_image_size(image, size)
                 global_image = self.resize(
-                    image=image, size=size, resample=resample, input_data_format=input_data_format
+                    image=image, size=global_image_size, resample=resample, input_data_format=input_data_format
                 )
                 new_crop_size = {}
                 new_crop_size["height"] = crop_grid[0] * self.crop_window_size + self.total_margin_pixels
@@ -643,7 +647,6 @@ class MolmoImageProcessor(BaseImageProcessor):
                     image=image, size=new_crop_size, input_data_format=input_data_format, constant_values=0
                 )
                 # 2.2 (from original code) the image mask padding is increased by 1 dim
-                image_mask = np.pad(image_mask, [[0, 1], [0, 0]], constant_values=-1)
                 global_image, _ = self.pad(
                     image=global_image, size=size, input_data_format=input_data_format, constant_values=0
                 )
@@ -659,7 +662,6 @@ class MolmoImageProcessor(BaseImageProcessor):
                 # 4. Reorder patches left-to-right instead of crop-by-crop.
                 patch_orderings = self.transpose_patch_orderings(crop_grid, patch_orderings)
             global_image = self.reshape_into_patches(global_image)
-
             # 5. Concatenate patches and the global image
             crops = np.concatenate([np.expand_dims(global_image, 0), crops], 0)
             cropped_masks = np.pad(cropped_masks, [[0, 1], [0, 0]], constant_values=-1)
@@ -682,5 +684,4 @@ class MolmoImageProcessor(BaseImageProcessor):
         }
         if do_pad:
             data = self._pad_for_batching(data)
-
         return BatchFeature(data=data, tensor_type=return_tensors)
