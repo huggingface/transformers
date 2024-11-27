@@ -543,8 +543,9 @@ python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
     --save_strategy="no"
 ```
 
-## Language model inference on BFloat16
-The following example showcases how to inference a language model using the JAX/Flax backend.
+## Language model inference with bfloat16
+
+The following example demonstrates performing inference with a language model using the JAX/Flax backend.
 
 The example run_bert_flax.py uses bert-base-uncased and the model is loaded into FlaxBertModel.
 The input data are just random generated tokens, and the model is also jitted with JAX.
