@@ -237,8 +237,11 @@ class MolmoProcessor(ProcessorMixin):
                 for sample in text:
                     sample = sample.replace(self.image_token, "".join(all_image_tokens))
                     prompt_strings.append(sample)
-
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        bos_token = self.tokenizer.bos_token or self.tokenizer.eos_token
+        text_inputs = self.tokenizer(
+            [f"{bos_token}{prompt}" for prompt in prompt_strings], **output_kwargs["text_kwargs"]
+        )
+        # there is no bos token in Qwen tokenizer
         return BatchFeature(
             data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
         )
