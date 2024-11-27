@@ -51,7 +51,6 @@ class QuantizationMethod(str, Enum):
     SPQR = "spqr"
 
 
-
 class AWQLinearVersion(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
@@ -1514,18 +1513,18 @@ class BitNetConfig(QuantizationConfigMixin):
 @dataclass
 class SpQRConfig(QuantizationConfigMixin):
     def __init__(
-            self,
-            bits: int = 3,
-            beta1: int = 16,
-            beta2: int = 16,
-            **kwargs,
+        self,
+        bits: int = 3,
+        beta1: int = 16,
+        beta2: int = 16,
+        **kwargs,
     ):
         self.quant_method = QuantizationMethod.SPQR
         self.bits = bits
         self.beta1 = beta1
         self.beta2 = beta2
-        self.linear_weights_not_to_quantize = kwargs['linear_weights_not_to_quantize']
-        self.shapes = kwargs['shapes']
+        self.linear_weights_not_to_quantize = kwargs["linear_weights_not_to_quantize"]
+        self.shapes = kwargs["shapes"]
         self.post_init()
 
     def post_init(self):
@@ -1538,4 +1537,3 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("beta1 must be an int")
         if not isinstance(self.beta2, int):
             raise TypeError("beta2 must be an int")
-

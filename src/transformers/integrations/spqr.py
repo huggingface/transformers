@@ -69,11 +69,11 @@ def replace_with_spqr_linear(
             # Check if the current key is not in the `linear_weights_not_to_quantize`
             if ".".join(current_key_name) + ".weight" not in linear_weights_not_to_quantize:
                 with init_empty_weights():
-                    tensor_name = '.'.join(current_key_name)
-                    dense_weights_shape = quantization_config.shapes[f'{tensor_name}.dense_weights.shape']
-                    row_offsets_shape = quantization_config.shapes[f'{tensor_name}.row_offsets.shape']
-                    col_vals_shape = quantization_config.shapes[f'{tensor_name}.col_vals.shape']
-                    in_perm_shape = quantization_config.shapes[f'{tensor_name}.in_perm.shape']
+                    tensor_name = ".".join(current_key_name)
+                    dense_weights_shape = quantization_config.shapes[f"{tensor_name}.dense_weights.shape"]
+                    row_offsets_shape = quantization_config.shapes[f"{tensor_name}.row_offsets.shape"]
+                    col_vals_shape = quantization_config.shapes[f"{tensor_name}.col_vals.shape"]
+                    in_perm_shape = quantization_config.shapes[f"{tensor_name}.in_perm.shape"]
 
                     in_features = module.in_features
                     out_features = module.out_features
@@ -87,7 +87,7 @@ def replace_with_spqr_linear(
                         dense_weights_shape=dense_weights_shape,
                         row_offsets_shape=row_offsets_shape,
                         col_vals_shape=col_vals_shape,
-                        in_perm_shape=in_perm_shape
+                        in_perm_shape=in_perm_shape,
                     )
                     has_been_replaced = True
 
