@@ -23,6 +23,7 @@ from ..utils.quantization_config import (
     CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
+    HiggsConfig,
     GPTQConfig,
     HqqConfig,
     QuantizationConfigMixin,
@@ -38,6 +39,7 @@ from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
+from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
@@ -70,6 +72,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
+    "higgs": HiggsConfig,
     "torchao": TorchAoConfig,
     "bitnet": BitNetConfig,
 }
