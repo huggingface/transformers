@@ -142,9 +142,24 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
         """
+
+        if getattr(args, "sequence_parallel", 1) > 1:
+            assert (
+                is_accelerate_available()
+            ), "DeepSpeed sequence parallelism requires Accelerate, install it with 'pip install accelerate'"
+
+            from accelerate.utils import parallel_state as mpu
+
+            mpu.initialize_model_parallel(
+                sequence_parallel_size=args.sequence_parallel,
+            )
+            world_size = mpu.get_data_parallel_world_size()
+        else:
+            world_size = args.world_size
+
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
-        train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
+        train_batch_size = world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
         self.fill_match(
             "train_micro_batch_size_per_gpu",
             args.per_device_train_batch_size,
@@ -461,14 +476,14 @@ def is_deepspeed_sp_enabled():
         return False
 
 
-def wrap_deepspeed(_flash_attention_forward):
+def deepspeed_ulysses_forward(attn_func, seq_dim=1, head_dim=2):
     is_sp_enabled = is_deepspeed_sp_enabled()
 
     def wrapped(*args, **kwargs):
         if is_sp_enabled:
             spg = ds_comm_groups._get_sequence_parallel_group()
-            scatter_idx = 2  # Scatter on num_heads dimension
-            gather_idx = 1  # Gather on seq_len dimension
+            scatter_idx = head_dim  # Scatter on num_heads dimension
+            gather_idx = seq_dim  # Gather on seq_len dimension
             batch_dim_idx = 0  # Synonymous with the batch_first==true
             args = list(args)
             args[0] = _SeqAllToAll.apply(spg, args[0], scatter_idx, gather_idx, batch_dim_idx)
@@ -476,11 +491,11 @@ def wrap_deepspeed(_flash_attention_forward):
             args[2] = _SeqAllToAll.apply(spg, args[2], scatter_idx, gather_idx, batch_dim_idx)
             args = tuple(args)
 
-        attn_output = _flash_attention_forward(*args, **kwargs)
+        attn_output = attn_func(*args, **kwargs)
 
         if is_sp_enabled:
-            scatter_idx = 1  # Scatter back on seq_len dimension
-            gather_idx = 2  # Gather on num_heads dimension
+            scatter_idx = seq_dim  # Scatter back on seq_len dimension
+            gather_idx = head_dim  # Gather on num_heads dimension
             batch_dim_idx = 0
             attn_output = _SeqAllToAll.apply(spg, attn_output, scatter_idx, gather_idx, batch_dim_idx)
 

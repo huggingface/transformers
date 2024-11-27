@@ -27,6 +27,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations.deepspeed import deepspeed_ulysses_forward
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
 from ...modeling_outputs import (
@@ -45,11 +46,16 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_llama import LlamaConfig
+
+
+if is_accelerate_available():
+    from accelerate.utils import parallel_state as mpu
 
 
 logger = logging.get_logger(__name__)
@@ -373,6 +379,11 @@ class LlamaFlashAttention2(LlamaAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.q_len_multiplier = 1
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -462,7 +473,7 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states,
             value_states,
             attention_mask,
-            q_len,
+            q_len * self.q_len_multiplier,
             position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
@@ -486,6 +497,18 @@ class LlamaSdpaAttention(LlamaAttention):
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            self.attn_func = deepspeed_ulysses_forward(
+                torch.nn.functional.scaled_dot_product_attention, seq_dim=2, head_dim=1
+            )
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.attn_func = torch.nn.functional.scaled_dot_product_attention
+            self.q_len_multiplier = 1
 
     # Adapted from LlamaAttention.forward
     def forward(
@@ -550,7 +573,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2] * self.q_len_multiplier]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -563,7 +586,7 @@ class LlamaSdpaAttention(LlamaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
+        attn_output = self.attn_func(
             query_states,
             key_states,
             value_states,
@@ -692,6 +715,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    supports_sequence_parallel = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
@@ -815,6 +839,11 @@ class LlamaModel(LlamaPreTrainedModel):
         if getattr(config, "pretraining_tp", 1) != 1:
             logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
 
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.q_len_multiplier = 1
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -875,7 +904,9 @@ class LlamaModel(LlamaPreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1] * self.q_len_multiplier,
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -979,7 +1010,8 @@ class LlamaModel(LlamaPreTrainedModel):
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
-        sequence_length = input_tensor.shape[1]
+        sequence_length = input_tensor.shape[1] * self.q_len_multiplier
+        min_dtype = torch.finfo(dtype).min
         if using_static_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:

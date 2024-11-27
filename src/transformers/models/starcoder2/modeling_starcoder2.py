@@ -33,6 +33,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations.deepspeed import deepspeed_ulysses_forward
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
@@ -47,6 +48,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -54,6 +56,11 @@ from ...utils import (
 )
 from .configuration_starcoder2 import Starcoder2Config
 
+
+if is_accelerate_available():
+    from accelerate.utils import parallel_state as mpu
+
+    from ...layer import DistributedAttention
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -338,6 +345,12 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.q_len_multiplier = 1
+
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -408,12 +421,12 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attn_output = _flash_attention_forward(
+        attn_output = self.attn_func(
             query_states,
             key_states,
             value_states,
             attention_mask,
-            q_len,
+            q_len * self.q_len_multiplier,
             position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
@@ -438,6 +451,16 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
     SDPA API.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Add support for sequence parallelism
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            raise ValueError(
+                "SDPA is not supported with sequence parallelism. Please use the `flash_attention_2` implementation instead."
+            )
+
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -640,6 +663,7 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    supports_sequence_parallel = True
     _no_split_modules = ["Starcoder2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
