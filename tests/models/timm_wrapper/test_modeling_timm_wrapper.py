@@ -257,6 +257,16 @@ def prepare_img():
 @require_torch
 @require_vision
 class TimmWrapperModelIntegrationTest(unittest.TestCase):
+    # some popular ones
+    model_names_to_test = [
+        "vit_small_patch16_384.augreg_in21k_ft_in1k",
+        "resnet50.a1_in1k",
+        "tf_mobilenetv3_large_minimal_100.in1k",
+        "swin_tiny_patch4_window7_224.ms_in1k",
+        "ese_vovnet19b_dw.ra_in1k",
+        "hrnet_w18.ms_aug_in1k",
+    ]
+
     @slow
     def test_inference_image_classification_head(self):
         checkpoint = "timm/resnet18.a1_in1k"
@@ -315,21 +325,12 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
 
     @slow
-    def test_transformers_model_equivalent_to_timm(self):
+    def test_transformers_model_for_classification_is_equivalent_to_timm(self):
         # check that wrapper logits are the same as timm model logits
 
-        # some popular ones
-        model_names = [
-            "vit_small_patch16_384.augreg_in21k_ft_in1k",
-            "resnet50.a1_in1k",
-            "tf_mobilenetv3_large_minimal_100.in1k",
-            "swin_tiny_patch4_window7_224.ms_in1k",
-            "ese_vovnet19b_dw.ra_in1k",
-            "hrnet_w18.ms_aug_in1k",
-        ]
         image = prepare_img()
 
-        for model_name in model_names:
+        for model_name in self.model_names_to_test:
             checkpoint = f"timm/{model_name}"
 
             with self.subTest(msg=model_name):
@@ -350,6 +351,35 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
 
                 # check logits are the same
                 diff = (outputs.logits - timm_outputs).max().item()
+                self.assertLess(diff, 1e-4)
+
+    @slow
+    def test_transformers_model_is_equivalent_to_timm(self):
+        # check that wrapper logits are the same as timm model logits
+
+        image = prepare_img()
+
+        for model_name in self.model_names_to_test:
+            checkpoint = f"timm/{model_name}"
+
+            with self.subTest(msg=model_name):
+                # prepare inputs
+                image_processor = TimmWrapperImageProcessor.from_pretrained(checkpoint)
+                pixel_values = image_processor(images=image).pixel_values.to(torch_device)
+
+                # load models
+                model = TimmWrapperModel.from_pretrained(checkpoint, device_map=torch_device).eval()
+                timm_model = timm.create_model(model_name, pretrained=True, num_classes=0).to(torch_device).eval()
+
+                with torch.inference_mode():
+                    outputs = model(pixel_values)
+                    timm_outputs = timm_model(pixel_values)
+
+                # check shape is the same
+                self.assertEqual(outputs.pooler_output.shape, timm_outputs.shape)
+
+                # check logits are the same
+                diff = (outputs.pooler_output - timm_outputs).max().item()
                 self.assertLess(diff, 1e-4)
 
     @slow
