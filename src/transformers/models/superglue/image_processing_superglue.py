@@ -459,7 +459,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
     def post_process_keypoint_matching(
         self, outputs: "KeypointMatchingOutput", target_sizes: Union[TensorType, List[Tuple]]
-    ):
+    ) -> List[Dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
