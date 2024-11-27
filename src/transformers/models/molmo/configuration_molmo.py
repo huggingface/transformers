@@ -96,7 +96,7 @@ class MolmoVisionConfig(PretrainedConfig):
         num_image_positions=577,
         projection_dim=512,
         num_channels=3,
-        image_size=336,
+        image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,

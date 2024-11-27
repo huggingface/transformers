@@ -1472,7 +1472,6 @@ class MolmoVisionEmbeddings(nn.Module):
             bias=False,
         )
 
-        self.image_size = 576 # FIXME
         self.position_embedding = nn.Embedding(config.num_image_positions, config.hidden_size)
         self.register_buffer(
             "position_ids", torch.arange(config.num_image_positions).expand((1, -1)), persistent=False
