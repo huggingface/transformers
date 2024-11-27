@@ -565,9 +565,4 @@ By changing the dtype for `FlaxBertModel `to `jax.numpy.bfloat16`, you get the p
 import jax
 model = FlaxBertModel.from_pretrained("bert-base-uncased", config=config, dtype=jax.numpy.bfloat16)
 ```
-To evaluate the performance speedup on bfloat16, users just need to add an argument "--precision bfloat16" for this example.
-
-```bash
-python3 run_bert_flax.py --precision bfloat16
-```
 On a AWS c7i.4xlarge with Intel Sapphire Rapids, we get  > 2X speedup by changing precision from float32 to bfloat16.
