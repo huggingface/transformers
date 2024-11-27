@@ -250,6 +250,8 @@ def write_model(
     print("Model reloaded successfully.")
 
     processor = MolmoProcessor.from_pretrained(input_base_path)
+    processor.tokenizer.bos_token = processor.tokenizer.eos_token
+    processor.tokenizer.bos_token_id = processor.tokenizer.bos_token_id
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
 
