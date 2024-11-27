@@ -756,6 +756,7 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
 class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
+
     Args:
         image_processor(`AriaImageProcessor`):
             The AriaImageProcessor to use for image preprocessing.
@@ -763,10 +764,10 @@ class AriaProcessor(ProcessorMixin):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
         patch_size(`):
             The patch size to use for the image processor.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        image_token(`str`):
-            The image token to use for the tokenizer.
+        chat_template (`str`, *optional*):
+            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+        size_conversion(`Dict`, *optional*):
+            A dictionary indicating size conversions for images.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -780,7 +781,6 @@ class AriaProcessor(ProcessorMixin):
         tokenizer: Union[AutoTokenizer, str] = None,
         patch_size: int = 490,
         chat_template: str = None,
-        image_token: str = "<|img|>",
         size_conversion: Optional[Dict] = None,
         **kwargs,
     ):
@@ -793,8 +793,6 @@ class AriaProcessor(ProcessorMixin):
 
         if tokenizer is not None and tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.unk_token
-
-        self.image_token = image_token
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -849,7 +847,7 @@ class AriaProcessor(ProcessorMixin):
             prompt_strings = []
             num_crops = image_inputs.pop("num_crops") * tokens_per_image
             for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_crops)
+                sample = sample.replace(self.tokenizer.image_token, self.tokenizer.image_token * num_crops)
                 prompt_strings.append(sample)
 
         else:
