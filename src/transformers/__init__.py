@@ -1239,7 +1239,6 @@ else:
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.textnet"].extend(["TextNetImageProcessor"])
-    _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
