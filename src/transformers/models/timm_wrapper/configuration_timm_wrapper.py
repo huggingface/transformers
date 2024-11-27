@@ -36,7 +36,7 @@ class TimmWrapperConfig(PretrainedConfig):
     Args:
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        do_pooling (`bool`, defaults to `True`):
+        do_pooling (`bool`, *optional*, defaults to `True`):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not.
 
     Example:
