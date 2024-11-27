@@ -33,6 +33,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -54,7 +55,7 @@ def get_resize_output_image_size(
     image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
 ) -> tuple:
-    original_height, original_width = image.shape[:2]
+    original_height, original_width = get_image_size(image)
 
     scale_y = size["height"] / original_height
     scale_x = size["width"] / original_width
@@ -111,7 +112,7 @@ class MolmoImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         max_num_crops: int = 12,
-        overlap_margins: Tuple[int, int] = (4, 4),
+        overlap_margins: Tuple[int, int] = [4, 4],
         size: Dict[str, int] = None,
         tokens_per_image_width: int = 12,
         tokens_per_image_height: int = 12,
@@ -176,6 +177,10 @@ class MolmoImageProcessor(BaseImageProcessor):
             "return_tensors",
             "data_format",
             "input_data_format",
+            "do_pad",
+            "do_split_into_crops",
+            "padding_mode",
+            "padding_value",
         ]
 
         # TODO move these to configuration once processing is done.
@@ -403,7 +408,6 @@ class MolmoImageProcessor(BaseImageProcessor):
                 crops.append(
                     image[crop_y_start : crop_y_start + self.crop_size, crop_x_start : crop_x_start + self.crop_size]
                 )
-                # print(crops[-1].shape, crop_y_start, crop_x_start, self.crop_size, image.shape)
 
                 # Extract the corresponding mask for the crop
                 cropped_masks.append(

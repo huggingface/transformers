@@ -80,6 +80,28 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
+    def test_nested_input(self):
+        processor_components = self.prepare_components()
+        processor_components["image_processor"] = self.get_component("image_processor")
+        processor_components["tokenizer"] = self.get_component("tokenizer")
+
+        processor = self.processor_class(**processor_components)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        # Test batched as a nested list of images, where each sublist is one batch
+        image_inputs_nested = [[image_input] * 3, [image_input] * 3]
+        text = [input_str] * 6
+        inputs_nested = processor(text=text, images=image_inputs_nested, return_tensors="np")
+
+        # Test batched as a flat list of images
+        image_inputs_flat = [image_input] * 6
+        inputs_flat = processor(text=text, images=image_inputs_flat, return_tensors="np")
+
+        # Image processor should return same pixel values, independently of input format
+        self.assertTrue((inputs_nested.pixel_values == inputs_flat.pixel_values).all())
+
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["Intel/molmo-gemma-2b", "allenai/Molmo-7B-D-0924"]:
             processor = MolmoProcessor.from_pretrained(checkpoint)

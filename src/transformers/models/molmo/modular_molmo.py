@@ -38,6 +38,7 @@ from ...image_utils import (
     OPENAI_Siglip_MEAN,
     OPENAI_Siglip_STD,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -1220,7 +1221,7 @@ def get_resize_output_image_size(
     image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
 ) -> tuple:
-    original_height, original_width = image.shape[:2]
+    original_height, original_width = get_image_size(image)
 
     scale_y = size["height"] / original_height
     scale_x = size["width"] / original_width
