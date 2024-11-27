@@ -1472,10 +1472,7 @@ class MolmoVisionEmbeddings(nn.Module):
             bias=False,
         )
 
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.image_size = 576  # FIXME: raushan
-        self.num_patches = 576
-        self.num_positions = self.num_patches + 1
+        self.image_size = 576 # FIXME
         self.position_embedding = nn.Embedding(config.num_image_positions, config.hidden_size)
         self.register_buffer(
             "position_ids", torch.arange(config.num_image_positions).expand((1, -1)), persistent=False
@@ -2046,7 +2043,7 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
                 raise ValueError(image_padding_embed)
 
         image_features = self.image_feature_dropout(image_features)
-        num_patches = 24  # TODO: calculate from config or add in config
+        num_patches = self.config.image_num_patches
         image_features = image_features.reshape(
             (batch_size, patches) + (num_patches, num_patches) + (-1,),
         )
@@ -2221,13 +2218,6 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
     def tie_weights(self):
         return self.language_model.tie_weights()
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
 
     def get_image_features(
         self,
