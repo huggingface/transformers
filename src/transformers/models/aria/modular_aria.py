@@ -347,8 +347,6 @@ class AriaProjector(nn.Module):
 
         self.query = nn.Parameter(torch.zeros(max(self.patch_to_query_dict.values()), self.in_features))
 
-        nn.init.trunc_normal_(self.query, std=0.02)
-
         self.cross_attn = AriaCrossAttention(config)
 
         self.layer_norm = nn.LayerNorm(self.in_features)
@@ -1163,6 +1161,8 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, AriaGroupedExpertsGEMM):
             module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, AriaProjector):
+            nn.init.trunc_normal_(module.query, std=std)
 
 
 class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
