@@ -426,8 +426,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         from peft import LoraConfig
 
-        dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
-
         for model_id in self.transformers_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
                 model = transformers_class.from_pretrained(model_id).to(torch_device)
