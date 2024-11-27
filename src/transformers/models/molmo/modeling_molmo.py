@@ -2681,7 +2681,9 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             inputs_embeds = inputs_embeds.view(-1, hidden_size)
             image_features = image_features.view(-1, hidden_size)
             image_token_indices = image_token_indices.view(-1)
-            image_token_indices += 1  # TODO: pablo, this matches with orig when I added +1
+
+            # TODO: pablo, this matches with orig when I added +1
+            image_token_indices[image_token_indices != -100] += 1
 
             # insert image features at specified positions
             valid_indices = image_token_indices >= 0
