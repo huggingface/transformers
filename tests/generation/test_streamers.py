@@ -156,9 +156,8 @@ class AsyncStreamerTester(unittest.IsolatedAsyncioTestCase):
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
         thread.start()
 
-        # The streamer will timeout after 0.001 seconds, so nothing should be generated
-        streamer_text = ""
-        async for new_text in streamer:
-            streamer_text += new_text
-
-        self.assertEqual(streamer_text, "")
+        # The streamer will timeout after 0.001 seconds, so TimeoutError will be raised
+        with self.assertRaises(TimeoutError):
+            streamer_text = ""
+            async for new_text in streamer:
+                streamer_text += new_text
