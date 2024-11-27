@@ -122,11 +122,11 @@ _import_structure = {
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
     "generation": [
+        "CompileConfig",
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
         "WatermarkingConfig",
-        "CompileConfig",
     ],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],

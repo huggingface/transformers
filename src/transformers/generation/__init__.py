@@ -20,11 +20,11 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 _import_structure = {
     "configuration_utils": [
         "BaseWatermarkingConfig",
+        "CompileConfig",
         "GenerationConfig",
         "GenerationMode",
         "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
-        "CompileConfig",
     ],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
