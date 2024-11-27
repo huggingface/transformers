@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import unittest
+import pytest
 from queue import Empty
 from threading import Thread
 
