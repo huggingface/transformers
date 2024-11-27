@@ -1569,15 +1569,15 @@ class CompileConfig(object):
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
 
     Args:
-        fullgraph (`bool`, *optional*, defaults to True):
+        fullgraph (`bool`, *optional*, defaults to `True`):
             If `True`, requires that the whole forward be capturable in a single graph.
-        dynamic (`bool` or `None`, *optional*, defaults to None):
+        dynamic (`bool` or `None`, *optional*):
             Whether to try to use dynamic shape graphs.
-        backend (`str` or `Callable`, *optional*, defaults to "inductor"):
+        backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
             Backend to be used.
-        mode (`str`, *optional*, defaults to "reduce-overhead"):
+        mode (`str`, *optional*, defaults to `"reduce-overhead"`):
             Controls balance between performance and overhead.
-        options (`dict`, *optional*, defaults to None):
+        options (`dict`, *optional*):
             A dictionary of options to pass to the backend.
     """
 
