@@ -22,7 +22,7 @@ if __name__ == '__main__':
         print(job)
 
         project_slug = f'gh/{os.environ["CIRCLE_PROJECT_USERNAME"]}/{os.environ["CIRCLE_PROJECT_REPONAME"]}'
-        if job["name"].startswith("tests_"):
+        if job["name"].startswith(("tests_", "examples_", "pipelines_")):
 
             os.system(f'mkdir {job["name"]}')
 
