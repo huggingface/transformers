@@ -419,7 +419,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(encoded_images.shape), (expected_batch_size, *expected_output_image_shape))
 
     @require_torch
-    def test_post_processing_keypoint_detection(self):
+    def test_post_processing_keypoint_matching(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         image_inputs = self.image_processor_tester.prepare_image_inputs()
         pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")

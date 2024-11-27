@@ -458,7 +458,10 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_keypoint_matching(
-        self, outputs: "KeypointMatchingOutput", target_sizes: Union[TensorType, List[Tuple]]
+        self,
+        outputs: "KeypointMatchingOutput",
+        target_sizes: Union[TensorType, List[Tuple]],
+        matching_threshold: float = 0.0,
     ) -> List[Dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
@@ -470,6 +473,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before
                 any processing).
+            matching_threshold (`float`, *optional*, defaults to 0.0):
+                Threshold to filter out the matches with low scores.
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
@@ -503,9 +508,12 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             matches0 = matches[mask0]
             scores0 = scores[mask0]
 
-            matched_keypoints0 = keypoints0[matches0 > -1]
-            matched_keypoints1 = keypoints1[matches0[matches0 > -1]]
-            matching_scores = scores0[matches0 > -1]
+            # Filter out matches with low scores
+            valid_matches = scores0 > matching_threshold
+
+            matched_keypoints0 = keypoints0[valid_matches]
+            matched_keypoints1 = keypoints1[matches0[valid_matches]]
+            matching_scores = scores0[valid_matches]
 
             results.append(
                 {
