@@ -30,7 +30,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
-from ...integrations.deepspeed import deepspeed_ulysses_forward
+from ...integrations.deepspeed import deepspeed_ulysses_attention, support_deepspeed_ulysses
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -44,7 +44,6 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -52,9 +51,6 @@ from ...utils import (
 )
 from .configuration_mistral import MistralConfig
 
-
-if is_accelerate_available():
-    from accelerate.utils import parallel_state as mpu
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -275,6 +271,7 @@ class MistralAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+@support_deepspeed_ulysses
 class MistralFlashAttention2(MistralAttention):
     """
     Mistral flash attention module. This module inherits from `MistralAttention` as the weights of the module stays
@@ -290,11 +287,6 @@ class MistralFlashAttention2(MistralAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
-            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
-        else:
-            self.q_len_multiplier = 1
 
     def forward(
         self,
@@ -368,12 +360,12 @@ class MistralFlashAttention2(MistralAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attn_output = self.attn_func(
+        attn_output = _flash_attention_forward(
             query_states,
             key_states,
             value_states,
             attention_mask,
-            q_len * self.q_len_multiplier,
+            q_len * getattr(self, "q_len_multiplier", 1),
             position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
@@ -392,6 +384,7 @@ class MistralFlashAttention2(MistralAttention):
 
 # copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Mistral
 # TODO(joao): add me back asap :)
+@support_deepspeed_ulysses
 class MistralSdpaAttention(MistralAttention):
     """
     Mistral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -401,15 +394,6 @@ class MistralSdpaAttention(MistralAttention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
-            self.attn_func = deepspeed_ulysses_forward(
-                torch.nn.functional.scaled_dot_product_attention, seq_dim=2, head_dim=1
-            )
-            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
-        else:
-            self.attn_func = torch.nn.functional.scaled_dot_product_attention
-            self.q_len_multiplier = 1
 
     # Adapted from MistralAttention.forward
     def forward(
@@ -462,7 +446,7 @@ class MistralSdpaAttention(MistralAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2] * self.q_len_multiplier]
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2] * getattr(self, "q_len_multiplier", 1)]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -475,7 +459,14 @@ class MistralSdpaAttention(MistralAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        attn_output = self.attn_func(
+        if hasattr(self, "q_len_multiplier") and self.q_len_multiplier > 1:
+            scaled_dot_product_attention = deepspeed_ulysses_attention(
+                torch.nn.functional.scaled_dot_product_attention, seq_dim=2, head_dim=1
+            )
+        else:
+            scaled_dot_product_attention = torch.nn.functional.scaled_dot_product_attention
+
+        attn_output = scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
@@ -608,6 +599,7 @@ class MistralPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
+    _supports_sequence_parallel = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -700,6 +692,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
     "The bare Mistral Model outputting raw hidden-states without any specific head on top.",
     MISTRAL_START_DOCSTRING,
 )
+@support_deepspeed_ulysses
 class MistralModel(MistralPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MistralDecoderLayer`]
@@ -719,11 +712,6 @@ class MistralModel(MistralPreTrainedModel):
         )
         self._attn_implementation = config._attn_implementation
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
-            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
-        else:
-            self.q_len_multiplier = 1
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -788,7 +776,7 @@ class MistralModel(MistralPreTrainedModel):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1] * self.q_len_multiplier,
+                past_seen_tokens + inputs_embeds.shape[1] * getattr(self, "q_len_multiplier", 1),
                 device=inputs_embeds.device,
             )
 
@@ -905,7 +893,7 @@ class MistralModel(MistralPreTrainedModel):
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1] * self.q_len_multiplier
+        sequence_length = input_tensor.shape[1] * getattr(self, "q_len_multiplier", 1)
         # SlidingWindowCache or StaticCache
         if using_sliding_window_cache or using_static_cache:
             target_length = past_key_values.get_max_cache_shape()

@@ -58,7 +58,7 @@ else:
 
 if is_deepspeed_available():
     from deepspeed.sequence.layer import _SeqAllToAll
-    from deepspeed.utils import groups as ds_comm_groups
+    from deepspeed.utils import groups as deepspeed_mpu
 
 
 class HfDeepSpeedConfig(DeepSpeedConfig):
@@ -142,21 +142,10 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
         """
-
-        if getattr(args, "sequence_parallel", 1) > 1:
-            assert (
-                is_accelerate_available()
-            ), "DeepSpeed sequence parallelism requires Accelerate, install it with 'pip install accelerate'"
-
-            from accelerate.utils import parallel_state as mpu
-
-            mpu.initialize_model_parallel(
-                sequence_parallel_size=args.sequence_parallel,
-            )
-            world_size = mpu.get_data_parallel_world_size()
+        if getattr(args, "sequence_parallel_size", 1) > 1:
+            world_size = getattr(args, "data_parallel_size", args.world.size // args.sequence_parallel_size)
         else:
             world_size = args.world_size
-
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
@@ -296,6 +285,9 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 # keep the config object global to be able to access it anywhere during TrainingArguments life-cycle
 _hf_deepspeed_config_weak_ref = None
 
+# remove when a flag is added to the Deepspeed config in `accelerate`
+_hf_deepspeed_is_sp = None
+
 
 def set_hf_deepspeed_config(hf_deepspeed_config_obj):
     # this is a special weakref global object to allow us to get to Deepspeed config from APIs
@@ -314,6 +306,17 @@ def unset_hf_deepspeed_config():
 def is_deepspeed_zero3_enabled():
     if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
         return _hf_deepspeed_config_weak_ref().is_zero3()
+    else:
+        return False
+
+
+def is_deepspeed_sp_enabled():
+    # remove when a flag is added to the Deepspeed config in `accelerate`
+    if _hf_deepspeed_is_sp is not None:
+        return _hf_deepspeed_is_sp
+    elif _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+        _hf_deepspeed_is_sp = _hf_deepspeed_config_weak_ref().get_value("sequence_parallel_size") > 1
+        return _hf_deepspeed_is_sp
     else:
         return False
 
@@ -467,21 +470,10 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
 
 
-def is_deepspeed_sp_enabled():
-    if is_deepspeed_available():
-        from deepspeed.utils import groups
-
-        return groups._get_sequence_parallel_world_size() > 1
-    else:
-        return False
-
-
-def deepspeed_ulysses_forward(attn_func, seq_dim=1, head_dim=2):
-    is_sp_enabled = is_deepspeed_sp_enabled()
-
+def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
     def wrapped(*args, **kwargs):
-        if is_sp_enabled:
-            spg = ds_comm_groups._get_sequence_parallel_group()
+        if is_deepspeed_sp_enabled():
+            spg = deepspeed_mpu._get_sequence_parallel_group()
             scatter_idx = head_dim  # Scatter on num_heads dimension
             gather_idx = seq_dim  # Gather on seq_len dimension
             batch_dim_idx = 0  # Synonymous with the batch_first==true
@@ -493,7 +485,7 @@ def deepspeed_ulysses_forward(attn_func, seq_dim=1, head_dim=2):
 
         attn_output = attn_func(*args, **kwargs)
 
-        if is_sp_enabled:
+        if is_deepspeed_sp_enabled():
             scatter_idx = seq_dim  # Scatter back on seq_len dimension
             gather_idx = head_dim  # Gather on num_heads dimension
             batch_dim_idx = 0
@@ -502,3 +494,21 @@ def deepspeed_ulysses_forward(attn_func, seq_dim=1, head_dim=2):
         return attn_output
 
     return wrapped
+
+
+def support_deepspeed_ulysses(module):
+    module._supports_sequence_parallel = True
+
+    original_forward = module.forward
+
+    def wrapped_forward(*args, **kwargs):
+        # lazily set if sequence parallelism is enabled to ensure deepspeed is initialized first
+        if is_deepspeed_sp_enabled():
+            sp_size = deepspeed_mpu._get_sequence_parallel_world_size()
+            module.q_len_multiplier = sp_size
+
+        return original_forward(*args, **kwargs)
+
+    module.forward = wrapped_forward
+
+    return module

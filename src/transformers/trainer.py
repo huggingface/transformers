@@ -57,13 +57,23 @@ from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDa
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
-from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
+from .data.data_collator import (
+    DataCollator,
+    DataCollatorForSeqParallel,
+    DataCollatorWithPadding,
+    default_data_collator,
+)
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
-from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.deepspeed import (
+    deepspeed_init,
+    deepspeed_load_checkpoint,
+    is_deepspeed_available,
+    is_deepspeed_sp_enabled,
+)
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
@@ -90,6 +100,7 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
+    DistributedSampler,
     DistributedTensorGatherer,
     EvalLoopContainer,
     IterableDatasetShard,
@@ -247,6 +258,7 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
+        from deepspeed.utils import groups as deepspeed_mpu
 
     from accelerate.utils import parallel_state as mpu
 
@@ -595,6 +607,10 @@ class Trainer:
             else default_data_collator
         )
         self.data_collator = data_collator if data_collator is not None else default_collator
+
+        if is_deepspeed_sp_enabled():
+            self.data_collator = DataCollatorForSeqParallel(self.data_collator)
+
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.processing_class = processing_class
@@ -953,6 +969,16 @@ class Trainer:
         if self.train_dataset is None or not has_length(self.train_dataset):
             return None
 
+        if self.is_deepspeed_enabled and is_deepspeed_sp_enabled():
+            assert self.args.group_by_length is False, "Group by length is not supported with sequence parallelism."
+            return DistributedSampler(
+                dataset=self.train_dataset,
+                num_replicas=deepspeed_mpu._get_data_parallel_world_size(),
+                rank=deepspeed_mpu._get_data_parallel_rank(),
+                shuffle=True,
+                seed=self.args.seed,
+            )
+
         # Build the sampler.
         if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
             assert self.args.group_by_length is False, "Group by length is not supported with sequence parallelism."
@@ -1023,11 +1049,11 @@ class Trainer:
         if eval_dataset is None or not has_length(eval_dataset):
             return None
         # Build the sampler.
-        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+        if self.is_deepspeed_enabled and is_deepspeed_sp_enabled():
             return DistributedSampler(
-                dataset=self.eval_dataset,
-                num_replicas=mpu.get_data_parallel_world_size(),
-                rank=mpu.get_data_parallel_rank(),
+                dataset=self.train_dataset,
+                num_replicas=deepspeed_mpu._get_data_parallel_world_size(),
+                rank=deepspeed_mpu._get_data_parallel_rank(),
                 shuffle=False,
             )
 
