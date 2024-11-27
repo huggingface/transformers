@@ -14,7 +14,7 @@ if __name__ == '__main__':
     # os.system("tail -1000 workflow_jobs.json")
 
     with open("workflow_jobs.json") as fp:
-        jobs = json.load(fp)
+        jobs = json.load(fp)["items"]
 
     # for each job, download artifacts
     for job in jobs:
