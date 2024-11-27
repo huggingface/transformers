@@ -19,13 +19,13 @@ import os
 import regex as re
 import torch
 from huggingface_hub import hf_hub_download
-from transformers.image_utils import PILImageResampling
 
 from transformers import (
     DepthProConfig,
-    DepthProImageProcessorFast,
     DepthProForDepthEstimation,
+    DepthProImageProcessorFast,
 )
+from transformers.image_utils import PILImageResampling
 
 
 # fmt: off
@@ -126,7 +126,7 @@ def get_qkv_state_dict(key, parameter):
     )
     for replacement_key, replacement_val in zip(replacements_keys, replacements_vals):
         qkv_state_dict[key.replace(placeholder, replacement_key)] = replacement_val
-    return qkv_state_dict        
+    return qkv_state_dict
 
 def write_model(
     hf_repo_id: str,

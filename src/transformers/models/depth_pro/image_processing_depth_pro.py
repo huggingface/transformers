@@ -14,11 +14,9 @@
 # limitations under the License.
 """Image processor class for DepthPro."""
 
-from typing import Dict, List, Optional, Union
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import to_channel_dimension_format
@@ -30,43 +28,15 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    pil_torch_interpolation_mapping,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-
-import math
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
-
-
-if TYPE_CHECKING:
-    from ...modeling_outputs import DepthEstimatorOutput
-
-import numpy as np
-
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import pad, resize, to_channel_dimension_format
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
     is_torch_available,
-    is_torch_tensor,
     make_list_of_images,
+    pil_torch_interpolation_mapping,
     to_numpy_array,
     valid_images,
 )
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
-    is_vision_available,
     logging,
     requires_backends,
 )
@@ -74,9 +44,6 @@ from ...utils import (
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    import PIL
 
 
 logger = logging.get_logger(__name__)
@@ -379,7 +346,7 @@ class DepthProImageProcessor(BaseImageProcessor):
                 Field of view (FoV) values corresponding to each depth prediction. Should have the same length
                 as `predicted_depths` if provided. If `None`, FoV scaling is skipped.
             target_sizes (`Optional[Union[TensorType, List[Tuple[int, int]], None]]`, *optional*, defaults to `None`):
-                Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)` 
+                Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)`
                 or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
                 is performed.
 

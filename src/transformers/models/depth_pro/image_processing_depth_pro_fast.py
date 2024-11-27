@@ -15,7 +15,7 @@
 """Fast Image processor class for DepthPro."""
 
 import functools
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union
 
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils import get_size_dict
@@ -34,6 +34,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import is_torch_available, is_torchvision_available
+
 
 logger = logging.get_logger(__name__)
 
@@ -325,7 +326,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
                 Field of view (FoV) values corresponding to each depth prediction. Should have the same length
                 as `predicted_depths` if provided. If `None`, FoV scaling is skipped.
             target_sizes (`Optional[Union[TensorType, List[tuple[int, int]], None]]`, *optional*, defaults to `None`):
-                Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)` 
+                Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)`
                 or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
                 is performed.
 

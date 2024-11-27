@@ -15,16 +15,16 @@
 """PyTorch DepthPro model."""
 
 import math
+from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple, Union
 
 import torch
 from torch import nn
-from dataclasses import dataclass
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput, DepthEstimatorOutput
-)
+from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -32,8 +32,6 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
-from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from .configuration_depth_pro import DepthProConfig
 
 
