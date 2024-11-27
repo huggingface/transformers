@@ -40,32 +40,14 @@ class EmptyJob:
     job_name = "empty"
 
     def to_dict(self):
-        # steps = ["checkout"]
         steps = []
-        step = {"run": 'dir'}
-        steps.append(step)
         step = {"run": 'ls -la'}
         steps.append(step)
-        if self.job_name == "first_collection_job":
-            step = {"run": 'mkdir -p outputs'}
-            steps.append(step)
-            step = {"run": 'echo "Hello, world!" > outputs/echo-output'}
-            steps.append(step)
-            step = {
-                "persist_to_workspace": {
-                    "root": "outputs",
-                    "paths": ["echo-output"]
-                }
-            }
-            steps.append(step)
-        elif self.job_name == "final_collection_job":
-            step = {"run": 'ls -l'}
-            steps.append(step)
 
-        elif self.job_name == "waiter_job":
+        if self.job_name == "collection_job":
             steps.append("checkout")
 
-            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
+            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "collection_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
             step = {"run": wait_command}
             steps.append(step)
 
@@ -426,26 +408,13 @@ def create_circleci_config(folder=None):
         jobs = [EmptyJob()]
     print("Full list of job name inputs", {j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs})
 
-    final_collection_job = EmptyJob()
-    final_collection_job.job_name = "final_collection_job"
-    first_collection_job = EmptyJob()
-    first_collection_job.job_name = "first_collection_job"
-    waiter_job = EmptyJob()
-    waiter_job.job_name = "waiter_job"
-    jobs = [first_collection_job] + jobs + [waiter_job, final_collection_job]
+    collection_job = EmptyJob()
+    collection_job.job_name = "collection_job"
+    jobs = jobs + [collection_job]
 
     _jobs = []
     for job in jobs:
-        if job is first_collection_job:
-            _jobs.append(job.job_name)
-        # elif job is waiter_job:
-        #     _jobs.append({job.job_name: {"requires": [k.job_name for k in jobs if k not in [first_collection_job, waiter_job, final_collection_job]]}})
-        elif job is waiter_job:
-            _jobs.append(job.job_name)
-        elif job is final_collection_job:
-            _jobs.append(job.job_name)
-        else:
-            _jobs.append({job.job_name: {"requires": [first_collection_job.job_name]}})
+        _jobs.append(job.job_name)
 
     config = {
         "version": "2.1",
