@@ -991,8 +991,8 @@ _import_structure = {
         "GPTQConfig",
         "HqqConfig",
         "QuantoConfig",
-        "TorchAoConfig",
         "SpQRConfig",
+        "TorchAoConfig",
     ],
 }
 
