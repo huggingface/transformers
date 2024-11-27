@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings_to_model_forward,
@@ -31,6 +32,39 @@ from .configuration_timm_wrapper import TimmWrapperConfig
 
 if is_timm_available():
     import timm
+
+
+@dataclass
+class TimmWrapperModelOutput(ModelOutput):
+    """
+    Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
+    and optional hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor`):
+            The last hidden state of the model, output before applying the classification head.
+        pooler_output (`torch.FloatTensor`, *optional*):
+            The pooled output derived from the last hidden state, if applicable.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
+            Returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*):
+            A tuple containing the intermediate attention weights of the model at the output of each layer.
+            Returned if `output_attentions=True` is set or if `config.output_attentions=True`.
+            Note: Currently, Timm models do not support attentions output.
+    """
+
+    last_hidden_state: torch.FloatTensor
+    pooler_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+def _load_timm_model(config: TimmWrapperConfig, add_classification_head: bool = False):
+    # timm model will not add classification head if num_classes = 0
+    num_classes = config.num_labels if add_classification_head else 0
+    model = timm.create_model(model_name=config.architecture, pretrained=False, num_classes=num_classes)
+    return model
 
 
 TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
@@ -47,13 +81,6 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
         **kwargs:
             Additional keyword arguments passed along to the model forward.
 """
-
-
-def _load_timm_model(config: TimmWrapperConfig, add_classification_head: bool = False):
-    # timm model will not add classification head if num_classes = 0
-    num_classes = config.num_labels if add_classification_head else 0
-    model = timm.create_model(model_name=config.architecture, pretrained=False, num_classes=num_classes)
-    return model
 
 
 class TimmWrapperPreTrainedModel(PreTrainedModel):
@@ -94,7 +121,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """
-        Empty init weights function to ensure compatibility of the class in the library.
+        Init weights function to ensure properly initialize Linear layer weights.
+        Since model architectures may vary, we assume only the classifier requires
+        initialization, while all other weights should be loaded from the checkpoint.
         """
         if isinstance(module, (nn.Linear)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -119,13 +148,20 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
+        do_pooling: Optional[bool] = None,
         **kwargs,
-    ) -> Union[BaseModelOutputWithPooling, Tuple[Tensor, ...]]:
+    ) -> Union[TimmWrapperModelOutput, Tuple[Tensor, ...]]:
+        r"""
+        do_pooling (`bool`, *optional*):
+            Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not. If `None` is passed, the
+            `do_pooling` value from the config is used.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        do_pooling = do_pooling if do_pooling is not None else self.config.do_pooling
 
         if output_attentions:
             raise ValueError("Cannot set `output_attentions` for timm models.")
@@ -149,15 +185,18 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
             last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
             hidden_states = None
 
-        # classification head is not created, applying pooling only
-        pooler_output = self.timm_model.forward_head(last_hidden_state)
+        if do_pooling:
+            # classification head is not created, applying pooling only
+            pooler_output = self.timm_model.forward_head(last_hidden_state)
+        else:
+            pooler_output = None
 
         if not return_dict:
             outputs = (last_hidden_state, pooler_output, hidden_states)
             outputs = tuple(output for output in outputs if output is not None)
             return outputs
 
-        return BaseModelOutputWithPooling(
+        return TimmWrapperModelOutput(
             last_hidden_state=last_hidden_state,
             pooler_output=pooler_output,
             hidden_states=hidden_states,
