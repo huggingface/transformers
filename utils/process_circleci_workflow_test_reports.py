@@ -28,7 +28,7 @@ if __name__ == '__main__':
             url = f'https://circleci.com/api/v2/project/{project_slug}/{job["job_number"]}/artifacts'
             os.system(f'curl -o {job["name"]}_artifacts.json {url} --header "Circle-Token: $CIRCLE_TOKEN"')
             with open(f'{job["name"]}_artifacts.json') as fp:
-                job_artifacts = json.load(fp)
+                job_artifacts = json.load(fp)["items"]
                 print(job_artifacts)
 
                 job_test_summaries = {}
