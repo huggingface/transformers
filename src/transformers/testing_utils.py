@@ -1194,7 +1194,7 @@ def require_tensorboard(test_case):
 
 def require_auto_gptq(test_case):
     """
-    Decorator for auto_gptq dependency
+    Decorator for auto_gptq dependency 
     """
     eetq_available = is_eetq_available()
     if eetq_available:
