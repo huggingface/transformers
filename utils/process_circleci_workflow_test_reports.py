@@ -30,6 +30,8 @@ if __name__ == '__main__':
             with open(f'{job["name"]}_artifacts.json') as fp:
                 job_artifacts = json.load(fp)["items"]
 
+                os.system(f'mkdir {job["name"]}')
+
                 job_test_summaries = {}
                 for artifact in job_artifacts:
                     if artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt"):
