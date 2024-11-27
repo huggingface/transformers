@@ -52,12 +52,11 @@ class MolmoVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        ignore_index=-100,
         image_token_index=0,
         projector_hidden_act="gelu",
         seq_length=7,
         vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
+        vision_feature_layers=(0, 1),
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -69,7 +68,8 @@ class MolmoVisionText2TextModelTester:
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 37,
+            "intermediate_size": 38,
+            "head_dim": 8,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
             "attention_probs_dropout_prob": 0.1,
@@ -83,28 +83,38 @@ class MolmoVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 30,
-            "patch_size": 2,
+            "image_size": 49,
+            "num_image_positions": 50,
+            "patch_size": 4,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
             "projection_dim": 32,
-            "num_hidden_layers": 2,
+            "num_hidden_layers": 3,
             "num_attention_heads": 4,
             "intermediate_size": 37,
             "dropout": 0.1,
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
+        pooling_config={
+            "image_num_patches": 7,
+            "hidden_size": 64,
+            "num_attention_heads": 4,
+            "head_dim": 8,
+            "pad_embed_dim": 64,
+            "text_intermediate_size": 38,
+            "text_hidden_size": 32,
+        },
     ):
         self.parent = parent
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
+        self.vision_feature_layers = vision_feature_layers
         self.text_config = text_config
         self.vision_config = vision_config
+        self.pooling_config = pooling_config
         self.pad_token_id = text_config["pad_token_id"]
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
@@ -114,21 +124,20 @@ class MolmoVisionText2TextModelTester:
         self.is_training = is_training
 
         self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 336
-        self.encoder_seq_length = 231
-        self.num_image_tokens = 224
+        self.num_patches = 5
+        self.image_size = 49
+        self.num_image_tokens = 80
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
         return MolmoConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            ignore_index=self.ignore_index,
+            pooling_config=self.pooling_config,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
-            vision_feature_layer=self.vision_feature_layer,
+            vision_feature_layers=self.vision_feature_layers,
             image_seq_length=self.num_image_tokens,
         )
 
@@ -136,24 +145,30 @@ class MolmoVisionText2TextModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                self.vision_config["num_channels"],
+                self.num_patches,
                 self.vision_config["image_size"],
-                self.vision_config["image_size"],
+                self.vision_config["patch_size"] ** 2 * 3,
             ]
         )
+        image_token_indices = (
+            torch.arange(self.num_image_tokens, device=torch_device).unsqueeze(0).repeat(self.batch_size, 1)
+        )
+        image_masks = torch.ones_like(pixel_values)[..., 0]
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values, image_token_indices, image_masks
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
+        config, pixel_values, image_token_indices, image_masks = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
+            "image_token_indices": image_token_indices,
+            "image_masks": image_masks,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }

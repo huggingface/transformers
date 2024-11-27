@@ -161,7 +161,7 @@ class MolmoVisionConfig(SiglipVisionConfig):
         num_image_positions=577,
         projection_dim=512,
         num_channels=3,
-        image_size=336,
+        image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
@@ -502,10 +502,6 @@ class MolmoVisionEmbeddings(nn.Module):
             bias=False,
         )
 
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.image_size = 576  # FIXME: raushan
-        self.num_patches = 576
-        self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(config.num_image_positions, config.hidden_size)
         self.register_buffer(
             "position_ids", torch.arange(config.num_image_positions).expand((1, -1)), persistent=False
