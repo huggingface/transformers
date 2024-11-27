@@ -21,7 +21,6 @@ from typing import List
 
 import regex as re
 import torch
-import torch.nn.functional as F
 from safetensors.torch import load_file
 
 from transformers import (
@@ -113,38 +112,6 @@ def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1
     hidden_dim = int(ffn_dim_multiplier * hidden_dim)
     hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
     return hidden_dim
-
-
-def interpolate_positional_embedding(
-    embeddings: torch.Tensor, vision_tile_size: int, vision_patch_size: int
-) -> torch.Tensor:
-    """
-    This method allows to interpolate the pre-trained position embeddings, to be able to use the model on higher resolution
-    images.
-    """
-    cls_embedding, positional_embedding = embeddings[:1], embeddings[1:]
-    total_num_patches, dim = positional_embedding.shape
-
-    # compute current and target number of patches for height and width
-    num_patches = int(round(total_num_patches**0.5))
-    new_num_patches = vision_tile_size // vision_patch_size
-
-    # Check if the number of patches is already the desired size
-    if num_patches == new_num_patches:
-        return embeddings
-
-    positional_embedding = positional_embedding.transpose(0, 1)
-    positional_embedding = positional_embedding.reshape(1, dim, num_patches, num_patches)
-    positional_embedding = F.interpolate(
-        positional_embedding,
-        size=(new_num_patches, new_num_patches),
-        mode="bicubic",
-        align_corners=False,
-    )
-    positional_embedding = positional_embedding.reshape(dim, -1).transpose(0, 1)
-
-    embeddings = torch.cat([cls_embedding, positional_embedding], dim=0)
-    return embeddings
 
 
 def write_model(
