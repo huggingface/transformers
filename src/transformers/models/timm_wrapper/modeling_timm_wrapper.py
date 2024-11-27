@@ -79,7 +79,7 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         **kwargs:
-            Additional keyword arguments passed along to the model forward.
+            Additional keyword arguments passed along to the `timm` model forward.
 """
 
 
