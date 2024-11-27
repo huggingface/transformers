@@ -13,63 +13,18 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-
-_import_structure = {"configuration_aria": ["AriaConfig", "AriaTextConfig"]}
-
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_aria"] = ["AriaImageProcessor"]
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_aria"] = [
-        "AriaForConditionalGeneration",
-        "AriaPreTrainedModel",
-        "AriaTextModel",
-        "AriaTextForCausalLM",
-    ]
-
-    _import_structure["processing_aria"] = ["AriaProcessor"]
 
 if TYPE_CHECKING:
-    from .configuration_aria import AriaConfig, AriaTextConfig
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_aria import AriaImageProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_aria import (
-            AriaForConditionalGeneration,
-            AriaPreTrainedModel,
-            AriaTextModel,
-            AriaTextForCausalLM,
-        )
-        from .processing_aria import AriaProcessor
-
+    from .configuration_aria import *
+    from .image_processing_aria import *
+    from .modeling_aria import *
+    from .processing_aria import *
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
