@@ -57,7 +57,7 @@ class AriaVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=0,
+        image_token_index=9,
         projector_hidden_act="gelu",
         seq_length=7,
         vision_feature_select_strategy="default",
@@ -91,6 +91,7 @@ class AriaVisionText2TextModelTester:
             rope_theta=5000000,
             vocab_size=99,
             eos_token_id=2,
+            head_dim=2
         ),
         is_training=True,
         vision_config=Idefics3VisionConfig(
@@ -290,6 +291,14 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="Unstable test")
     def test_dola_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_0_greedy(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
 

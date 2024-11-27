@@ -173,7 +173,7 @@ class AriaConfig(PretrainedConfig):
         text_config=None,
         projector_patch_to_query_dict=None,
         ignore_index=-100,
-        image_token_index=32000,
+        image_token_index=9,
         initializer_range: float = 0.02,
         **kwargs,
     ):
