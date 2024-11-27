@@ -37,7 +37,7 @@ RUN python3 -m pip install --no-cache-dir einops
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
 # Add auto-gptq for gtpq quantization testing, installed from source
-git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && pip install -vvv --no-build-isolation -e .
+RUN git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && pip install -vvv --no-build-isolation -e .
 
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
