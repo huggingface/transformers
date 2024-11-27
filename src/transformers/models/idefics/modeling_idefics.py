@@ -1155,7 +1155,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         elif position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if len([x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]]) != 2:
+        if sum([x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]]) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
