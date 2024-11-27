@@ -548,11 +548,11 @@ python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
 The following example demonstrates performing inference with a language model using the JAX/Flax backend.
 
 The example script run_bert_flax.py uses bert-base-uncased, and the model is loaded into `FlaxBertModel`.
-The input data are just random generated tokens, and the model is also jitted with JAX.
-By default, it uses float32 precision for inference, users could use below commands to run inference with float32.
+The input data are randomly generated tokens, and the model is also jitted with JAX.
+By default, it uses float32 precision for inference. To enable bfloat16, add the flag shown in the command below.
+
 ```bash
-python3 run_bert_flax.py
-```
+python3 run_bert_flax.py --precision bfloat16
 > NOTE: For JAX Versions after v0.4.33 or later, users will need to set the below environment variables as a \
 > temporary workaround to use Bfloat16 datatype. \
 > This restriction is expected to be removed in future version
