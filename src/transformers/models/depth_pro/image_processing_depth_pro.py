@@ -72,8 +72,6 @@ from ...utils import (
     requires_backends,
 )
 
-from transformers.models.depth_pro.modeling_depth_pro import DepthProDepthEstimatorOutput
-
 
 if is_torch_available():
     import torch

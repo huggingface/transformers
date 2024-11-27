@@ -92,6 +92,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("donut-swin", "DonutSwinModel"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
+        ("depth_pro", "DepthProModel"),
         ("efficientformer", "EfficientFormerModel"),
         ("efficientnet", "EfficientNetModel"),
         ("electra", "ElectraModel"),
@@ -571,6 +572,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
         ("dpt", "DPTModel"),
+        ("depth_pro", "DepthProModel"),
         ("efficientformer", "EfficientFormerModel"),
         ("efficientnet", "EfficientNetModel"),
         ("focalnet", "FocalNetModel"),
@@ -866,6 +868,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
         # Model for depth estimation mapping
         ("depth_anything", "DepthAnythingForDepthEstimation"),
         ("dpt", "DPTForDepthEstimation"),
+        ("depth_pro", "DepthProForDepthEstimation"),
         ("glpn", "GLPNForDepthEstimation"),
         ("zoedepth", "ZoeDepthForDepthEstimation"),
     ]

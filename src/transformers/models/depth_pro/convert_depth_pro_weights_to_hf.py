@@ -21,9 +21,11 @@ import torch
 from huggingface_hub import hf_hub_download
 from transformers.image_utils import PILImageResampling
 
-from transformers.models.depth_pro.configuration_depth_pro import DepthProConfig
-from transformers.models.depth_pro.image_processing_depth_pro_fast import DepthProImageProcessorFast
-from transformers.models.depth_pro.modeling_depth_pro import DepthProForDepthEstimation
+from transformers import (
+    DepthProConfig,
+    DepthProImageProcessorFast,
+    DepthProForDepthEstimation,
+)
 
 
 # fmt: off

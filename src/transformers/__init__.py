@@ -408,6 +408,7 @@ _import_structure = {
         "DPRReaderTokenizer",
     ],
     "models.dpt": ["DPTConfig"],
+    "models.depth_pro": ["DepthProConfig"],
     "models.efficientnet": ["EfficientNetConfig"],
     "models.electra": [
         "ElectraConfig",
@@ -1195,6 +1196,7 @@ else:
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor", "DetrImageProcessorFast"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
+    _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
@@ -2134,6 +2136,13 @@ else:
             "DPTForSemanticSegmentation",
             "DPTModel",
             "DPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.depth_pro"].extend(
+        [
+            "DepthProForDepthEstimation",
+            "DepthProModel",
+            "DepthProPreTrainedModel",
         ]
     )
     _import_structure["models.efficientnet"].extend(
@@ -5272,6 +5281,7 @@ if TYPE_CHECKING:
         DPRReaderTokenizer,
     )
     from .models.dpt import DPTConfig
+    from .models.depth_pro import DepthProConfig
     from .models.efficientnet import (
         EfficientNetConfig,
     )
@@ -6100,6 +6110,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor, DetrImageProcessorFast
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
+        from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
@@ -6906,6 +6917,11 @@ if TYPE_CHECKING:
             DPTForSemanticSegmentation,
             DPTModel,
             DPTPreTrainedModel,
+        )
+        from .models.depth_pro import (
+            DepthProForDepthEstimation,
+            DepthProModel,
+            DepthProPreTrainedModel,
         )
         from .models.efficientnet import (
             EfficientNetForImageClassification,

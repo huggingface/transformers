@@ -77,6 +77,7 @@ else:
             ("dinov2", ("BitImageProcessor",)),
             ("donut-swin", ("DonutImageProcessor",)),
             ("dpt", ("DPTImageProcessor",)),
+            ("depth_pro", ("DepthProImageProcessor", "DepthProImageProcessorFast")),
             ("efficientformer", ("EfficientFormerImageProcessor",)),
             ("efficientnet", ("EfficientNetImageProcessor",)),
             ("flava", ("FlavaImageProcessor",)),
