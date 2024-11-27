@@ -63,7 +63,7 @@ if __name__ == '__main__':
                 # collected version
                 with open(f'{job["name"]}/test_summary.json', "w") as fp:
                     json.dump(summary, fp, indent=4)
-                print(summary)
+                # print(summary)
 
     new_workflow_summary = {}
     for job_name, job_summary in workflow_summary.items():
@@ -75,3 +75,6 @@ if __name__ == '__main__':
     for test, result in workflow_summary.items():
         workflow_summary[test] = sorted(result)
     workflow_summary = sorted(workflow_summary)
+
+    with open(f'test_summary.json', "w") as fp:
+        json.dump(workflow_summary, fp, indent=4)
