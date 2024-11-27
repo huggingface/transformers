@@ -79,6 +79,8 @@ class EmptyJob:
             step = {"run": command}
             steps.append(step)
 
+            # python dealing with `workflow_jobs.json`: find all jobs and download all target artifacts from each job.
+
             step = {"run": 'tail -1000 workflow_jobs.json'}
             steps.append(step)
 
@@ -90,7 +92,7 @@ class EmptyJob:
             step = {"run": f'echo {job_number}'}
             steps.append(step)
 
-            job_number = "1481661"
+            job_number = "1488882"
             url = f"https://circleci.com/api/v2/project/{project_slug}/{job_number}/artifacts"
 
             command = f'curl -o artifacts.json {url} --header "Circle-Token: $CIRCLE_TOKEN"'
@@ -104,6 +106,21 @@ class EmptyJob:
             command = "tail -1000 artifacts.json"
             step = {"run": command}
             steps.append(step)
+
+            # python dealing with `artifacts.json`
+            command = "tail -1000 artifacts.json"
+            step = {"run": command}
+            steps.append(step)
+
+            url = "https://output.circle-artifacts.com/output/job/bed97a69-a336-460f-aaf4-a64f92bc2c59/artifacts/0/reports/tests_hub/summary_short.txt"
+            command = f'curl -o test_summary.json {url} --header "Circle-Token: $CIRCLE_TOKEN"'
+            step = {"run": command}
+            steps.append(step)
+
+            command = "tail -1000 test_summary.json"
+            step = {"run": command}
+            steps.append(step)
+
         elif self.job_name == "waiter_job":
             wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
             step = {"run": 'mkdir -p outputs'}
