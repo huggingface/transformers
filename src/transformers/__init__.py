@@ -1014,9 +1014,9 @@ _import_structure = {
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
-        "TorchAoConfig",
         "VptqConfig",
         "SpQRConfig",
+        "TorchAoConfig",
     ],
 }
 
