@@ -75,51 +75,53 @@ class EmptyJob:
             step = {"run": 'mkdir -p outputs'}
             steps.append(step)
 
-            command = 'curl -o workflow_jobs.json --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"'
-            step = {"run": command}
-            steps.append(step)
-
+            # command = 'curl -o workflow_jobs.json --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"'
+            # step = {"run": command}
+            # steps.append(step)
+            #
+            # step = {"run": 'tail -1000 workflow_jobs.json'}
+            # steps.append(step)
+            #
             # python dealing with `workflow_jobs.json`: find all jobs and download all target artifacts from each job.
-
-            step = {"run": 'tail -1000 workflow_jobs.json'}
+            step = {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID'}
             steps.append(step)
-
-            project_slug = "gh/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME"
-            step = {"run": 'echo project_slug'}
-            steps.append(step)
-
-            job_number = "$CIRCLE_BUILD_NUM"
-            step = {"run": f'echo {job_number}'}
-            steps.append(step)
-
-            job_number = "1488882"
-            url = f"https://circleci.com/api/v2/project/{project_slug}/{job_number}/artifacts"
-
-            command = f'curl -o artifacts.json {url} --header "Circle-Token: $CIRCLE_TOKEN"'
-            step = {"run": command}
-            steps.append(step)
-
-            command = "ls -l artifacts.json"
-            step = {"run": command}
-            steps.append(step)
-
-            command = "tail -1000 artifacts.json"
-            step = {"run": command}
-            steps.append(step)
-
-            # python dealing with `artifacts.json`
-            command = "tail -1000 artifacts.json"
-            step = {"run": command}
-            steps.append(step)
-
-            url = "https://output.circle-artifacts.com/output/job/bed97a69-a336-460f-aaf4-a64f92bc2c59/artifacts/0/reports/tests_hub/summary_short.txt"
-            command = f'curl -o test_summary.json {url} --header "Circle-Token: $CIRCLE_TOKEN"'
-            step = {"run": command}
-            steps.append(step)
-
-            command = "tail -1000 test_summary.json"
-            step = {"run": command}
-            steps.append(step)
+            #
+            # project_slug = "gh/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME"
+            # step = {"run": 'echo project_slug'}
+            # steps.append(step)
+            #
+            # job_number = "$CIRCLE_BUILD_NUM"
+            # step = {"run": f'echo {job_number}'}
+            # steps.append(step)
+            #
+            # job_number = "1488882"
+            # url = f"https://circleci.com/api/v2/project/{project_slug}/{job_number}/artifacts"
+            #
+            # command = f'curl -o artifacts.json {url} --header "Circle-Token: $CIRCLE_TOKEN"'
+            # step = {"run": command}
+            # steps.append(step)
+            #
+            # command = "ls -l artifacts.json"
+            # step = {"run": command}
+            # steps.append(step)
+            #
+            # command = "tail -1000 artifacts.json"
+            # step = {"run": command}
+            # steps.append(step)
+            #
+            # # python dealing with `artifacts.json`
+            # command = "tail -1000 artifacts.json"
+            # step = {"run": command}
+            # steps.append(step)
+            #
+            # url = "https://output.circle-artifacts.com/output/job/bed97a69-a336-460f-aaf4-a64f92bc2c59/artifacts/0/reports/tests_hub/summary_short.txt"
+            # command = f'curl -o test_summary.json {url} --header "Circle-Token: $CIRCLE_TOKEN"'
+            # step = {"run": command}
+            # steps.append(step)
+            #
+            # command = "tail -1000 test_summary.json"
+            # step = {"run": command}
+            # steps.append(step)
 
         elif self.job_name == "waiter_job":
             wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "waiter_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
@@ -461,7 +463,7 @@ doc_test_job = CircleCIJob(
 # REPO_UTIL_TESTS = [repo_utils_job]
 # DOC_TESTS = [doc_test_job]
 
-REGULAR_TESTS = [hub_job] # fmt: skip
+REGULAR_TESTS = [torch_job, hub_job] # fmt: skip
 EXAMPLES_TESTS = []
 PIPELINE_TESTS = []
 REPO_UTIL_TESTS = []
