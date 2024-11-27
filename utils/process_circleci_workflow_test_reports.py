@@ -16,6 +16,7 @@ if __name__ == '__main__':
     with open("workflow_jobs.json") as fp:
         jobs = json.load(fp)["items"]
 
+    workflow_summary = {}
     # for each job, download artifacts
     for job in jobs:
         print(job)
@@ -55,9 +56,22 @@ if __name__ == '__main__':
                         elif line.startswith("FAILED "):
                             test = line[len("FAILED "):].split()[0]
                             summary[test] = "failed"
-                summary = {k: v for k, v in sorted(summary.items())}
+                # failed before passed
+                summary = {k: v for k, v in sorted(summary.items(), key=lambda x: (v, k))}
+                workflow_summary[job["name"]] = summary
 
                 # collected version
                 with open(f'{job["name"]}/test_summary.json', "w") as fp:
                     json.dump(summary, fp, indent=4)
                 print(summary)
+
+        new_workflow_summary = {}
+        for job_name, job_summary in workflow_summary.items():
+            for test, status in job_summary.items():
+                if test not in new_workflow_summary:
+                    new_workflow_summary[test] = {}
+                new_workflow_summary[test][job_name] = status
+
+        for test, result in workflow_summary.items():
+            workflow_summary[test] = sorted(result)
+        workflow_summary = sorted(workflow_summary)
