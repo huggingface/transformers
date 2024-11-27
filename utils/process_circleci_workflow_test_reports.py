@@ -36,12 +36,12 @@ if __name__ == '__main__':
                     if artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt"):
                         node_index = artifact["node_index"]
                         url = artifact["url"]
-                        fn = f'{job["name"]}/test_summary_{node_index}.json'
+                        fn = f'{job["name"]}/test_summary_{node_index}.txt'
                         command = f'curl -o {fn} {url} --header "Circle-Token: $CIRCLE_TOKEN"'
                         os.system(command)
 
                         with open(fn) as fp:
-                            test_summary = json.load(fp)
+                            test_summary = fp.read()
                             job_test_summaries[node_index] = test_summary
 
                 with open(f'{job["name"]}/test_summary.txt', "w") as fp:
