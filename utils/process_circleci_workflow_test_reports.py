@@ -16,21 +16,19 @@ if __name__ == '__main__':
     with open("workflow_jobs.json") as fp:
         jobs = json.load(fp)["items"]
 
+    os.system(f'mkdir outputs')
+
     workflow_summary = {}
     # for each job, download artifacts
     for job in jobs:
-        print(job)
 
         project_slug = f'gh/{os.environ["CIRCLE_PROJECT_USERNAME"]}/{os.environ["CIRCLE_PROJECT_REPONAME"]}'
         if job["name"].startswith(("tests_", "examples_", "pipelines_")):
-
-            os.system(f'mkdir {job["name"]}')
 
             url = f'https://circleci.com/api/v2/project/{project_slug}/{job["job_number"]}/artifacts'
             os.system(f'curl -o {job["name"]}_artifacts.json {url} --header "Circle-Token: $CIRCLE_TOKEN"')
             with open(f'{job["name"]}_artifacts.json') as fp:
                 job_artifacts = json.load(fp)["items"]
-                print(job_artifacts)
 
                 job_test_summaries = {}
                 for artifact in job_artifacts:
@@ -61,9 +59,8 @@ if __name__ == '__main__':
                 workflow_summary[job["name"]] = summary
 
                 # collected version
-                with open(f'{job["name"]}/test_summary.json', "w") as fp:
+                with open(f'outputs/{job["name"]}/test_summary.json', "w") as fp:
                     json.dump(summary, fp, indent=4)
-                # print(summary)
 
     new_workflow_summary = {}
     for job_name, job_summary in workflow_summary.items():
@@ -76,5 +73,5 @@ if __name__ == '__main__':
         new_workflow_summary[test] = {k: v for k, v in sorted(result.items())}
     new_workflow_summary = {k: v for k, v in sorted(new_workflow_summary.items())}
 
-    with open(f'test_summary.json', "w") as fp:
+    with open(f'outputs/test_summary.json', "w") as fp:
         json.dump(new_workflow_summary, fp, indent=4)
