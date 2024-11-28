@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configuration for Backbone models"""
+"""Configuration for TimmWrapper models"""
 
 from typing import Any, Dict
 
