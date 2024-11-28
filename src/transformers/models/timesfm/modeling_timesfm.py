@@ -218,7 +218,8 @@ class TimesFMAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         kv_write_indices: torch.Tensor | None = None,
         kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
-    ) -> torch.Tensor:
+        output_attentions: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         hidden_states_shape = hidden_states.shape
         assert len(hidden_states_shape) == 3
 
@@ -270,6 +271,10 @@ class TimesFMAttention(nn.Module):
         # [batch_size, input_len, hidden_dim]
         output = output.transpose(1, 2).contiguous().view(batch_size, input_len, -1)
         output = self.o_proj(output)
+
+        if output_attentions:
+            scores = None
+
         return output, scores
 
 
@@ -323,7 +328,7 @@ class TimesFMStackedDecoder(nn.Module):
         kv_caches: List[Tuple[torch.Tensor, torch.Tensor]] | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> torch.Tensor:
+    ) -> BaseModelOutput:
         padding_mask = timesfm_convert_paddings_to_mask(paddings, hidden_states.dtype)
         atten_mask = timesfm_causal_mask(hidden_states)
         mask = timesfm_merge_masks(padding_mask, atten_mask)
@@ -345,7 +350,11 @@ class TimesFMStackedDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states.append(hidden_states)
 
-        return hidden_states, all_attentions, all_hidden_states
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            attentions=all_attentions,
+            hidden_states=all_hidden_states,
+        )
 
 
 # Move utility functions here
@@ -664,7 +673,7 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         num_outputs = len(self.config.quantiles) + 1
         model_input, patched_padding, stats, _ = self._preprocess_input(
             input_ts=input_ts,
@@ -673,17 +682,19 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
         f_emb = self.freq_emb(freq)  # B x 1 x D
         model_input += f_emb
 
-        model_output, all_attentions, all_hidden_states = self.stacked_transformer(
+        transformer_output = self.stacked_transformer(
             model_input,
             patched_padding,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
         if output_hidden_states:
-            all_hidden_states = [model_input] + all_hidden_states
+            all_hidden_states = [model_input] + transformer_output.hidden_states
+        else:
+            all_hidden_states = None
 
-        output_ts = self._postprocess_output(model_output, num_outputs, stats)
-        return output_ts, all_attentions, all_hidden_states
+        output_ts = self._postprocess_output(transformer_output.last_hidden_state, num_outputs, stats)
+        return output_ts, transformer_output.attentions, all_hidden_states
 
     def decode(
         self,
