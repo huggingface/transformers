@@ -322,7 +322,7 @@ UPERNET_START_DOCSTRING = r"""
 
 UPERNET_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):

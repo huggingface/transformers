@@ -363,9 +363,9 @@ class TFT5Attention(keras.layers.Layer):
         real_seq_length = seq_length
 
         if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
+            assert len(past_key_value) == 2, (
+                f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
+            )
             real_seq_length += shape_list(past_key_value[0])[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else shape_list(key_value_states)[1]
@@ -1077,7 +1077,7 @@ T5_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        encoder_outputs (`tuple(tuple(tf.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(tf.Tensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.

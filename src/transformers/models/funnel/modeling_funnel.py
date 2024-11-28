@@ -623,12 +623,10 @@ class FunnelEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.attention_structure = FunnelAttentionStructure(config)
-        self.blocks = nn.ModuleList(
-            [
-                nn.ModuleList([FunnelLayer(config, block_index) for _ in range(block_size)])
-                for block_index, block_size in enumerate(config.block_sizes)
-            ]
-        )
+        self.blocks = nn.ModuleList([
+            nn.ModuleList([FunnelLayer(config, block_index) for _ in range(block_size)])
+            for block_index, block_size in enumerate(config.block_sizes)
+        ])
 
     def forward(
         self,
@@ -823,27 +821,27 @@ class FunnelForPreTrainingOutput(ModelOutput):
     Output type of [`FunnelForPreTraining`].
 
     Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
             Total loss of the ELECTRA-style objective.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        logits (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Prediction scores of the head (scores for each token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 FUNNEL_START_DOCSTRING = r"""
@@ -874,7 +872,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -889,7 +887,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.

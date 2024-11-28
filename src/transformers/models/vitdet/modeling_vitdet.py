@@ -395,7 +395,7 @@ def window_partition(hidden_state, window_size):
             Window size.
 
     Returns:
-        `tuple(torch.FloatTensor)` comprising various elements:
+        `tuple(torch.Tensor)` comprising various elements:
         - windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
         - (padded_height, padded_width): padded height and width before partition
     """
@@ -672,11 +672,11 @@ VITDET_START_DOCSTRING = r"""
 
 VITDET_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,

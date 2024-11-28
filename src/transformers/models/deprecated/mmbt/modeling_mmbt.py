@@ -100,7 +100,7 @@ MMBT_START_DOCSTRING = r"""
 
 MMBT_INPUTS_DOCSTRING = r"""
     Args:
-        input_modal (`torch.FloatTensor` of shape `(batch_size, ***)`):
+        input_modal (`torch.Tensor` of shape `(batch_size, ***)`):
             The other modality data. It will be the shape that the encoder for that type expects. e.g. With an Image
             Encoder, the shape would be (batch_size, channels, height, width)
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -114,7 +114,7 @@ MMBT_INPUTS_DOCSTRING = r"""
             tasks.
         modal_end_tokens (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Optional end token to be added to Other Modality Embedding. [SEP] Most commonly used.
-        attention_mask (*optional*) `torch.FloatTensor` of shape `(batch_size, sequence_length)`:
+        attention_mask (*optional*) `torch.Tensor` of shape `(batch_size, sequence_length)`:
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -142,20 +142,20 @@ MMBT_INPUTS_DOCSTRING = r"""
             Selected in the range `[0, config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -317,14 +317,14 @@ class MMBTForClassification(nn.Module):
         `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
     Returns: *Tuple* comprising various elements depending on the configuration (config) and inputs: **loss**:
-    (*optional*, returned when `labels` is provided) `torch.FloatTensor` of shape `(1,)`: Classification (or
+    (*optional*, returned when `labels` is provided) `torch.Tensor` of shape `(1,)`: Classification (or
     regression if config.num_labels==1) loss. **logits**:
-        `torch.FloatTensor` of shape `(batch_size, config.num_labels)` Classification (or regression if
+        `torch.Tensor` of shape `(batch_size, config.num_labels)` Classification (or regression if
         config.num_labels==1) scores (before SoftMax).
-    **hidden_states**: (*optional*, returned when `output_hidden_states=True`) list of `torch.FloatTensor` (one for
+    **hidden_states**: (*optional*, returned when `output_hidden_states=True`) list of `torch.Tensor` (one for
     the output of each layer + the output of the embeddings) of shape `(batch_size, sequence_length, hidden_size)`:
     Hidden-states of the model at the output of each layer plus the initial embedding outputs. **attentions**:
-    (*optional*, returned when `output_attentions=True`) list of `torch.FloatTensor` (one for each layer) of shape
+    (*optional*, returned when `output_attentions=True`) list of `torch.Tensor` (one for each layer) of shape
     `(batch_size, num_heads, sequence_length, sequence_length)`: Attentions weights after the attention softmax, used
     to compute the weighted average in the self-attention heads.
 

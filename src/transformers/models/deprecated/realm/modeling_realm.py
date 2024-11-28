@@ -139,9 +139,9 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            assert pointer.shape == array.shape, (
+                f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            )
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -177,7 +177,7 @@ class RealmEmbeddings(nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
@@ -249,11 +249,11 @@ class RealmSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
@@ -397,11 +397,11 @@ class RealmAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -465,11 +465,11 @@ class RealmLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -543,11 +543,11 @@ class RealmEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -647,25 +647,25 @@ class RealmEmbedderOutput(ModelOutput):
     Outputs of [`RealmEmbedder`] models.
 
     Args:
-        projected_score (`torch.FloatTensor` of shape `(batch_size, config.retriever_proj_size)`):
+        projected_score (`torch.Tensor` of shape `(batch_size, config.retriever_proj_size)`):
 
             Projected score.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    projected_score: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    projected_score: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -674,17 +674,17 @@ class RealmScorerOutput(ModelOutput):
     Outputs of [`RealmScorer`] models.
 
     Args:
-        relevance_score (`torch.FloatTensor` of shape `(batch_size, config.num_candidates)`):
+        relevance_score (`torch.Tensor` of shape `(batch_size, config.num_candidates)`):
             The relevance score of document candidates (before softmax).
-        query_score (`torch.FloatTensor` of shape `(batch_size, config.retriever_proj_size)`):
+        query_score (`torch.Tensor` of shape `(batch_size, config.retriever_proj_size)`):
             Query score derived from the query embedder.
-        candidate_score (`torch.FloatTensor` of shape `(batch_size, config.num_candidates, config.retriever_proj_size)`):
+        candidate_score (`torch.Tensor` of shape `(batch_size, config.num_candidates, config.retriever_proj_size)`):
             Candidate score derived from the embedder.
     """
 
-    relevance_score: torch.FloatTensor = None
-    query_score: torch.FloatTensor = None
-    candidate_score: torch.FloatTensor = None
+    relevance_score: torch.Tensor = None
+    query_score: torch.Tensor = None
+    candidate_score: torch.Tensor = None
 
 
 @dataclass
@@ -693,11 +693,11 @@ class RealmReaderOutput(ModelOutput):
     Outputs of [`RealmReader`] models.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
             Total loss.
-        retriever_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
+        retriever_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
             Retriever loss.
-        reader_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
+        reader_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
             Reader loss.
         retriever_correct (`torch.BoolTensor` of shape `(config.searcher_beam_size,)`, *optional*):
             Whether or not an evidence block contains answer.
@@ -711,30 +711,30 @@ class RealmReaderOutput(ModelOutput):
             Predicted answer starting position in *RealmReader*'s inputs.
         end_pos (`torch.IntTensor` of shape `()`):
             Predicted answer ending position in *RealmReader*'s inputs.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: torch.FloatTensor = None
-    retriever_loss: torch.FloatTensor = None
-    reader_loss: torch.FloatTensor = None
+    loss: torch.Tensor = None
+    retriever_loss: torch.Tensor = None
+    reader_loss: torch.Tensor = None
     retriever_correct: torch.BoolTensor = None
     reader_correct: torch.BoolTensor = None
     block_idx: torch.LongTensor = None
     candidate: torch.LongTensor = None
     start_pos: torch.int32 = None
     end_pos: torch.int32 = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -904,7 +904,7 @@ REALM_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -924,13 +924,13 @@ REALM_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1153,11 +1153,11 @@ class RealmEmbedder(RealmPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1235,15 +1235,15 @@ class RealmScorer(RealmPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         candidate_input_ids: Optional[torch.LongTensor] = None,
-        candidate_attention_mask: Optional[torch.FloatTensor] = None,
+        candidate_attention_mask: Optional[torch.Tensor] = None,
         candidate_token_type_ids: Optional[torch.LongTensor] = None,
-        candidate_inputs_embeds: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        candidate_inputs_embeds: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1256,7 +1256,7 @@ class RealmScorer(RealmPreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        candidate_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_candidates, sequence_length)`, *optional*):
+        candidate_attention_mask (`torch.Tensor` of shape `(batch_size, num_candidates, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1271,7 +1271,7 @@ class RealmScorer(RealmPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        candidate_inputs_embeds (`torch.FloatTensor` of shape `(batch_size * num_candidates, sequence_length, hidden_size)`, *optional*):
+        candidate_inputs_embeds (`torch.Tensor` of shape `(batch_size * num_candidates, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `candidate_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert *candidate_input_ids* indices
             into associated vectors than the model's internal embedding lookup matrix.
@@ -1391,12 +1391,12 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        relevance_score: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        relevance_score: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         mlm_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1404,7 +1404,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
-        relevance_score (`torch.FloatTensor` of shape `(batch_size, num_candidates)`, *optional*):
+        relevance_score (`torch.Tensor` of shape `(batch_size, num_candidates)`, *optional*):
             Relevance score derived from RealmScorer, must be specified if you want to compute the masked language
             modeling loss.
 
@@ -1528,12 +1528,12 @@ class RealmReader(RealmPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        relevance_score: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        relevance_score: Optional[torch.Tensor] = None,
         block_mask: Optional[torch.BoolTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1543,7 +1543,7 @@ class RealmReader(RealmPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, RealmReaderOutput]:
         r"""
-        relevance_score (`torch.FloatTensor` of shape `(searcher_beam_size,)`, *optional*):
+        relevance_score (`torch.Tensor` of shape `(searcher_beam_size,)`, *optional*):
             Relevance score, which must be specified if you want to compute the logits and marginal log loss.
         block_mask (`torch.BoolTensor` of shape `(searcher_beam_size, sequence_length)`, *optional*):
             The mask of the evidence block, which must be specified if you want to compute the logits and marginal log
@@ -1688,7 +1688,7 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1754,7 +1754,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         answer_ids: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,

@@ -35,9 +35,9 @@ class FSNERModel(torch.nn.Module):
             W_supports (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of support sequence tokens in the vocabulary.
         Returns:
-            p_start (`torch.FloatTensor` of shape `(batch_size, sequence_length)`): Scores of each token as
+            p_start (`torch.Tensor` of shape `(batch_size, sequence_length)`): Scores of each token as
             being start token of an entity
-            p_end (`torch.FloatTensor` of shape `(batch_size, sequence_length)`): Scores of each token as
+            p_end (`torch.Tensor` of shape `(batch_size, sequence_length)`): Scores of each token as
             being end token of an entity
         """
 

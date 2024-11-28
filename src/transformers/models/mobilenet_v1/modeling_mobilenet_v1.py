@@ -276,7 +276,7 @@ MOBILENET_V1_START_DOCSTRING = r"""
 
 MOBILENET_V1_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileNetV1ImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):

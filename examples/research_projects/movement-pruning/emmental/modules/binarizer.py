@@ -37,7 +37,7 @@ class ThresholdBinarizer(autograd.Function):
     def forward(ctx, inputs: torch.tensor, threshold: float, sigmoid: bool):
         """
         Args:
-            inputs (`torch.FloatTensor`)
+            inputs (`torch.Tensor`)
                 The input matrix from which the binarizer computes the binary mask.
             threshold (`float`)
                 The threshold value (in R).
@@ -45,7 +45,7 @@ class ThresholdBinarizer(autograd.Function):
                 If set to ``True``, we apply the sigmoid function to the `inputs` matrix before comparing to `threshold`.
                 In this case, `threshold` should be a value between 0 and 1.
         Returns:
-            mask (`torch.FloatTensor`)
+            mask (`torch.Tensor`)
                 Binary matrix of the same size as `inputs` acting as a mask (1 - the associated weight is
                 retained, 0 - the associated weight is pruned).
         """
@@ -82,13 +82,13 @@ class TopKBinarizer(autograd.Function):
     def forward(ctx, inputs: torch.tensor, threshold: float):
         """
         Args:
-            inputs (`torch.FloatTensor`)
+            inputs (`torch.Tensor`)
                 The input matrix from which the binarizer computes the binary mask.
             threshold (`float`)
                 The percentage of weights to keep (the rest is pruned).
                 `threshold` is a float between 0 and 1.
         Returns:
-            mask (`torch.FloatTensor`)
+            mask (`torch.Tensor`)
                 Binary matrix of the same size as `inputs` acting as a mask (1 - the associated weight is
                 retained, 0 - the associated weight is pruned).
         """
@@ -121,14 +121,14 @@ class MagnitudeBinarizer:
     def apply(inputs: torch.tensor, threshold: float):
         """
         Args:
-            inputs (`torch.FloatTensor`)
+            inputs (`torch.Tensor`)
                 The input matrix from which the binarizer computes the binary mask.
                 This input marix is typically the weight matrix.
             threshold (`float`)
                 The percentage of weights to keep (the rest is pruned).
                 `threshold` is a float between 0 and 1.
         Returns:
-            mask (`torch.FloatTensor`)
+            mask (`torch.Tensor`)
                 Binary matrix of the same size as `inputs` acting as a mask (1 - the associated weight is
                 retained, 0 - the associated weight is pruned).
         """

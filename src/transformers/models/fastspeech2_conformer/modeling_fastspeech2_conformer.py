@@ -40,53 +40,53 @@ class FastSpeech2ConformerModelOutput(ModelOutput):
     Output type of [`FastSpeech2ConformerModel`].
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Spectrogram generation loss.
-        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+        spectrogram (`torch.Tensor` of shape `(batch_size, sequence_length, num_bins)`):
             The predicted spectrogram.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        encoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        encoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        decoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         duration_outputs (`torch.LongTensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
             Outputs of the duration predictor.
-        pitch_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
+        pitch_outputs (`torch.Tensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
             Outputs of the pitch predictor.
-        energy_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
+        energy_outputs (`torch.Tensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
             Outputs of the energy predictor.
 
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    spectrogram: torch.FloatTensor = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    spectrogram: torch.Tensor = None
+    encoder_last_hidden_state: Optional[torch.Tensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.Tensor]] = None
+    encoder_attentions: Optional[Tuple[torch.Tensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.Tensor]] = None
+    decoder_attentions: Optional[Tuple[torch.Tensor]] = None
     duration_outputs: torch.LongTensor = None
-    pitch_outputs: torch.FloatTensor = None
-    energy_outputs: torch.FloatTensor = None
+    pitch_outputs: torch.Tensor = None
+    energy_outputs: torch.Tensor = None
 
 
 @dataclass
@@ -95,45 +95,45 @@ class FastSpeech2ConformerWithHifiGanOutput(FastSpeech2ConformerModelOutput):
     Output type of [`FastSpeech2ConformerWithHifiGan`].
 
     Args:
-        waveform (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        waveform (`torch.Tensor` of shape `(batch_size, audio_length)`):
             Speech output as a result of passing the predicted mel spectrogram through the vocoder.
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Spectrogram generation loss.
-        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+        spectrogram (`torch.Tensor` of shape `(batch_size, sequence_length, num_bins)`):
             The predicted spectrogram.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        encoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        encoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        decoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         duration_outputs (`torch.LongTensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
             Outputs of the duration predictor.
-        pitch_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
+        pitch_outputs (`torch.Tensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
             Outputs of the pitch predictor.
-        energy_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
+        energy_outputs (`torch.Tensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
             Outputs of the energy predictor.
     """
 
-    waveform: torch.FloatTensor = None
+    waveform: torch.Tensor = None
 
 
 _CONFIG_FOR_DOC = "FastSpeech2ConformerConfig"
@@ -340,9 +340,9 @@ class FastSpeech2ConformerSpeechDecoderPostnet(nn.Module):
         super().__init__()
         self.config = config
         self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
-        self.layers = nn.ModuleList(
-            [FastSpeech2ConformerBatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
-        )
+        self.layers = nn.ModuleList([
+            FastSpeech2ConformerBatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)
+        ])
 
     def forward(self, hidden_states: torch.Tensor):
         outputs_before_postnet = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
@@ -877,9 +877,9 @@ class FastSpeech2ConformerEncoder(nn.Module):
 
         self.pos_enc = FastSpeech2ConformerRelPositionalEncoding(config, module_config)
 
-        self.conformer_layers = nn.ModuleList(
-            [FastSpeech2ConformerEncoderLayer(config, module_config) for _ in range(module_config["layers"])]
-        )
+        self.conformer_layers = nn.ModuleList([
+            FastSpeech2ConformerEncoderLayer(config, module_config) for _ in range(module_config["layers"])
+        ])
 
     def forward(
         self,
@@ -1007,7 +1007,7 @@ class FastSpeech2ConformerLoss(nn.Module):
                 Mask used to discern which values the spectrogam loss should be calculated for.
 
         Returns:
-            `tuple(torch.FloatTensor)`: Tuple of tensors containing, in order, the L1 loss value, duration predictor
+            `tuple(torch.Tensor)`: Tuple of tensors containing, in order, the L1 loss value, duration predictor
             loss value, pitch predictor loss value, and energy predictor loss value.
 
         """
@@ -1178,13 +1178,13 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        spectrogram_labels: Optional[torch.FloatTensor] = None,
+        spectrogram_labels: Optional[torch.Tensor] = None,
         duration_labels: Optional[torch.LongTensor] = None,
-        pitch_labels: Optional[torch.FloatTensor] = None,
-        energy_labels: Optional[torch.FloatTensor] = None,
+        pitch_labels: Optional[torch.Tensor] = None,
+        energy_labels: Optional[torch.Tensor] = None,
         speaker_ids: Optional[torch.LongTensor] = None,
         lang_ids: Optional[torch.LongTensor] = None,
-        speaker_embedding: Optional[torch.FloatTensor] = None,
+        speaker_embedding: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1196,19 +1196,19 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*, defaults to `None`):
                 Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
                 `[0, 1]`: 0 for tokens that are **masked**, 1 for tokens that are **not masked**.
-            spectrogram_labels (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*, defaults to `None`):
+            spectrogram_labels (`torch.Tensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*, defaults to `None`):
                 Batch of padded target features.
             duration_labels (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*, defaults to `None`):
                 Batch of padded durations.
-            pitch_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            pitch_labels (`torch.Tensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
                 Batch of padded token-averaged pitch.
-            energy_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            energy_labels (`torch.Tensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
                 Batch of padded token-averaged energy.
             speaker_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
                 Speaker ids used to condition features of speech output by the model.
             lang_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
                 Language ids used to condition features of speech output by the model.
-            speaker_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*, defaults to `None`):
+            speaker_embedding (`torch.Tensor` of shape `(batch_size, embedding_dim)`, *optional*, defaults to `None`):
                 Embedding containing conditioning signals for the features of the speech.
             return_dict (`bool`, *optional*, defaults to `None`):
                 Whether or not to return a [`FastSpeech2ConformerModelOutput`] instead of a plain tuple.
@@ -1385,32 +1385,28 @@ class HifiGanResidualBlock(nn.Module):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
 
-        self.convs1 = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    channels,
-                    channels,
-                    kernel_size,
-                    stride=1,
-                    dilation=dilation[i],
-                    padding=self.get_padding(kernel_size, dilation[i]),
-                )
-                for i in range(len(dilation))
-            ]
-        )
-        self.convs2 = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    channels,
-                    channels,
-                    kernel_size,
-                    stride=1,
-                    dilation=1,
-                    padding=self.get_padding(kernel_size, 1),
-                )
-                for _ in range(len(dilation))
-            ]
-        )
+        self.convs1 = nn.ModuleList([
+            nn.Conv1d(
+                channels,
+                channels,
+                kernel_size,
+                stride=1,
+                dilation=dilation[i],
+                padding=self.get_padding(kernel_size, dilation[i]),
+            )
+            for i in range(len(dilation))
+        ])
+        self.convs2 = nn.ModuleList([
+            nn.Conv1d(
+                channels,
+                channels,
+                kernel_size,
+                stride=1,
+                dilation=1,
+                padding=self.get_padding(kernel_size, 1),
+            )
+            for _ in range(len(dilation))
+        ])
 
     def get_padding(self, kernel_size, dilation=1):
         return (kernel_size * dilation - dilation) // 2
@@ -1516,19 +1512,19 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
 
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.Tensor) -> torch.Tensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
         waveform.
 
         Args:
-            spectrogram (`torch.FloatTensor`):
+            spectrogram (`torch.Tensor`):
                 Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
                 config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
 
         Returns:
-            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
+            `torch.Tensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
             shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
         """
         if self.config.normalize_before:
@@ -1586,13 +1582,13 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        spectrogram_labels: Optional[torch.FloatTensor] = None,
+        spectrogram_labels: Optional[torch.Tensor] = None,
         duration_labels: Optional[torch.LongTensor] = None,
-        pitch_labels: Optional[torch.FloatTensor] = None,
-        energy_labels: Optional[torch.FloatTensor] = None,
+        pitch_labels: Optional[torch.Tensor] = None,
+        energy_labels: Optional[torch.Tensor] = None,
         speaker_ids: Optional[torch.LongTensor] = None,
         lang_ids: Optional[torch.LongTensor] = None,
-        speaker_embedding: Optional[torch.FloatTensor] = None,
+        speaker_embedding: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1604,19 +1600,19 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*, defaults to `None`):
                 Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
                 `[0, 1]`: 0 for tokens that are **masked**, 1 for tokens that are **not masked**.
-            spectrogram_labels (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*, defaults to `None`):
+            spectrogram_labels (`torch.Tensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*, defaults to `None`):
                 Batch of padded target features.
             duration_labels (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*, defaults to `None`):
                 Batch of padded durations.
-            pitch_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            pitch_labels (`torch.Tensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
                 Batch of padded token-averaged pitch.
-            energy_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            energy_labels (`torch.Tensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
                 Batch of padded token-averaged energy.
             speaker_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
                 Speaker ids used to condition features of speech output by the model.
             lang_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
                 Language ids used to condition features of speech output by the model.
-            speaker_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*, defaults to `None`):
+            speaker_embedding (`torch.Tensor` of shape `(batch_size, embedding_dim)`, *optional*, defaults to `None`):
                 Embedding containing conditioning signals for the features of the speech.
             return_dict (`bool`, *optional*, defaults to `None`):
                 Whether or not to return a [`FastSpeech2ConformerModelOutput`] instead of a plain tuple.

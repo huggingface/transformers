@@ -114,7 +114,7 @@ class ASTSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -177,7 +177,7 @@ class ASTSdpaSelfAttention(ASTSelfAttention):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
@@ -459,14 +459,14 @@ AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING = r"""
 
 AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
+        input_values (`torch.Tensor` of shape `(batch_size, max_length, num_mel_bins)`):
             Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
             loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
+            tensor of type `torch.Tensor`. See [`~ASTFeatureExtractor.__call__`]
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,

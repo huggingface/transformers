@@ -64,31 +64,31 @@ class CanineModelOutputWithPooling(ModelOutput):
     Transformer encoders.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model (i.e. the output of the final
             shallow Transformer encoder).
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
             Hidden-state of the first token of the sequence (classification token) at the last layer of the deep
             Transformer encoder, further processed by a Linear layer and a Tanh activation function. The Linear layer
             weights are trained from the next sentence prediction (classification) objective during pretraining.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of each
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the input to each encoder + one for the output of each layer of each
             encoder) of shape `(batch_size, sequence_length, hidden_size)` and `(batch_size, sequence_length //
             config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of each layer plus the
             initial input to each Transformer encoder. The hidden states of the shallow encoders have length
             `sequence_length`, but the hidden states of the deep encoder have length `sequence_length` //
             `config.downsampling_rate`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape `(batch_size,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of the 3 Transformer encoders of shape `(batch_size,
             num_heads, sequence_length, sequence_length)` and `(batch_size, num_heads, sequence_length //
             config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions weights after the
             attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor = None
+    pooler_output: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
@@ -257,8 +257,8 @@ class CanineEmbeddings(nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-    ) -> torch.FloatTensor:
+        inputs_embeds: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -425,8 +425,8 @@ class CanineSelfAttention(nn.Module):
         self,
         from_tensor: torch.Tensor,
         to_tensor: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         mixed_query_layer = self.query(from_tensor)
@@ -501,8 +501,8 @@ class CanineSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        self, hidden_states: Tuple[torch.Tensor], input_tensor: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -579,11 +579,11 @@ class CanineAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: Tuple[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         if not self.local:
             self_outputs = self.self(hidden_states, hidden_states, attention_mask, head_mask, output_attentions)
             attention_output = self_outputs[0]
@@ -661,7 +661,7 @@ class CanineIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -674,7 +674,7 @@ class CanineOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.Tensor], input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -711,11 +711,11 @@ class CanineLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: Tuple[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -753,28 +753,26 @@ class CanineEncoder(nn.Module):
     ):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [
-                CanineLayer(
-                    config,
-                    local,
-                    always_attend_to_first_position,
-                    first_position_attends_to_all,
-                    attend_from_chunk_width,
-                    attend_from_chunk_stride,
-                    attend_to_chunk_width,
-                    attend_to_chunk_stride,
-                )
-                for _ in range(config.num_hidden_layers)
-            ]
-        )
+        self.layer = nn.ModuleList([
+            CanineLayer(
+                config,
+                local,
+                always_attend_to_first_position,
+                first_position_attends_to_all,
+                attend_from_chunk_width,
+                attend_from_chunk_stride,
+                attend_to_chunk_width,
+                attend_to_chunk_stride,
+            )
+            for _ in range(config.num_hidden_layers)
+        ])
         self.gradient_checkpointing = False
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: Tuple[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -821,7 +819,7 @@ class CaninePooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.Tensor]) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -840,7 +838,7 @@ class CaninePredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.Tensor]) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -861,7 +859,7 @@ class CanineLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.Tensor]) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -928,7 +926,7 @@ CANINE_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -948,13 +946,13 @@ CANINE_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1090,11 +1088,11 @@ class CanineModel(CaninePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1274,11 +1272,11 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1370,11 +1368,11 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1458,11 +1456,11 @@ class CanineForTokenClassification(CaninePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1569,11 +1567,11 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,

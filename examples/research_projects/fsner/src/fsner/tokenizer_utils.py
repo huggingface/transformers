@@ -62,9 +62,9 @@ class FSNERTokenizerUtils:
                 List of query strings.
             W_query (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of query sequence tokens in the vocabulary.
-            p_start (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            p_start (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Scores of each token as being start token of an entity
-            p_end (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            p_end (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Scores of each token as being end token of an entity
             thresh (`float`):
                 Score threshold value
@@ -80,14 +80,12 @@ class FSNERTokenizerUtils:
             for start_id in start_indexes:
                 for end_id in end_indexes:
                     if start_id < end_id:
-                        output.append(
-                            (
-                                start_id,
-                                end_id,
-                                p_start[idx][start_id].item(),
-                                p_end[idx][end_id].item(),
-                            )
-                        )
+                        output.append((
+                            start_id,
+                            end_id,
+                            p_start[idx][start_id].item(),
+                            p_end[idx][end_id].item(),
+                        ))
 
             output.sort(key=lambda tup: (tup[2] * tup[3]), reverse=True)
             temp = []

@@ -797,29 +797,29 @@ class PatchTSTModelOutput(ModelOutput):
     Base class for model's outputs, with potential hidden states.
 
     Parameters:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, num_channels, height, width)`. Hidden-states of
             the model at the output of each layer plus the optional initial embedding outputs.
-        mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`, *optional*)
+        mask: (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`, *optional*)
             Bool masked tensor indicating which patches are masked
-        loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+        loc: (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-        scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+        scale: (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-        patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
+        patch_input (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
             Patched input to the Transformer
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    mask: torch.FloatTensor = None
-    loc: torch.FloatTensor = None
-    scale: torch.FloatTensor = None
-    patch_input: torch.FloatTensor = None
+    last_hidden_state: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
+    mask: torch.Tensor = None
+    loc: torch.Tensor = None
+    scale: torch.Tensor = None
+    patch_input: torch.Tensor = None
 
 
 @dataclass
@@ -828,27 +828,27 @@ class PatchTSTForPretrainingOutput(ModelOutput):
     Output type of [`PatchTSTForPretraining`].
 
     Parameters:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
             MSE loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        prediction_outputs (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction outputs of the time series modeling heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    prediction_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    prediction_output: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -857,27 +857,27 @@ class PatchTSTForRegressionOutput(ModelOutput):
     Output type of [`PatchTSTForRegression`].
 
     Parameters:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
             MSE loss.
-        regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+        regression_outputs (`torch.Tensor` of shape `(batch_size, num_targets)`):
             Regression outputs of the time series modeling heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    regression_outputs: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    regression_outputs: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -886,33 +886,33 @@ class PatchTSTForPredictionOutput(ModelOutput):
     Output type of [`PatchTSTForPrediction`].
 
     Parameters:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
             MSE loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, prediction_length, -1)`):
+        prediction_outputs (`torch.Tensor` of shape `(batch_size, prediction_length, -1)`):
             Prediction outputs of the time series modeling heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+        loc: (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-        scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+        scale: (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    prediction_outputs: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loc: torch.FloatTensor = None
-    scale: torch.FloatTensor = None
+    loss: Optional[torch.Tensor] = None
+    prediction_outputs: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
+    loc: torch.Tensor = None
+    scale: torch.Tensor = None
 
 
 @dataclass
@@ -921,28 +921,28 @@ class PatchTSTForClassificationOutput(ModelOutput):
     Output type of [`PatchTSTForClassification`].
 
     Parameters:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+        prediction_logits (`torch.Tensor` of shape `(batch_size, num_targets)`):
             Prediction scores of the PatchTST modeling head (scores before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    prediction_logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -956,7 +956,7 @@ class SamplePatchTSTOutput(ModelOutput):
                 Sampled values from the chosen distribution.
     """
 
-    sequences: torch.FloatTensor = None
+    sequences: torch.Tensor = None
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
@@ -974,15 +974,15 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
 
     Args:
-        input_tensor (`torch.FloatTensor`):
+        input_tensor (`torch.Tensor`):
             Input tensor, of which the average must be computed.
-        weights (`torch.FloatTensor`, *optional*):
+        weights (`torch.Tensor`, *optional*):
             Weights tensor, of the same shape as `input_tensor`.
         dim (`int`, *optional*):
             The dim along which to average `input_tensor`.
 
     Returns:
-        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+        `torch.Tensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
         weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
@@ -1782,7 +1782,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         Generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
@@ -1999,7 +1999,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         Generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected

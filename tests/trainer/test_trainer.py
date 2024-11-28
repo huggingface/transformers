@@ -324,7 +324,7 @@ class AlmostAccuracyBatched:
             labels = labels[0]
         batch_size = len(predictions)
         true = torch.abs(predictions - labels) <= self.thresh
-        acc = true.type(torch.FloatTensor).mean().item()
+        acc = true.type(torch.Tensor).mean().item()
         self.batch_acc.extend([acc] * batch_size)
         if compute_result:
             result = {"accuracy": np.mean(self.batch_acc).item()}
@@ -649,7 +649,7 @@ class TrainerIntegrationCommon:
         keys = list(state_dict.keys())
 
         shard_files = [
-            shard_name.replace(f".{extension}", f"-{idx+1:05d}-of-{len(keys):05d}.{extension}")
+            shard_name.replace(f".{extension}", f"-{idx + 1:05d}-of-{len(keys):05d}.{extension}")
             for idx in range(len(keys))
         ]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}
@@ -2531,9 +2531,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.train()
             # Check that we have the last known step:
-            assert os.path.exists(
-                os.path.join(tmpdir, f"checkpoint-{trainer.state.max_steps}")
-            ), f"Could not find checkpoint-{trainer.state.max_steps}"
+            assert os.path.exists(os.path.join(tmpdir, f"checkpoint-{trainer.state.max_steps}")), (
+                f"Could not find checkpoint-{trainer.state.max_steps}"
+            )
             # And then check the last step
             assert os.path.exists(os.path.join(tmpdir, "checkpoint-9")), "Could not find checkpoint-9"
 
@@ -4270,9 +4270,9 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
         # Some commits are skipped if nothing has changed
         # We expect 1 commit per 5 epochs + 1 commit at the end
-        nb_empty_commits = len(
-            [record for record in logs.records if "Skipping to prevent empty commit." in record.message]
-        )
+        nb_empty_commits = len([
+            record for record in logs.records if "Skipping to prevent empty commit." in record.message
+        ])
         nb_epoch_commits = len([commit for commit in commits if "Training in progress, step" in commit])
 
         # max_steps depend on the number of available GPUs
@@ -4624,123 +4624,95 @@ if is_torch_available():
     if is_apex_available():
         import apex
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None"),
-                apex.optimizers.FusedAdam,
-                default_adam_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None"),
+            apex.optimizers.FusedAdam,
+            default_adam_kwargs,
+        ))
 
     if is_bitsandbytes_available():
         import bitsandbytes as bnb
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
+            bnb.optim.AdamW,
+            default_adam_kwargs,
+        ))
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
+            bnb.optim.AdamW,
+            default_adam_kwargs,
+        ))
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
+            bnb.optim.AdamW,
+            default_adam_kwargs,
+        ))
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
+            bnb.optim.AdamW,
+            default_adam_kwargs,
+        ))
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
-                bnb.optim.Lion,
-                default_lion_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
+            bnb.optim.Lion,
+            default_lion_kwargs,
+        ))
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
-                bnb.optim.Lion,
-                default_lion_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
+            bnb.optim.Lion,
+            default_lion_kwargs,
+        ))
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
-                bnb.optim.Lion,
-                default_lion_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
+            bnb.optim.Lion,
+            default_lion_kwargs,
+        ))
 
         if version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.44.0"):
-            optim_test_params.append(
-                (
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None"),
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-            )
-            optim_test_params.append(
-                (
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None"),
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-            )
-            optim_test_params.append(
-                (
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None"),
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-            )
-            optim_test_params.append(
-                (
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None"),
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-            )
+            optim_test_params.append((
+                TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None"),
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            ))
+            optim_test_params.append((
+                TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None"),
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            ))
+            optim_test_params.append((
+                TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None"),
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            ))
+            optim_test_params.append((
+                TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None"),
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
+            ))
 
     if is_torchdistx_available():
         import torchdistx
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
-                torchdistx.optimizers.AnyPrecisionAdamW,
-                dict(default_adam_kwargs, **default_anyprecision_kwargs),
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
+            torchdistx.optimizers.AnyPrecisionAdamW,
+            dict(default_adam_kwargs, **default_anyprecision_kwargs),
+        ))
     if is_torchao_available():
         import torchao
 
-        optim_test_params.append(
-            (
-                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_4BIT, output_dir="None"),
-                torchao.prototype.low_bit_optim.AdamW4bit,
-                default_adam_kwargs,
-            )
-        )
+        optim_test_params.append((
+            TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_4BIT, output_dir="None"),
+            torchao.prototype.low_bit_optim.AdamW4bit,
+            default_adam_kwargs,
+        ))
 
 
 @require_torch

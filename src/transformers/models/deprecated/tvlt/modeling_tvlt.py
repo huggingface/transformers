@@ -51,39 +51,39 @@ class TvltModelOutput(ModelOutput):
     Class for TvltModel's outputs, with potential hidden states and attentions.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        last_pixel_hidden_state (`torch.FloatTensor` of shape `(batch_size, pixel_sequence_length, hidden_size)`):
+        last_pixel_hidden_state (`torch.Tensor` of shape `(batch_size, pixel_sequence_length, hidden_size)`):
             Pixel sequence of hidden-states at the output of the last layer of the model.
-        last_audio_hidden_state (`torch.FloatTensor` of shape `(batch_size, audio_sequence_length, hidden_size)`):
+        last_audio_hidden_state (`torch.Tensor` of shape `(batch_size, audio_sequence_length, hidden_size)`):
             Audio sequence of hidden-states at the output of the last layer of the model.
-        pixel_label_masks (`torch.FloatTensor` of shape `(batch_size, pixel_patch_length)`):
+        pixel_label_masks (`torch.Tensor` of shape `(batch_size, pixel_patch_length)`):
             Tensor indicating which pixel patches are masked (1) and which are not (0).
-        audio_label_masks (`torch.FloatTensor` of shape `(batch_size, audio_patch_length)`):
+        audio_label_masks (`torch.Tensor` of shape `(batch_size, audio_patch_length)`):
             Tensor indicating which audio patches are masked (1) and which are not (0).
         pixel_ids_restore (`torch.LongTensor` of shape `(batch_size, pixel_patch_length)`):
             Tensor containing the ids permutation of pixel masking.
         audio_ids_restore (`torch.LongTensor` of shape `(batch_size, audio_patch_length)`):
             Tensor containing the ids permutation of audio masking.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings and one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    last_pixel_hidden_state: torch.FloatTensor = None
-    last_audio_hidden_state: torch.FloatTensor = None
+    last_hidden_state: torch.Tensor = None
+    last_pixel_hidden_state: torch.Tensor = None
+    last_audio_hidden_state: torch.Tensor = None
     pixel_label_masks: torch.LongTensor = None
     audio_label_masks: torch.LongTensor = None
     pixel_ids_restore: torch.LongTensor = None
     audio_ids_restore: torch.LongTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
 
 
 @dataclass
@@ -92,21 +92,21 @@ class TvltDecoderOutput(ModelOutput):
     Class for TvltDecoder's outputs, with potential hidden states and attentions.
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        logits (`torch.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings and one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
 
 
 @dataclass
@@ -115,32 +115,32 @@ class TvltForPreTrainingOutput(ModelOutput):
     Class for TvltForPreTraining's outputs, with potential hidden states and attentions.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`):
+        loss (`torch.Tensor` of shape `(1,)`):
             Pixel reconstruction loss.
-        matching_logits (`torch.FloatTensor` of shape `(batch_size, 1)`):
+        matching_logits (`torch.Tensor` of shape `(batch_size, 1)`):
             Matching objective logits.
-        pixel_logits (`torch.FloatTensor` of shape
+        pixel_logits (`torch.Tensor` of shape
             `(batch_size, pixel_patch_length, image_patch_size ** 3 * pixel_num_channels)`): Pixel reconstruction
             logits.
-        audio_logits (`torch.FloatTensor` of shape
+        audio_logits (`torch.Tensor` of shape
             `(batch_size, audio_patch_length, image_patch_size[0] * image_patch_size[1])`): Audio reconstruction
             logits.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings and one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    matching_logits: torch.FloatTensor = None
-    pixel_logits: torch.FloatTensor = None
-    audio_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    loss: Optional[torch.Tensor] = None
+    matching_logits: torch.Tensor = None
+    pixel_logits: torch.Tensor = None
+    audio_logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
 
 
 def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
@@ -345,7 +345,7 @@ class TvltSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -611,27 +611,27 @@ TVLT_START_DOCSTRING = r"""
 
 TVLT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
             details.
 
-        audio_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Audio values. Audio values can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
             details.
 
-        pixel_mask (`torch.FloatTensor` of shape `(batch_size, num_pixel_patches)`):
+        pixel_mask (`torch.Tensor` of shape `(batch_size, num_pixel_patches)`):
             Pixel masks. Pixel masks can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
             details.
 
-        audio_mask (`torch.FloatTensor` of shape `(batch_size, num_audio_patches)`):
+        audio_mask (`torch.Tensor` of shape `(batch_size, num_audio_patches)`):
             Audio masks. Audio masks can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
             details.
 
-        pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+        pixel_values_mixed (`torch.Tensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Pixel values mixed can
             be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
-        pixel_mask_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_mask_mixed (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel masks of pixel_values_mixed. Pixel masks mixed can be obtained using [`TvltProcessor`]. See
             [`TvltProcessor.__call__`] for details.
 
@@ -692,16 +692,16 @@ class TvltModel(TvltPreTrainedModel):
     @replace_return_docstrings(output_type=TvltModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        audio_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
-        audio_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        audio_values: torch.Tensor,
+        pixel_mask: Optional[torch.Tensor] = None,
+        audio_mask: Optional[torch.Tensor] = None,
         mask_pixel: bool = False,
         mask_audio: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], TvltModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], TvltModelOutput]:
         r"""
         Returns:
 
@@ -830,9 +830,9 @@ class TvltDecoder(nn.Module):
         decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.ModuleList(
-            [TvltLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
-        )
+        self.decoder_layers = nn.ModuleList([
+            TvltLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)
+        ])
 
         self.layernorm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
 
@@ -1020,23 +1020,23 @@ class TvltForPreTraining(TvltPreTrainedModel):
     @replace_return_docstrings(output_type=TvltForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        audio_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
-        audio_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        audio_values: torch.Tensor,
+        pixel_mask: Optional[torch.Tensor] = None,
+        audio_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        pixel_values_mixed: Optional[torch.FloatTensor] = None,
-        pixel_mask_mixed: Optional[torch.FloatTensor] = None,
+        pixel_values_mixed: Optional[torch.Tensor] = None,
+        pixel_mask_mixed: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], TvltForPreTrainingOutput]:
+    ) -> Union[Tuple[torch.Tensor], TvltForPreTrainingOutput]:
         r"""
-        pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+        pixel_values_mixed (`torch.Tensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Audio values can be
             obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
-        pixel_mask_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_mask_mixed (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltProcessor`]. See
             [`TvltProcessor.__call__`] for details.
 
@@ -1221,15 +1221,15 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        audio_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
-        audio_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        audio_values: torch.Tensor,
+        pixel_mask: Optional[torch.Tensor] = None,
+        audio_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], SequenceClassifierOutput]:
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the audiovisual loss. Indices should be in `[0, ..., num_classes-1]` where num_classes

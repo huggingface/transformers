@@ -171,7 +171,7 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
 
     # Helper function to convert MXNET Arrays to PyTorch
     def to_torch(mx_array) -> nn.Parameter:
-        return nn.Parameter(torch.FloatTensor(mx_array.data().asnumpy()))
+        return nn.Parameter(torch.Tensor(mx_array.data().asnumpy()))
 
     # Check param shapes and map new HF param back
     def check_and_map_params(hf_param, gluon_param):
@@ -180,9 +180,9 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
         gluon_param = to_torch(params[gluon_param])
         shape_gluon = gluon_param.shape
 
-        assert (
-            shape_hf == shape_gluon
-        ), f"The gluon parameter {gluon_param} has shape {shape_gluon}, but expects shape {shape_hf} for Transformers"
+        assert shape_hf == shape_gluon, (
+            f"The gluon parameter {gluon_param} has shape {shape_gluon}, but expects shape {shape_hf} for Transformers"
+        )
 
         return gluon_param
 

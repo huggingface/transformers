@@ -61,14 +61,14 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
     in the context of Vision models.:
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+        intermediate_activations (`tuple(torch.Tensor)`, *optional*):
             Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: torch.FloatTensor = None
-    intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
+    last_hidden_states: torch.Tensor = None
+    intermediate_activations: Optional[Tuple[torch.Tensor, ...]] = None
 
 
 @dataclass
@@ -78,33 +78,33 @@ class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     activations that can be used by the model at later stages.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
             Last layer hidden-state of the first token of the sequence (classification token) after further processing
             through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
             the classification token after processing through a linear layer and a tanh activation function. The linear
             layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+        intermediate_activations (`tuple(torch.Tensor)`, *optional*):
             Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.Tensor = None
+    pooler_output: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
+    intermediate_activations: Optional[Tuple[torch.Tensor, ...]] = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
@@ -301,7 +301,7 @@ class DPTViTSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -613,7 +613,7 @@ class DPTReassembleStage(nn.Module):
     def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
         Args:
-            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`List[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -836,11 +836,11 @@ DPT_START_DOCSTRING = r"""
 
 DPT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
             for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
@@ -903,8 +903,8 @@ class DPTModel(DPTPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -999,7 +999,7 @@ class DPTNeck(nn.Module):
     def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
         Args:
-            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`List[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -1090,8 +1090,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1271,8 +1271,8 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
     @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

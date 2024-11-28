@@ -652,8 +652,8 @@ class JetMoeFlashAttention2(JetMoeAttention):
 
     def forward(
         self,
-        hidden_states: Optional[torch.FloatTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
@@ -667,8 +667,8 @@ class JetMoeFlashAttention2(JetMoeAttention):
         Forward pass of the JetMoeAttention module.
 
         Args:
-            hidden_states (Optional[torch.FloatTensor]): Input hidden states.
-            attention_mask (Optional[torch.FloatTensor]): Attention mask.
+            hidden_states (Optional[torch.Tensor]): Input hidden states.
+            attention_mask (Optional[torch.Tensor]): Attention mask.
             layer_past (Optional[Tuple[torch.Tensor]]): Past layer state.
             use_cache (Optional[bool]): Whether to use cached states.
             output_attentions (Optional[bool]): Whether to output attention weights.
@@ -781,15 +781,15 @@ class JetMoeBlock(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[torch.FloatTensor],
+        hidden_states: Optional[torch.Tensor],
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]]]:
         # Self Attention
         attn_output, self_attn_weights, present_key_value, attn_router_logits = self.self_attention(
             hidden_states=self.input_layernorm(hidden_states),
@@ -877,7 +877,7 @@ JETMOE_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -889,7 +889,7 @@ JETMOE_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_dim)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `({0}, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -952,8 +952,8 @@ class JetMoeModel(JetMoePreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1253,8 +1253,8 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[List[torch.Tensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1384,8 +1384,8 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,

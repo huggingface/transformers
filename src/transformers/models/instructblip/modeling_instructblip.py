@@ -57,9 +57,9 @@ class InstructBlipForConditionalGenerationModelOutput(ModelOutput):
     Class defining the outputs of [`InstructBlipForConditionalGeneration`].
 
     Args:
-        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        loss (`torch.Tensor`, *optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
             Language modeling loss from the language model.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head of the language model.
         vision_outputs (`BaseModelOutputWithPooling`):
             Outputs of the vision encoder.
@@ -69,11 +69,11 @@ class InstructBlipForConditionalGenerationModelOutput(ModelOutput):
             Outputs of the language model.
     """
 
-    loss: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
-    vision_outputs: Optional[torch.FloatTensor] = None
-    qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
-    language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[Tuple[torch.Tensor]] = None
+    logits: Optional[Tuple[torch.Tensor]] = None
+    vision_outputs: Optional[torch.Tensor] = None
+    qformer_outputs: Optional[Tuple[torch.Tensor]] = None
+    language_model_outputs: Optional[Tuple[torch.Tensor]] = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -144,7 +144,7 @@ class InstructBlipVisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
@@ -272,11 +272,11 @@ class InstructBlipEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.Tensor]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
                 `(config.encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
@@ -363,7 +363,7 @@ INSTRUCTBLIP_START_DOCSTRING = r"""
 
 INSTRUCTBLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`InstructBlipProcessor`]. See
             [`InstructBlipProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
@@ -380,7 +380,7 @@ INSTRUCTBLIP_VISION_INPUTS_DOCSTRING = r"""
 
 INSTRUCTBLIP_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`InstructBlipProcessor`]. See
             [`InstructBlipProcessor.__call__`] for details.
 
@@ -471,7 +471,7 @@ class InstructBlipEncoder(nn.Module):
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Embedded representation of the inputs. Should be float, not int tokens.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -551,7 +551,7 @@ class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=InstructBlipVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -776,11 +776,11 @@ class InstructBlipQFormerAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.attention(
@@ -936,9 +936,9 @@ class InstructBlipQFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [InstructBlipQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        self.layer = nn.ModuleList([
+            InstructBlipQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ])
         self.gradient_checkpointing = False
 
     def forward(
@@ -1154,28 +1154,28 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         query_embeds: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states  (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of:
+        past_key_values (`tuple(tuple(torch.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of:
             shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key and
             value hidden states of the attention blocks. Can be used to speed up decoding. If `past_key_values` are
             used, the user can optionally input only the last `decoder_input_ids` (those that don't have their past key
@@ -1363,10 +1363,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        qformer_input_ids: torch.FloatTensor,
+        pixel_values: torch.Tensor,
+        qformer_input_ids: torch.Tensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
-        input_ids: Optional[torch.FloatTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1529,7 +1529,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
     @torch.no_grad()
     def generate(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         qformer_input_ids: Optional[torch.LongTensor] = None,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1541,7 +1541,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         Overrides `generate` function to be able to use the model as a conditional generator.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width)):
+            pixel_values (`torch.Tensor` of shape (batch_size, num_channels, height, width)):
                 Input images to be processed.
             qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 The sequence used as a prompt to be fed to the Q-Former module.

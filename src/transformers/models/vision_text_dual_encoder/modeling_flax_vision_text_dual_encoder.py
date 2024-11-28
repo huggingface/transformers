@@ -104,7 +104,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             an image processor (e.g. if you use ViT as the encoder, you should use [`AutoImageProcessor`]). See
             [`ViTImageProcessor.__call__`] for details.

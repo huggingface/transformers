@@ -610,16 +610,16 @@ class OpusState:
 
         # handle tensors not associated with layers
         if self.cfg["tied-embeddings-src"]:
-            wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
-            bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
+            wemb_tensor = nn.Parameter(torch.Tensor(self.wemb))
+            bias_tensor = nn.Parameter(torch.Tensor(self.final_bias))
             model.model.shared.weight = wemb_tensor
             model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
         else:
-            wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
+            wemb_tensor = nn.Parameter(torch.Tensor(self.wemb))
             model.model.encoder.embed_tokens.weight = wemb_tensor
 
-            decoder_wemb_tensor = nn.Parameter(torch.FloatTensor(self.dec_wemb))
-            bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
+            decoder_wemb_tensor = nn.Parameter(torch.Tensor(self.dec_wemb))
+            bias_tensor = nn.Parameter(torch.Tensor(self.final_bias))
             model.model.decoder.embed_tokens.weight = decoder_wemb_tensor
 
         # handle tied embeddings, otherwise "from_pretrained" loads them incorrectly

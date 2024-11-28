@@ -70,34 +70,34 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
     Output type of [`UniSpeechForPreTrainingOutput`], with potential hidden states and attentions.
 
     Args:
-        loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
+        loss (*optional*, returned when model is in train mode, `torch.Tensor` of shape `(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
             paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
-        projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+        projected_states (`torch.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
-        projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+        projected_quantized_states (`torch.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
             target vectors for contrastive loss.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    projected_states: torch.FloatTensor = None
-    projected_quantized_states: torch.FloatTensor = None
-    codevector_perplexity: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    projected_states: torch.Tensor = None
+    projected_quantized_states: torch.Tensor = None
+    codevector_perplexity: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
@@ -190,9 +190,10 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
-        )
+        spec_aug_mask_idx = np.concatenate([
+            spec_aug_mask_idx,
+            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+        ])
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
@@ -906,7 +907,7 @@ class UniSpeechAttnAdapterLayer(nn.Module):
         self.act_fn = nn.ReLU()
         self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.norm(hidden_states)
 
         hidden_states = self.linear_1(hidden_states)
@@ -1056,9 +1057,9 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
         self.pos_conv_embed = UniSpeechPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList(
-            [UniSpeechEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([
+            UniSpeechEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)
+        ])
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
@@ -1157,7 +1158,7 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(
-            torch.FloatTensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
+            torch.Tensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
         )
         self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
 
@@ -1306,11 +1307,11 @@ UNISPEECH_START_DOCSTRING = r"""
 
 UNISPEECH_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
+            conversion into a tensor of type `torch.Tensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1366,8 +1367,8 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
@@ -1422,7 +1423,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        mask_time_indices: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1512,9 +1513,9 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
     @staticmethod
     def compute_contrastive_logits(
-        target_features: torch.FloatTensor,
-        negative_features: torch.FloatTensor,
-        predicted_features: torch.FloatTensor,
+        target_features: torch.Tensor,
+        negative_features: torch.Tensor,
+        predicted_features: torch.Tensor,
         temperature: int = 1,
     ):
         """

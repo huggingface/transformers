@@ -79,11 +79,11 @@ def box_area(boxes):
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
     Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+        boxes (`torch.Tensor` of shape `(number_of_boxes, 4)`):
             Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
             < x2` and `0 <= y1 < y2`.
     Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
+        `torch.Tensor`: a tensor containing the area for each box.
     """
     boxes = _upcast(boxes)
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -140,7 +140,7 @@ def _preprocess_resize_output_shape(image, output_shape):
         # multichannel case: append shape of last axis
         output_shape = output_shape + (image.shape[-1],)
     elif output_ndim < image.ndim:
-        raise ValueError("output_shape length cannot be smaller than the " "image number of dimensions")
+        raise ValueError("output_shape length cannot be smaller than the image number of dimensions")
 
     return image, output_shape
 
@@ -312,10 +312,10 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             else:
                 anti_aliasing_sigma = np.atleast_1d(anti_aliasing_sigma) * np.ones_like(factors)
                 if np.any(anti_aliasing_sigma < 0):
-                    raise ValueError("Anti-aliasing standard deviation must be " "greater than or equal to zero")
+                    raise ValueError("Anti-aliasing standard deviation must be greater than or equal to zero")
                 elif np.any((anti_aliasing_sigma > 0) & (factors <= 1)):
                     warnings.warn(
-                        "Anti-aliasing standard deviation greater than zero but " "not down-sampling along all axes"
+                        "Anti-aliasing standard deviation greater than zero but not down-sampling along all axes"
                     )
             filtered = ndi.gaussian_filter(image, anti_aliasing_sigma, cval=cval, mode=ndi_mode)
         else:

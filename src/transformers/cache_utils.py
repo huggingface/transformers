@@ -478,7 +478,7 @@ class DynamicCache(Cache):
     @classmethod
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
     def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, num_hidden_layers: int = None
+        cls, past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None, num_hidden_layers: int = None
     ) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
@@ -1473,9 +1473,7 @@ class EncoderDecoderCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    ) -> "EncoderDecoderCache":
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
         cache = cls(
             self_attention_cache=DynamicCache(),

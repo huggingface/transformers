@@ -154,9 +154,9 @@ class TFPegasusSinusoidalPositionalEmbedding(keras.layers.Layer):
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
         """
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
+        position_enc = np.array([
+            [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)
+        ])
         table = np.zeros_like(position_enc)
         # index 0 is all zero
         table[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
@@ -680,7 +680,7 @@ PEGASUS_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        encoder_outputs (`tf.FloatTensor`, *optional*):
+        encoder_outputs (`tf.Tensor`, *optional*):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
             of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
         past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)

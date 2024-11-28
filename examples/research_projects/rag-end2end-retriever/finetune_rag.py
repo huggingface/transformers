@@ -388,7 +388,7 @@ class GenerativeQAModule(BaseTransformer):
         gen_metrics = {
             k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
         }
-        metrics_tensor: torch.FloatTensor = torch.tensor(gen_metrics[self.val_metric]).type_as(loss)
+        metrics_tensor: torch.Tensor = torch.tensor(gen_metrics[self.val_metric]).type_as(loss)
         gen_metrics.update({k: v.item() for k, v in losses.items()})
 
         # fix for https://github.com/PyTorchLightning/pytorch-lightning/issues/2424

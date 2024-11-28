@@ -179,10 +179,10 @@ class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForCondit
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        qformer_input_ids: torch.FloatTensor,
+        pixel_values: torch.Tensor,
+        qformer_input_ids: torch.Tensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
-        input_ids: Optional[torch.FloatTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -369,7 +369,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
     @torch.no_grad()
     def generate(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         qformer_input_ids: Optional[torch.LongTensor] = None,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.LongTensor] = None,
@@ -381,7 +381,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         Overrides `generate` function to be able to use the model as a conditional generator.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width) or
+            pixel_values (`torch.Tensor` of shape (batch_size, num_channels, height, width) or
                 (batch_size, num_frames, num_channels, height, width)): Input images or videos to be processed.
             qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 The sequence used as a prompt to be fed to the Q-Former module.

@@ -161,9 +161,9 @@ class TransformerDecoder(nn.Module):
         self.pos_emb = PositionalEncoding(dropout, self.embeddings.embedding_dim)
 
         # Build TransformerDecoder.
-        self.transformer_layers = nn.ModuleList(
-            [TransformerDecoderLayer(d_model, heads, d_ff, dropout) for _ in range(num_layers)]
-        )
+        self.transformer_layers = nn.ModuleList([
+            TransformerDecoderLayer(d_model, heads, d_ff, dropout) for _ in range(num_layers)
+        ])
 
         self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 
@@ -320,13 +320,13 @@ class TransformerDecoderLayer(nn.Module):
     ):
         """
         Args:
-            inputs (`FloatTensor`): `[batch_size x 1 x model_dim]`
-            memory_bank (`FloatTensor`): `[batch_size x src_len x model_dim]`
+            inputs (`Tensor`): `[batch_size x 1 x model_dim]`
+            memory_bank (`Tensor`): `[batch_size x src_len x model_dim]`
             src_pad_mask (`LongTensor`): `[batch_size x 1 x src_len]`
             tgt_pad_mask (`LongTensor`): `[batch_size x 1 x 1]`
 
         Returns:
-            (`FloatTensor`, `FloatTensor`, `FloatTensor`):
+            (`Tensor`, `Tensor`, `Tensor`):
 
             * output `[batch_size x 1 x model_dim]`
             * attn `[batch_size x 1 x src_len]`
@@ -456,16 +456,16 @@ class MultiHeadedAttention(nn.Module):
         Compute the context vector and the attention vectors.
 
         Args:
-           key (`FloatTensor`): set of `key_len`
+           key (`Tensor`): set of `key_len`
                 key vectors `[batch, key_len, dim]`
-           value (`FloatTensor`): set of `key_len`
+           value (`Tensor`): set of `key_len`
                 value vectors `[batch, key_len, dim]`
-           query (`FloatTensor`): set of `query_len`
+           query (`Tensor`): set of `query_len`
                  query vectors  `[batch, query_len, dim]`
            mask: binary mask indicating which keys have
                  non-zero attention `[batch, query_len, key_len]`
         Returns:
-           (`FloatTensor`, `FloatTensor`) :
+           (`Tensor`, `Tensor`) :
 
            * output context vectors `[batch, query_len, dim]`
            * one of the attention vectors `[batch, query_len, key_len]`
@@ -593,7 +593,7 @@ class TransformerDecoderState(DecoderState):
     def __init__(self, src):
         """
         Args:
-            src (FloatTensor): a sequence of source words tensors
+            src (Tensor): a sequence of source words tensors
                     with optional feature tensors, of size (len x batch).
         """
         self.src = src

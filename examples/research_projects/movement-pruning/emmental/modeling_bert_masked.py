@@ -425,7 +425,7 @@ MASKED_BERT_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
@@ -442,18 +442,18 @@ MASKED_BERT_INPUTS_DOCSTRING = r"""
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        inputs_embeds (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        encoder_hidden_states  (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             if the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        encoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
@@ -515,10 +515,10 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
             Threshold value (see :class:`~emmental.MaskedLinear`).
 
         Return:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
-            last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            :obj:`tuple(torch.Tensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
+            last_hidden_state (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the model.
-            pooler_output (:obj:`torch.FloatTensor`: of shape :obj:`(batch_size, hidden_size)`):
+            pooler_output (:obj:`torch.Tensor`: of shape :obj:`(batch_size, hidden_size)`):
                 Last layer hidden-state of the first token of the sequence (classification token)
                 further processed by a Linear layer and a Tanh activation function. The Linear
                 layer weights are trained from the next sentence prediction (classification)
@@ -527,13 +527,13 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
                 This output is usually *not* a good summary
                 of the semantic content of the input, you're often better with averaging or pooling
                 the sequence of hidden-states for the whole input sequence.
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            hidden_states (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            attentions (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.Tensor` (one for each layer) of shape
                 :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -693,18 +693,18 @@ class MaskedBertForSequenceClassification(MaskedBertPreTrainedModel):
                 Threshold value (see :class:`~emmental.MaskedLinear`).
 
         Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
-            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
+            :obj:`tuple(torch.Tensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
+            loss (:obj:`torch.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
                 Classification (or regression if config.num_labels==1) loss.
-            logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            logits (:obj:`torch.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
                 Classification (or regression if config.num_labels==1) scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            hidden_states (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            attentions (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.Tensor` (one for each layer) of shape
                 :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -777,20 +777,20 @@ class MaskedBertForMultipleChoice(MaskedBertPreTrainedModel):
                 Threshold value (see :class:`~emmental.MaskedLinear`).
 
         Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
-            loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
+            :obj:`tuple(torch.Tensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
+            loss (:obj:`torch.Tensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
                 Classification loss.
-            classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
+            classification_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, num_choices)`):
                 `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
 
                 Classification scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            hidden_states (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            attentions (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.Tensor` (one for each layer) of shape
                 :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -866,18 +866,18 @@ class MaskedBertForTokenClassification(MaskedBertPreTrainedModel):
                 Threshold value (see :class:`~emmental.MaskedLinear`).
 
         Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
-            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
+            :obj:`tuple(torch.Tensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
+            loss (:obj:`torch.Tensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
                 Classification loss.
-            scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
+            scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
                 Classification scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            hidden_states (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            attentions (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.Tensor` (one for each layer) of shape
                 :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -958,20 +958,20 @@ class MaskedBertForQuestionAnswering(MaskedBertPreTrainedModel):
                 Threshold value (see :class:`~emmental.MaskedLinear`).
 
         Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
-            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            :obj:`tuple(torch.Tensor)` comprising various elements depending on the configuration (:class:`~emmental.MaskedBertConfig`) and inputs:
+            loss (:obj:`torch.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
                 Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-            start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            start_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
                 Span-start scores (before SoftMax).
-            end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            end_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
                 Span-end scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            hidden_states (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            attentions (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.Tensor` (one for each layer) of shape
                 :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention

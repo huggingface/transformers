@@ -98,7 +98,7 @@ class ConvNextV2GRN(nn.Module):
         self.weight = nn.Parameter(torch.zeros(1, 1, 1, dim))
         self.bias = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Compute and normalize global spatial feature maps
         global_features = torch.norm(hidden_states, p=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
@@ -152,7 +152,7 @@ class ConvNextV2Embeddings(nn.Module):
         self.layernorm = ConvNextV2LayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
         self.num_channels = config.num_channels
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
             raise ValueError(
@@ -189,7 +189,7 @@ class ConvNextV2Layer(nn.Module):
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.drop_path = ConvNextV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input = hidden_states
         x = self.dwconv(hidden_states)
         # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
@@ -229,11 +229,11 @@ class ConvNextV2Stage(nn.Module):
         else:
             self.downsampling_layer = nn.Identity()
         drop_path_rates = drop_path_rates or [0.0] * depth
-        self.layers = nn.Sequential(
-            *[ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
-        )
+        self.layers = nn.Sequential(*[
+            ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)
+        ])
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.downsampling_layer(hidden_states)
         hidden_states = self.layers(hidden_states)
         return hidden_states
@@ -263,7 +263,7 @@ class ConvNextV2Encoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
@@ -325,7 +325,7 @@ CONVNEXTV2_START_DOCSTRING = r"""
 
 CONVNEXTV2_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`ConvNextImageProcessor`]. See
             [`ConvNextImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
@@ -365,7 +365,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -432,7 +432,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: torch.Tensor = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

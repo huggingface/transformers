@@ -61,7 +61,7 @@ class RwkvStoppingCriteria(StoppingCriteria):
         self.eos_sequence = eos_sequence
         self.eos_token_id = eos_token_id
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor, **kwargs) -> bool:
         last_2_ids = input_ids[:,-2:].tolist()
         return self.eos_sequence in last_2_ids
 

@@ -76,7 +76,7 @@ POP2PIANO_INPUTS_DOCSTRING = r"""
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
             [What are input IDs?](../glossary#input-ids) To know more on how to prepare `input_ids` for pretraining
             take a look a [Pop2Piano Training](./Pop2Piano#training).
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -90,12 +90,12 @@ POP2PIANO_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
             1]`:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        decoder_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
             1]`:
             - 1 indicates the head is **not masked**,
@@ -105,23 +105,23 @@ POP2PIANO_INPUTS_DOCSTRING = r"""
                 `[0, 1]`:
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`tuple(tuple(torch.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        input_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Does the same task as `inputs_embeds`. If `inputs_embeds` is not present but `input_features` is present
             then `input_features` will be considered as `inputs_embeds`.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+        decoder_inputs_embeds (`torch.Tensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
             input (see `past_key_values`). This is useful if you want more control over how to convert
@@ -753,12 +753,10 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
-        self.block = nn.ModuleList(
-            [
-                Pop2PianoBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i)
-                for i in range(config.num_layers)
-            ]
-        )
+        self.block = nn.ModuleList([
+            Pop2PianoBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i)
+            for i in range(config.num_layers)
+        ])
         self.final_layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -1197,17 +1195,17 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
 
     def get_mel_conditioner_outputs(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         composer: str,
         generation_config: GenerationConfig,
-        attention_mask: torch.FloatTensor = None,
+        attention_mask: torch.Tensor = None,
     ):
         """
         This method is used to concatenate mel conditioner tokens at the front of the input_features in order to
         control the type of MIDI token generated by the model.
 
         Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            input_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 input features extracted from the feature extractor.
             composer (`str`):
                 composer token which determines the type of MIDI tokens to be generated.
@@ -1249,24 +1247,24 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        input_features: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -1376,7 +1374,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         </Tip>
 
         Parameters:
-            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            input_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 This is the featurized version of audio generated by `Pop2PianoFeatureExtractor`.
             attention_mask:
                 For batched generation `input_features` are padded to have the same shape across all examples.
@@ -1401,7 +1399,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            or when `config.return_dict_in_generate=True`) or a `torch.Tensor`.
                 Since Pop2Piano is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
                     - [`~generation.GenerateEncoderDecoderOutput`],

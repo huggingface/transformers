@@ -83,8 +83,8 @@ def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out.requires_grad = False
-    out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-    out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+    out[:, 0::2] = torch.Tensor(np.sin(position_enc[:, 0::2]))
+    out[:, 1::2] = torch.Tensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
 
 
@@ -638,20 +638,20 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.

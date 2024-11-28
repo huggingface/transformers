@@ -174,13 +174,11 @@ class GenerationTesterMixin:
             "remove_invalid_values": True,
         }
         if do_sample:
-            logits_processor_kwargs.update(
-                {
-                    "top_k": 10,
-                    "top_p": 0.7,
-                    "temperature": 0.7,
-                }
-            )
+            logits_processor_kwargs.update({
+                "top_k": 10,
+                "top_p": 0.7,
+                "temperature": 0.7,
+            })
         # TODO (joao, raushan): see this comment for a long-term fix
         # https://github.com/huggingface/transformers/pull/33593#issuecomment-2361824264)
         # This is a band-aid for VLM models, to ensure they don't generate image/video tokens which would cause them
@@ -1995,12 +1993,10 @@ class GenerationTesterMixin:
             with self.assertRaises(ValueError):
                 model.generate(**generation_kwargs, **inputs_dict)
 
-    @parameterized.expand(
-        [
-            ("forward_only", False),  # TODO (@joao): a few models failing. After fixed, this should not be "@slow"
-            ("end_to_end", True),  # TODO (@joao): end-to-end compilation is broken with torch 2.5+, explore and fix
-        ]
-    )
+    @parameterized.expand([
+        ("forward_only", False),  # TODO (@joao): a few models failing. After fixed, this should not be "@slow"
+        ("end_to_end", True),  # TODO (@joao): end-to-end compilation is broken with torch 2.5+, explore and fix
+    ])
     @pytest.mark.generate
     @require_torch_gpu
     @slow
@@ -2458,27 +2454,23 @@ class UtilsFunctionsTest(unittest.TestCase):
     def test_speculative_sampling(self):
         # assume vocab size 10, input length 5 + 3 generated candidates
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
-        candidate_logits = torch.tensor(
+        candidate_logits = torch.tensor([
             [
-                [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
-                ]
+                [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
+                [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
+                [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
             ]
-        )
+        ])
         candidate_length = 3
         inf = float("inf")
-        new_logits = torch.tensor(
+        new_logits = torch.tensor([
             [
-                [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
-                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
-                ]
+                [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
+                [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
+                [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
+                [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
             ]
-        )
+        ])
         last_assistant_token_is_eos = False
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
@@ -2497,31 +2489,27 @@ class UtilsFunctionsTest(unittest.TestCase):
         """
         # assume vocab size 10, input length 5 + 3 generated candidates
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
-        candidate_logits = torch.tensor(
+        candidate_logits = torch.tensor([
             [
-                [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
-                ]
+                [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
+                [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
+                [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
             ]
-        )
+        ])
         candidate_length = 3
         inf = float("inf")
-        new_logits = torch.tensor(
+        new_logits = torch.tensor([
             [
-                [
-                    # accepts 1:
-                    [-inf, 10.0, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],
-                    # accepts 4:
-                    [-inf, -inf, -inf, -inf, 10.0, -inf, -inf, -inf, -inf, -inf],
-                    # most likely to be 1 or 8, less likely to be 3, then 7, and should never be any other value:
-                    [-inf, 2.0, -inf, 1.0, -inf, -inf, -inf, -0.01, 2.0, -inf],
-                    # N/A:
-                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],
-                ]
+                # accepts 1:
+                [-inf, 10.0, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],
+                # accepts 4:
+                [-inf, -inf, -inf, -inf, 10.0, -inf, -inf, -inf, -inf, -inf],
+                # most likely to be 1 or 8, less likely to be 3, then 7, and should never be any other value:
+                [-inf, 2.0, -inf, 1.0, -inf, -inf, -inf, -0.01, 2.0, -inf],
+                # N/A:
+                [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf],
             ]
-        )
+        ])
         last_assistant_token_is_eos = False
         last_validated_token = []
         for _ in range(10_000):
@@ -2645,7 +2633,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         class DummyCriteria(StoppingCriteria):
-            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+            def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor, **kwargs) -> bool:
                 return input_ids.shape[-1] >= 20
 
         stopping_criteria = StoppingCriteriaList()
@@ -4227,17 +4215,15 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
-    @parameterized.expand(
-        [
-            ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
-            # aggressive_healing: "http" shouldn't be replaced with "https"
-            ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
-            ("trailing_whitespace", "I read a book about ", "I read a book about"),
-            ("nothing_to_heal", "I read a book about", "I read a book about"),
-            ("single_token", "I", "I"),
-            ("empty_prompt", "", ""),
-        ]
-    )
+    @parameterized.expand([
+        ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
+        # aggressive_healing: "http" shouldn't be replaced with "https"
+        ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
+        ("trailing_whitespace", "I read a book about ", "I read a book about"),
+        ("nothing_to_heal", "I read a book about", "I read a book about"),
+        ("single_token", "I", "I"),
+        ("empty_prompt", "", ""),
+    ])
     def test_prompts(self, name, input, expected):
         model_name_or_path = "distilbert/distilgpt2"
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)

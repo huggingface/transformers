@@ -39,24 +39,24 @@ logger = logging.get_logger(__name__)
 class TvpVideoGroundingOutput(ModelOutput):
     """
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Temporal-Distance IoU loss for video grounding.
-        logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        logits (`torch.Tensor` of shape `(batch_size, 2)`):
             Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
             input texts.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
             the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
 
 
 class TvpLoss(nn.Module):
@@ -121,9 +121,9 @@ class TvpLoss(nn.Module):
         This performs the loss computation.
 
         Args:
-            logits (`torch.FloatTensor`):
+            logits (`torch.Tensor`):
                 The output logits of head module.
-            labels (`List[torch.FloatTensor]`):
+            labels (`List[torch.Tensor]`):
                 List of tensors ([start, end, duration]), which contains start time, end time of the video corresponding to the text, and also the duration.
         """
         duration, start_time, end_time = labels
@@ -132,9 +132,9 @@ class TvpLoss(nn.Module):
 
         losses_dict = {}
         for loss in self.losses:
-            losses_dict.update(
-                {loss: self.loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)}
-            )
+            losses_dict.update({
+                loss: self.loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)
+            })
 
         return losses_dict
 
@@ -495,7 +495,7 @@ class TvpEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -608,17 +608,17 @@ TVP_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
 
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`TvpImageProcessor`]. See [`TvpImageProcessor.__call__`]
             for details.
 
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -697,26 +697,22 @@ class TvpFramePadPrompter(nn.Module):
             torch.randn([1, config.num_frames, 3, config.visual_prompt_size, config.max_img_size])
         )
         self.pad_left = nn.Parameter(
-            torch.randn(
-                [
-                    1,
-                    config.num_frames,
-                    3,
-                    config.max_img_size - config.visual_prompt_size * 2,
-                    config.visual_prompt_size,
-                ]
-            )
+            torch.randn([
+                1,
+                config.num_frames,
+                3,
+                config.max_img_size - config.visual_prompt_size * 2,
+                config.visual_prompt_size,
+            ])
         )
         self.pad_right = nn.Parameter(
-            torch.randn(
-                [
-                    1,
-                    config.num_frames,
-                    3,
-                    config.max_img_size - config.visual_prompt_size * 2,
-                    config.visual_prompt_size,
-                ]
-            )
+            torch.randn([
+                1,
+                config.num_frames,
+                3,
+                config.max_img_size - config.visual_prompt_size * 2,
+                config.visual_prompt_size,
+            ])
         )
 
     def interpolate_pad_encoding(self, prompt: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -773,7 +769,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 
 
 @add_start_docstrings(
-    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
+    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on top.",
     TVP_START_DOCSTRING,
 )
 class TvpModel(TvpPreTrainedModel):
@@ -811,9 +807,9 @@ class TvpModel(TvpPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -917,17 +913,17 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         labels: Tuple[torch.Tensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ):
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, 3)`, *optional*):
             The labels contains duration, start time, and end time of the video corresponding to the text.
         Returns:
 

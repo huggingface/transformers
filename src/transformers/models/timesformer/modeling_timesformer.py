@@ -497,7 +497,7 @@ TIMESFORMER_START_DOCSTRING = r"""
 
 TIMESFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`VideoMAEImageProcessor.preprocess`] for details.
 
@@ -544,11 +544,11 @@ class TimesformerModel(TimesformerPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutput]:
         r"""
         Returns:
 

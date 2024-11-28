@@ -158,9 +158,10 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
-        )
+        spec_aug_mask_idx = np.concatenate([
+            spec_aug_mask_idx,
+            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+        ])
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
@@ -257,9 +258,9 @@ class Data2VecAudioPositionalConvLayer(nn.Module):
 class Data2VecAudioPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layers = nn.ModuleList(
-            [Data2VecAudioPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)]
-        )
+        self.layers = nn.ModuleList([
+            Data2VecAudioPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)
+        ])
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.transpose(1, 2)
@@ -274,9 +275,9 @@ class Data2VecAudioFeatureEncoder(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.conv_layers = nn.ModuleList(
-            [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
-        )
+        self.conv_layers = nn.ModuleList([
+            Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+        ])
         self.gradient_checkpointing = False
         self._requires_grad = True
 
@@ -1026,11 +1027,11 @@ DATA2VEC_AUDIO_START_DOCSTRING = r"""
 
 DATA2VEC_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
             soundfile*). To prepare the array into *input_values*, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            conversion into a tensor of type *torch.Tensor*. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1092,8 +1093,8 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
 
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
@@ -1148,7 +1149,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        mask_time_indices: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

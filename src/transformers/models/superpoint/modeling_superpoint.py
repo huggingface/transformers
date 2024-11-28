@@ -87,29 +87,29 @@ class SuperPointKeypointDescriptionOutput(ModelOutput):
     and which are padding.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*):
             Loss computed during training.
-        keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
             Relative (x, y) coordinates of predicted keypoints in a given image.
-        scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
+        scores (`torch.Tensor` of shape `(batch_size, num_keypoints)`):
             Scores of predicted keypoints.
-        descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
+        descriptors (`torch.Tensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
             Descriptors of predicted keypoints.
         mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
             Mask indicating which values in keypoints, scores and descriptors are keypoint information.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or
         when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
             (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.Tensor] = None
     keypoints: Optional[torch.IntTensor] = None
-    scores: Optional[torch.FloatTensor] = None
-    descriptors: Optional[torch.FloatTensor] = None
+    scores: Optional[torch.Tensor] = None
+    descriptors: Optional[torch.Tensor] = None
     mask: Optional[torch.BoolTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
 
 
 class SuperPointConvBlock(nn.Module):
@@ -347,7 +347,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def extract_one_channel_pixel_values(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
         extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for SuperPoint. This is
@@ -355,10 +355,10 @@ class SuperPointPreTrainedModel(PreTrainedModel):
         https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
         Args:
-            pixel_values: torch.FloatTensor of shape (batch_size, 3, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 3, height, width)
 
         Returns:
-            pixel_values: torch.FloatTensor of shape (batch_size, 1, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 1, height, width)
 
         """
         return pixel_values[:, 0, :, :][:, None, :, :]
@@ -377,7 +377,7 @@ SUPERPOINT_START_DOCSTRING = r"""
 
 SUPERPOINT_INPUTS_DOCSTRING = r"""
 Args:
-    pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Pixel values. Pixel values can be obtained using [`SuperPointImageProcessor`]. See
         [`SuperPointImageProcessor.__call__`] for details.
     output_hidden_states (`bool`, *optional*):
@@ -416,7 +416,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

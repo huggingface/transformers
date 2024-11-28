@@ -215,7 +215,7 @@ class MobileViTSelfAttention(nn.Module):
 
         if hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -677,7 +677,7 @@ MOBILEVIT_START_DOCSTRING = r"""
 
 MOBILEVIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileViTImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
@@ -913,19 +913,17 @@ class MobileViTASPP(nn.Module):
         )
         self.convs.append(in_projection)
 
-        self.convs.extend(
-            [
-                MobileViTConvLayer(
-                    config,
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=3,
-                    dilation=rate,
-                    use_activation="relu",
-                )
-                for rate in config.atrous_rates
-            ]
-        )
+        self.convs.extend([
+            MobileViTConvLayer(
+                config,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=3,
+                dilation=rate,
+                use_activation="relu",
+            )
+            for rate in config.atrous_rates
+        ])
 
         pool_layer = MobileViTASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)

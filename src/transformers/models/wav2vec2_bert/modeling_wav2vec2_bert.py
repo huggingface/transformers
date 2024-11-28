@@ -71,12 +71,12 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
     stops at the corresponding element in `seq_lens`.
     Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
+        hidden_states (`torch.Tensor` of shape `(batch, seq_len, *)`):
             The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
         seq_lens (`torch.Tensor` of shape `(batch)`:
             Each element represents the length of the sequence at the same index in `hidden_states`
     Returns:
-        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
+        `torch.Tensor`: The float attention mask of shape `(batch, seq_len)`
     """
     batch_size, mask_seq_len = hidden_states.shape[:2]
 
@@ -181,9 +181,10 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
-        )
+        spec_aug_mask_idx = np.concatenate([
+            spec_aug_mask_idx,
+            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+        ])
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
@@ -1015,11 +1016,11 @@ WAV2VEC2_BERT_START_DOCSTRING = r"""
 
 WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_features (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
+            conversion into a tensor of type `torch.Tensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1067,8 +1068,8 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
@@ -1123,7 +1124,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
         self,
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        mask_time_indices: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

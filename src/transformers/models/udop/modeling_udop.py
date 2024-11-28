@@ -78,7 +78,7 @@ UDOP_INPUTS_DOCSTRING = r"""
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
             [What are input IDs?](../glossary#input-ids)
 
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -93,7 +93,7 @@ UDOP_INPUTS_DOCSTRING = r"""
             Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
             token. See `pixel_values` for `patch_sequence_length`.
 
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
             config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
             config.patch_size) * (width / config.patch_size))`.
@@ -111,12 +111,12 @@ UDOP_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
             1]`:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        decoder_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
             1]`:
             - 1 indicates the head is **not masked**,
@@ -126,20 +126,20 @@ UDOP_INPUTS_DOCSTRING = r"""
                 `[0, 1]`:
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`tuple(tuple(torch.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+        decoder_inputs_embeds (`torch.Tensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
             input (see `past_key_values`). This is useful if you want more control over how to convert
@@ -173,7 +173,7 @@ UDOP_ENCODER_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -190,7 +190,7 @@ UDOP_ENCODER_INPUTS_DOCSTRING = r"""
             Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
             token. See `pixel_values` for `patch_sequence_length`.
 
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
             config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
             config.patch_size) * (width / config.patch_size))`.
@@ -198,13 +198,13 @@ UDOP_ENCODER_INPUTS_DOCSTRING = r"""
         visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
             Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -226,40 +226,40 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
     an additional attention mask.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
             the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or
+        past_key_values (`tuple(tuple(torch.Tensor))`, *optional*, returned when `use_cache=True` is passed or
         when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
             `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
             encoder_sequence_length, embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the
             self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
             that can be used (see `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or
         when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
             the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when
         `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and
+        cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` and
         `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    attention_mask: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor = None
+    attention_mask: torch.Tensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
+    cross_attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 def get_visual_bbox(image_size=224, patch_size=16):
@@ -362,14 +362,14 @@ def combine_image_text_embeddings(
         max_len = image_embeddings.size(1)
     else:
         max_len = max_len - inputs_embeds.size(1)
-    inputs_vision_patches = torch.stack(
-        [pad_sequence(item, max_len, torch.zeros_like(image_embeddings[0, 0])) for item in input_vision_patches]
-    )
+    inputs_vision_patches = torch.stack([
+        pad_sequence(item, max_len, torch.zeros_like(image_embeddings[0, 0])) for item in input_vision_patches
+    ])
     visual_bbox = torch.stack([pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_bbox])
     if attention_mask is not None:
-        visual_attention_mask = torch.stack(
-            [pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask]
-        )
+        visual_attention_mask = torch.stack([
+            pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask
+        ])
 
     inputs_embeds = torch.cat([inputs_embeds, inputs_vision_patches], 1)
     bbox = torch.cat([bbox, visual_bbox], 1)
@@ -400,8 +400,7 @@ class UdopPatchEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.proj(pixel_values)
         embeddings = embeddings.flatten(2).transpose(1, 2)
@@ -1270,9 +1269,9 @@ class UdopStack(UdopPreTrainedModel):
         self._max_length = config.max_length
         self.num_layers = config.num_layers
 
-        self.block = nn.ModuleList(
-            [UdopBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i) for i in range(self.num_layers)]
-        )
+        self.block = nn.ModuleList([
+            UdopBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i) for i in range(self.num_layers)
+        ])
         self.final_layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -2105,7 +2104,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithAttentionMask]:
         r"""
         Returns:
 

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.Tensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -43,21 +43,21 @@ class CandidateGenerator:
 
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
-            assessed by the model and, optionally, a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            assessed by the model and, optionally, a `torch.Tensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can call `get_candidates`."
         )
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
         """
         Updates the candidate generation strategy based on the outcomes.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
+            scores (`torch.Tensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
             num_matches (`int`):
@@ -180,7 +180,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.Tensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -190,7 +190,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
-            assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            assessed by the model and a `torch.Tensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
         input_ids = input_ids.to(self.assistant_model.device)
@@ -235,14 +235,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
         """
         Updates the candidate generation strategy based on the outcomes.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
+            scores (`torch.Tensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
             num_matches (`int`):
@@ -422,7 +422,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.Tensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -432,7 +432,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
-            assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            assessed by the model and a `torch.Tensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
         max_new_tokens = int(self.num_assistant_tokens)
@@ -587,7 +587,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.Tensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -651,14 +651,14 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
         """
         Updates the candidate generation strategy based on the outcomes.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
+            scores (`torch.Tensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
             num_matches (`int`):
@@ -714,7 +714,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         self.assistant_early_exit = self.generation_config.assistant_early_exit
         self.generation_config.assistant_early_exit = None
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.Tensor]]:
         # Temporarily sets the number of hidden layers to the early exit value
         base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
         original_num_hidden_layers = base_model.config.num_hidden_layers
@@ -729,14 +729,12 @@ def _crop_past_key_values(model, past_key_values, max_length):
     new_past = []
     if model.config.is_encoder_decoder:
         for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :max_length, :],
-                    past_key_values[idx][1][:, :, :max_length, :],
-                    past_key_values[idx][2],
-                    past_key_values[idx][3],
-                )
-            )
+            new_past.append((
+                past_key_values[idx][0][:, :, :max_length, :],
+                past_key_values[idx][1][:, :, :max_length, :],
+                past_key_values[idx][2],
+                past_key_values[idx][3],
+            ))
         past_key_values = tuple(new_past)
     # gptbigcode is special and stores kv in shape (batch_size, seq_len, dim), if it's a multi_query model
     elif "gptbigcode" in model.__class__.__name__.lower() or (
@@ -753,12 +751,10 @@ def _crop_past_key_values(model, past_key_values, max_length):
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):
             if past_key_values[idx] != ([], []):
-                new_past.append(
-                    (
-                        past_key_values[idx][0][:, :, :max_length, :],
-                        past_key_values[idx][1][:, :, :max_length, :],
-                    )
-                )
+                new_past.append((
+                    past_key_values[idx][0][:, :, :max_length, :],
+                    past_key_values[idx][1][:, :, :max_length, :],
+                ))
             else:
                 new_past.append((past_key_values[idx][0], past_key_values[idx][1]))
         past_key_values = tuple(new_past)

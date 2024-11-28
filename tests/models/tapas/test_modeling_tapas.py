@@ -801,7 +801,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         numeric_values_scale = inputs["numeric_values_scale"].to(torch_device)
 
         # the answer should be prepared by the user
-        float_answer = torch.FloatTensor(float_answer).to(torch_device)
+        float_answer = torch.Tensor(float_answer).to(torch_device)
 
         # forward pass to get loss + logits:
         with torch.no_grad():
@@ -949,29 +949,23 @@ class TapasUtilitiesTest(unittest.TestCase):
         Returns:
         SegmentedTensors with the tables.
         """
-        values = torch.tensor(
-            [
-                [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
-                [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
-            ]
-        )
+        values = torch.tensor([
+            [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
+            [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
+        ])
         row_index = IndexMap(
-            indices=torch.tensor(
-                [
-                    [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
-                    [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
-                ]
-            ),
+            indices=torch.tensor([
+                [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+                [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+            ]),
             num_segments=3,
             batch_dims=1,
         )
         col_index = IndexMap(
-            indices=torch.tensor(
-                [
-                    [[0, 0, 1], [0, 0, 1], [0, 0, 1]],
-                    [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
-                ]
-            ),
+            indices=torch.tensor([
+                [[0, 0, 1], [0, 0, 1], [0, 0, 1]],
+                [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
+            ]),
             num_segments=3,
             batch_dims=1,
         )

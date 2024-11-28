@@ -630,7 +630,7 @@ MOBILEVITV2_START_DOCSTRING = r"""
 
 MOBILEVITV2_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileViTImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
@@ -867,19 +867,17 @@ class MobileViTV2ASPP(nn.Module):
         )
         self.convs.append(in_projection)
 
-        self.convs.extend(
-            [
-                MobileViTV2ConvLayer(
-                    config,
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=3,
-                    dilation=rate,
-                    use_activation="relu",
-                )
-                for rate in config.atrous_rates
-            ]
-        )
+        self.convs.extend([
+            MobileViTV2ConvLayer(
+                config,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=3,
+                dilation=rate,
+                use_activation="relu",
+            )
+            for rate in config.atrous_rates
+        ])
 
         pool_layer = MobileViTV2ASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)

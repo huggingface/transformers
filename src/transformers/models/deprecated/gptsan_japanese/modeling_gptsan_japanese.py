@@ -516,10 +516,10 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        hidden_states: Optional[Tuple[torch.Tensor]],
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
@@ -527,15 +527,15 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         Self-attention and normalize block.
 
         Args:
-            hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            hidden_states  (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 if the model is configured as a decoder.
-            past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            past_key_values (`tuple(tuple(torch.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
                 decoding. If `past_key_values` are used, the user can optionally input only the last
                 `decoder_input_ids` (those that don't have their past key value states given to this model) of shape
                 `(batch_size, 1)` instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
                 in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -597,10 +597,10 @@ class GPTSanJapaneseBlock(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        hidden_states: Optional[Tuple[torch.Tensor]],
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         output_router_tuple: Optional[bool] = False,
@@ -609,15 +609,15 @@ class GPTSanJapaneseBlock(nn.Module):
         GPTSAN transformer block.
 
         Args:
-            hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            hidden_states  (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 if the model is configured as a decoder.
-            past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            past_key_values (`tuple(tuple(torch.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
                 decoding. If `past_key_values` are used, the user can optionally input only the last
                 `decoder_input_ids` (those that don't have their past key value states given to this model) of shape
                 `(batch_size, 1)` instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
                 in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -793,36 +793,36 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. GPTSAN-japanese is a model that generates sentence
             continuations or predicts tokens at mask positions. Special tokens required for inputs to the model are
             automatically appended.
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        token_type_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             An input that masks the Prefix part in the Prefix-LM input. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **prefix** input,
             - 0 for tokens that are **not-prefix** input.
         spout (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
                 This vector is transformed through an 8-layer FFN and can be used instead of `past_key_values`.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`tuple(tuple(torch.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+        decoder_inputs_embeds (`torch.Tensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
             input (see `past_key_values`). This is useful if you want more control over how to convert
@@ -835,8 +835,8 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
             Router logits of the decoder model, useful to compute the auxiliary loss for Mixture of Experts models.
 """
 
@@ -883,20 +883,20 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.FloatTensor] = None,
-        spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        spout: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        head_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         num_precontext: Optional[torch.LongTensor] = None,
-    ) -> Union[MoEModelOutputWithPastAndCrossAttentions, Tuple[torch.FloatTensor]]:
+    ) -> Union[MoEModelOutputWithPastAndCrossAttentions, Tuple[torch.Tensor]]:
         r"""
         num_precontext (`torch.LongTensor` of shape `(batch_size,1)`):
             length of `hybrid` input tokens in the input. Tokens up to this length refer to both front and back like
@@ -1109,20 +1109,20 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.FloatTensor] = None,
-        spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        spout: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        head_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], MoECausalLMOutputWithPast]:
+    ) -> Union[Tuple[torch.Tensor], MoECausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification loss. Indices should be in `[-100, 0, ...,
@@ -1266,10 +1266,10 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: torch.FloatTensor,
-        token_type_ids: Optional[torch.FloatTensor] = None,
-        spout: Optional[Union[List, torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        attention_mask: torch.Tensor,
+        token_type_ids: Optional[torch.Tensor] = None,
+        spout: Optional[Union[List, torch.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         **kwargs,
     ):
         if isinstance(spout, list):

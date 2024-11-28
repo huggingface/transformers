@@ -334,9 +334,9 @@ class EfficientFormerMeta3DLayers(nn.Module):
             config.drop_path_rate * (block_idx + sum(config.depths[:-1]))
             for block_idx in range(config.num_meta3d_blocks)
         ]
-        self.blocks = nn.ModuleList(
-            [EfficientFormerMeta3D(config, config.hidden_sizes[-1], drop_path=drop_path) for drop_path in drop_paths]
-        )
+        self.blocks = nn.ModuleList([
+            EfficientFormerMeta3D(config, config.hidden_sizes[-1], drop_path=drop_path) for drop_path in drop_paths
+        ])
 
     def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         all_attention_outputs = () if output_attentions else None
@@ -399,12 +399,10 @@ class EfficientFormerMeta4DLayers(nn.Module):
             config.drop_path_rate * (block_idx + sum(config.depths[:stage_idx])) for block_idx in range(num_layers)
         ]
 
-        self.blocks = nn.ModuleList(
-            [
-                EfficientFormerMeta4D(config, config.hidden_sizes[stage_idx], drop_path=drop_path)
-                for drop_path in drop_paths
-            ]
-        )
+        self.blocks = nn.ModuleList([
+            EfficientFormerMeta4D(config, config.hidden_sizes[stage_idx], drop_path=drop_path)
+            for drop_path in drop_paths
+        ])
 
     def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         for layer_module in self.blocks:
@@ -528,7 +526,7 @@ EFFICIENTFORMER_START_DOCSTRING = r"""
 
 EFFICIENTFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`ViTImageProcessor`]. See
             [`ViTImageProcessor.preprocess`] for details.
         output_attentions (`bool`, *optional*):
@@ -699,29 +697,29 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
     Output type of [`EfficientFormerForImageClassificationWithTeacher`].
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores as the average of the cls_logits and distillation logits.
-        cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        cls_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
             class token).
-        distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        distillation_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
             distillation token).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    cls_logits: torch.FloatTensor = None
-    distillation_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: torch.Tensor = None
+    cls_logits: torch.Tensor = None
+    distillation_logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @add_start_docstrings(

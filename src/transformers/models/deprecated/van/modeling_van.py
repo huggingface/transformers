@@ -178,12 +178,10 @@ class VanSpatialAttentionLayer(nn.Module):
     def __init__(self, hidden_size: int, hidden_act: str = "gelu"):
         super().__init__()
         self.pre_projection = nn.Sequential(
-            OrderedDict(
-                [
-                    ("conv", nn.Conv2d(hidden_size, hidden_size, kernel_size=1)),
-                    ("act", ACT2FN[hidden_act]),
-                ]
-            )
+            OrderedDict([
+                ("conv", nn.Conv2d(hidden_size, hidden_size, kernel_size=1)),
+                ("act", ACT2FN[hidden_act]),
+            ])
         )
         self.attention_layer = VanLargeKernelAttentionLayer(hidden_size)
         self.post_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
@@ -273,17 +271,15 @@ class VanStage(nn.Module):
     ):
         super().__init__()
         self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
-        self.layers = nn.Sequential(
-            *[
-                VanLayer(
-                    config,
-                    hidden_size,
-                    mlp_ratio=mlp_ratio,
-                    drop_path_rate=drop_path_rate,
-                )
-                for _ in range(depth)
-            ]
-        )
+        self.layers = nn.Sequential(*[
+            VanLayer(
+                config,
+                hidden_size,
+                mlp_ratio=mlp_ratio,
+                drop_path_rate=drop_path_rate,
+            )
+            for _ in range(depth)
+        ])
         self.normalization = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -394,7 +390,7 @@ VAN_START_DOCSTRING = r"""
 
 VAN_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`ConvNextImageProcessor.__call__`] for details.
 
@@ -431,7 +427,7 @@ class VanModel(VanPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor],
+        pixel_values: Optional[torch.Tensor],
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -487,7 +483,7 @@ class VanForImageClassification(VanPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

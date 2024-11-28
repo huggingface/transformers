@@ -333,7 +333,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
                 the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
                 [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
+                tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -436,7 +436,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor` or `Dict[str, Any]`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor` or a dict of segments when `return_segments=True`.
+            or when `config.return_dict_in_generate=True`) or a `torch.Tensor` or a dict of segments when `return_segments=True`.
 
                 If the passed input is > 30 seconds / > 3000 mel input features and `return_segments=True` then a dictionary of generated sequence ids, called `sequences` and a list of each generated segment is returned.
 
@@ -1419,8 +1419,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def detect_language(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]] = None,
+        input_features: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Union[torch.Tensor, BaseModelOutput]] = None,
         generation_config: Optional[GenerationConfig] = None,
         num_segment_frames: int = 3000,
     ) -> torch.Tensor:
@@ -1433,8 +1433,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
                 the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
                 [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
-            encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+                tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
+            encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
                 Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
                 `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
                 hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
@@ -1806,14 +1806,12 @@ class WhisperGenerationMixin(GenerationMixin):
                 sliced_tokens = seek_sequence[last_slice:current_slice]
                 start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
-                segments.append(
-                    {
-                        "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
-                        "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
-                        "tokens": sliced_tokens,
-                        "result": seek_outputs[idx],
-                    }
-                )
+                segments.append({
+                    "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
+                    "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
+                    "tokens": sliced_tokens,
+                    "result": seek_outputs[idx],
+                })
                 if return_token_timestamps:
                     segments[-1]["token_timestamps"] = (
                         token_timestamps[last_slice:current_slice] + time_offset[prev_idx]

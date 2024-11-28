@@ -59,29 +59,29 @@ class PerceiverModelOutput(ModelOutput):
     Base class for Perceiver base model's outputs, with potential hidden states, attentions and cross-attentions.
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        logits (`torch.Tensor` of shape `(batch_size, num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
             used to compute the weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: torch.Tensor = None
+    last_hidden_state: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
+    cross_attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -90,16 +90,16 @@ class PerceiverDecoderOutput(ModelOutput):
     Base class for Perceiver decoder outputs, with potential cross-attentions.
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        logits (`torch.Tensor` of shape `(batch_size, num_labels)`):
             Output of the basic decoder.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
             used to compute the weighted average in the cross-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: torch.Tensor = None
+    cross_attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -108,29 +108,29 @@ class PerceiverMaskedLMOutput(ModelOutput):
     Base class for Perceiver's masked language model outputs.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Masked language modeling (MLM) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_latents,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, num_latents,
             num_latents)`. Attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
             used to compute the weighted average in the cross-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
+    cross_attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -140,29 +140,29 @@ class PerceiverClassifierOutput(ModelOutput):
     autoencoding.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
             used to compute the weighted average in the cross-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
+    cross_attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 class PerceiverEmbeddings(nn.Module):
@@ -228,10 +228,10 @@ class PerceiverSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs: Optional[torch.FloatTensor] = None,
-        inputs_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs: Optional[torch.Tensor] = None,
+        inputs_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         hidden_states = self.layernorm1(hidden_states)
@@ -373,10 +373,10 @@ class PerceiverAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs: Optional[torch.FloatTensor] = None,
-        inputs_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs: Optional[torch.Tensor] = None,
+        inputs_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -452,10 +452,10 @@ class PerceiverLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs: Optional[torch.FloatTensor] = None,
-        inputs_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs: Optional[torch.Tensor] = None,
+        inputs_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         attention_outputs = self.attention(
@@ -539,10 +539,10 @@ class PerceiverEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs: Optional[torch.FloatTensor] = None,
-        inputs_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs: Optional[torch.Tensor] = None,
+        inputs_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -679,16 +679,16 @@ PERCEIVER_MODEL_START_DOCSTRING = r"""
 
 PERCEIVER_INPUTS_DOCSTRING = r"""
     Args:
-        inputs (`torch.FloatTensor`):
+        inputs (`torch.Tensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
-        attention_mask (`torch.FloatTensor` of shape `{0}`, *optional*):
+        attention_mask (`torch.Tensor` of shape `{0}`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
@@ -760,10 +760,10 @@ class PerceiverModel(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        inputs: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         subsampled_output_points: Optional[Dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
@@ -2076,9 +2076,7 @@ class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         return None
 
-    def forward(
-        self, query: torch.Tensor, z: torch.FloatTensor, query_mask: Optional[torch.FloatTensor] = None
-    ) -> torch.FloatTensor:
+    def forward(self, query: torch.Tensor, z: torch.Tensor, query_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         # (batch_size, num_latents, d_latents) -> (batch_size, d_latents)
         z = torch.mean(z, dim=1)
         # (batch_size, d_latents) -> (batch_size, config.num_labels)
@@ -2244,8 +2242,8 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
     def forward(
         self,
         query: torch.Tensor,
-        z: torch.FloatTensor,
-        query_mask: Optional[torch.FloatTensor] = None,
+        z: torch.Tensor,
+        query_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> PerceiverDecoderOutput:
         # Cross-attention decoding.
@@ -2306,8 +2304,8 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
     def forward(
         self,
         query: torch.Tensor,
-        z: torch.FloatTensor,
-        query_mask: Optional[torch.FloatTensor] = None,
+        z: torch.Tensor,
+        query_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> PerceiverDecoderOutput:
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
@@ -2341,8 +2339,8 @@ class PerceiverOpticalFlowDecoder(PerceiverAbstractDecoder):
     def forward(
         self,
         query: torch.Tensor,
-        z: torch.FloatTensor,
-        query_mask: Optional[torch.FloatTensor] = None,
+        z: torch.Tensor,
+        query_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> PerceiverDecoderOutput:
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
@@ -2397,7 +2395,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
         )
 
     def forward(
-        self, query: torch.Tensor, z: torch.FloatTensor, query_mask: Optional[torch.FloatTensor] = None
+        self, query: torch.Tensor, z: torch.Tensor, query_mask: Optional[torch.Tensor] = None
     ) -> PerceiverDecoderOutput:
         decoder_outputs = self.decoder(query, z)
         logits = decoder_outputs.logits
@@ -2480,12 +2478,10 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             num_channels=self.num_query_channels,
             **decoder_kwargs,
         )
-        self.padding = nn.ParameterDict(
-            {
-                modality: nn.Parameter(torch.randn(1, self.num_query_channels - decoder.num_query_channels))
-                for modality, decoder in modalities.items()
-            }
-        )
+        self.padding = nn.ParameterDict({
+            modality: nn.Parameter(torch.randn(1, self.num_query_channels - decoder.num_query_channels))
+            for modality, decoder in modalities.items()
+        })
 
     @property
     def num_query_channels(self) -> int:
@@ -2530,8 +2526,8 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     def forward(
         self,
         query: torch.Tensor,
-        z: torch.FloatTensor,
-        query_mask: Optional[torch.FloatTensor] = None,
+        z: torch.Tensor,
+        query_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> torch.Tensor:
         # B x 1 x num_classes -> B x num_classes
@@ -2672,7 +2668,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         Whether to use a single phase (sin) or two (sin/cos) for each frequency band.
 
     Returns:
-      `torch.FloatTensor` of shape `(batch_size, sequence_length, n_channels)`: The Fourier position embeddings. If
+      `torch.Tensor` of shape `(batch_size, sequence_length, n_channels)`: The Fourier position embeddings. If
       `concat_pos` is `True` and `sine_only` is `False`, output dimensions are ordered as: [dim_1, dim_2, ..., dim_d,
       sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ..., sin(pi*f_1*dim_d), ..., sin(pi*f_K*dim_d), cos(pi*f_1*dim_1),
       ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d), ..., cos(pi*f_K*dim_d)], where dim_i is pos[:, i] and f_k is the
@@ -2718,7 +2714,7 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
         The min and max values taken by each input index dimension.
 
     Returns:
-      `torch.FloatTensor` of shape `(index_dims[0], index_dims[1], .., index_dims[-1], N)`.
+      `torch.Tensor` of shape `(index_dims[0], index_dims[1], .., index_dims[-1], N)`.
     """
 
     def _linspace(n_xels_per_dim):
@@ -2806,7 +2802,7 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
     Checks or builds spatial position features (x, y, ...).
 
     Args:
-      pos (`torch.FloatTensor`):
+      pos (`torch.Tensor`):
         None, or an array of position features. If None, position features are built. Otherwise, their size is checked.
       index_dims (`List[int]`):
         An iterable giving the spatial/index size of the data to be featurized.
@@ -2814,7 +2810,7 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
         The batch size of the data to be featurized.
 
     Returns:
-        `torch.FloatTensor` of shape `(batch_size, prod(index_dims))` an array of position features.
+        `torch.Tensor` of shape `(batch_size, prod(index_dims))` an array of position features.
     """
     if pos is None:
         pos = build_linear_positions(index_dims)
@@ -2862,8 +2858,8 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         batch_size: int,
         device: torch.device,
         dtype: torch.dtype,
-        pos: torch.FloatTensor = None,
-    ) -> torch.FloatTensor:
+        pos: torch.Tensor = None,
+    ) -> torch.Tensor:
         pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
         fourier_pos_enc = generate_fourier_features(
             pos,
@@ -3439,15 +3435,13 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         self.modalities = nn.ModuleDict(modalities)
         self.min_padding_size = min_padding_size
         self.mask_probs = mask_probs if mask_probs is not None else {}
-        self.padding = nn.ParameterDict(
-            {
-                modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
-                for modality, preprocessor in modalities.items()
-            }
-        )
-        self.mask = nn.ParameterDict(
-            {modality: nn.Parameter(torch.randn(1, self.num_channels)) for modality, _ in self.mask_probs.items()}
-        )
+        self.padding = nn.ParameterDict({
+            modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
+            for modality, preprocessor in modalities.items()
+        })
+        self.mask = nn.ParameterDict({
+            modality: nn.Parameter(torch.randn(1, self.num_channels)) for modality, _ in self.mask_probs.items()
+        })
 
     @property
     def num_channels(self) -> int:

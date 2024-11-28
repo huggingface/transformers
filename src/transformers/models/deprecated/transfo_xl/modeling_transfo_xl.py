@@ -53,12 +53,10 @@ def build_tf_to_pytorch_map(model, config):
 
     if hasattr(model, "transformer"):
         # We are loading in a TransfoXLLMHeadModel => we will load also the Adaptive Softmax
-        tf_to_pt_map.update(
-            {
-                "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
-                "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias,
-            }
-        )
+        tf_to_pt_map.update({
+            "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
+            "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias,
+        })
         for i, (out_l, proj_l, tie_proj) in enumerate(
             zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
         ):
@@ -82,21 +80,19 @@ def build_tf_to_pytorch_map(model, config):
     # Transformer blocks
     for i, b in enumerate(model.layers):
         layer_str = f"transformer/layer_{i}/"
-        tf_to_pt_map.update(
-            {
-                layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
-                layer_str + "rel_attn/LayerNorm/beta": b.dec_attn.layer_norm.bias,
-                layer_str + "rel_attn/o/kernel": b.dec_attn.o_net.weight,
-                layer_str + "rel_attn/qkv/kernel": b.dec_attn.qkv_net.weight,
-                layer_str + "rel_attn/r/kernel": b.dec_attn.r_net.weight,
-                layer_str + "ff/LayerNorm/gamma": b.pos_ff.layer_norm.weight,
-                layer_str + "ff/LayerNorm/beta": b.pos_ff.layer_norm.bias,
-                layer_str + "ff/layer_1/kernel": b.pos_ff.CoreNet[0].weight,
-                layer_str + "ff/layer_1/bias": b.pos_ff.CoreNet[0].bias,
-                layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
-                layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
-            }
-        )
+        tf_to_pt_map.update({
+            layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
+            layer_str + "rel_attn/LayerNorm/beta": b.dec_attn.layer_norm.bias,
+            layer_str + "rel_attn/o/kernel": b.dec_attn.o_net.weight,
+            layer_str + "rel_attn/qkv/kernel": b.dec_attn.qkv_net.weight,
+            layer_str + "rel_attn/r/kernel": b.dec_attn.r_net.weight,
+            layer_str + "ff/LayerNorm/gamma": b.pos_ff.layer_norm.weight,
+            layer_str + "ff/LayerNorm/beta": b.pos_ff.layer_norm.bias,
+            layer_str + "ff/layer_1/kernel": b.pos_ff.CoreNet[0].weight,
+            layer_str + "ff/layer_1/bias": b.pos_ff.CoreNet[0].bias,
+            layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
+            layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
+        })
 
     # Relative positioning biases
     if config.untie_r:
@@ -155,9 +151,9 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert (
-                    pointer.shape == array.shape
-                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                assert pointer.shape == array.shape, (
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                )
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -260,8 +256,8 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         self.pre_lnorm = pre_lnorm
 
         if r_r_bias is None or r_w_bias is None:  # Biases are not shared
-            self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
-            self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
         else:
             self.r_r_bias = r_r_bias
             self.r_w_bias = r_w_bias
@@ -412,13 +408,13 @@ class AdaptiveEmbedding(nn.Module):
         if div_val == 1:
             self.emb_layers.append(nn.Embedding(n_token, d_embed, sparse=sample_softmax > 0))
             if d_proj != d_embed:
-                self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_embed)))
+                self.emb_projs.append(nn.Parameter(torch.Tensor(d_proj, d_embed)))
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
                 d_emb_i = d_embed // (div_val**i)
                 self.emb_layers.append(nn.Embedding(r_idx - l_idx, d_emb_i))
-                self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
+                self.emb_projs.append(nn.Parameter(torch.Tensor(d_proj, d_emb_i)))
 
     def forward(self, inp):
         if self.div_val == 1:
@@ -598,29 +594,29 @@ class TransfoXLModelOutput(ModelOutput):
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`List[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor
-    mems: List[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor
+    mems: List[torch.Tensor] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -629,32 +625,32 @@ class TransfoXLSequenceClassifierOutputWithPast(ModelOutput):
     Base class for outputs of sentence classification models.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`List[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    mems: List[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: torch.Tensor = None
+    mems: List[torch.Tensor] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -663,35 +659,35 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
     Args:
-        losses (`torch.FloatTensor` of shape *(batch_size, sequence_length-1)*, *optional*, returned when `labels` is provided):
+        losses (`torch.Tensor` of shape *(batch_size, sequence_length-1)*, *optional*, returned when `labels` is provided):
             Language modeling losses (not reduced).
-        prediction_scores (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        prediction_scores (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`List[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        loss (`torch.FloatTensor` of shape `()`, *optional*, returned when `labels` is provided)
+        loss (`torch.Tensor` of shape `()`, *optional*, returned when `labels` is provided)
             Reduced language modeling loss.
     """
 
-    losses: Optional[torch.FloatTensor] = None
-    prediction_scores: torch.FloatTensor = None
-    mems: List[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
+    losses: Optional[torch.Tensor] = None
+    prediction_scores: torch.Tensor = None
+    mems: List[torch.Tensor] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
+    loss: Optional[torch.Tensor] = None
 
     @property
     def logits(self):
@@ -728,17 +724,17 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`List[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
             given to this model should not be passed as `input_ids` as they have already been computed.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -779,8 +775,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self.attn_type = config.attn_type
 
         if not config.untie_r:
-            self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
-            self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
 
         self.layers = nn.ModuleList()
         if config.attn_type == 0:  # the default attention
@@ -869,9 +865,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        mems: Optional[List[torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        mems: Optional[List[torch.Tensor]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1064,9 +1060,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        mems: Optional[List[torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        mems: Optional[List[torch.Tensor]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1205,9 +1201,9 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        mems: Optional[List[torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        mems: Optional[List[torch.Tensor]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1238,9 +1234,9 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        assert self.config.pad_token_id is not None or batch_size == 1, (
+            "Cannot handle batch sizes > 1 if no padding token is defined."
+        )
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:

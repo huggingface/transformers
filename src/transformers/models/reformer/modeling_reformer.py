@@ -446,12 +446,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # free memory
         del hidden_states
 
-        assert (
-            query_key_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {query_key_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            value_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of value_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        assert query_key_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {query_key_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
+        assert value_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of value_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
 
         do_standard_self_attention = (sequence_length <= self.chunk_length) or (
             use_cache and past_buckets_states[1] is not None
@@ -470,9 +470,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 # make sure buckets has correct shape for LSH attention
                 buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes * sequence_length)
 
-            assert (
-                int(buckets.shape[-1]) == num_hashes * sequence_length
-            ), f"last dim of buckets is {buckets.shape[-1]}, but should be {num_hashes * sequence_length}"
+            assert int(buckets.shape[-1]) == num_hashes * sequence_length, (
+                f"last dim of buckets is {buckets.shape[-1]}, but should be {num_hashes * sequence_length}"
+            )
 
             sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
                 sequence_length, buckets, num_hashes
@@ -612,18 +612,18 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # We sample a different random rotation for each round of hashing to
         # decrease the probability of hash misses.
         if isinstance(self.num_buckets, int):
-            assert (
-                self.num_buckets % 2 == 0
-            ), f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
+            assert self.num_buckets % 2 == 0, (
+                f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
+            )
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
             # Factorize the hash if self.num_buckets is a list or tuple
             rotation_size, num_buckets = 0, 1
             for bucket_factor in self.num_buckets:
-                assert (
-                    bucket_factor % 2 == 0
-                ), f"The number of buckets should be even, but `num_bucket`: {bucket_factor}"
+                assert bucket_factor % 2 == 0, (
+                    f"The number of buckets should be even, but `num_bucket`: {bucket_factor}"
+                )
                 rotation_size = rotation_size + bucket_factor
                 num_buckets = num_buckets * bucket_factor
 
@@ -1090,15 +1090,15 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         key_vectors = self._split_hidden_size_dim(key_vectors, self.num_attention_heads, self.attention_head_size)
         value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
-        assert (
-            query_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {query_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            key_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {key_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            value_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        assert query_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {query_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
+        assert key_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {key_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
+        assert value_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
 
         if self.chunk_length is None:
             assert self.num_chunks_before == 0 and self.num_chunks_after == 0, (
@@ -1820,35 +1820,35 @@ class ReformerModelOutput(ModelOutput):
     Output type of [`ReformerModel`].
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, num_predict, hidden_size)`):
             Sequence of hidden-states at the last layer of the model.
 
             `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
             corresponds to `sequence_length`.
-        past_buckets_states (`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `Tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+        past_buckets_states (`List[Tuple(torch.LongTensor, torch.Tensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            List of `Tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
             Contains precomputed buckets and hidden-states that can be used (see `past_buckets_states` input) to speed
             up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings and one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor
-    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor
+    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.Tensor]]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -1857,38 +1857,38 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
     Output type of [`ReformerModelWithLMHead`].
 
     Args:
-        loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided)
+        loss (`torch.Tensor` of shape *(1,)*, *optional*, returned when `labels` is provided)
             Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, num_predict, config.vocab_size)`):
+        logits (`torch.Tensor` of shape `(batch_size, num_predict, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 
             `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
             corresponds to `sequence_length`.
-        past_buckets_states (`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `Tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+        past_buckets_states (`List[Tuple(torch.LongTensor, torch.Tensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            List of `Tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
             Contains precomputed buckets and hidden-states that can be used (see `past_buckets_states` input) to speed
             up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            TTuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer)
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            TTuple of `torch.Tensor` (one for the output of the embeddings and one for the output of each layer)
             of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: torch.Tensor = None
+    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.Tensor]]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 REFORMER_START_DOCSTRING = r"""
@@ -1920,7 +1920,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1932,13 +1932,13 @@ REFORMER_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1947,8 +1947,8 @@ REFORMER_INPUTS_DOCSTRING = r"""
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        past_buckets_states (`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
-            List of `Tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+        past_buckets_states (`List[Tuple(torch.LongTensor, torch.Tensor)]`, *optional*):
+            List of `Tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -1976,9 +1976,9 @@ class ReformerModel(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        assert (
-            self.config.num_hidden_layers > 0
-        ), "`config.attn_layers` is empty. Select at least one attn layer form ['lsh', 'local']"
+        assert self.config.num_hidden_layers > 0, (
+            "`config.attn_layers` is empty. Select at least one attn layer form ['lsh', 'local']"
+        )
 
         self.embeddings = ReformerEmbeddings(config)
         self.encoder = ReformerEncoder(config)
@@ -2039,9 +2039,9 @@ class ReformerModel(ReformerPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        assert (
-            len(input_shape) == 2
-        ), f"`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {input_shape}"
+        assert len(input_shape) == 2, (
+            f"`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {input_shape}"
+        )
 
         if past_buckets_states is not None:
             assert not self.training, "`past_buckets_states` can only be used for inference, not for training`."

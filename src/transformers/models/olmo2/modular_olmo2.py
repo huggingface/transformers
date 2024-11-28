@@ -428,7 +428,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         residual = hidden_states
 
         # Self Attention
@@ -468,9 +468,9 @@ class Olmo2PreTrainedModel(OlmoPreTrainedModel):
 class Olmo2Model(OlmoModel):
     def __init__(self, config: Olmo2Config):
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([
+            Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ])
         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 

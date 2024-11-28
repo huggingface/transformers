@@ -1922,9 +1922,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             total_decoder_name="",
             total_encoder_name="",
         ):
-            assert isinstance(decoder_pointer, nn.Module) and isinstance(
-                encoder_pointer, nn.Module
-            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
+            assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
+                f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
+            )
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -1938,9 +1938,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             encoder_modules = encoder_pointer._modules
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
-                assert (
-                    len(encoder_modules) > 0
-                ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
+                assert len(encoder_modules) > 0, (
+                    f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
+                )
 
                 all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
@@ -4118,13 +4118,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hf_quantizer is not None:
                 special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
 
-            special_dtypes.update(
-                {
-                    name: torch.float32
-                    for name, _ in model.named_parameters()
-                    if any(m in name for m in keep_in_fp32_modules)
-                }
-            )
+            special_dtypes.update({
+                name: torch.float32
+                for name, _ in model.named_parameters()
+                if any(m in name for m in keep_in_fp32_modules)
+            })
 
             target_dtype = torch_dtype
 
@@ -4606,9 +4604,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                             pass
                         else:
-                            mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
-                            )
+                            mismatched_keys.append((
+                                checkpoint_key,
+                                state_dict[checkpoint_key].shape,
+                                model_state_dict[model_key].shape,
+                            ))
                             del state_dict[checkpoint_key]
             return mismatched_keys
 
@@ -4822,12 +4822,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " training."
             )
         if len(mismatched_keys) > 0:
-            mismatched_warning = "\n".join(
-                [
-                    f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
-                    for key, shape1, shape2 in mismatched_keys
-                ]
-            )
+            mismatched_warning = "\n".join([
+                f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                for key, shape1, shape2 in mismatched_keys
+            ])
             logger.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
@@ -4842,9 +4840,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # torch.nn.ParameterList is a special case where two parameter keywords
         # are appended to the module name, *e.g.* bert.special_embeddings.0
-        module_keys = module_keys.union(
-            {".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()}
-        )
+        module_keys = module_keys.union({
+            ".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()
+        })
 
         retrieved_modules = []
         # retrieve all modules that has at least one missing weight name
@@ -5115,19 +5113,17 @@ class PoolerStartLogits(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, p_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
         Returns:
-            `torch.FloatTensor`: The start logits for SQuAD.
+            `torch.Tensor`: The start logits for SQuAD.
         """
         x = self.dense(hidden_states).squeeze(-1)
 
@@ -5159,20 +5155,20 @@ class PoolerEndLogits(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.Tensor,
+        start_states: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
-        p_mask: Optional[torch.FloatTensor] = None,
-    ) -> torch.FloatTensor:
+        p_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
@@ -5184,11 +5180,11 @@ class PoolerEndLogits(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The end logits for SQuAD.
+            `torch.Tensor`: The end logits for SQuAD.
         """
-        assert (
-            start_states is not None or start_positions is not None
-        ), "One of start_states, start_positions should be not None"
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -5226,16 +5222,16 @@ class PoolerAnswerClass(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.Tensor,
+        start_states: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         cls_index: Optional[torch.LongTensor] = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
@@ -5250,13 +5246,13 @@ class PoolerAnswerClass(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The SQuAD 2.0 answer class.
+            `torch.Tensor`: The SQuAD 2.0 answer class.
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
-        assert (
-            start_states is not None or start_positions is not None
-        ), "One of start_states, start_positions should be not None"
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
             start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
@@ -5280,29 +5276,29 @@ class SquadHeadOutput(ModelOutput):
     Base class for outputs of question answering models using a [`~modeling_utils.SQuADHead`].
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
             Classification loss as the sum of start token, end token (and is_impossible if provided) classification
             losses.
-        start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        start_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
             Log probabilities for the top config.start_n_top start token possibilities (beam-search).
         start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
             Indices for the top config.start_n_top start token possibilities (beam-search).
-        end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        end_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
             Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
             (beam-search).
         end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
             Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-        cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        cls_logits (`torch.Tensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
             Log probabilities for the `is_impossible` label of the answers.
 
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    start_top_log_probs: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.Tensor] = None
+    start_top_log_probs: Optional[torch.Tensor] = None
     start_top_index: Optional[torch.LongTensor] = None
-    end_top_log_probs: Optional[torch.FloatTensor] = None
+    end_top_log_probs: Optional[torch.Tensor] = None
     end_top_index: Optional[torch.LongTensor] = None
-    cls_logits: Optional[torch.FloatTensor] = None
+    cls_logits: Optional[torch.Tensor] = None
 
 
 class SQuADHead(nn.Module):
@@ -5327,17 +5323,17 @@ class SQuADHead(nn.Module):
     @replace_return_docstrings(output_type=SquadHeadOutput, config_class=PretrainedConfig)
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         cls_index: Optional[torch.LongTensor] = None,
         is_impossible: Optional[torch.LongTensor] = None,
-        p_mask: Optional[torch.FloatTensor] = None,
+        p_mask: Optional[torch.Tensor] = None,
         return_dict: bool = False,
-    ) -> Union[SquadHeadOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[SquadHeadOutput, Tuple[torch.Tensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 Final hidden states of the model on the sequence tokens.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 Positions of the first token for the labeled span.
@@ -5347,7 +5343,7 @@ class SQuADHead(nn.Module):
                 Position of the CLS token for each sentence in the batch. If `None`, takes the last token.
             is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 Whether the question has a possible answer in the paragraph or not.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
             return_dict (`bool`, *optional*, defaults to `False`):
@@ -5477,20 +5473,18 @@ class SequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, cls_index: Optional[torch.LongTensor] = None) -> torch.Tensor:
         """
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`torch.Tensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
+            `torch.Tensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -5558,9 +5552,9 @@ def expand_device_map(device_map, param_names, start_prefix):
     new_device_map = {}
     param_names = [p[len(start_prefix) :] for p in param_names if p.startswith(start_prefix)]
     for module, device in device_map.items():
-        new_device_map.update(
-            {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
-        )
+        new_device_map.update({
+            p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""
+        })
     return new_device_map
 
 

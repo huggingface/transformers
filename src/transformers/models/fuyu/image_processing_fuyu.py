@@ -162,7 +162,7 @@ class FuyuBatchFeature(BatchFeature):
 
             return elem
 
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `Tensor`
         for k, v in self.items():
             if isinstance(v, list) and isinstance(v[0], list):
                 # Data structure is a list of lists

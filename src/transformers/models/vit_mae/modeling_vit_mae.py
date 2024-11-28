@@ -52,27 +52,27 @@ class ViTMAEModelOutput(ModelOutput):
     Class for ViTMAEModel's outputs, with potential hidden states and attentions.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Tensor indicating which patches are masked (1) and which are not (0).
         ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Tensor containing the original index of the (shuffled) masked patches.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: torch.Tensor = None
     mask: torch.LongTensor = None
     ids_restore: torch.LongTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -81,21 +81,21 @@ class ViTMAEDecoderOutput(ModelOutput):
     Class for ViTMAEDecoder's outputs, with potential hidden states and attentions.
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
+        logits (`torch.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -104,30 +104,30 @@ class ViTMAEForPreTrainingOutput(ModelOutput):
     Class for ViTMAEForPreTraining's outputs, with potential hidden states and attentions.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`):
+        loss (`torch.Tensor` of shape `(1,)`):
             Pixel reconstruction loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
+        logits (`torch.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
-        mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Tensor indicating which patches are masked (1) and which are not (0).
         ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Tensor containing the original index of the (shuffled) masked patches.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    loss: Optional[torch.Tensor] = None
+    logits: torch.Tensor = None
     mask: torch.LongTensor = None
     ids_restore: torch.LongTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
@@ -143,7 +143,7 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
             Whether or not to add a classification (CLS) token.
 
     Returns:
-        (`torch.FloatTensor` of shape (grid_size*grid_size, embed_dim) or (1+grid_size*grid_size, embed_dim): the
+        (`torch.Tensor` of shape (grid_size*grid_size, embed_dim) or (1+grid_size*grid_size, embed_dim): the
         position embeddings (with or without classification token)
     """
     grid_h = np.arange(grid_size, dtype=np.float32)
@@ -273,7 +273,7 @@ class ViTMAEEmbeddings(nn.Module):
 
         Args:
             sequence (`torch.LongTensor` of shape `(batch_size, sequence_length, dim)`)
-            noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*) which is
+            noise (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*) which is
                 mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         batch_size, seq_length, dim = sequence.shape
@@ -362,7 +362,7 @@ class ViTMAESelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -425,7 +425,7 @@ class ViTMAESdpaSelfAttention(ViTMAESelfAttention):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
@@ -703,11 +703,11 @@ VIT_MAE_START_DOCSTRING = r"""
 
 VIT_MAE_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
@@ -759,9 +759,9 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
     @replace_return_docstrings(output_type=ViTMAEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        noise: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        noise: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -843,9 +843,9 @@ class ViTMAEDecoder(nn.Module):
         decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.ModuleList(
-            [ViTMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
-        )
+        self.decoder_layers = nn.ModuleList([
+            ViTMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)
+        ])
 
         self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
         self.decoder_pred = nn.Linear(
@@ -1010,13 +1010,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def patchify(self, pixel_values, interpolate_pos_encoding: bool = False):
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values.
             interpolate_pos_encoding (`bool`, *optional*, default `False`):
                 interpolation flag passed during the forward pass.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+            `torch.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
@@ -1046,13 +1046,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def unpatchify(self, patchified_pixel_values, original_image_size: Optional[Tuple[int, int]] = None):
         """
         Args:
-            patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+            patchified_pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
             original_image_size (`Tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`:
+            `torch.Tensor` of shape `(batch_size, num_channels, height, width)`:
                 Pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
@@ -1092,17 +1092,17 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def forward_loss(self, pixel_values, pred, mask, interpolate_pos_encoding: bool = False):
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values.
-            pred (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+            pred (`torch.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Predicted pixel values.
-            mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Tensor indicating which patches are masked (1) and which are not (0).
             interpolate_pos_encoding (`bool`, *optional*, default `False`):
                 interpolation flag passed during the forward pass.
 
         Returns:
-            `torch.FloatTensor`: Pixel reconstruction loss.
+            `torch.Tensor`: Pixel reconstruction loss.
         """
         target = self.patchify(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         if self.config.norm_pix_loss:
@@ -1119,9 +1119,9 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     @replace_return_docstrings(output_type=ViTMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        noise: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        noise: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

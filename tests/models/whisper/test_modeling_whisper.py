@@ -105,7 +105,7 @@ if is_torch_available():
         def set_begin_index(self, begin_index: int):
             self.begin_index = begin_index
 
-        def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
             # we don't want to randomely sample timestamp tokens
             if input_ids.shape[-1] != self.begin_index:
                 scores[:, self.timestamp_begin :] = -float("inf")
