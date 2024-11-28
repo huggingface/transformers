@@ -53,7 +53,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -2095,18 +2094,7 @@ class MolmoImageProcessor(BaseImageProcessor):
 ### PROCESSING CODE
 
 
-class MolmoImagesKwargs(ImagesKwargs, total=False):
-    max_crops: Optional[int]
-    overlap_margins: Optional[List[int]]
-    base_image_input_size: Optional[List[int]]
-    image_token_length_w: Optional[int]
-    image_token_length_h: Optional[int]
-    image_patch_size: Optional[int]
-    image_padding_mask: Optional[bool]
-
-
 class MolmoProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MolmoImagesKwargs
     _defaults = {
         "images_kwargs": {
             "max_crops": 12,

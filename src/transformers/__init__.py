@@ -593,7 +593,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
-    "models.molmo": ["MolmoConfig", "MolmoProcessor", "MolmoImageProcessor"],
+    "models.molmo": ["MolmoConfig", "MolmoImageProcessor", "MolmoProcessor"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -2809,10 +2809,10 @@ else:
     )
     _import_structure["models.molmo"].extend(
         [
-            "MolmoForConditionalGeneration",
             "MolmoForCausalLM",
-            "MolmoTextModel",
+            "MolmoForConditionalGeneration",
             "MolmoPreTrainedModel",
+            "MolmoTextModel",
         ]
     )
 
