@@ -70,7 +70,7 @@ def _load_timm_model(config: TimmWrapperConfig, add_classification_head: bool = 
 TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`TimmWrapperImageProcessor.preprocess`]
             for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
@@ -85,7 +85,6 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
 
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = False
     config_class = TimmWrapperConfig
     _no_split_modules = []
 
@@ -96,9 +95,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     @staticmethod
     def _fix_state_dict_key_on_load(key):
         """
-        Override original method which renames `gamma` and `beta` to `weight` and `bias`.
-        We don't want this behavior for timm wrapped models. Instead, this method adds
-        "timm_model." prefix to be able to load official timm Hub checkpoints.
+        Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
+        We don't want this behavior for timm wrapped models. Instead, this method adds a
+        "timm_model." prefix to enable loading official timm Hub checkpoints.
         """
         if "timm_model." not in key:
             return f"timm_model.{key}"
@@ -106,22 +105,22 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
 
     def _fix_state_dict_key_on_save(self, key):
         """
-        Override original method to remove "timm_model." prefix from state_dict keys.
-        Makes saved checkpoint compatible with `timm` library.
+        Overrides original method to remove "timm_model." prefix from state_dict keys.
+        Makes the saved checkpoint compatible with the `timm` library.
         """
         return key.replace("timm_model.", "")
 
     def load_state_dict(self, state_dict, *args, **kwargs):
         """
-        Override original method to fix state_dict keys on load for cases when weight are loaded
-        without using `from_pretrained` method (e.g. in Trainer to resume from checkpoint).
+        Override original method to fix state_dict keys on load for cases when weights are loaded
+        without using the `from_pretrained` method (e.g., in Trainer to resume from checkpoint).
         """
         state_dict = self._fix_state_dict_keys_on_load(state_dict)
         return super().load_state_dict(state_dict, *args, **kwargs)
 
     def _init_weights(self, module):
         """
-        Init weights function to ensure properly initialize Linear layer weights.
+        Initialize weights function to properly initialize Linear layer weights.
         Since model architectures may vary, we assume only the classifier requires
         initialization, while all other weights should be loaded from the checkpoint.
         """
@@ -213,8 +212,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
         if config.num_labels == 0:
             raise ValueError(
-                "You are trying to load weights to `TimmWrapperForImageClassification` from the checkpoint with no classifier head. "
-                "Specify the number of classes, e.g. `model = TimmWrapperForImageClassification.from_pretrained(..., num_labels=10)`,"
+                "You are trying to load weights into `TimmWrapperForImageClassification` from a checkpoint with no classifier head. "
+                "Please specify the number of classes, e.g. `model = TimmWrapperForImageClassification.from_pretrained(..., num_labels=10)`, "
                 "or use `TimmWrapperModel` for feature extraction."
             )
 
