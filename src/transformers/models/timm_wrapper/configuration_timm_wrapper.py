@@ -84,3 +84,6 @@ class TimmWrapperConfig(PretrainedConfig):
         output = super().to_dict()
         output["num_classes"] = self.num_labels
         return output
+
+
+__all__ = ["TimmWrapperConfig"]

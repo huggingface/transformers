@@ -116,3 +116,6 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
             "Image processor configuration is saved directly in `config.json` while "
             "`save_pretrained` is called for model saving."
         )
+
+
+__all__ = ["TimmWrapperImageProcessor"]

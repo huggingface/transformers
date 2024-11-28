@@ -299,3 +299,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             logits=logits,
             hidden_states=hidden_states,
         )
+
+
+__all__ = ["TimmWrapperPreTrainedModel", "TimmWrapperModel", "TimmWrapperForImageClassification"]
