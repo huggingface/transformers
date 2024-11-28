@@ -610,7 +610,11 @@ class AriaImageProcessor(BaseImageProcessor):
                         data_format=input_data_format,
                         input_data_format=input_data_format,
                     )
-                    crop_image_padded = to_channel_dimension_format(crop_image_padded, data_format, input_data_format) if data_format is not None else crop_image_padded
+                    crop_image_padded = (
+                        to_channel_dimension_format(crop_image_padded, data_format, input_data_format)
+                        if data_format is not None
+                        else crop_image_padded
+                    )
 
                 pixel_values.append(crop_image_padded)
         return BatchFeature(
@@ -1170,13 +1174,40 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        pixel_mask: torch.FloatTensor,
         vision_feature_layer: int,
     ):
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+        patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
+        image_outputs = self.vision_tower(
+            pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
+        )
+        image_attn_mask = self._create_image_attention_mask(patch_attention_mask)
+
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
+
+    def _create_patch_attention_mask(self, pixel_mask):
+        if pixel_mask is None:
+            return None
+
+        patches_subgrid = pixel_mask.unfold(
+            dimension=1,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        ).unfold(
+            dimension=2,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        )
+        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
+    def _create_image_attention_mask(self, patch_attention_mask):
+        if patch_attention_mask is None:
+            return None
+
+        flattened_mask = patch_attention_mask.flatten(1)
+        return torch.logical_not(flattened_mask)
 
     def forward(
         self,

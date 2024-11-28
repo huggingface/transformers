@@ -1795,7 +1795,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         vision_feature_layer: int,
     ):
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        image_outputs = self.vision_tower(pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True)
+        image_outputs = self.vision_tower(
+            pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
+        )
         image_attn_mask = self._create_image_attention_mask(patch_attention_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
@@ -1949,7 +1951,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
     def prepare_inputs_for_generation(
         self,

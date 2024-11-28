@@ -293,7 +293,11 @@ class AriaImageProcessor(BaseImageProcessor):
                         data_format=input_data_format,
                         input_data_format=input_data_format,
                     )
-                    crop_image_padded = to_channel_dimension_format(crop_image_padded, data_format, input_data_format) if data_format is not None else crop_image_padded
+                    crop_image_padded = (
+                        to_channel_dimension_format(crop_image_padded, data_format, input_data_format)
+                        if data_format is not None
+                        else crop_image_padded
+                    )
 
                 pixel_values.append(crop_image_padded)
         return BatchFeature(
