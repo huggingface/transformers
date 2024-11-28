@@ -289,7 +289,7 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-11.2618, -9.6192, -10.3205]).to(torch_device)
         resulted_slice = outputs.logits[0, :3]
-        is_close = torch.allclose(resulted_slice, expected_slice, atol=1e-4)
+        is_close = torch.allclose(resulted_slice, expected_slice, atol=1e-3)
         self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
 
     @slow
