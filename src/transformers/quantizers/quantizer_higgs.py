@@ -91,11 +91,6 @@ class HiggsHfQuantizer(HfQuantizer):
         """
         Quantizes weights into weight and weight_scale
         """
-        import flute.utils
-
-        if target_device not in model.flute_workspaces:
-            model.flute_workspaces[target_device] = flute.utils.make_workspace_streamk(device=target_device)
-
         flute_dict = quantize_with_higgs(
             param_value.to(target_device),
             self.quantization_config.bits,
@@ -107,16 +102,14 @@ class HiggsHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
         for key, value in flute_dict.items():
             if key in module._parameters:
-                module._parameters[key] = value
+                module._parameters[key] = torch.nn.Parameter(value, requires_grad=False)
             elif key in module._buffers:
-                module._buffers[key] = value
+                module._buffers[key] = torch.nn.Buffer(value)
             else:
                 raise ValueError(f"Unexpected key {key} in module {module}")
 
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)
-
-        module.workspace = model.flute_workspaces[target_device]
 
     def _process_model_before_weight_loading(
         self,
@@ -128,10 +121,33 @@ class HiggsHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
         )
         model.config.quantization_config = self.quantization_config
-        model.flute_workspaces = {}
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
+        import flute.utils
+
+        flute_workspaces = {}
+        for name, module in model.named_modules():
+            if isinstance(module, HiggsLinear):
+                if module.weight.device not in flute_workspaces:
+                    flute_workspaces[module.weight.device] = flute.utils.make_workspace_streamk(
+                        device=module.weight.device
+                    )
+                module.workspace = flute_workspaces[module.weight.device]
+
+    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+        from ..integrations import HiggsLinear
+
+        not_missing_keys = []
+        for name, module in model.named_modules():
+            if isinstance(module, HiggsLinear):
+                for missing in missing_keys:
+                    if (
+                        (name in missing or name in f"{prefix}.{missing}")
+                        and not missing.endswith(".weight")
+                        and not missing.endswith(".bias")
+                    ):
+                        not_missing_keys.append(missing)
+        return [k for k in missing_keys if k not in not_missing_keys]
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
@@ -149,7 +165,7 @@ class HiggsHfQuantizer(HfQuantizer):
         **kwargs,
     ) -> bool:
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, HiggsLinear) and tensor_name == "weight":
+        if isinstance(module, HiggsLinear) and tensor_name == "weight" and param_value.dtype != torch.int16:
             # Add here check for loaded components' dtypes once serialization is implemented
             return True
         else:

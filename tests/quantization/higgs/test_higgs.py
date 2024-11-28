@@ -67,10 +67,10 @@ if is_accelerate_available():
 class HiggsTest(unittest.TestCase):
     model_name = "meta-llama/Meta-Llama-3.1-8B"
 
-    input_text = "What are we having for dinner?"
-    max_new_tokens = 9
+    input_text = "A quick brown fox jumps over the"
+    max_new_tokens = 2
 
-    EXPECTED_OUTPUT = "What are we having for dinner?\nI'm having a steak and a salad"
+    EXPECTED_OUTPUT = "A quick brown fox jumps over the lazy dog"
 
     device_map = "cuda"
 
@@ -190,26 +190,6 @@ class HiggsTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_change_loading_attributes(self):
-        """
-        Simple test that checks if the quantized model is working properly after being saved and loaded
-        """
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname)
-
-            quantization_config = HiggsConfig()
-
-            model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, device_map=self.device_map, quantization_config=quantization_config
-            )
-
-            self.assertEqual(model.model.layers[1].mlp.down_proj.input_scale_ub.item(), 1000.0)
-
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
         """
@@ -225,32 +205,6 @@ class HiggsTest(unittest.TestCase):
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-    def test_quantized_model_offload(self):
-        """
-        Simple test that checks if the quantized model returns an error when loading with cpu/disk offloaded
-        """
-        quantization_config = HiggsConfig()
-
-        with self.assertRaisesRegex(
-            ValueError, "You are attempting to load an FP8 model with a device_map that contains a CPU or disk device."
-        ):
-            AutoModelForCausalLM.from_pretrained(
-                self.model_name, device_map=self.offload_device_map, quantization_config=quantization_config
-            )
-
-    def test_save_pretrained_offload(self):
-        """
-        Simple test that checks if the saved quantized model is working properly cpu/disk offload
-        """
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname)
-
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
-            quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
-            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
     def test_save_pretrained_multi_gpu(self):

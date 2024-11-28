@@ -317,7 +317,10 @@ def get_higgs_grid(p: int, n: int) -> torch.Tensor:
 
 def quantize_with_higgs(weight: torch.Tensor, bits: int = 4, p: int = 2):
     assert len(weight.shape) == 2, "Only 2D weights are supported for now"
-    assert weight.device.type == "cuda", "Only CUDA devices are supported for now"
+    if weight.device.type != "cuda":
+        raise ValueError(
+            "You are attempting to load a HIGGS model with a device_map that contains a CPU or disk device."
+        )
 
     grid = get_higgs_grid(p, 2 ** (p * bits)).to(weight.device)
     grid_norm_2 = torch.linalg.norm(grid, axis=-1) ** 2
@@ -360,7 +363,7 @@ def quantize_with_higgs(weight: torch.Tensor, bits: int = 4, p: int = 2):
         "weight": weight,
         "scales": scales,
         "tables": tables,
-        "tables2": tables2,
+        "tables2": tables2.view(dtype=torch.float16),
     }
 
 
@@ -385,7 +388,7 @@ class HiggsLinear(nn.Module):
         assert num_bits in [2, 3, 4]
 
         self.weight = nn.Parameter(
-            torch.empty((in_features * num_bits // 16, out_features), dtype=torch.int16, device=device),
+            torch.empty((out_features * num_bits // 16, in_features), dtype=torch.int16, device=device),
             requires_grad=False,
         )
         self.scales = nn.Parameter(
@@ -393,7 +396,7 @@ class HiggsLinear(nn.Module):
         )
         self.tables = nn.Parameter(torch.empty((2**num_bits,), dtype=dtype, device=device), requires_grad=False)
         self.tables2 = nn.Parameter(
-            torch.empty((2**num_bits, 2**num_bits, 1), dtype=torch.float32, device=device), requires_grad=False
+            torch.empty((2**num_bits, 2**num_bits, 2), dtype=dtype, device=device), requires_grad=False
         )
 
         if bias:
@@ -411,12 +414,15 @@ class HiggsLinear(nn.Module):
         x = hadamard_transform(x, scale=1 / 32)
         x = x.reshape(orig_shape)
 
+        if self.workspace is None:
+            raise Exception("Workspace must be set before calling forward")
+
         return flute.qgemm_simple(
             x,
             self.weight,
             self.scales,
             self.tables,
-            self.tables2,
+            self.tables2.view(dtype=torch.float32),
             self.workspace,
             self.num_bits,
             256,
