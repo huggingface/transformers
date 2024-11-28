@@ -21,9 +21,10 @@ NOTE: This script was originally run using `torch==2.5.1` and with:
 
 ```bash
 python src/transformers/models/colpali/convert_colpali_weights_to_hf.py \
-    --model_id vidore/colpali-v1.2 \
+    --model_id vidore/colpali-v1.2-merged \
     --revision 89fd9736194236a1ecb7a9ec9b04f537f6f896af \
-    --output_dir vidore/colpali-v1.2-hf \
+    --original_vlm_name_or_path google/paligemma-3b-mix-448 \
+    --output_dir vidore/colpali-v1.2-hf-internal \
     --push_to_hub
 ```
 """
@@ -62,8 +63,12 @@ def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     return new_state_dict
 
 
-def load_original_state_dict(model_id):
-    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> Dict[str, torch.Tensor]:
+    directory_path = snapshot_download(
+        repo_id=model_id,
+        revision=revision,
+        allow_patterns=["*.safetensors"],
+    )
 
     original_state_dict = {}
     for path in glob.glob(f"{directory_path}/*"):
@@ -72,7 +77,7 @@ def load_original_state_dict(model_id):
                 for key in f.keys():
                     original_state_dict[key] = f.get_tensor(key)
 
-    # tied wieghts so lm.head is not saved. Let's clone to load state dict
+    # Some weights are tied, so `lm.head`` is not saved. Let's clone to load state dict.
     if "lm_head.weight" not in original_state_dict:
         original_state_dict["vlm.language_model.lm_head.weight"] = original_state_dict[
             "model.language_model.model.embed_tokens.weight"
@@ -87,28 +92,30 @@ def convert_colpali_weights_to_hf(
     output_dir: str,
     push_to_hub: bool,
     revision: Optional[str] = None,
+    original_vlm_name_or_path: Optional[str] = None,
 ):
     # Load the original model data
     original_config = AutoConfig.from_pretrained(
         model_id,
         revision=revision,
     )
-    original_state_dict = load_original_state_dict(model_id)
+    if original_vlm_name_or_path is not None:
+        original_config._name_or_path = original_vlm_name_or_path
+    if hasattr(original_config, "architectures"):
+        delattr(original_config, "architectures")
+
+    original_state_dict = load_original_state_dict(model_id, revision=revision)
 
     # Format the state_dict keys
     original_state_dict = rename_state_dict_keys(original_state_dict)
 
-    # Add the extra attributes for the new model
-    new_config = {
-        "vlm_config": original_config.copy(),
-        "model_type": "colpali",
-        "is_composition": False,
-        "embedding_dim": 128,
-        "initializer_range": 0.02,  # unused as initialized weights will be replaced
-    }
-
     # Create the new config
-    config = ColPaliConfig.from_dict(new_config)
+    config = ColPaliConfig(
+        vlm_config=original_config,
+        embedding_dim=128,  # hardcoded in the original model
+    )
+    config.model_type = "colpali"
+    config.is_composition = False
 
     # Load the untrained model
     model = ColPaliForRetrieval(config=config).to("cpu").eval()
@@ -157,8 +164,9 @@ if __name__ == "__main__":
         Example usage:
         ```bash
         python src/transformers/models/colpali/convert_colpali_weights_to_hf.py \
-            --model_id vidore/colpali-v1.2 \
+            --model_id vidore/colpali-v1.2-merged \
             --revision 89fd9736194236a1ecb7a9ec9b04f537f6f896af \
+            --original_vlm_name_or_path google/paligemma-3b-mix-448 \
             --output_dir vidore/colpali-v1.2-hf \
             --push_to_hub
         ```
@@ -170,18 +178,22 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output_dir",
-        default="vidore/colpali-v1.2-hf",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
         "--push_to_hub",
-        help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
+        help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally",
         action="store_true",
         default=False,
     )
     parser.add_argument(
         "--revision",
         help="Revision of the model to download",
+        default=None,
+    )
+    parser.add_argument(
+        "--original_vlm_name_or_path",
+        help="Name or path of the original VLM backbone model",
         default=None,
     )
     args = parser.parse_args()
@@ -191,4 +203,5 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         push_to_hub=args.push_to_hub,
         revision=args.revision,
+        original_vlm_name_or_path=args.original_vlm_name_or_path,
     )
