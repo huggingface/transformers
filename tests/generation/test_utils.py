@@ -37,6 +37,9 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -1920,28 +1923,14 @@ class GenerationTesterMixin:
         Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
         has the expected shapes
         """
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
-
-            config.rms_norm_eps = 1.0
-            config.layer_norm_eps = 1.0
-            config.norm_eps = 1.0
-            config.norm_epsilon = 1.0
-            config.layer_norm_epsilon = 1.0
-
-            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
-            # (We don't need the original epsilon values to check eager/sdpa matches)
-            for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
-                if hasattr(config, attr):
-                    getattr(config, attr).rms_norm_eps = 1.0
-                    getattr(config, attr).layer_norm_eps = 1.0
-                    getattr(config, attr).norm_eps = 1.0
-                    getattr(config, attr).norm_epsilon = 1.0
-                    getattr(config, attr).layer_norm_epsilon = 1.0
 
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
@@ -1953,12 +1942,7 @@ class GenerationTesterMixin:
 
             for dtype in (torch.float32, torch.float16):
                 model = model_class(config).to(torch_device).to(dtype).eval()
-
-                # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-                for x in model.modules():
-                    from torch import nn
-                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)) or type(x).__name__ == "GemmaRMSNorm":
-                        x.eps = 1.0
+                set_model_for_less_flaky_test(model)
 
                 generation_kwargs = {
                     "max_new_tokens": max_new_tokens,
