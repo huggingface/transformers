@@ -90,7 +90,12 @@ class HiggsHfQuantizer(HfQuantizer):
         """
         Quantizes weights into weight and weight_scale
         """
+        import flute.utils
         
+        if target_device not in model.flute_workspaces:
+            model.flute_workspaces[target_device] = flute.utils.make_workspace_streamk(device=target_device)
+
+
         flute_dict = quantize_with_higgs(
             param_value.to(target_device),
             self.quantization_config.bits,
@@ -111,6 +116,8 @@ class HiggsHfQuantizer(HfQuantizer):
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)
 
+        module.workspace = model.flute_workspaces[target_device]
+
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -122,6 +129,7 @@ class HiggsHfQuantizer(HfQuantizer):
             linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
         )
         model.config.quantization_config = self.quantization_config
+        model.flute_workspaces = {}
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model

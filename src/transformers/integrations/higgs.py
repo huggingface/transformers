@@ -16,13 +16,13 @@
 from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available
 
 
-# if is_torch_available():
-import torch
-import torch.nn as nn
+if is_torch_available():
+    import torch
+    import torch.nn as nn
     
 
-# if is_flute_available():
-import flute.utils
+if is_flute_available():
+    import flute.utils
 
 if is_hadamard_available():
     from fast_hadamard_transform import hadamard_transform
@@ -356,8 +356,7 @@ def quantize_with_higgs(weight: torch.Tensor, bits: int=4, p: int=2):
         "tables": tables,
         "tables2": tables2,
     }
-    
-WORKSPACE = flute.utils.make_workspace_streamk(device="cuda")
+
 
 class HiggsLinear(nn.Module):
     def __init__(
@@ -388,6 +387,8 @@ class HiggsLinear(nn.Module):
             self.bias = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype), requires_grad=False)
         else:
             self.register_parameter("bias", None)
+            
+        self.workspace = None # must be set externally to be reused among layers
     
     def forward(self, x):
         x = pad_to_block(x, [-1], 1024)
@@ -403,7 +404,7 @@ class HiggsLinear(nn.Module):
             self.scales,
             self.tables,
             self.tables2,
-            WORKSPACE,
+            self.workspace,
             self.num_bits,
             256,
         )
