@@ -181,23 +181,16 @@ class TimesFMPositionalEmbedding(nn.Module):
 class TimesFMAttention(nn.Module):
     """Implements the attention used in TimesFM."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        num_kv_heads: int,
-        head_dim: int,
-    ):
+    def __init__(self, config: TimesFMConfig):
         super().__init__()
-
-        self.num_heads = num_heads
-        self.num_kv_heads = num_kv_heads
+        self.num_heads = config.num_heads
+        self.num_kv_heads = config.num_heads
 
         assert self.num_heads % self.num_kv_heads == 0
         self.num_queries_per_kv = self.num_heads // self.num_kv_heads
 
-        self.hidden_size = hidden_size
-        self.head_dim = head_dim
+        self.hidden_size = config.model_dim
+        self.head_dim = config.head_dim
 
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
@@ -274,33 +267,17 @@ class TimesFMAttention(nn.Module):
         # [batch_size, input_len, hidden_dim]
         output = output.transpose(1, 2).contiguous().view(batch_size, input_len, -1)
         output = self.o_proj(output)
-        return scores, output
+        return output, scores
 
 
 class TimesFMDecoderLayer(nn.Module):
     """Transformer layer."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-        num_heads: int,
-        num_kv_heads: int,
-        head_dim: int,
-        rms_norm_eps: float = 1e-6,
-    ):
+    def __init__(self, config: TimesFMConfig):
         super().__init__()
-        self.self_attn = TimesFMAttention(
-            hidden_size=hidden_size,
-            num_heads=num_heads,
-            num_kv_heads=num_kv_heads,
-            head_dim=head_dim,
-        )
-        self.mlp = TimesFMTransformerMLP(
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-        )
-        self.input_layernorm = TimesFMRMSNorm(hidden_size, eps=rms_norm_eps)
+        self.self_attn = TimesFMAttention(config)
+        self.mlp = TimesFMTransformerMLP(config.model_dim, config.intermediate_size)
+        self.input_layernorm = TimesFMRMSNorm(config.model_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -313,7 +290,7 @@ class TimesFMDecoderLayer(nn.Module):
         # Self Attention
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        scores, hidden_states = self.self_attn(
+        hidden_states, scores = self.self_attn(
             hidden_states=hidden_states,
             mask=mask,
             kv_write_indices=kv_write_indices,
@@ -330,30 +307,10 @@ class TimesFMDecoderLayer(nn.Module):
 class TimesFMStackedDecoder(nn.Module):
     """Stacked transformer layer."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-        num_heads: int,
-        num_kv_heads: int,
-        head_dim: int,
-        num_layers: int,
-        rms_norm_eps: float = 1e-6,
-    ):
+    def __init__(self, config: TimesFMConfig):
         super().__init__()
 
-        self.layers = nn.ModuleList()
-        for _ in range(num_layers):
-            self.layers.append(
-                TimesFMDecoderLayer(
-                    hidden_size=hidden_size,
-                    intermediate_size=intermediate_size,
-                    num_heads=num_heads,
-                    num_kv_heads=num_kv_heads,
-                    head_dim=head_dim,
-                    rms_norm_eps=rms_norm_eps,
-                )
-            )
+        self.layers = nn.ModuleList([TimesFMDecoderLayer(config) for _ in range(config.num_layers)])
 
     def forward(
         self,
@@ -602,15 +559,7 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
             output_dims=config.horizon_len * (1 + len(config.quantiles)),
             hidden_dims=config.model_dim,
         )
-        self.stacked_transformer = TimesFMStackedDecoder(
-            hidden_size=self.config.model_dim,
-            intermediate_size=self.config.model_dim,
-            num_heads=self.config.num_heads,
-            num_kv_heads=self.config.num_heads,
-            head_dim=self.config.head_dim,
-            num_layers=self.config.num_layers,
-            rms_norm_eps=self.config.rms_norm_eps,
-        )
+        self.stacked_transformer = TimesFMStackedDecoder(config=config)
         if self.config.use_positional_embedding:
             self.position_emb = TimesFMPositionalEmbedding(
                 embedding_dims=self.config.model_dim,

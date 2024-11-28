@@ -47,6 +47,8 @@ class TimesFMConfig(PretrainedConfig):
             Number of Transformer layers.
         model_dim (`int`, *optional*, defaults to 1280):
             Size of the hidden layers in the feed-forward networks.
+        intermediate_size (`int`, *optional*, defaults to 11008):
+            Dimension of the MLP representations.
         head_dim (`int`, *optional*, defaults to 80):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
             be defined as `num_heads * head_dim`.
@@ -69,12 +71,14 @@ class TimesFMConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
     """
 
     model_type = "timesfm"
     keys_to_ignore_at_inference = []
     attribute_map = {
-        "hidden_size": "hidden_size",
+        "hidden_size": "model_dim",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
     }
@@ -88,6 +92,7 @@ class TimesFMConfig(PretrainedConfig):
         freq_size: int = 3,
         num_layers: int = 20,
         model_dim: int = 1280,
+        intermediate_size: int = 1280,
         head_dim: int = 80,
         num_heads: int = 16,
         dropout_rate: float = 0.1,
@@ -98,6 +103,7 @@ class TimesFMConfig(PretrainedConfig):
         use_positional_embedding: bool = True,
         batch_size: int = 32,
         initializer_factor: float = 1.0,
+        attention_dropout: float = 0.0,
         **kwargs,
     ):
         self.patch_len = patch_len
@@ -107,6 +113,7 @@ class TimesFMConfig(PretrainedConfig):
         self.pad_val = pad_val
         self.freq_size = freq_size
         self.model_dim = model_dim
+        self.intermediate_size = intermediate_size
         self.head_dim = head_dim
         self.num_layers = num_layers
         self.num_heads = num_heads
@@ -116,6 +123,7 @@ class TimesFMConfig(PretrainedConfig):
         self.use_positional_embedding = use_positional_embedding
         self.batch_size = batch_size
         self.initializer_factor = initializer_factor
+        self.attention_dropout = attention_dropout
 
         super().__init__(
             is_encoder_decoder=self.is_encoder_decoder,

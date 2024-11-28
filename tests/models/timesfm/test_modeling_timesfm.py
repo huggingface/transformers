@@ -56,6 +56,7 @@ class TimesFMModelTester:
         freq_size: int = 3,
         num_layers: int = 4,
         model_dim: int = 128,
+        intermediate_size: int = 1280,
         head_dim: int = 16,
         num_heads: int = 4,
         dropout_rate: float = 0.1,
@@ -76,6 +77,7 @@ class TimesFMModelTester:
         self.pad_val = pad_val
         self.freq_size = freq_size
         self.model_dim = model_dim
+        self.intermediate_size = intermediate_size
         self.head_dim = head_dim
         self.num_hidden_layers = num_layers
         self.num_attention_heads = num_heads
@@ -103,6 +105,7 @@ class TimesFMModelTester:
             pad_val=self.pad_val,
             freq_size=self.freq_size,
             model_dim=self.model_dim,
+            intermediate_size=self.intermediate_size,
             head_dim=self.head_dim,
             num_layers=self.num_hidden_layers,
             num_heads=self.num_attention_heads,
