@@ -195,9 +195,6 @@ def fa_peft_integration_check(
     cast them back in float16 / bfloat16 just to be sure everything works as expected.
     This might slowdown training & inference so it is recommended to not cast the LayerNorms!
 
-    This can potentially be avoided in cases where RoPE is used as we cast back to fp16/bf16 in
-    any case.
-
     Args:
         query (`torch.Tensor`):
             Input query states to be passed to Flash Attention API
