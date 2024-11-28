@@ -379,7 +379,7 @@ def create_circleci_config(folder=None):
 
     collection_job = EmptyJob()
     collection_job.job_name = "collection_job"
-    jobs = jobs + [collection_job]
+    jobs = [collection_job] + jobs
 
     config = {
         "version": "2.1",
