@@ -26,7 +26,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -43,16 +43,7 @@ class MolmoImagesKwargs(ImagesKwargs, total=False):
     image_padding_mask: Optional[bool]
 
 
-class MolmoTextKwargs(TextKwargs, total=False):
-    style: Optional[str]
-    system_prompt: Optional[str]
-    message_format: Optional[str]
-    always_start_with_space: Optional[bool]
-    sequence_length: Optional[int]
-
-
 class MolmoProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: MolmoTextKwargs
     images_kwargs: MolmoImagesKwargs
     _defaults = {
         "images_kwargs": {

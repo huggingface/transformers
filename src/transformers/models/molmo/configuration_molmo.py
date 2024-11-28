@@ -31,9 +31,9 @@ logger = logging.get_logger(__name__)
 class MolmoVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MolmoVisionModel`]. It is used to instantiate a
-    MolmoVisionEncoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the MOLMO
-    [openai/molmo-vit-base-patch32](https://huggingface.co/openai/molmo-vit-base-patch32) architecture.
+    `MolmoVisionModel` according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the Molmo
+    [allenai/Molmo-7B-D-0924-hf](https://huggingface.co/allenai/Molmo-7B-D-0924-hf) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -71,12 +71,12 @@ class MolmoVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MolmoOVisionConfig, MolmoVisionModel
+    >>> from transformers import MolmoVisionConfig, MolmoVisionModel
 
-    >>> # Initializing a MolmoVisionConfig with molmo-community/Molmo-7B-D-0924 style configuration
+    >>> # Initializing a MolmoVisionConfig with allenai/Molmo-7B-D-0924-hf style configuration
     >>> configuration = MolmoVisionConfig()
 
-    >>> # Initializing a MolmoVisionModel (with random weights) from the molmo-community/Molmo-7B-D-0924 style configuration
+    >>> # Initializing a MolmoVisionModel (with random weights) from the allenai/Molmo-7B-D-0924-hf style configuration
     >>> model = MolmoVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -126,6 +126,63 @@ class MolmoVisionConfig(PretrainedConfig):
 
 
 class MolmoPoolingConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`MolmoAdapterModel`]. It is used to instantiate an
+    `MolmoAdapterModel` according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Molmo-7B-D.
+
+    e.g. [allenai/Molmo-7B-D-0924-hf](https://huggingface.co/allenai/Molmo-7B-D-0924-hf)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the pooler attention layer.
+        text_hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the text encoder layers.
+        text_intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the text Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer pooler.
+        head_dim (`int`, *optional*, defaults to 64):
+            The poolinng attention head dimension.
+        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The activation function used by the multimodal projector.
+        pooling_height (`int`, *optional*, defaults to 2):
+            The height of image features requred for pooling operation.
+        pooling_width (`int`, *optional*, defaults to 2):
+            The width of image features requred for pooling operation.
+        pad_embed_dim (`int`, *optional*, defaults to 2048):
+            Dimensionality of a padding tensor which is multiplied with the image mask.
+        image_num_patches (`int`, *optional*, defaults to 24):
+            Number of patches each image feature has after the vision tower.
+        image_feature_dropout (`float`, *optional*, defaults to 0.9):
+            The dropout ratio for the image features after vision tower.
+        image_pooling_type (`str`, *optional*, defaults to `"attention_meanq"`):
+            Type of pooling to apply on image features. Can be one of ["attention", "attention_meanq", "attention_2wide", "attention_v2", "stack"] or `None`
+        image_padding_embed (`str`, *optional*, defaults to `"pad_and_partial_pad"`):
+            Type of padding to apply of image masks. Can be one of ["pad_embed", "regress", "pad_and_partial_pad]
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers import MolmoAdapterModel, MolmoPoolingConfig
+
+    >>> # Initializing a Molmo-pooling config
+    >>> pooling_config = MolmoPoolingConfig()
+
+    >>> # Initializing a adapter model from the allenai/Molmo-7B-D-0924-hf style configuration
+    >>> model = MolmoAdapterModel(pooling_config)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     def __init__(
         self,
         hidden_size=2048,
@@ -175,27 +232,31 @@ class MolmoTextConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
+        vocab_size (`int`, *optional*, defaults to 152064):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MolmoModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+            `inputs_ids` passed when calling [`MolmoTextModel`]
+        additional_vocab_size  (`int`, *optional*, defaults to 128):
+            Number of additional tokens added to the vocabulary size of the Molmo model.
+        hidden_size (`int`, *optional*, defaults to 3584):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22016):
+        intermediate_size (`int`, *optional*, defaults to 37888):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 28):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        head_dim (`int`, *optional*, defaults to 128):
+            The poolinng attention head dimension.
+        num_attention_heads (`int`, *optional*, defaults to 28):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
+        num_key_value_heads (`int`, *optional*, defaults to 4):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"swiglu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -206,7 +267,7 @@ class MolmoTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -255,13 +316,13 @@ class MolmoTextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import MolmoModel, MolmoConfig
+    >>> from transformers import MolmoTextModel, MolmoTextConfig
 
     >>> # Initializing a Molmo style configuration
-    >>> configuration = MolmoConfig()
+    >>> configuration = MolmoTextConfig()
 
     >>> # Initializing a model from the Molmo-7B style configuration
-    >>> model = MolmoModel(configuration)
+    >>> model = MolmoTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -281,7 +342,7 @@ class MolmoTextConfig(PretrainedConfig):
         additional_vocab_size=128,
         intermediate_size=37888,
         hidden_act="swiglu",
-        max_position_embeddings=32768,
+        max_position_embeddings=4096,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
@@ -331,11 +392,11 @@ class MolmoTextConfig(PretrainedConfig):
 
 class MolmoConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`MolmoForConditionalGeneration`]. It is used to instantiate an
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llava-9B.
+    with the defaults will yield a similar configuration to that of the Molmo-7B-D.
 
-    e.g. [llava-hf/llava-9b](https://huggingface.co/llava-hf/llava-9b)
+    e.g. [allenai/Molmo-7B-D-0924-hf](https://huggingface.co/allenai/Molmo-7B-D-0924-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -345,34 +406,39 @@ class MolmoConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MolmoTextConfig`):
             The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        pooling_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MolmoPoolingConfig`):
+            The config object or dictionary of the adapter backbone.
+        image_token_index (`int`, *optional*, defaults to 152069):
             The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
+        image_seq_length (`int`, *optional*, defaults to 576):
+            Sequence length of one image embedding.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
+        vision_feature_layers (`List[int]`, *optional*, defaults to (-2, -9)):
+            The indices of the layers to select the vision feature.
 
     Example:
 
     ```python
-    >>> from transformers import LlavaForConditionalGeneration, LlavaConfig, SiglipVisionConfig, LlamaConfig
+    >>> from transformers import MolmoForConditionalGeneration, MolmoConfig, MolmoVisionConfig, MolmoTextConfig, MolmoPoolingConfig
 
-    >>> # Initializing a Siglip-vision config
-    >>> vision_config = SiglipVisionConfig()
+    >>> # Initializing a Molmo-vision config
+    >>> vision_config = MolmoVisionConfig()
 
-    >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
+    >>> # Initializing a Molmo-text config
+    >>> text_config = MolmoTextConfig()
 
-    >>> # Initializing a Llava llava-1.5-7b style configuration
-    >>> configuration = LlavaConfig(vision_config, text_config)
+    >>> # Initializing a Molmo-pooling config
+    >>> pooling_config = MolmoPoolingConfig()
 
-    >>> # Initializing a model from the llava-1.5-7b style configuration
-    >>> model = LlavaForConditionalGeneration(configuration)
+    >>> # Initializing a Molmo allenai/Molmo-7B-D-0924-hf style configuration
+    >>> configuration = MolmoConfig.from_text_vision_configs(vision_config, text_config, pooling_config)
+
+    >>> # Initializing a model from the allenai/Molmo-7B-D-0924-hf style configuration
+    >>> model = MolmoForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -390,7 +456,7 @@ class MolmoConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         pooling_config=None,
-        image_token_index=32000,
+        image_token_index=152069,
         image_seq_length=576,
         initializer_range=0.02,
         vision_feature_select_strategy="default",

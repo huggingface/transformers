@@ -61,6 +61,46 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MolmoConfig"
 
 
+@dataclass
+class MolmoCausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for Molmo causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
+
+
 # swiglu activation
 class MolmoSwiGLU(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -1654,48 +1694,6 @@ class MolmoVisionEncoder(nn.Module):
         )
 
 
-class MolmoMultiheadAttentionPoolingHead(nn.Module):
-    """Multihead Attention Pooling."""
-
-    def __init__(self, config: MolmoVisionConfig):
-        super().__init__()
-
-        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = MolmoMLP(config)
-
-    def forward(self, hidden_state):
-        batch_size = hidden_state.shape[0]
-        probe = self.probe.repeat(batch_size, 1, 1)
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
-
-        residual = hidden_state
-        hidden_state = self.layernorm(hidden_state)
-        hidden_state = residual + self.mlp(hidden_state)
-
-        return hidden_state[:, 0]
-
-
-MOLMO_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class MolmoVisionTransformer(nn.Module):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
@@ -1705,7 +1703,6 @@ class MolmoVisionTransformer(nn.Module):
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MolmoVisionEncoder(config)  # necessary because of renaming issue in modular
 
-    @add_start_docstrings_to_model_forward(MOLMO_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
     def forward(
         self,
@@ -1872,7 +1869,6 @@ class MolmoPoolingSdpaAttention(MolmoPoolingAttention):
         key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # MOLMO_VISION text model uses both `causal_attention_mask` and `attention_mask` sequentially.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -1905,7 +1901,6 @@ class MolmoPoolingFlashAttention2(MolmoPoolingAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1999,10 +1994,7 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         elif config.image_pooling_type == "attention_2wide":
             self.image_pooling_2d = attention_class(config)
         elif config.image_pooling_type == "attention_v2":
-            self.image_pooling_2d = attention_class(
-                config,
-                # TODO: mean of hidden states for query -> query="mean",
-            )
+            self.image_pooling_2d = attention_class(config)
         elif config.image_pooling_type in [None, "stack"]:
             self.image_pooling_2d = None
         else:
@@ -2066,7 +2058,6 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         )
 
         if self.config.image_pooling_type == "attention_meanq":
-            # TODO: fixme maybe?
             queries = image_features.mean(-2, keepdim=True)
             image_features = self.image_pooling_2d(queries, image_features)[0]
         elif self.config.image_pooling_type not in {None, "stack"}:
@@ -2080,6 +2071,24 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         image_features = image_features.reshape(batch_size, patches, h * w, -1)
         image_features = self.multi_modal_projector(image_features)
         return image_features
+
+
+MOLMO_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 @add_start_docstrings(
@@ -2143,46 +2152,6 @@ class MolmoVisionModel(MolmoPreTrainedModel):
         )
 
 
-@dataclass
-class MolmoCausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for Molmo causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-
-
 @add_start_docstrings(
     """The MOLMO model which consists of a vision backbone and a language model.""",
     MOLMO_START_DOCSTRING,
@@ -2193,9 +2162,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         self.vision_tower = MolmoVisionModel._from_config(config.vision_config)
         self.vocab_size = config.text_config.vocab_size
 
-        self.language_model = MolmoForCausalLM._from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = MolmoForCausalLM._from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)
         self.post_init()
