@@ -20,7 +20,6 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations import HiggsLinear, quantize_with_higgs, replace_with_higgs_linear
 from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
@@ -88,6 +87,8 @@ class HiggsHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         unexpected_keys: Optional[List[str]] = None,
     ):
+        from ..integrations import quantize_with_higgs
+
         """
         Quantizes weights into weight and weight_scale
         """
@@ -116,6 +117,8 @@ class HiggsHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        from ..integrations import replace_with_higgs_linear
+
         replace_with_higgs_linear(
             model,
             quantization_config=self.quantization_config,
@@ -124,6 +127,8 @@ class HiggsHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         import flute.utils
+
+        from ..integrations import HiggsLinear
 
         flute_workspaces = {}
         for name, module in model.named_modules():
@@ -164,6 +169,8 @@ class HiggsHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ) -> bool:
+        from ..integrations import HiggsLinear
+
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module, HiggsLinear) and tensor_name == "weight" and param_value.dtype != torch.int16:
             # Add here check for loaded components' dtypes once serialization is implemented
