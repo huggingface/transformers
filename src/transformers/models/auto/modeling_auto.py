@@ -37,6 +37,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("altclip", "AltCLIPModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
         ("autoformer", "AutoformerModel"),
+        ("bamba", "BambaModel"),
         ("bark", "BarkModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
@@ -463,6 +464,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("bamba", "BambaForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),

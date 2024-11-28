@@ -38,6 +38,7 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 
 FlashAttention-2 is currently supported for the following architectures:
 * [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
+* [Bamba](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BambaModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)
 * [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
@@ -217,6 +218,7 @@ PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.o
 For now, Transformers supports SDPA inference and training for the following architectures:
 * [Albert](https://huggingface.co/docs/transformers/model_doc/albert#transformers.AlbertModel)
 * [Audio Spectrogram Transformer](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel)
+* [Bamba](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BambaModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Bert](https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel)
 * [BioGpt](https://huggingface.co/docs/transformers/model_doc/biogpt#transformers.BioGptModel)
