@@ -226,6 +226,10 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_attention_outputs(self):
         pass
 
+    @unittest.skip(reason="TextNet does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
     @unittest.skip(reason="TextNet does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
