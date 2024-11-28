@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 
 class ColPaliConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an
-    ColPaliForRetrieval according to the specified arguments, defining the model architecture following the methodology from
-    the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
+    Configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an instance
+    of `ColPaliForRetrieval` according to the specified arguments, defining the model architecture following the methodology
+    from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
 
-    Instantiating a configuration with the defaults will yield the same configuration used in the ColPali paper, i.e. the one
-    from [vidore/colpali-v1.2](https://huggingface.co/vidore/colpali-v1.2).
+    Creating a configuration with the default settings will result in a configuration where the VLM backbone is set to the
+    default PaliGemma configuration.
 
     The ColPali config is very similar to [`PaligemmaConfig`], but with an extra attribute defining the embedding dimension.
 
