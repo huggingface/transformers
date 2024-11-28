@@ -24,7 +24,7 @@ from ..utils import (
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
+    from torch import nn
 
 
 if is_flute_available():
@@ -367,7 +367,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2):
     }
 
 
-class HiggsLinear(nn.Module):
+class HiggsLinear(torch.nn.Module):
     def __init__(
         self,
         in_features: int,
