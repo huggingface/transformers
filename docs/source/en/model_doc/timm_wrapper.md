@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -22,17 +22,18 @@ Helper class to enable loading timm models to be used with the transformers libr
 
 ```python
 import torch
-from urllib.request import urlopen
 from PIL import Image
+from urllib.request import urlopen
 from transformers import AutoConfig, AutoModelForImageClassification, AutoImageProcessor
 
 checkpoint = "timm/resnet50.a1_in1k"
-img = Image.open(urlopen(
+image = Image.open(urlopen(
     'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png'
 ))
 
 image_processor = AutoImageProcessor.from_pretrained(checkpoint)
-inputs = image_processor(img, return_tensors="pt")
+inputs = image_processor(image)
+
 model = AutoModelForImageClassification.from_pretrained(checkpoint)
 
 with torch.no_grad():
