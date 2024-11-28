@@ -25,6 +25,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings_to_model_forward,
     is_timm_available,
+    replace_return_docstrings,
     requires_backends,
 )
 from .configuration_timm_wrapper import TimmWrapperConfig
@@ -141,6 +142,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TimmWrapperModelOutput, config_class=TimmWrapperConfig)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -154,6 +156,39 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         do_pooling (`bool`, *optional*):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not. If `None` is passed, the
             `do_pooling` value from the config is used.
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> import torch
+        >>> from PIL import Image
+        >>> from urllib.request import urlopen
+        >>> from transformers import AutoModel, AutoImageProcessor
+
+        >>> # Load image
+        >>> image = Image.open(urlopen(
+        ...     'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png'
+        ... ))
+
+        >>> # Load model and image processor
+        >>> checkpoint = "timm/resnet50.a1_in1k"
+        >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
+        >>> model = AutoModel.from_pretrained(checkpoint).eval()
+
+        >>> # Preprocess image
+        >>> inputs = image_processor(image)
+
+        >>> # Forward pass
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Get pooled output
+        >>> pooled_output = outputs.pooler_output
+
+        >>> # Get last hidden state
+        >>> last_hidden_state = outputs.last_hidden_state
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -222,6 +257,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=TimmWrapperConfig)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -236,6 +272,36 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> import torch
+        >>> from PIL import Image
+        >>> from urllib.request import urlopen
+        >>> from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+        >>> # Load image
+        >>> image = Image.open(urlopen(
+        ...     'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png'
+        ... ))
+
+        >>> # Load model and image processor
+        >>> checkpoint = "timm/resnet50.a1_in1k"
+        >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
+        >>> model = AutoModelForImageClassification.from_pretrained(checkpoint).eval()
+
+        >>> # Preprocess image
+        >>> inputs = image_processor(image)
+
+        >>> # Forward pass
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> # Get top 5 predictions
+        >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
