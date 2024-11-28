@@ -40,29 +40,23 @@ class EmptyJob:
     job_name = "empty"
 
     def to_dict(self):
-        steps = []
-        step = {"run": 'ls -la'}
-        steps.append(step)
-
+        steps = [{"run": 'ls -la'}]
         if self.job_name == "collection_job":
-            steps.append("checkout")
+            steps.extend(
+                [
+                    "checkout",
+                    {"run": """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "collection_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""},
+                    {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID'},
+                    {"store_artifacts": {"path": "outputs"}},
+                    {"run": 'echo "All required jobs have now completed"'},
+                ]
+            )
 
-            wait_command = """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "collection_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done"""
-            step = {"run": wait_command}
-            steps.append(step)
-
-            step = {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID'}
-            steps.append(step)
-
-            step = {"store_artifacts": {"path": "outputs"}}
-            steps.append(step)
-
-            step = {"run": 'echo "All required jobs have now completed"'}
-            steps.append(step)
         return {
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
             "steps": steps,
         }
+
 
 @dataclass
 class CircleCIJob:
@@ -368,12 +362,6 @@ EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
 PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
-
-# REGULAR_TESTS = [torch_job, hub_job] # fmt: skip
-# EXAMPLES_TESTS = []
-# PIPELINE_TESTS = []
-# REPO_UTIL_TESTS = []
-# DOC_TESTS = []
 
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
 
