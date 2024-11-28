@@ -59,7 +59,6 @@ class HiggsHfQuantizer(HfQuantizer):
     requires_calibration = False
     requires_parameters_quantization = True
     required_packages = ["flute-kernel", "fast_hadamard_transform"]
-    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
