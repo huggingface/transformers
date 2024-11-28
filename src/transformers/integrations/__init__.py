@@ -157,7 +157,6 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
-    from .higgs import HiggsLinear, quantize_with_higgs, replace_with_higgs_linear
     from .fsdp import is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,
@@ -167,6 +166,7 @@ if TYPE_CHECKING:
         load_dequant_gguf_tensor,
         load_gguf,
     )
+    from .higgs import HiggsLinear, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,

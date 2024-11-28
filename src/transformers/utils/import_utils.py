@@ -102,7 +102,12 @@ _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
-_flute_available = True # _is_package_available("flute")
+try:
+    _flute_available = package_exists = (
+        importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") == "0.2.6"
+    )
+except importlib.metadata.PackageNotFoundError:
+    _flute_available = False
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
@@ -330,7 +335,7 @@ def is_torch_deterministic():
         return False
     else:
         return True
-    
+
 
 def is_hadamard_available():
     return _hadamard_available

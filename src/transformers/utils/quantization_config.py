@@ -1223,7 +1223,7 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         loading_attibutes = ["activation_scale_ub"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
-    
+
 
 @dataclass
 class HiggsConfig(QuantizationConfigMixin):
@@ -1256,7 +1256,7 @@ class HiggsConfig(QuantizationConfigMixin):
         self.bits = bits
         self.p = p
         self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
-        self.num_sms_packed=128
+        self.num_sms_packed = 128
 
         self.post_init()
 

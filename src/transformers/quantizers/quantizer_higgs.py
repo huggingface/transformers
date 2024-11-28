@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
-from typing import TYPE_CHECKING, Optional, Dict, List, Any
-
-from packaging import version
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -23,13 +20,13 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations import HiggsLinear, replace_with_higgs_linear, quantize_with_higgs
-from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
-
-
 # if is_torch_available():
 import torch
+
+from ..integrations import HiggsLinear, quantize_with_higgs, replace_with_higgs_linear
+from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, logging
+from ..utils.quantization_config import QuantizationConfigMixin
+
 
 logger = logging.get_logger(__name__)
 
@@ -63,9 +60,11 @@ class HiggsHfQuantizer(HfQuantizer):
 
         if not is_flute_available():
             raise ImportError("Using `higgs` quantization requires FLUTE: `pip install flute-kernel`")
-        
+
         if not is_hadamard_available():
-            raise ImportError("Using `higgs` quantization requires fast_hadamard_transform: `pip install fast_hadamard_transform`")
+            raise ImportError(
+                "Using `higgs` quantization requires fast_hadamard_transform: `pip install fast_hadamard_transform`"
+            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -75,9 +74,11 @@ class HiggsHfQuantizer(HfQuantizer):
                     "CUDA available. Assuming HIGGS inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
                 )
             else:
-                raise NotImplementedError("HIGGS quantization is only supported on GPU. Please use a different quantizer.")
+                raise NotImplementedError(
+                    "HIGGS quantization is only supported on GPU. Please use a different quantizer."
+                )
         return torch_dtype
-    
+
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -91,19 +92,18 @@ class HiggsHfQuantizer(HfQuantizer):
         Quantizes weights into weight and weight_scale
         """
         import flute.utils
-        
+
         if target_device not in model.flute_workspaces:
             model.flute_workspaces[target_device] = flute.utils.make_workspace_streamk(device=target_device)
-
 
         flute_dict = quantize_with_higgs(
             param_value.to(target_device),
             self.quantization_config.bits,
             self.quantization_config.p,
         )
-        
+
         del param_value
-        
+
         module, tensor_name = get_module_from_name(model, param_name)
         for key, value in flute_dict.items():
             if key in module._parameters:
@@ -140,7 +140,7 @@ class HiggsHfQuantizer(HfQuantizer):
 
     def is_serializable(self, safe_serialization=None):
         return True
-    
+
     def check_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -149,8 +149,6 @@ class HiggsHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ) -> bool:
-        import bitsandbytes as bnb
-
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module, HiggsLinear) and tensor_name == "weight":
             # Add here check for loaded components' dtypes once serialization is implemented
