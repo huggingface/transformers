@@ -1391,7 +1391,10 @@ def assert_screenout(out, what):
 def set_model_tester_for_less_flaky_test(test_case):
     if hasattr(test_case.model_tester, "num_hidden_layers"):
         test_case.model_tester.num_hidden_layers = 1
-    if hasattr(test_case.model_tester, "vision_config") and "num_hidden_layers" in test_case.model_tester.vision_config:
+    if (
+        hasattr(test_case.model_tester, "vision_config")
+        and "num_hidden_layers" in test_case.model_tester.vision_config
+    ):
         test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
         test_case.model_tester.vision_config["num_hidden_layers"] = 1
     if hasattr(test_case.model_tester, "text_config") and "num_hidden_layers" in test_case.model_tester.text_config:
