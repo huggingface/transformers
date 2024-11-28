@@ -49,7 +49,7 @@ def pad_to_block(tensor, dims, had_block_size, value=0):
     return nn.functional.pad(tensor, pad_dims, "constant", value)
 
 
-def get_higgs_grid(p: int, n: int) -> torch.Tensor:
+def get_higgs_grid(p: int, n: int):
     if (p, n) == (2, 256):
         return torch.tensor(
             [
@@ -315,7 +315,7 @@ def get_higgs_grid(p: int, n: int) -> torch.Tensor:
         raise NotImplementedError(f"Unsupported p={p}, n={n}")
 
 
-def quantize_with_higgs(weight: torch.Tensor, bits: int = 4, p: int = 2):
+def quantize_with_higgs(weight, bits: int = 4, p: int = 2):
     assert len(weight.shape) == 2, "Only 2D weights are supported for now"
     if weight.device.type != "cuda":
         raise ValueError(
