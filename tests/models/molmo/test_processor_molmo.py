@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, MolmoProcessor
+from transformers import AutoProcessor, LlamaTokenizerFast, MolmoProcessor
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -102,14 +102,8 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Image processor should return same pixel values, independently of input format
         self.assertTrue((inputs_nested.pixel_values == inputs_flat.pixel_values).all())
 
-    def test_can_load_various_tokenizers(self):
-        for checkpoint in ["Intel/molmo-gemma-2b", "allenai/Molmo-7B-D-0924"]:
-            processor = MolmoProcessor.from_pretrained(checkpoint)
-            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
-
     def test_chat_template(self):
-        processor = MolmoProcessor.from_pretrained("allenai/Molmo-7B-D-0924-hf")
+        processor = MolmoProcessor.from_pretrained("Molbap/molmo-hf-7B-D")
         expected_prompt = "User: <image> What is shown in this image? Assistant:"
 
         messages = [

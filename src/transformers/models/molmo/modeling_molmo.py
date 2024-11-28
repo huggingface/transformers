@@ -2051,8 +2051,18 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         # image pooling
         leading_dimension, image_batch_size, patch_height, patch_width, image_embed_dim = image_features.shape
 
-        image_features = image_features.view(leading_dimension, image_batch_size, patch_height // self.config.pooling_height, self.config.pooling_height, patch_width // self.config.pooling_width, self.config.pooling_width, image_embed_dim)
-        image_features = image_features.permute(0, 1, 2, 4, 3, 5, 6).reshape(-1, self.config.pooling_height * self.config.pooling_width, image_embed_dim)
+        image_features = image_features.view(
+            leading_dimension,
+            image_batch_size,
+            patch_height // self.config.pooling_height,
+            self.config.pooling_height,
+            patch_width // self.config.pooling_width,
+            self.config.pooling_width,
+            image_embed_dim,
+        )
+        image_features = image_features.permute(0, 1, 2, 4, 3, 5, 6).reshape(
+            -1, self.config.pooling_height * self.config.pooling_width, image_embed_dim
+        )
 
         if self.config.image_pooling_type == "attention_meanq":
             queries = image_features.mean(-2, keepdim=True)
