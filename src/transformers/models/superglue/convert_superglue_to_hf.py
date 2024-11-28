@@ -132,7 +132,31 @@ def convert_state_dict(state_dict, config):
         for key in keys:
             state_dict[key] = state_dict[key].squeeze(-1)
 
+    def qkv_permute_weights_and_biases(keys, num_heads=4):
+        for key in keys:
+            tensor = state_dict[key]
+            shape = tensor.shape
+            dim_out = shape[0]
+            if len(shape) == 2:
+                dim_in = shape[1]
+                tensor = (
+                    tensor.reshape(dim_out // num_heads, num_heads, dim_in).permute(1, 0, 2).reshape(dim_out, dim_in)
+                )
+            if len(shape) == 1:
+                tensor = tensor.reshape(dim_out // num_heads, num_heads).permute(1, 0).reshape(dim_out)
+            state_dict[key] = tensor
+
+    def output_permute_weights(keys, num_heads=4):
+        for key in keys:
+            tensor = state_dict[key]
+            dim_in = tensor.shape[1]
+            dim_out = tensor.shape[0]
+            tensor = tensor.reshape(dim_out, dim_in // num_heads, num_heads).permute(0, 2, 1).reshape(dim_out, dim_in)
+            state_dict[key] = tensor
+
     conv_keys = []
+    qkv_permute_keys = []
+    output_permute_keys = []
     # Keypoint Encoder
     keypoint_encoder_key = "keypoint_encoder.encoder"
     for i in range(1, len(config.keypoint_encoder_sizes) + 2):
@@ -162,6 +186,17 @@ def convert_state_dict(state_dict, config):
                 f"{attention_key}.output.dense.weight",
             ]
         )
+        qkv_permute_keys.extend(
+            [
+                f"{attention_key}.self.query.weight",
+                f"{attention_key}.self.key.weight",
+                f"{attention_key}.self.value.weight",
+                f"{attention_key}.self.query.bias",
+                f"{attention_key}.self.key.bias",
+                f"{attention_key}.self.value.bias",
+            ]
+        )
+        output_permute_keys.append(f"{attention_key}.output.dense.weight")
 
         ## MLP
         conv_keys.extend([f"{gnn_layer_key}.mlp.0.linear.weight", f"{gnn_layer_key}.mlp.1.weight"])
@@ -170,6 +205,8 @@ def convert_state_dict(state_dict, config):
     conv_keys.append("final_projection.final_proj.weight")
 
     convert_conv_to_linear(conv_keys)
+    qkv_permute_weights_and_biases(qkv_permute_keys)
+    output_permute_weights(output_permute_keys)
     all_keys = list(state_dict.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys, converted_to_final_key_mapping)
     state_dict = replace_state_dict_keys(all_keys, new_keys, state_dict)
