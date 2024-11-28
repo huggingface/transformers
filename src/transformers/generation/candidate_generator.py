@@ -456,7 +456,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             vocabulary_size)` containing the logits associated to each candidate.
         """
         max_new_tokens = int(self.num_assistant_tokens)
-        if max_new_tokens == 0: # TODO
+        if max_new_tokens == 0:
             return input_ids, None
         
         input_ids = input_ids.to(self.assistant_model.device)
