@@ -112,14 +112,10 @@ class MolmoVisionConfig(SiglipVisionConfig):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
@@ -133,10 +129,6 @@ class MolmoVisionConfig(SiglipVisionConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -157,37 +149,27 @@ class MolmoVisionConfig(SiglipVisionConfig):
         hidden_size=1024,
         num_attention_heads=16,
         intermediate_size=4096,
-        image_num_key_value_heads=16,
         num_hidden_layers=23,
         num_image_positions=577,
-        projection_dim=512,
-        num_channels=3,
         image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
-        initializer_factor=1.0,
-        residual_dropout=0.0,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**super_kwargs)
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
-        self.image_num_key_value_heads = image_num_key_value_heads
         self.num_image_positions = num_image_positions
-        self.residual_dropout = residual_dropout
         self.hidden_act = hidden_act
 
 
