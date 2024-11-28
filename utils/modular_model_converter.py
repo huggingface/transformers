@@ -18,7 +18,7 @@ import importlib
 import os
 import re
 from abc import ABC, abstractmethod
-from collections import defaultdict, deque, Counter
+from collections import Counter, defaultdict, deque
 from typing import Dict, Set
 
 import libcst as cst
@@ -83,14 +83,15 @@ def get_cased_name(lowercase_name: str) -> str:
         return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
     else:
         return "".join(x.title() for x in lowercase_name.split("_"))
-    
+
+
 def get_lowercase_name(cased_name: str) -> str:
     """From a model name in Camelcase in the format `MyModel`, return the lowercase name in the format `my_model`."""
     inverse_mapping = {value: key for key, value in CONFIG_MAPPING_NAMES.items()}
     if cased_name + "Config" in inverse_mapping:
-       return inverse_mapping[cased_name + "Config"]
-    else: 
-        return "_".join([s.lower() for s in re.findall(r'[A-Z][^A-Z]*', cased_name)])
+        return inverse_mapping[cased_name + "Config"]
+    else:
+        return "_".join([s.lower() for s in re.findall(r"[A-Z][^A-Z]*", cased_name)])
 
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
@@ -113,7 +114,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
             old_name: new_name,
             old_name.upper(): new_name.upper(),
             # For some old models, `self.cased_old_name` == `old_name.upper()` in which case this overwrite previous entry
-            self.cased_old_name: self.cased_new_name
+            self.cased_old_name: self.cased_new_name,
         }
         # In case new_name is a prefix alias, and not the original new model name
         self.original_new_model_name = original_new_model_name
@@ -124,13 +125,15 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
             return cst.RemoveFromParent()
         update = preserve_case_replace(updated_node.value, self.patterns, self.cased_new_name)
         return updated_node.with_changes(value=update)
-    
+
     def leave_ImportFrom(self, original_node, updated_node):
         """The imports from other file types (configuration, processing etc) should use original model name."""
         if self.original_new_model_name != self.new_name and m.matches(updated_node.module, m.Name()):
             patterns = "|".join(ALL_FILE_TYPES)
             regex = rf"({patterns})_{self.new_name}"
-            new_source = re.sub(regex, lambda m: f"{m.group(1)}_{self.original_new_model_name}", updated_node.module.value)
+            new_source = re.sub(
+                regex, lambda m: f"{m.group(1)}_{self.original_new_model_name}", updated_node.module.value
+            )
             updated_node = updated_node.with_changes(module=updated_node.module.with_changes(value=new_source))
         return updated_node
 
@@ -875,7 +878,7 @@ def common_partial_suffix(str1: str, str2: str) -> str:
     """Return the biggest common suffix between 2 strings. If one string is a full suffix of the other string,
     we do not consider it a common suffix and return `""`"""
     common_suffix = ""
-    for i in range(1, min(len(str1), len(str2))+1):
+    for i in range(1, min(len(str1), len(str2)) + 1):
         if str1[-i] == str2[-i]:
             common_suffix = str1[-i] + common_suffix
         else:
@@ -886,7 +889,9 @@ def common_partial_suffix(str1: str, str2: str) -> str:
     return common_suffix
 
 
-def replace_class_node(mapper: ModelFileMapper, class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str):
+def replace_class_node(
+    mapper: ModelFileMapper, class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
+):
     """
     Replace a class node which inherits from another modeling class. This function works in the following way:
     - start from the base class node of the inherited class (a cst.Node)
@@ -1351,7 +1356,9 @@ class ModularFileMapper(ModuleMapper):
         cased_default_name = get_cased_name(self.model_name)
         # Iterate over all new classes to get modeling super classes
         for class_name, class_node in self.classes.items():
-            modeling_bases = [k.value.value for k in class_node.bases if k.value.value in self.model_specific_imported_objects]
+            modeling_bases = [
+                k.value.value for k in class_node.bases if k.value.value in self.model_specific_imported_objects
+            ]
             if len(modeling_bases) > 1:
                 raise ValueError(
                     f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {*modeling_bases,}."
@@ -1381,7 +1388,7 @@ class ModularFileMapper(ModuleMapper):
                 final_name_mapping[file] = get_lowercase_name(most_used)
             else:
                 final_name_mapping[file] = get_lowercase_name(list(prefixes_counter)[0])
-        
+
         # Check we are not missing imported files
         for file in self.model_specific_modules.keys():
             if file not in final_name_mapping.keys():
@@ -1440,7 +1447,9 @@ def get_class_node_and_dependencies(
     the modular that we nay need.
     """
     # An exception was already raised if this has len > 1
-    model_specific_bases = [k.value.value for k in node.bases if k.value.value in modular_mapper.model_specific_imported_objects]
+    model_specific_bases = [
+        k.value.value for k in node.bases if k.value.value in modular_mapper.model_specific_imported_objects
+    ]
     super_class = model_specific_bases[0] if len(model_specific_bases) == 1 else None
 
     file_type = find_file_type(class_name)

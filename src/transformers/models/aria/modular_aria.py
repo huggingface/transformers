@@ -38,7 +38,6 @@ from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
-    LLAMA_ATTENTION_CLASSES,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
@@ -47,7 +46,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from ..llava_next.image_processing_llava_next import make_batched_images, divide_to_patches
+from ..llava_next.image_processing_llava_next import divide_to_patches, make_batched_images
 
 
 logger = logging.get_logger(__name__)
@@ -99,8 +98,10 @@ def get_experts_gemm():
             experts_gemm = sequential_gemm
         else:
             from grouped_gemm.ops import gmm
+
             experts_gemm = gmm
     return experts_gemm
+
 
 experts_gemm = get_experts_gemm()
 
@@ -810,7 +811,7 @@ class AriaProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
-    
+
     def save_pretrained(self, save_directory, **kwargs):
         """
         Save both the image processor and tokenizer.

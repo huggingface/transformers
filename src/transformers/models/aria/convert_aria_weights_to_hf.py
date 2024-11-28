@@ -166,5 +166,6 @@ def main():
 
     tokenizer.push_to_hub(args.output_hub_path)
 
+
 if __name__ == "__main__":
     main()
