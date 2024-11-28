@@ -38,7 +38,6 @@ from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
-    LLAMA_ATTENTION_CLASSES,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
@@ -47,7 +46,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from ..llava_next.image_processing_llava_next import make_batched_images
+from ..llava_next.image_processing_llava_next import divide_to_patches, make_batched_images
 
 
 logger = logging.get_logger(__name__)
@@ -88,15 +87,23 @@ def sequential_gemm(token_states, expert_weights, tokens_per_expert):
     return output
 
 
-if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
-    logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM")
-    experts_gemm = sequential_gemm
-else:
-    if importlib.util.find_spec("grouped_gemm") is None:
-        logger.warning("grouped_gemm is not installed, using sequential GEMM, which is slower.")
+def get_experts_gemm():
+    """Return the experts gemm function to be used."""
+    if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
+        logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM")
         experts_gemm = sequential_gemm
     else:
-        from grouped_gemm.ops import gmm as experts_gemm
+        if importlib.util.find_spec("grouped_gemm") is None:
+            logger.warning("grouped_gemm is not installed, using sequential GEMM, which is slower.")
+            experts_gemm = sequential_gemm
+        else:
+            from grouped_gemm.ops import gmm
+
+            experts_gemm = gmm
+    return experts_gemm
+
+
+experts_gemm = get_experts_gemm()
 
 
 class AriaTextConfig(LlamaConfig):
@@ -384,75 +391,6 @@ class AriaProjector(nn.Module):
         out = self.feed_forward(self.layer_norm(attention_out))
 
         return out
-
-
-# Copied from models.llava_next.image_processing_llava_next.py
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
-    """
-    Divides an image into patches of a specified size.
-
-    Args:
-        image (`np.array`):
-            The input image.
-        patch_size (`int`):
-            The size of each patch.
-        input_data_format (`ChannelDimension` or `str`):
-            The channel dimension format of the input image.
-
-    Returns:
-        `list`: A list of np.array representing the patches.
-    """
-    patches = []
-    height, width = get_image_size(image, channel_dim=input_data_format)
-    for i in range(0, height, patch_size):
-        for j in range(0, width, patch_size):
-            if input_data_format == ChannelDimension.LAST:
-                patch = image[i : i + patch_size, j : j + patch_size]
-            else:
-                patch = image[:, i : i + patch_size, j : j + patch_size]
-            patches.append(patch)
-
-    return patches
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image size and the desired output size.
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
 
 
 class AriaImageProcessor(BaseImageProcessor):
@@ -792,7 +730,6 @@ class AriaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    # Modified from models.llava_next.processing_llave_next.LlavaNextProcessor.__call__
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -857,7 +794,6 @@ class AriaProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -865,7 +801,6 @@ class AriaProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
@@ -873,8 +808,27 @@ class AriaProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    def save_pretrained(self, save_directory, **kwargs):
+        """
+        Save both the image processor and tokenizer.
+        """
+        merged_kwargs = self._merge_kwargs(
+            AriaProcessorKwargs,
+            {},
+            **kwargs,
+        )
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(
+                save_directory,
+                **merged_kwargs["images_kwargs"],
+            )
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(
+                save_directory,
+                **merged_kwargs["text_kwargs"],
+            )
+
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
@@ -925,14 +879,8 @@ class AriaSharedExpertsMLP(LlamaMLP):
     """
 
     def __init__(self, config: AriaTextConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.hidden_size = config.hidden_size
+        super().__init__(self)
         self.intermediate_size = config.moe_intermediate_size * config.moe_num_shared_experts
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
 
 
 class AriaGroupedExpertsGEMM(nn.Module):
@@ -1112,14 +1060,8 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
     """
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
-
+        super().__init__(self)
         self.mlp = AriaTextMoELayer(config)
-        self.input_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
@@ -1139,7 +1081,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
             nn.init.trunc_normal_(module.query, std=std)
 
 
-class AriaTextModel(LlamaModel, AriaTextPreTrainedModel):
+class AriaTextModel(LlamaModel):
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
