@@ -32,7 +32,7 @@ alt="drawing" width="600"/>
 
 <small> Performance comparison between Relation-DETR and other DETR methods. Taken from the <a href="https://arxiv.org/abs/2407.11699">original paper.</a> </small>
 
-The model version was contributed by [rafaelpadilla](https://huggingface.co/rafaelpadilla) and [xiuqhou](https://github.com/xiuqhou). The original code can be found [here](https://github.com/xiuqhou/Relation-DETR/).
+The model version was contributed by [xiuqhou](https://github.com/xiuqhou). The original code can be found [here](https://github.com/xiuqhou/Relation-DETR/).
 
 
 ## Usage tips
