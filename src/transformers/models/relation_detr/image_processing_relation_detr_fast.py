@@ -16,7 +16,6 @@
 
 import functools
 import math
-import pathlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -44,16 +43,14 @@ from ...image_utils import (
     get_image_type,
     infer_channel_dimension_format,
     make_list_of_images,
-    pil_torch_interpolation_mapping,
     validate_annotations,
-    validate_kwargs,
 )
 from ...utils import (
     TensorType,
+    filter_out_non_signature_kwargs,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .image_processing_relation_detr import (
@@ -65,10 +62,7 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from torchvision.io import read_image
-
-    if is_vision_available():
-        from ...image_utils import pil_torch_interpolation_mapping
+    from ...image_utils import pil_torch_interpolation_mapping
 
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
@@ -78,51 +72,11 @@ if is_torchvision_available():
 
 logger = logging.get_logger(__name__)
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION,)
 
 
-# Copied from transformers.models.detr.image_processing_detr_fast.convert_coco_poly_to_mask
-def convert_coco_poly_to_mask(segmentations, height: int, width: int, device: torch.device) -> torch.Tensor:
-    """
-    Convert a COCO polygon annotation to a mask.
-
-    Args:
-        segmentations (`List[List[float]]`):
-            List of polygons, each polygon represented by a list of x-y coordinates.
-        height (`int`):
-            Height of the mask.
-        width (`int`):
-            Width of the mask.
-    """
-    try:
-        from pycocotools import mask as coco_mask
-    except ImportError:
-        raise ImportError("Pycocotools is not installed in your environment.")
-
-    masks = []
-    for polygons in segmentations:
-        rles = coco_mask.frPyObjects(polygons, height, width)
-        mask = coco_mask.decode(rles)
-        if len(mask.shape) < 3:
-            mask = mask[..., None]
-        mask = torch.as_tensor(mask, dtype=torch.uint8, device=device)
-        mask = torch.any(mask, axis=2)
-        masks.append(mask)
-    if masks:
-        masks = torch.stack(masks, axis=0)
-    else:
-        masks = torch.zeros((0, height, width), dtype=torch.uint8, device=device)
-
-    return masks
-
-
-# Copied from transformers.models.detr.image_processing_detr_fast.prepare_coco_detection_annotation with DETR->RelationDetr
-def prepare_coco_detection_annotation(
-    image,
-    target,
-    return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
-):
+# Modified from transformers.models.detr.image_processing_detr_fast.prepare_coco_detection_annotation
+def prepare_coco_detection_annotation(image, target):
     """
     Convert the target in COCO format into the format expected by RelationDetr.
     """
@@ -172,108 +126,6 @@ def prepare_coco_detection_annotation(
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
         new_target["keypoints"] = keypoints
-
-    if return_segmentation_masks:
-        segmentation_masks = [obj["segmentation"] for obj in annotations]
-        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width, device=image.device)
-        new_target["masks"] = masks[keep]
-
-    return new_target
-
-
-# Copied from transformers.models.detr.image_processing_detr_fast.masks_to_boxes
-def masks_to_boxes(masks: torch.Tensor) -> torch.Tensor:
-    """
-    Compute the bounding boxes around the provided panoptic segmentation masks.
-
-    Args:
-        masks: masks in format `[number_masks, height, width]` where N is the number of masks
-
-    Returns:
-        boxes: bounding boxes in format `[number_masks, 4]` in xyxy format
-    """
-    if masks.numel() == 0:
-        return torch.zeros((0, 4), device=masks.device)
-
-    h, w = masks.shape[-2:]
-    y = torch.arange(0, h, dtype=torch.float32, device=masks.device)
-    x = torch.arange(0, w, dtype=torch.float32, device=masks.device)
-    # see https://github.com/pytorch/pytorch/issues/50276
-    y, x = torch.meshgrid(y, x, indexing="ij")
-
-    x_mask = masks * torch.unsqueeze(x, 0)
-    x_max = x_mask.view(x_mask.shape[0], -1).max(-1)[0]
-    x_min = (
-        torch.where(masks, x.unsqueeze(0), torch.tensor(1e8, device=masks.device)).view(masks.shape[0], -1).min(-1)[0]
-    )
-
-    y_mask = masks * torch.unsqueeze(y, 0)
-    y_max = y_mask.view(y_mask.shape[0], -1).max(-1)[0]
-    y_min = (
-        torch.where(masks, y.unsqueeze(0), torch.tensor(1e8, device=masks.device)).view(masks.shape[0], -1).min(-1)[0]
-    )
-
-    return torch.stack([x_min, y_min, x_max, y_max], 1)
-
-
-# Copied from transformers.models.detr.image_processing_detr_fast.rgb_to_id
-def rgb_to_id(color):
-    """
-    Converts RGB color to unique ID.
-    """
-    if isinstance(color, torch.Tensor) and len(color.shape) == 3:
-        if color.dtype == torch.uint8:
-            color = color.to(torch.int32)
-        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
-    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
-
-
-# Copied from transformers.models.detr.image_processing_detr_fast.prepare_coco_panoptic_annotation with DETR->RelationDetr
-def prepare_coco_panoptic_annotation(
-    image: torch.Tensor,
-    target: Dict,
-    masks_path: Union[str, pathlib.Path],
-    return_masks: bool = True,
-    input_data_format: Union[ChannelDimension, str] = None,
-) -> Dict:
-    """
-    Prepare a coco panoptic annotation for RelationDetr.
-    """
-    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
-    annotation_path = pathlib.Path(masks_path) / target["file_name"]
-
-    new_target = {}
-    new_target["image_id"] = torch.as_tensor(
-        [target["image_id"] if "image_id" in target else target["id"]], dtype=torch.int64, device=image.device
-    )
-    new_target["size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
-    new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
-
-    if "segments_info" in target:
-        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32).to(image.device)
-        masks = rgb_to_id(masks)
-
-        ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
-        masks = masks == ids[:, None, None]
-        masks = masks.to(torch.bool)
-        if return_masks:
-            new_target["masks"] = masks
-        new_target["boxes"] = masks_to_boxes(masks)
-        new_target["class_labels"] = torch.as_tensor(
-            [segment_info["category_id"] for segment_info in target["segments_info"]],
-            dtype=torch.int64,
-            device=image.device,
-        )
-        new_target["iscrowd"] = torch.as_tensor(
-            [segment_info["iscrowd"] for segment_info in target["segments_info"]],
-            dtype=torch.int64,
-            device=image.device,
-        )
-        new_target["area"] = torch.as_tensor(
-            [segment_info["area"] for segment_info in target["segments_info"]],
-            dtype=torch.float32,
-            device=image.device,
-        )
 
     return new_target
 
@@ -352,22 +204,9 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         size_divisor: Optional[int] = None,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=False)
 
-        # Backwards compatibility
         if do_convert_annotations is None:
             do_convert_annotations = do_normalize
 
@@ -385,53 +224,13 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         self.do_pad = do_pad
         self.pad_size = pad_size
         self.size_divisor = size_divisor
-        self._valid_processor_keys = [
-            "images",
-            "annotations",
-            "return_segmentation_masks",
-            "masks_path",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "do_convert_annotations",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "pad_size",
-            "format",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-            "size_divisor",
-        ]
 
-    @classmethod
-    # Copied from transformers.models.detr.image_processing_detr_fast.DetrImageProcessorFast.from_dict with Detr->RelationDetr
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `RelationDetrImageProcessorFast.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr_fast.DetrImageProcessorFast.prepare_annotation with DETR->RelationDetr
+    # Modified from transformers.models.detr.image_processing_detr_fast.DetrImageProcessorFast.prepare_annotation
     def prepare_annotation(
         self,
         image: torch.Tensor,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
         """
         Prepare an annotation for feeding into RelationDetr model.
@@ -439,19 +238,7 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
-            )
-        elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_panoptic_annotation(
-                image,
-                target,
-                masks_path=masks_path,
-                return_masks=return_segmentation_masks,
-                input_data_format=input_data_format,
-            )
+            target = prepare_coco_detection_annotation(image, target)
         else:
             raise ValueError(f"Format {format} is not supported.")
         return target
@@ -678,12 +465,11 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         if do_normalize and None in (image_mean, image_std):
             raise ValueError("Image mean and standard deviation must be specified if do_normalize is True.")
 
+    @filter_out_non_signature_kwargs(extra=["device"])
     def preprocess(
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: Optional[Union[PILImageResampling, "F.InterpolationMode"]] = None,
@@ -720,10 +506,6 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
                 - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
                 - "file_name" (`str`): The file name of the image.
-            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
-                Whether to return segmentation masks.
-            masks_path (`str` or `pathlib.Path`, *optional*):
-                Path to the directory containing the segmentation masks.
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to self.size):
@@ -779,19 +561,6 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
                 The size to which the height and width of the images should be divisible by. If set, the images will
                 be padded to the nearest multiple of `size_divisor`.
         """
-        if "pad_and_return_pixel_mask" in kwargs:
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            size = kwargs.pop("max_size")
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
         size = get_size_dict(size=size, default_to_square=False)
@@ -807,6 +576,7 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         do_pad = self.do_pad if do_pad is None else do_pad
         pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
+        return_tensors = "pt" if return_tensors is None else return_tensors
         device = kwargs.pop("device", None)
 
         # Make hashable for cache
@@ -819,7 +589,6 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
 
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         self._validate_input_arguments(
             do_rescale=do_rescale,
@@ -845,16 +614,6 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         format = AnnotationFormat(format)
         if annotations is not None:
             validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
-
-        if (
-            masks_path is not None
-            and format == AnnotationFormat.COCO_PANOPTIC
-            and not isinstance(masks_path, (pathlib.Path, str))
-        ):
-            raise ValueError(
-                "The path to the directory containing the mask PNG files should be provided as a"
-                f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
-            )
 
         data = {}
         if image_type == ImageType.PIL:
@@ -884,14 +643,7 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
             # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
             if annotations is not None:
-                annotation = self.prepare_annotation(
-                    image,
-                    annotation,
-                    format,
-                    return_segmentation_masks=return_segmentation_masks,
-                    masks_path=masks_path,
-                    input_data_format=input_data_format,
-                )
+                annotation = self.prepare_annotation(image, annotation, format)
 
             if do_resize:
                 interpolation = (
@@ -965,53 +717,7 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
             ]
         return encoded_inputs
 
-    # Copied from transformers.models.relation_detr.image_processing_relation_detr.RelationDetrImageProcessor.post_process
-    def post_process(self, outputs, target_sizes):
-        """
-        Converts the raw output of [`RelationDetrForObjectDetection`] into final bounding boxes in (top_left_x,
-        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
-
-        Args:
-            outputs ([`RelationDetrObjectDetectionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
-                original image size (before any data augmentation). For visualization, this should be the image size
-                after data augment, but before padding.
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        logger.warning_once(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-        )
-
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
-        if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
-        scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
-        labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
-
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
-
-    # Copied from transformers.models.relation_detr.image_processing_relation_detr.RelationDetrImageProcessor.post_process_object_detection
+    # Modified from transformers.models.relation_detr.image_processing_relation_detr.RelationDetrImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
     ):
@@ -1063,10 +769,10 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
-        for s, l, b in zip(scores, labels, boxes):
-            score = s[s > threshold]
-            label = l[s > threshold]
-            box = b[s > threshold]
+        for score, label, box in zip(scores, labels, boxes):
+            score = score[score > threshold]
+            label = label[score > threshold]
+            box = box[score > threshold]
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results

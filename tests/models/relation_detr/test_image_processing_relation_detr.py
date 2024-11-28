@@ -22,7 +22,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -131,7 +131,7 @@ class RelationDetrImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class RelationDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
+class RelationDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = RelationDetrImageProcessor if is_vision_available() else None
     fast_image_processing_class = RelationDetrImageProcessorFast if is_torchvision_available() else None
 
@@ -159,12 +159,6 @@ class RelationDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessing
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
             self.assertEqual(image_processor.do_pad, True)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
-            self.assertEqual(image_processor.do_pad, False)
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):

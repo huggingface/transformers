@@ -14,11 +14,8 @@
 # limitations under the License.
 """Image processor class for Relation DETR."""
 
-import io
 import math
-import pathlib
-from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -28,11 +25,9 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
-    id_to_rgb,
     pad,
     rescale,
     resize,
-    rgb_to_id,
     to_channel_dimension_format,
 )
 from ...image_utils import (
@@ -50,39 +45,29 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
+    filter_out_non_signature_kwargs,
     is_flax_available,
     is_jax_tensor,
-    is_scipy_available,
     is_tf_available,
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
-    is_vision_available,
     logging,
+    requires_backends,
 )
 
 
 if is_torch_available():
     import torch
-    from torch import nn
-
-
-if is_vision_available():
-    import PIL
-
-if is_scipy_available():
-    import scipy.special
-    import scipy.stats
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION,)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -290,46 +275,10 @@ def make_pixel_mask(
     return mask
 
 
-# Copied from transformers.models.detr.image_processing_detr.convert_coco_poly_to_mask
-def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
-    """
-    Convert a COCO polygon annotation to a mask.
-
-    Args:
-        segmentations (`List[List[float]]`):
-            List of polygons, each polygon represented by a list of x-y coordinates.
-        height (`int`):
-            Height of the mask.
-        width (`int`):
-            Width of the mask.
-    """
-    try:
-        from pycocotools import mask as coco_mask
-    except ImportError:
-        raise ImportError("Pycocotools is not installed in your environment.")
-
-    masks = []
-    for polygons in segmentations:
-        rles = coco_mask.frPyObjects(polygons, height, width)
-        mask = coco_mask.decode(rles)
-        if len(mask.shape) < 3:
-            mask = mask[..., None]
-        mask = np.asarray(mask, dtype=np.uint8)
-        mask = np.any(mask, axis=2)
-        masks.append(mask)
-    if masks:
-        masks = np.stack(masks, axis=0)
-    else:
-        masks = np.zeros((0, height, width), dtype=np.uint8)
-
-    return masks
-
-
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->RelationDetr
+# Modified from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation
 def prepare_coco_detection_annotation(
     image,
     target,
-    return_segmentation_masks: bool = False,
     input_data_format: Optional[Union[ChannelDimension, str]] = None,
 ):
     """
@@ -378,220 +327,7 @@ def prepare_coco_detection_annotation(
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
         new_target["keypoints"] = keypoints
 
-    if return_segmentation_masks:
-        segmentation_masks = [obj["segmentation"] for obj in annotations]
-        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width)
-        new_target["masks"] = masks[keep]
-
     return new_target
-
-
-# Copied from transformers.models.detr.image_processing_detr.masks_to_boxes
-def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
-    """
-    Compute the bounding boxes around the provided panoptic segmentation masks.
-
-    Args:
-        masks: masks in format `[number_masks, height, width]` where N is the number of masks
-
-    Returns:
-        boxes: bounding boxes in format `[number_masks, 4]` in xyxy format
-    """
-    if masks.size == 0:
-        return np.zeros((0, 4))
-
-    h, w = masks.shape[-2:]
-    y = np.arange(0, h, dtype=np.float32)
-    x = np.arange(0, w, dtype=np.float32)
-    # see https://github.com/pytorch/pytorch/issues/50276
-    y, x = np.meshgrid(y, x, indexing="ij")
-
-    x_mask = masks * np.expand_dims(x, axis=0)
-    x_max = x_mask.reshape(x_mask.shape[0], -1).max(-1)
-    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
-    x_min = x.filled(fill_value=1e8)
-    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
-
-    y_mask = masks * np.expand_dims(y, axis=0)
-    y_max = y_mask.reshape(x_mask.shape[0], -1).max(-1)
-    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
-    y_min = y.filled(fill_value=1e8)
-    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
-
-    return np.stack([x_min, y_min, x_max, y_max], 1)
-
-
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->RelationDetr
-def prepare_coco_panoptic_annotation(
-    image: np.ndarray,
-    target: Dict,
-    masks_path: Union[str, pathlib.Path],
-    return_masks: bool = True,
-    input_data_format: Union[ChannelDimension, str] = None,
-) -> Dict:
-    """
-    Prepare a coco panoptic annotation for RelationDetr.
-    """
-    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
-    annotation_path = pathlib.Path(masks_path) / target["file_name"]
-
-    new_target = {}
-    new_target["image_id"] = np.asarray([target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64)
-    new_target["size"] = np.asarray([image_height, image_width], dtype=np.int64)
-    new_target["orig_size"] = np.asarray([image_height, image_width], dtype=np.int64)
-
-    if "segments_info" in target:
-        masks = np.asarray(PIL.Image.open(annotation_path), dtype=np.uint32)
-        masks = rgb_to_id(masks)
-
-        ids = np.array([segment_info["id"] for segment_info in target["segments_info"]])
-        masks = masks == ids[:, None, None]
-        masks = masks.astype(np.uint8)
-        if return_masks:
-            new_target["masks"] = masks
-        new_target["boxes"] = masks_to_boxes(masks)
-        new_target["class_labels"] = np.array(
-            [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=np.int64
-        )
-        new_target["iscrowd"] = np.asarray(
-            [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=np.int64
-        )
-        new_target["area"] = np.asarray(
-            [segment_info["area"] for segment_info in target["segments_info"]], dtype=np.float32
-        )
-
-    return new_target
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_segmentation_image
-def get_segmentation_image(
-    masks: np.ndarray, input_size: Tuple, target_size: Tuple, stuff_equiv_classes, deduplicate=False
-):
-    h, w = input_size
-    final_h, final_w = target_size
-
-    m_id = scipy.special.softmax(masks.transpose(0, 1), -1)
-
-    if m_id.shape[-1] == 0:
-        # We didn't detect any mask :(
-        m_id = np.zeros((h, w), dtype=np.int64)
-    else:
-        m_id = m_id.argmax(-1).reshape(h, w)
-
-    if deduplicate:
-        # Merge the masks corresponding to the same stuff class
-        for equiv in stuff_equiv_classes.values():
-            for eq_id in equiv:
-                m_id[m_id == eq_id] = equiv[0]
-
-    seg_img = id_to_rgb(m_id)
-    seg_img = resize(seg_img, (final_w, final_h), resample=PILImageResampling.NEAREST)
-    return seg_img
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_mask_area
-def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: int) -> np.ndarray:
-    final_h, final_w = target_size
-    np_seg_img = seg_img.astype(np.uint8)
-    np_seg_img = np_seg_img.reshape(final_h, final_w, 3)
-    m_id = rgb_to_id(np_seg_img)
-    area = [(m_id == i).sum() for i in range(n_classes)]
-    return area
-
-
-# Copied from transformers.models.detr.image_processing_detr.score_labels_from_class_probabilities
-def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    probs = scipy.special.softmax(logits, axis=-1)
-    labels = probs.argmax(-1, keepdims=True)
-    scores = np.take_along_axis(probs, labels, axis=-1)
-    scores, labels = scores.squeeze(-1), labels.squeeze(-1)
-    return scores, labels
-
-
-# Copied from transformers.models.detr.image_processing_detr.post_process_panoptic_sample
-def post_process_panoptic_sample(
-    out_logits: np.ndarray,
-    masks: np.ndarray,
-    boxes: np.ndarray,
-    processed_size: Tuple[int, int],
-    target_size: Tuple[int, int],
-    is_thing_map: Dict,
-    threshold=0.85,
-) -> Dict:
-    """
-    Converts the output of [`DetrForSegmentation`] into panoptic segmentation predictions for a single sample.
-
-    Args:
-        out_logits (`torch.Tensor`):
-            The logits for this sample.
-        masks (`torch.Tensor`):
-            The predicted segmentation masks for this sample.
-        boxes (`torch.Tensor`):
-            The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
-            width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
-        processed_size (`Tuple[int, int]`):
-            The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
-            after data augmentation but before batching.
-        target_size (`Tuple[int, int]`):
-            The target size of the image, `(height, width)` corresponding to the requested final size of the
-            prediction.
-        is_thing_map (`Dict`):
-            A dictionary mapping class indices to a boolean value indicating whether the class is a thing or not.
-        threshold (`float`, *optional*, defaults to 0.85):
-            The threshold used to binarize the segmentation masks.
-    """
-    # we filter empty queries and detection below threshold
-    scores, labels = score_labels_from_class_probabilities(out_logits)
-    keep = (labels != out_logits.shape[-1] - 1) & (scores > threshold)
-
-    cur_scores = scores[keep]
-    cur_classes = labels[keep]
-    cur_boxes = center_to_corners_format(boxes[keep])
-
-    if len(cur_boxes) != len(cur_classes):
-        raise ValueError("Not as many boxes as there are classes")
-
-    cur_masks = masks[keep]
-    cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
-    cur_masks = safe_squeeze(cur_masks, 1)
-    b, h, w = cur_masks.shape
-
-    # It may be that we have several predicted masks for the same stuff class.
-    # In the following, we track the list of masks ids for each stuff class (they are merged later on)
-    cur_masks = cur_masks.reshape(b, -1)
-    stuff_equiv_classes = defaultdict(list)
-    for k, label in enumerate(cur_classes):
-        if not is_thing_map[label]:
-            stuff_equiv_classes[label].append(k)
-
-    seg_img = get_segmentation_image(cur_masks, processed_size, target_size, stuff_equiv_classes, deduplicate=True)
-    area = get_mask_area(cur_masks, processed_size, n_classes=len(cur_scores))
-
-    # We filter out any mask that is too small
-    if cur_classes.size() > 0:
-        # We know filter empty masks as long as we find some
-        filtered_small = np.array([a <= 4 for a in area], dtype=bool)
-        while filtered_small.any():
-            cur_masks = cur_masks[~filtered_small]
-            cur_scores = cur_scores[~filtered_small]
-            cur_classes = cur_classes[~filtered_small]
-            seg_img = get_segmentation_image(cur_masks, (h, w), target_size, stuff_equiv_classes, deduplicate=True)
-            area = get_mask_area(seg_img, target_size, n_classes=len(cur_scores))
-            filtered_small = np.array([a <= 4 for a in area], dtype=bool)
-    else:
-        cur_classes = np.ones((1, 1), dtype=np.int64)
-
-    segments_info = [
-        {"id": i, "isthing": is_thing_map[cat], "category_id": int(cat), "area": a}
-        for i, (cat, a) in enumerate(zip(cur_classes, area))
-    ]
-    del cur_classes
-
-    with io.BytesIO() as out:
-        PIL.Image.fromarray(seg_img).save(out, format="PNG")
-        predictions = {"png_string": out.getvalue(), "segments_info": segments_info}
-
-    return predictions
 
 
 # Copied from transformers.models.detr.image_processing_detr.resize_annotation
@@ -644,160 +380,6 @@ def resize_annotation(
             new_annotation[key] = value
 
     return new_annotation
-
-
-# Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
-def binary_mask_to_rle(mask):
-    """
-    Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
-
-    Args:
-        mask (`torch.Tensor` or `numpy.array`):
-            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
-            segment_id or class_id.
-    Returns:
-        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
-        format.
-    """
-    if is_torch_tensor(mask):
-        mask = mask.numpy()
-
-    pixels = mask.flatten()
-    pixels = np.concatenate([[0], pixels, [0]])
-    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
-    runs[1::2] -= runs[::2]
-    return list(runs)
-
-
-# Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
-def convert_segmentation_to_rle(segmentation):
-    """
-    Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
-
-    Args:
-        segmentation (`torch.Tensor` or `numpy.array`):
-            A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
-    Returns:
-        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
-    """
-    segment_ids = torch.unique(segmentation)
-
-    run_length_encodings = []
-    for idx in segment_ids:
-        mask = torch.where(segmentation == idx, 1, 0)
-        rle = binary_mask_to_rle(mask)
-        run_length_encodings.append(rle)
-
-    return run_length_encodings
-
-
-# Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
-def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
-    """
-    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
-    `labels`.
-
-    Args:
-        masks (`torch.Tensor`):
-            A tensor of shape `(num_queries, height, width)`.
-        scores (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        labels (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        object_mask_threshold (`float`):
-            A number between 0 and 1 used to binarize the masks.
-    Raises:
-        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-    Returns:
-        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
-        < `object_mask_threshold`.
-    """
-    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-        raise ValueError("mask, scores and labels must have the same shape!")
-
-    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-    return masks[to_keep], scores[to_keep], labels[to_keep]
-
-
-# Copied from transformers.models.detr.image_processing_detr.check_segment_validity
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-    # Get the mask associated with the k class
-    mask_k = mask_labels == k
-    mask_k_area = mask_k.sum()
-
-    # Compute the area of all the stuff in query k
-    original_area = (mask_probs[k] >= mask_threshold).sum()
-    mask_exists = mask_k_area > 0 and original_area > 0
-
-    # Eliminate disconnected tiny segments
-    if mask_exists:
-        area_ratio = mask_k_area / original_area
-        if not area_ratio.item() > overlap_mask_area_threshold:
-            mask_exists = False
-
-    return mask_exists, mask_k
-
-
-# Copied from transformers.models.detr.image_processing_detr.compute_segments
-def compute_segments(
-    mask_probs,
-    pred_scores,
-    pred_labels,
-    mask_threshold: float = 0.5,
-    overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Tuple[int, int] = None,
-):
-    height = mask_probs.shape[1] if target_size is None else target_size[0]
-    width = mask_probs.shape[2] if target_size is None else target_size[1]
-
-    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: List[Dict] = []
-
-    if target_size is not None:
-        mask_probs = nn.functional.interpolate(
-            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
-        )[0]
-
-    current_segment_id = 0
-
-    # Weigh each mask by its prediction score
-    mask_probs *= pred_scores.view(-1, 1, 1)
-    mask_labels = mask_probs.argmax(0)  # [height, width]
-
-    # Keep track of instances of each class
-    stuff_memory_list: Dict[str, int] = {}
-    for k in range(pred_labels.shape[0]):
-        pred_class = pred_labels[k].item()
-        should_fuse = pred_class in label_ids_to_fuse
-
-        # Check if mask exists and large enough to be a segment
-        mask_exists, mask_k = check_segment_validity(
-            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
-        )
-
-        if mask_exists:
-            if pred_class in stuff_memory_list:
-                current_segment_id = stuff_memory_list[pred_class]
-            else:
-                current_segment_id += 1
-
-            # Add current object segment to final segmentation map
-            segmentation[mask_k] = current_segment_id
-            segment_score = round(pred_scores[k].item(), 6)
-            segments.append(
-                {
-                    "id": current_segment_id,
-                    "label_id": pred_class,
-                    "was_fused": should_fuse,
-                    "score": segment_score,
-                }
-            )
-            if should_fuse:
-                stuff_memory_list[pred_class] = current_segment_id
-
-    return segmentation, segments
 
 
 class RelationDetrImageProcessor(BaseImageProcessor):
@@ -876,22 +458,9 @@ class RelationDetrImageProcessor(BaseImageProcessor):
         size_divisor: Optional[int] = None,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=False)
 
-        # Backwards compatibility
         if do_convert_annotations is None:
             do_convert_annotations = do_normalize
 
@@ -909,52 +478,13 @@ class RelationDetrImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.pad_size = pad_size
         self.size_divisor = size_divisor
-        self._valid_processor_keys = [
-            "images",
-            "annotations",
-            "return_segmentation_masks",
-            "masks_path",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "do_convert_annotations",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "pad_size",
-            "format",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-            "size_divisor",
-        ]
 
-    @classmethod
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->RelationDetr
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `RelationDetrImageProcessor.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->RelationDetr
+    # Modified from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation
     def prepare_annotation(
         self,
         image: np.ndarray,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
         """
@@ -963,19 +493,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
-            )
-        elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_panoptic_annotation(
-                image,
-                target,
-                masks_path=masks_path,
-                return_masks=return_segmentation_masks,
-                input_data_format=input_data_format,
-            )
+            target = prepare_coco_detection_annotation(image, target, input_data_format=input_data_format)
         else:
             raise ValueError(f"Format {format} is not supported.")
         return target
@@ -1178,6 +696,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             )
         return padded_image, annotation
 
+    # Modified from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad, add size_divisor
     def pad(
         self,
         images: List[np.ndarray],
@@ -1273,12 +792,11 @@ class RelationDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample=None,  # PILImageResampling
@@ -1295,7 +813,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         pad_size: Optional[Dict[str, int]] = None,
         size_divisor: Optional[int] = None,
-        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -1315,10 +832,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
                 - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
                 - "file_name" (`str`): The file name of the image.
-            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
-                Whether to return segmentation masks.
-            masks_path (`str` or `pathlib.Path`, *optional*):
-                Path to the directory containing the segmentation masks.
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to self.size):
@@ -1374,24 +887,9 @@ class RelationDetrImageProcessor(BaseImageProcessor):
                 The size to which the height and width of the images should be divisible by. If set, the images will
                 be padded to the nearest multiple of `size_divisor`.
         """
-        if "pad_and_return_pixel_mask" in kwargs:
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        max_size = None
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            size = kwargs.pop("max_size")
-
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
-        size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size=size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
@@ -1413,7 +911,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
         validate_preprocess_arguments(
@@ -1440,14 +937,10 @@ class RelationDetrImageProcessor(BaseImageProcessor):
         if annotations is not None:
             validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
 
-        if (
-            masks_path is not None
-            and format == AnnotationFormat.COCO_PANOPTIC
-            and not isinstance(masks_path, (pathlib.Path, str))
-        ):
+        if not valid_images(images):
             raise ValueError(
-                "The path to the directory containing the mask PNG files should be provided as a"
-                f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
         # All transformations expect numpy arrays
@@ -1472,8 +965,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
                     image,
                     target,
                     format,
-                    return_segmentation_masks=return_segmentation_masks,
-                    masks_path=masks_path,
                     input_data_format=input_data_format,
                 )
                 prepared_images.append(image)
@@ -1489,7 +980,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image, size=size, max_size=max_size, resample=resample, input_data_format=input_data_format
+                        image, size=size, resample=resample, input_data_format=input_data_format
                     )
                     resized_annotation = self.resize_annotation(
                         target, orig_size, get_image_size(resized_image, input_data_format)
@@ -1545,52 +1036,6 @@ class RelationDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS - TODO: add support for other frameworks
-    def post_process(self, outputs, target_sizes):
-        """
-        Converts the raw output of [`RelationDetrForObjectDetection`] into final bounding boxes in (top_left_x,
-        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
-
-        Args:
-            outputs ([`RelationDetrObjectDetectionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
-                original image size (before any data augmentation). For visualization, this should be the image size
-                after data augment, but before padding.
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        logger.warning_once(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-        )
-
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
-        if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
-        scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
-        labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
-
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
-
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
     ):
@@ -1613,6 +1058,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if target_sizes is not None:
@@ -1642,10 +1088,10 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
-        for s, l, b in zip(scores, labels, boxes):
-            score = s[s > threshold]
-            label = l[s > threshold]
-            box = b[s > threshold]
+        for score, label, box in zip(scores, labels, boxes):
+            score = score[score > threshold]
+            label = label[score > threshold]
+            box = box[score > threshold]
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
