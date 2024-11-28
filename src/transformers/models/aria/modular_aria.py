@@ -129,7 +129,7 @@ class AriaTextConfig(LlamaConfig):
             The padding token ID.
     """
 
-    model_type = "aria_text_model"
+    model_type = "aria_text"
     base_config_key = "text_config"
 
     def __init__(
@@ -234,6 +234,7 @@ class AriaConfig(PretrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
+        print("Initializing config", self.vision_config)
 
         super().__init__(**kwargs)
 
@@ -812,26 +813,6 @@ class AriaProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def save_pretrained(self, save_directory, **kwargs):
-        """
-        Save both the image processor and tokenizer.
-        """
-        merged_kwargs = self._merge_kwargs(
-            AriaProcessorKwargs,
-            {},
-            **kwargs,
-        )
-        if self.image_processor is not None:
-            self.image_processor.save_pretrained(
-                save_directory,
-                **merged_kwargs["images_kwargs"],
-            )
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(
-                save_directory,
-                **merged_kwargs["text_kwargs"],
-            )
-
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
@@ -1136,6 +1117,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             Configuration object for the model.
     """
 
+    config_class = AriaConfig
     _supports_flash_attn_2 = True
     _supports_sdpa = False
 
@@ -1174,8 +1156,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: torch.FloatTensor,
-        vision_feature_layer: int,
+        pixel_mask: torch.FloatTensor = None,
+        vision_feature_layer: int = -1,
     ):
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(

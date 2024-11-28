@@ -12,7 +12,6 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -31,59 +30,24 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import is_torch_available
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_aria import AriaConfig, AriaTextConfig
 
 
+if is_torch_available():
+    import torch
+    from torch import nn
+
+
 logger = logging.get_logger(__name__)
-
-
-def sequential_gemm(token_states, expert_weights, tokens_per_expert):
-    """
-    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
-
-    Args:
-        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
-        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
-        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-
-    Returns:
-        torch.Tensor: Output tensor of shape (num_tokens, out_features).
-    """
-    num_tokens = token_states.shape[0]
-    out_features = expert_weights.shape[-1]
-    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
-
-    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
-    # Insert zero at the begining for offset index's convenience
-    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
-    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
-
-    for expert_num in range(expert_weights.shape[0]):
-        start = cumsum_num_tokens[expert_num]
-        end = cumsum_num_tokens[expert_num + 1]
-        tokens = token_states[start:end]
-
-        out = torch.matmul(tokens, expert_weights[expert_num])
-        output[start:end] = out
-    return output
-
-
-if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
-    logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM")
-    experts_gemm = sequential_gemm
-else:
-    if importlib.util.find_spec("grouped_gemm") is None:
-        logger.warning("grouped_gemm is not installed, using sequential GEMM, which is slower.")
-        experts_gemm = sequential_gemm
-    else:
-        from grouped_gemm.ops import gmm as experts_gemm
+_CONFIG_FOR_DOC = "AriaTextConfig"
 
 
 class AriaTextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        AriaRMSNorm is equivalent to T5LayerNorm
+        AriaTextRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -295,7 +259,7 @@ class AriaSharedExpertsMLP(nn.Module):
     """
 
     def __init__(self, config: AriaTextConfig):
-        nn.Module.__init__(self)
+        super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.moe_intermediate_size * config.moe_num_shared_experts
@@ -307,6 +271,56 @@ class AriaSharedExpertsMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
+
+
+def sequential_gemm(token_states, expert_weights, tokens_per_expert):
+    """
+    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
+
+    Args:
+        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+
+    Returns:
+        torch.Tensor: Output tensor of shape (num_tokens, out_features).
+    """
+    num_tokens = token_states.shape[0]
+    out_features = expert_weights.shape[-1]
+    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
+
+    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
+    # Insert zero at the begining for offset index's convenience
+    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
+    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
+
+    for expert_num in range(expert_weights.shape[0]):
+        start = cumsum_num_tokens[expert_num]
+        end = cumsum_num_tokens[expert_num + 1]
+        tokens = token_states[start:end]
+
+        out = torch.matmul(tokens, expert_weights[expert_num])
+        output[start:end] = out
+    return output
+
+
+def get_experts_gemm():
+    """Return the experts gemm function to be used."""
+    if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
+        logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM")
+        experts_gemm = sequential_gemm
+    else:
+        if importlib.util.find_spec("grouped_gemm") is None:
+            logger.warning("grouped_gemm is not installed, using sequential GEMM, which is slower.")
+            experts_gemm = sequential_gemm
+        else:
+            from grouped_gemm.ops import gmm
+
+            experts_gemm = gmm
+    return experts_gemm
+
+
+experts_gemm = get_experts_gemm()
 
 
 class AriaGroupedExpertsGEMM(nn.Module):
@@ -651,31 +665,14 @@ class AriaTextAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        if self.config.pretraining_tp > 1:
-            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
-            query_slices = self.q_proj.weight.split(
-                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
-            )
-            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
-            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
-            query_states = torch.cat(query_states, dim=-1)
-
-            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
-            key_states = torch.cat(key_states, dim=-1)
-
-            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
-            value_states = torch.cat(value_states, dim=-1)
-
-        else:
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        # use -1 to infer num_heads and num_key_value_heads as they may vary if tensor parallel is used
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         if position_embeddings is None:
             logger.warning_once(
@@ -717,12 +714,7 @@ class AriaTextAttention(nn.Module):
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
 
-        if self.config.pretraining_tp > 1:
-            attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
-            o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
-            attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
-        else:
-            attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
@@ -755,6 +747,7 @@ class AriaTextFlashAttention2(AriaTextAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
@@ -839,6 +832,7 @@ class AriaTextFlashAttention2(AriaTextAttention):
             sliding_window=getattr(self, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -893,9 +887,10 @@ class AriaTextSdpaAttention(AriaTextAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        # use -1 to infer num_heads and num_key_value_heads as they may vary if tensor parallel is used
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         if position_embeddings is None:
             logger.warning_once(
@@ -970,11 +965,10 @@ class AriaTextDecoderLayer(nn.Module):
     """
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
-        nn.Module.__init__(self)
+        super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = ARIA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
-
         self.mlp = AriaTextMoELayer(config)
         self.input_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1048,7 +1042,7 @@ class AriaTextDecoderLayer(nn.Module):
         return outputs
 
 
-ARIA_START_DOCSTRING = r"""
+ARIA_TEXT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -1058,7 +1052,7 @@ ARIA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`AriaConfig`]):
+        config ([`AriaTextConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1066,14 +1060,14 @@ ARIA_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Aria Model outputting raw hidden-states without any specific head on top.",
-    ARIA_START_DOCSTRING,
+    "The bare AriaText Model outputting raw hidden-states without any specific head on top.",
+    ARIA_TEXT_START_DOCSTRING,
 )
 class AriaPreTrainedModel(PreTrainedModel):
-    config_class = AriaConfig
+    config_class = AriaTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["AriaDecoderLayer"]
+    _no_split_modules = ["AriaTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1097,117 +1091,7 @@ class AriaPreTrainedModel(PreTrainedModel):
             nn.init.trunc_normal_(module.query, std=std)
 
 
-_CONFIG_FOR_DOC = "AriaTextConfig"
-
-
-class AriaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        AriaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class AriaRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        dim=None,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-        rope_type="default",
-        config: Optional[AriaConfig] = None,
-    ):
-        super().__init__()
-        # TODO (joao): remove the `if` below, only used for BC
-        self.rope_kwargs = {}
-        if config is None:
-            logger.warning_once(
-                "`AriaRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be removed in v4.46"
-            )
-            self.rope_kwargs = {
-                "rope_type": rope_type,
-                "factor": scaling_factor,
-                "dim": dim,
-                "base": base,
-                "max_position_embeddings": max_position_embeddings,
-            }
-            self.rope_type = rope_type
-            self.max_seq_len_cached = max_position_embeddings
-            self.original_max_seq_len = max_position_embeddings
-        else:
-            # BC: "rope_type" was originally "type"
-            if config.rope_scaling is not None:
-                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            else:
-                self.rope_type = "default"
-            self.max_seq_len_cached = config.max_position_embeddings
-            self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-ARIA_INPUTS_DOCSTRING = r"""
+ARIA_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1283,15 +1167,15 @@ ARIA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Aria Model outputting raw hidden-states without any specific head on top.",
-    ARIA_START_DOCSTRING,
+    "The bare AriaText Model outputting raw hidden-states without any specific head on top.",
+    ARIA_TEXT_START_DOCSTRING,
 )
-class AriaTextModel(AriaPreTrainedModel):
+class AriaTextModel(AriaTextPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AriaDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AriaTextDecoderLayer`]
 
     Args:
-        config: AriaConfig
+        config: AriaTextConfig
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -1303,8 +1187,8 @@ class AriaTextModel(AriaPreTrainedModel):
         self.layers = nn.ModuleList(
             [AriaTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = AriaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = AriaRotaryEmbedding(config=config)
+        self.norm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = AriaTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         if getattr(config, "pretraining_tp", 1) != 1:
             logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
@@ -1318,7 +1202,7 @@ class AriaTextModel(AriaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1568,7 +1452,7 @@ class AriaTextModel(AriaPreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-class AriaTextForCausalLM(AriaPreTrainedModel, GenerationMixin):
+class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
     """
     Aria model for causal language modeling tasks.
 
@@ -1611,7 +1495,7 @@ class AriaTextForCausalLM(AriaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1646,10 +1530,10 @@ class AriaTextForCausalLM(AriaPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, AriaForCausalLM
+        >>> from transformers import AutoTokenizer, AriaTextForCausalLM
 
-        >>> model = AriaForCausalLM.from_pretrained("meta-aria/Aria-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-aria/Aria-2-7b-hf")
+        >>> model = AriaTextForCausalLM.from_pretrained("meta-aria_text/AriaText-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-aria_text/AriaText-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1755,9 +1639,11 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
     _supports_flash_attn_2 = True
     _supports_sdpa = False
+    config_class = AriaConfig
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
+        print(config)
 
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.multi_modal_projector = AriaProjector(config)
@@ -1791,8 +1677,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: torch.FloatTensor,
-        vision_feature_layer: int,
+        pixel_mask: torch.FloatTensor = None,
+        vision_feature_layer: int = -1,
     ):
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
@@ -1895,6 +1781,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        # 2. Merge text and images
         if pixel_values is not None and inputs_embeds.shape[1] != 1:
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -1907,11 +1794,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
                 n_image_tokens = (image_embeds).sum(dim=-1)[0].item()
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
-                pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
             )
-
-            n_image_features = image_features.shape[0] * image_features.shape[1]
+            n_images, n_features_per_image = image_features.shape[0], image_features.shape[1]
+            n_image_features = n_images * n_features_per_image
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"

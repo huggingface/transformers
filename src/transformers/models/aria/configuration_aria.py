@@ -33,7 +33,7 @@ class AriaTextConfig(PretrainedConfig):
             The padding token ID.
     """
 
-    model_type = "aria_text_model"
+    model_type = "aria_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `AriaTextModel`
     base_model_tp_plan = {

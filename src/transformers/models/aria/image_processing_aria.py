@@ -47,7 +47,6 @@ def make_batched_images(images) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched video from {images}")
 
 
-# Copied from models.llava_next.image_processing_llava_next.py
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
     """
     Divides an image into patches of a specified size.
@@ -61,7 +60,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
             The channel dimension format of the input image.
 
     Returns:
-        `list`: A list of np.array representing the patches.
+        list: A list of np.array representing the patches.
     """
     patches = []
     height, width = get_image_size(image, channel_dim=input_data_format)
