@@ -280,11 +280,9 @@ class MolmoTextConfig(Qwen2Config):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
+        vocab_size (`int`, *optional*, defaults to 152192):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MolmoTextModel`]
-        additional_vocab_size  (`int`, *optional*, defaults to 128):
-            Number of additional tokens added to the vocabulary size of the Molmo model.
         hidden_size (`int`, *optional*, defaults to 3584):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 37888):
@@ -383,8 +381,7 @@ class MolmoTextConfig(Qwen2Config):
         num_attention_heads=28,
         num_hidden_layers=28,
         head_dim=128,
-        vocab_size=152064,
-        additional_vocab_size=128,
+        vocab_size=152192,
         intermediate_size=37888,
         hidden_act="swiglu",
         max_position_embeddings=4096,
@@ -400,7 +397,6 @@ class MolmoTextConfig(Qwen2Config):
         attention_dropout=0.0,
         **kwargs,
     ):
-        self.additional_vocab_size = additional_vocab_size
         self.head_dim = head_dim
         super().__init__(**kwargs)
 
@@ -619,7 +615,7 @@ class MolmoTextModel(Qwen2Model):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(
-            config.vocab_size + config.additional_vocab_size,
+            config.vocab_size,
             config.hidden_size,
         )
 

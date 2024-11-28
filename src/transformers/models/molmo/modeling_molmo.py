@@ -826,7 +826,7 @@ class MolmoTextModel(MolmoPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(
-            config.vocab_size + config.additional_vocab_size,
+            config.vocab_size,
             config.hidden_size,
         )
 

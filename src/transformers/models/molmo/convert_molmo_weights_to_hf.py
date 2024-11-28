@@ -164,7 +164,7 @@ def write_model(
         max_position_embeddings=original_config["max_position_embeddings"],
         layer_norm_eps=original_config["layer_norm_eps"],
         rope_theta=original_config["rope_theta"],
-        vocab_size=original_config["vocab_size"],
+        vocab_size=original_config["vocab_size"] + 128,
         tie_word_embeddings=original_config["tie_word_embeddings"],
     )
 
@@ -225,16 +225,27 @@ def write_model(
                 state_dict[new_key.replace("qkv_proj", "v_proj")] = v_proj.clone()
             del state_dict[new_key]
 
+    gc.collect()
+    print("Loading the checkpoint in a Molmo model.")
+    with torch.device("meta"):
+        model = MolmoForConditionalGeneration(config)
+
     # convert word embeddings. They exist separately in the Molmo custom Embedding layer.
     initial_word_embeddings = state_dict.pop("language_model.model.word_embeddings.weight")
     new_word_embeddings = state_dict.pop("language_model.model.new_embeddings.weight")
     state_dict["language_model.model.embed_tokens.weight"] = torch.cat(
         [initial_word_embeddings, new_word_embeddings], dim=0
     )
-    gc.collect()
-    print("Loading the checkpoint in a Molmo model.")
-    with torch.device("meta"):
-        model = MolmoForConditionalGeneration(config)
+
+    # resize lm head to avoid shape mismatch errors as we assume embedding size is same as lm head
+    lm_head = state_dict.pop("language_model.lm_head.weight")
+    mu = torch.mean(lm_head, dim=0).float()
+    n = lm_head.shape[0]
+    sigma = ((lm_head - mu).T @ (lm_head - mu)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    new_lm_head = torch.stack(tuple((dist.sample() for _ in range(128))), dim=0)
+    new_lm_head = torch.cat([lm_head, new_lm_head], dim=0)
+    state_dict["language_model.lm_head.weight"] = new_lm_head
 
     model.load_state_dict(state_dict, strict=True, assign=True)
 

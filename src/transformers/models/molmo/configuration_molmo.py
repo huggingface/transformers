@@ -216,11 +216,9 @@ class MolmoTextConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
+        vocab_size (`int`, *optional*, defaults to 152192):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MolmoTextModel`]
-        additional_vocab_size  (`int`, *optional*, defaults to 128):
-            Number of additional tokens added to the vocabulary size of the Molmo model.
         hidden_size (`int`, *optional*, defaults to 3584):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 37888):
@@ -322,8 +320,7 @@ class MolmoTextConfig(PretrainedConfig):
         num_attention_heads=28,
         num_hidden_layers=28,
         head_dim=128,
-        vocab_size=152064,
-        additional_vocab_size=128,
+        vocab_size=152192,
         intermediate_size=37888,
         hidden_act="swiglu",
         max_position_embeddings=4096,
@@ -343,7 +340,6 @@ class MolmoTextConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        self.additional_vocab_size = additional_vocab_size
         self.head_dim = head_dim
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
