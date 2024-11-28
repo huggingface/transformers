@@ -47,7 +47,7 @@ class TimesFMConfig(PretrainedConfig):
             Number of Transformer layers.
         model_dim (`int`, *optional*, defaults to 1280):
             Size of the hidden layers in the feed-forward networks.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        intermediate_size (`int`, *optional*, defaults to 1280):
             Dimension of the MLP representations.
         head_dim (`int`, *optional*, defaults to 80):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
