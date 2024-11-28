@@ -36,8 +36,9 @@ RUN python3 -m pip install --no-cache-dir einops
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
-# Add auto-gptq for gtpq quantization testing
-RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+# Add auto-gptq for gtpq quantization testing, installed from source
+RUN pip install gekko
+RUN git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && TORCH_CUDA_ARCH_LIST="7.5+PTX" python3 setup.py install
 
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
@@ -57,6 +58,7 @@ RUN python3 -m pip install --no-cache-dir gguf
 # Add autoawq for quantization testing
 # >=v0.2.7 needed for compatibility with transformers > 4.46
 RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.7.post2/autoawq-0.2.7.post2-py3-none-any.whl
+RUN python3 -m pip install --no-cache-dir autoawq[kernels]
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
