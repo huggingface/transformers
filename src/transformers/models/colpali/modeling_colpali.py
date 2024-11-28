@@ -238,48 +238,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, ColPaliForRetrievalOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        import torch
-        from PIL import Image
-
-        from transformers import ColPaliForRetrieval, ColPaliProcessor
-
-        model_name = "vidore/colpali-v1.2-hf"
-
-        model = ColPaliForRetrieval.from_pretrained(
-            model_name,
-            torch_dtype=torch.bfloat16,
-            device_map="cuda:0",  # or "mps" if on Apple Silicon
-        ).eval()
-
-        processor = ColPaliProcessor.from_pretrained(model_name)
-
-        # Your inputs
-        images = [
-            Image.new("RGB", (32, 32), color="white"),
-            Image.new("RGB", (16, 16), color="black"),
-        ]
-        queries = [
-            "What is the organizational structure for our R&D department?",
-            "Can you provide a breakdown of last year’s financial performance?",
-        ]
-
-        # Process the inputs
-        batch_images = processor(images=images).to(model.device)
-        batch_queries = processor(text=queries).to(model.device)
-
-        # Forward pass
-        with torch.no_grad():
-            image_embeddings = model(**batch_images)
-            query_embeddings = model(**batch_queries)
-
-        scores = processor.score_retrieval(query_embeddings, image_embeddings)
-        ```"""
         if "pixel_values" in kwargs:
             kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

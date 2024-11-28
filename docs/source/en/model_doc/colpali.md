@@ -42,6 +42,47 @@ This work is partially supported by ILLUIN Technology, and by a grant from ANRT 
 This model was contributed by [tonywu71](https://huggingface.co/tonywu71) and [yonigozlan](https://huggingface.co/yonigozlan).
 The original code can be found [here](https://github.com/illuin-tech/colpali). To be more precise, the Hf version of Colpali was adapter from [`colpali-engine==0.3.2`](https://github.com/illuin-tech/colpali/releases/tag/v0.3.2).
 
+## Usage
+
+```python
+import torch
+from PIL import Image
+
+from transformers import ColPaliForRetrieval, ColPaliProcessor
+
+model_name = "vidore/colpali-v1.2-hf"
+
+model = ColPaliForRetrieval.from_pretrained(
+    model_name,
+    torch_dtype=torch.bfloat16,
+    device_map="cuda:0",  # or "mps" if on Apple Silicon
+).eval()
+
+processor = ColPaliProcessor.from_pretrained(model_name)
+
+# Your inputs
+images = [
+    Image.new("RGB", (32, 32), color="white"),
+    Image.new("RGB", (16, 16), color="black"),
+]
+queries = [
+    "What is the organizational structure for our R&D department?",
+    "Can you provide a breakdown of last year’s financial performance?",
+]
+
+# Process the inputs
+batch_images = processor(images=images).to(model.device)
+batch_queries = processor(text=queries).to(model.device)
+
+# Forward pass
+with torch.no_grad():
+    image_embeddings = model(**batch_images)
+    query_embeddings = model(**batch_queries)
+
+# Score the queries against the images
+scores = processor.score_retrieval(query_embeddings, image_embeddings)
+```
+
 ## ColPaliConfig
 
 [[autodoc]] ColPaliConfig
