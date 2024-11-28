@@ -91,7 +91,6 @@ class QuantoHfQuantizer(HfQuantizer):
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
 
-
         not_missing_keys = []
         for name, module in model.named_modules():
             if isinstance(module, QModuleMixin):
@@ -117,7 +116,6 @@ class QuantoHfQuantizer(HfQuantizer):
         """
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
-
 
         device_map = kwargs.get("device_map", None)
         param_device = kwargs.get("param_device", None)
