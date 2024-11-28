@@ -451,7 +451,10 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @parameterized.expand([("longrope",)])
     def test_model_rope_scaling_short_long_factor(self, scaling_type):
+        from transformers.testing_utils import set_config_for_less_flaky_test, set_model_for_less_flaky_test, set_model_tester_for_less_flaky_test
+        set_model_tester_for_less_flaky_test(self)
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
         n_factors = config.hidden_size // config.num_key_value_heads // 2
         config.rope_scaling = {
             "type": scaling_type,
@@ -463,6 +466,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         }
         input_tensor = ids_tensor([1, 4090], config.vocab_size)
         model = PhimoeForCausalLM(config)
+        set_model_for_less_flaky_test(model)
         model.to(torch_device)
         model.eval()
         generation_args_short = {
