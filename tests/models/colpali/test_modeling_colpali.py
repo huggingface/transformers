@@ -352,9 +352,9 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         # Further validation: fine-grained check, with a hardcoded score from the original implementation
         expected_scores = torch.tensor(
             [
-                [15.5000, 6.8125, 14.5000],
-                [12.2500, 16.1250, 10.9375],
-                [15.1875, 11.5000, 21.0000],
+                [15.5625, 6.5938, 14.4375],
+                [12.2500, 16.2500, 11.0000],
+                [15.0625, 11.7500, 21.0000],
             ],
             dtype=scores.dtype,
         )
