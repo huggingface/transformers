@@ -44,6 +44,8 @@ The original code can be found [here](https://github.com/illuin-tech/colpali). T
 
 ## Usage
 
+The following example demonstrates how to use the `ColPaliForRetrieval` model to score queries against images. Note that the snippet uses dummy images for demonstration purposes.
+
 ```python
 import torch
 from PIL import Image
