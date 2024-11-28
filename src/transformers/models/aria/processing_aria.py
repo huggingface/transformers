@@ -135,26 +135,6 @@ class AriaProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
-    def save_pretrained(self, save_directory, **kwargs):
-        """
-        Save both the image processor and tokenizer.
-        """
-        merged_kwargs = self._merge_kwargs(
-            AriaProcessorKwargs,
-            {},
-            **kwargs,
-        )
-        if self.image_processor is not None:
-            self.image_processor.save_pretrained(
-                save_directory,
-                **merged_kwargs["images_kwargs"],
-            )
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(
-                save_directory,
-                **merged_kwargs["text_kwargs"],
-            )
-
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
         """

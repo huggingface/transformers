@@ -258,11 +258,11 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
     config_class = AriaConfig
     base_model_prefix = "model"
-    _no_split_modules = []
+    _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -1583,7 +1583,6 @@ class AriaTextForCausalLM(AriaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     config_class = AriaTextConfig
-    _no_split_modules = ["AriaTextDecoderLayer"]
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1792,13 +1791,38 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        pixel_mask: torch.FloatTensor,
         vision_feature_layer: int,
     ):
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+        patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
+        image_outputs = self.vision_tower(pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True)
+        image_attn_mask = self._create_image_attention_mask(patch_attention_mask)
+
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
+
+    def _create_patch_attention_mask(self, pixel_mask):
+        if pixel_mask is None:
+            return None
+
+        patches_subgrid = pixel_mask.unfold(
+            dimension=1,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        ).unfold(
+            dimension=2,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        )
+        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
+    def _create_image_attention_mask(self, patch_attention_mask):
+        if patch_attention_mask is None:
+            return None
+
+        flattened_mask = patch_attention_mask.flatten(1)
+        return torch.logical_not(flattened_mask)
 
     def forward(
         self,
@@ -1869,7 +1893,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # 2. Merge text and images
         if pixel_values is not None and inputs_embeds.shape[1] != 1:
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -1882,10 +1905,11 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
                 n_image_tokens = (image_embeds).sum(dim=-1)[0].item()
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
+                pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
             )
 
-            n_image_features = image_features.size(1)
+            n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -1925,6 +1949,37 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        pixel_mask=None,
+        attention_mask=None,
+        cache_position=None,
+        num_logits_to_keep=None,
+        **kwargs,
+    ):
+        model_inputs = self.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            num_logits_to_keep=num_logits_to_keep,
+            **kwargs,
+        )
+
+        if cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_mask"] = pixel_mask
+
+        return model_inputs
 
 
 __all__ = ["AriaForConditionalGeneration", "AriaPreTrainedModel", "AriaTextModel", "AriaTextForCausalLM"]

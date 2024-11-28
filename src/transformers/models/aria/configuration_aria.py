@@ -140,7 +140,7 @@ class AriaConfig(PretrainedConfig):
             Mapping of patch sizes to query dimensions.
         ignore_index (`int`, *optional*, defaults to -100):
             Index to ignore in loss calculation.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        image_token_index (`int`, *optional*, defaults to 9):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
@@ -164,7 +164,7 @@ class AriaConfig(PretrainedConfig):
 
     model_type = "aria"
     is_composition = False
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,

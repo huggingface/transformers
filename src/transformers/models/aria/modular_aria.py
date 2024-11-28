@@ -134,9 +134,9 @@ class AriaTextConfig(LlamaConfig):
         moe_aux_loss_coeff: float = 1e-3,
         moe_num_shared_experts: int = 2,
         pad_token_id=2,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
         self.moe_intermediate_size = moe_intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
@@ -163,7 +163,7 @@ class AriaConfig(PretrainedConfig):
             Mapping of patch sizes to query dimensions.
         ignore_index (`int`, *optional*, defaults to -100):
             Index to ignore in loss calculation.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        image_token_index (`int`, *optional*, defaults to 9):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
@@ -187,7 +187,7 @@ class AriaConfig(PretrainedConfig):
 
     model_type = "aria"
     is_composition = False
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -196,7 +196,7 @@ class AriaConfig(PretrainedConfig):
         text_config=None,
         projector_patch_to_query_dict=None,
         ignore_index=-100,
-        image_token_index=32000,
+        image_token_index=9,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -475,8 +475,8 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        max_image_size=None,
-        min_image_size=None,
+        max_image_size=980,
+        min_image_size=336,
         image_mean=None,
         image_std=None,
         split_ratio: Optional[List[Tuple[int, int]]] = None,
@@ -488,8 +488,8 @@ class AriaImageProcessor(BaseImageProcessor):
             image_mean = [0.5, 0.5, 0.5]
         if image_std is None:
             image_std = [0.5, 0.5, 0.5]
-        self.max_image_size = 980 if max_image_size is None else max_image_size
-        self.min_image_size = 336 if min_image_size is None else min_image_size
+        self.max_image_size = max_image_size
+        self.min_image_size = min_image_size
         self.image_mean = image_mean
         self.image_std = image_std
         if split_ratio is None:
@@ -516,8 +516,6 @@ class AriaImageProcessor(BaseImageProcessor):
             ]
         else:
             self.split_ratio = split_ratio
-
-        self._set_processor_class("AriaProcessor")
 
     def preprocess(
         self,
@@ -638,10 +636,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
             for crop_image in crop_images:
                 # At this point the scale is the rescaling factor that would bring the image to max_size in its larger dimension
-                if input_data_format == ChannelDimension.FIRST:
-                    h, w = crop_image.shape[1:]
-                else:
-                    h, w = crop_image.shape[:2]
+                h, w = get_image_size(crop_image)
                 scale = max_image_size / max(h, w)
                 if w >= h:
                     new_size = (max(int(h * scale), min_image_size), max_image_size)  # h, w
@@ -652,7 +647,7 @@ class AriaImageProcessor(BaseImageProcessor):
                     crop_image,
                     new_size,
                     resample=resample,
-                    data_format=data_format,
+                    data_format=input_data_format,
                     input_data_format=input_data_format,
                 )
 
@@ -660,8 +655,8 @@ class AriaImageProcessor(BaseImageProcessor):
                 crop_image_padded = pad(
                     crop_image_resized,
                     ((0, padding_bottom), (0, padding_right)),
-                    data_format=data_format,
-                    input_data_format=data_format,
+                    data_format=input_data_format,
+                    input_data_format=input_data_format,
                 )
 
                 # Create a pixel mask
@@ -671,12 +666,13 @@ class AriaImageProcessor(BaseImageProcessor):
 
                 if do_normalize:
                     crop_image_padded = self.normalize(
-                        crop_image_padded,
+                        crop_image_padded / 255.0,
                         self.image_mean,
                         self.image_std,
-                        data_format=data_format,
-                        input_data_format=data_format,
+                        data_format=input_data_format,
+                        input_data_format=input_data_format,
                     )
+                    crop_image_padded = to_channel_dimension_format(crop_image_padded, data_format, input_data_format) if data_format is not None else crop_image_padded
 
                 pixel_values.append(crop_image_padded)
         return BatchFeature(
@@ -892,11 +888,11 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
     config_class = AriaConfig
     base_model_prefix = "model"
-    _no_split_modules = []
+    _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -1167,7 +1163,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
 
     _tied_weights_keys = ["lm_head.weight"]
     config_class = AriaTextConfig
-    _no_split_modules = ["AriaTextDecoderLayer"]
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1325,8 +1320,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
                 pixel_values=pixel_values,
                 vision_feature_layer=self.config.vision_feature_layer,
             )
-
-            n_image_features = image_features.size(1)
+            n_images, n_features_per_image = image_features.shape[0], image_features.shape[1]
+            n_image_features = n_images * n_features_per_image
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -1366,6 +1361,36 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        pixel_mask=None,
+        attention_mask=None,
+        cache_position=None,
+        num_logits_to_keep=None,
+        **kwargs,
+    ):
+        model_inputs = self.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            num_logits_to_keep=num_logits_to_keep,
+            **kwargs,
+        )
+
+        if cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_mask"] = pixel_mask
+
+        return model_inputs
 
 
 __all__ = [

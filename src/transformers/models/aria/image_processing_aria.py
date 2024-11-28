@@ -96,8 +96,8 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        max_image_size=None,
-        min_image_size=None,
+        max_image_size=980,
+        min_image_size=336,
         image_mean=None,
         image_std=None,
         split_ratio: Optional[List[Tuple[int, int]]] = None,
@@ -109,8 +109,8 @@ class AriaImageProcessor(BaseImageProcessor):
             image_mean = [0.5, 0.5, 0.5]
         if image_std is None:
             image_std = [0.5, 0.5, 0.5]
-        self.max_image_size = 980 if max_image_size is None else max_image_size
-        self.min_image_size = 336 if min_image_size is None else min_image_size
+        self.max_image_size = max_image_size
+        self.min_image_size = min_image_size
         self.image_mean = image_mean
         self.image_std = image_std
         if split_ratio is None:
@@ -137,8 +137,6 @@ class AriaImageProcessor(BaseImageProcessor):
             ]
         else:
             self.split_ratio = split_ratio
-
-        self._set_processor_class("AriaProcessor")
 
     def preprocess(
         self,
@@ -259,10 +257,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
             for crop_image in crop_images:
                 # At this point the scale is the rescaling factor that would bring the image to max_size in its larger dimension
-                if input_data_format == ChannelDimension.FIRST:
-                    h, w = crop_image.shape[1:]
-                else:
-                    h, w = crop_image.shape[:2]
+                h, w = get_image_size(crop_image)
                 scale = max_image_size / max(h, w)
                 if w >= h:
                     new_size = (max(int(h * scale), min_image_size), max_image_size)  # h, w
@@ -273,7 +268,7 @@ class AriaImageProcessor(BaseImageProcessor):
                     crop_image,
                     new_size,
                     resample=resample,
-                    data_format=data_format,
+                    data_format=input_data_format,
                     input_data_format=input_data_format,
                 )
 
@@ -281,8 +276,8 @@ class AriaImageProcessor(BaseImageProcessor):
                 crop_image_padded = pad(
                     crop_image_resized,
                     ((0, padding_bottom), (0, padding_right)),
-                    data_format=data_format,
-                    input_data_format=data_format,
+                    data_format=input_data_format,
+                    input_data_format=input_data_format,
                 )
 
                 # Create a pixel mask
@@ -292,12 +287,13 @@ class AriaImageProcessor(BaseImageProcessor):
 
                 if do_normalize:
                     crop_image_padded = self.normalize(
-                        crop_image_padded,
+                        crop_image_padded / 255.0,
                         self.image_mean,
                         self.image_std,
-                        data_format=data_format,
-                        input_data_format=data_format,
+                        data_format=input_data_format,
+                        input_data_format=input_data_format,
                     )
+                    crop_image_padded = to_channel_dimension_format(crop_image_padded, data_format, input_data_format) if data_format is not None else crop_image_padded
 
                 pixel_values.append(crop_image_padded)
         return BatchFeature(
