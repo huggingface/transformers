@@ -426,7 +426,6 @@ class HiggsLinear(nn.Module):
 def replace_with_higgs_linear(
     model,
     quantization_config=None,
-    linear_weights_not_to_quantize=None,
     current_key_name=None,
     has_been_replaced=False,
 ):
@@ -440,9 +439,6 @@ def replace_with_higgs_linear(
             The model to convert, can be any `torch.nn.Module` instance.
         quantization_config (`HiggsConfig`):
             The quantization config object that contains the quantization parameters.
-        linear_weights_not_to_quantize (`list[str]`, *optional*):
-            A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
-            converted.
         current_key_name (`list`, *optional*):
             A list that contains the current key name. This is used for recursion and should not be passed by the user.
         has_been_replaced (`bool`, *optional*):
@@ -462,9 +458,6 @@ def replace_with_higgs_linear(
             f"HIGGS requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
         )
 
-    if linear_weights_not_to_quantize is None:
-        linear_weights_not_to_quantize = []
-
     from accelerate import init_empty_weights
 
     for name, module in model.named_children():
@@ -473,8 +466,11 @@ def replace_with_higgs_linear(
         current_key_name.append(name)
 
         if isinstance(module, nn.Linear):
-            # Check if the current key is not in the `linear_weights_not_to_quantize`
-            if ".".join(current_key_name) + ".weight" not in linear_weights_not_to_quantize:
+            # Check if the current key is not in the `quantization_config.linear_weights_not_to_quantize`
+            current_key_name_str = ".".join(current_key_name) + ".weight"
+            if not any(
+                current_key_name_str.endswith(key) for key in quantization_config.linear_weights_not_to_quantize
+            ):
                 with init_empty_weights():
                     in_features = module.in_features
                     out_features = module.out_features
@@ -496,7 +492,6 @@ def replace_with_higgs_linear(
             _, has_been_replaced = replace_with_higgs_linear(
                 module,
                 quantization_config=quantization_config,
-                linear_weights_not_to_quantize=linear_weights_not_to_quantize,
                 current_key_name=current_key_name,
                 has_been_replaced=has_been_replaced,
             )

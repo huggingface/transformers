@@ -126,7 +126,6 @@ class HiggsHfQuantizer(HfQuantizer):
         replace_with_higgs_linear(
             model,
             quantization_config=self.quantization_config,
-            linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
         )
         model.config.quantization_config = self.quantization_config
         model.flute_workspaces = {}
