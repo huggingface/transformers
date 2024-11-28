@@ -305,7 +305,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ColPaliModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "/home/ubuntu/models_implem/vidore/colpali-v1.2-hf"
+    model_name: ClassVar[str] = "vidore/colpali-v1.2-hf"
 
     def setUp(self):
         self.processor = ColPaliProcessor.from_pretrained(self.model_name)
