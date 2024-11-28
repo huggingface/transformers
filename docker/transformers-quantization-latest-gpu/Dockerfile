@@ -38,7 +38,7 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 
 # Add auto-gptq for gtpq quantization testing, installed from source
 RUN pip install gekko
-RUN git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && python3 setup.py install
+RUN git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && TORCH_CUDA_ARCH_LIST="7.5+PTX" python3 setup.py install
 
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
