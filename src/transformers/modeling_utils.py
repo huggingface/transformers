@@ -1833,7 +1833,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not is_torch_flex_attn_available() or not cls._supports_flex_attn:
             return config
 
-
         if not hard_check_only:
             config._attn_implementation = "flex_attention"
 
