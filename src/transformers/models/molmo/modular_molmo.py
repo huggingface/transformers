@@ -19,7 +19,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
-from einops import einops
 from torch import nn
 
 from ...activations import ACT2FN
@@ -1126,12 +1125,11 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
             )
 
         # image pooling
-        image_features = einops.rearrange(
-            image_features,
-            "b n (h dh) (w dw) c -> (b n h w) (dh dw) c",
-            dh=self.config.pooling_height,
-            dw=self.config.pooling_width,
-        )
+        leading_dimension, image_batch_size, patch_height, patch_width, image_embed_dim = image_features.shape
+
+        image_features = image_features.view(leading_dimension, image_batch_size, patch_height // self.config.pooling_height, self.config.pooling_height, patch_width // self.config.pooling_width, self.config.pooling_width, image_embed_dim)
+        image_features = image_features.permute(0, 1, 2, 4, 3, 5, 6).reshape(-1, self.config.pooling_height * self.config.pooling_width, image_embed_dim)
+
 
         if self.config.image_pooling_type == "attention_meanq":
             queries = image_features.mean(-2, keepdim=True)
