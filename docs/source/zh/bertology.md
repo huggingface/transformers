@@ -23,7 +23,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 - CAT-probing: A Metric-based Approach to Interpret How Pre-trained Models for Programming Language Attend Code Structure: https://arxiv.org/abs/2210.04633
 
 
-为了助力这一新兴领域的发展，我们在BERT/GPT/GPT-2模型中增加了一些附加功能，以帮助人们访问内部表示，这些功能主要是基于Paul Michel的杰出工作进行调整的(https://arxiv.org/abs/1905.10650)：
+为了助力这一新兴领域的发展，我们在BERT/GPT/GPT-2模型中增加了一些附加功能，方便人们访问其内部表示，这些功能主要借鉴了Paul Michel的杰出工作(https://arxiv.org/abs/1905.10650)：
 
 
 - 访问BERT/GPT/GPT-2的所有隐藏状态，
