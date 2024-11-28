@@ -458,7 +458,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         max_new_tokens = int(self.num_assistant_tokens)
         if max_new_tokens == 0:
             return input_ids, None
-        
+
         input_ids = input_ids.to(self.assistant_model.device)
         remove_from_pkv = 0
 
@@ -991,9 +991,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         target_new_text = self.target_tokenizer.batch_decode(
             target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
-        assistant_new_ids = self.assistant_tokenizer(
-            target_new_text, add_special_tokens=False, return_tensors="pt"
-        )["input_ids"].to(self.assistant_model.device)
+        assistant_new_ids = self.assistant_tokenizer(target_new_text, add_special_tokens=False, return_tensors="pt")[
+            "input_ids"
+        ].to(self.assistant_model.device)
 
         # Update or initialize assistant IDs
         if self._prev_assistant_ids is None:
