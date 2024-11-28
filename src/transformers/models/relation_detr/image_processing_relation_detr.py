@@ -1631,7 +1631,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
         boxes = center_to_corners_format(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
-        # and from relative [0, 1] to absolute [0, height] coordinates
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
             if isinstance(target_sizes, List):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
