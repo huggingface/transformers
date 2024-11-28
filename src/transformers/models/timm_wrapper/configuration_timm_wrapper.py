@@ -28,7 +28,7 @@ class TimmWrapperConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`].
 
-    It is used to instantiate a timm backbone model according to the specified arguments, defining the model.
+    It is used to instantiate a timm model according to the specified arguments, defining the model.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -41,13 +41,10 @@ class TimmWrapperConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import TimmWrapperConfig, TimmWrapper
+    >>> from transformers import TimmWrapperModel
 
-    >>> # Initializing a timm backbone
-    >>> configuration = TimmWrapperConfig("resnet50")
-
-    >>> # Initializing a model from the configuration
-    >>> model = TimmWrapper(configuration)
+    >>> # Initializing a timm model
+    >>> model = TimmWrapperModel.from_pretrained("timm/resnet18.a1_in1k")
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -63,9 +60,9 @@ class TimmWrapperConfig(PretrainedConfig):
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "PretrainedConfig":
-        # timm config stores `num_classes` attribute in root of config and in "pretrained_cfg" dict of config.
-        # We are removing this attributes in order to have native `transformers` num_labels attribute in config
-        # and not to have duplicated attributes
+        # timm config stores the `num_classes` attribute in both the root of config and in the "pretrained_cfg" dict.
+        # We are removing these attributes in order to have the native `transformers` num_labels attribute in config
+        # and to avoid duplicate attributes
 
         num_labels_in_kwargs = kwargs.pop("num_labels", None)
         num_labels_in_dict = config_dict.pop("num_classes", None)
@@ -74,7 +71,7 @@ class TimmWrapperConfig(PretrainedConfig):
         kwargs["num_labels"] = num_labels_in_kwargs or num_labels_in_dict
 
         # pop num_classes from "pretrained_cfg",
-        # it is not necessary no have it, only root one is used in timm
+        # it is not necessary to have it, only root one is used in timm
         if "pretrained_cfg" in config_dict and "num_classes" in config_dict["pretrained_cfg"]:
             config_dict["pretrained_cfg"].pop("num_classes", None)
 
