@@ -12,7 +12,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 # 基于BERT进行的相关研究（BERTology）
 
-有一个不断发展的研究领域，致力于探究像BERT这样的大规模transformer模型的内部工作机制（一些人称之为“BERTology”）。这个领域的一些典型案例包括：
+当前，一个新兴的研究领域正致力于探索大规模 transformer 模型（如BERT）的内部工作机制，一些人称之为“BERTology”。以下是这个领域的一些典型示例：
 
 
 - BERT Rediscovers the Classical NLP Pipeline by Ian Tenney, Dipanjan Das, Ellie Pavlick:
