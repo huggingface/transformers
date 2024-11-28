@@ -924,6 +924,7 @@ class MistralModel(MistralPreTrainedModel):
 
 class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
