@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -84,19 +84,14 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                    Image to preprocess. Expects a single or batch of images
+                Image to preprocess. Expects a single or batch of images
             return_tensors (`str` or `TensorType`, *optional*):
-                    The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+                The type of tensors to return.
         """
         if return_tensors != "pt":
             raise ValueError(f"return_tensors for TimmWrapperImageProcessor must be 'pt', but got {return_tensors}")
 
-        # If the input a torch tensor, then no conversion needed
+        # If the input is a torch tensor, then no conversion is needed
         # Otherwise, we need to pass in a list of PIL images
         if isinstance(images, torch.Tensor):
             images = self.val_transforms(images)
@@ -113,8 +108,8 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         # disable it to make checkpoint the same as in `timm` library.
         logger.warning_once(
             "The `save_pretrained` method is disabled for TimmWrapperImageProcessor. "
-            "Image processor configuration is saved directly in `config.json` while "
-            "`save_pretrained` is called for model saving."
+            "The image processor configuration is saved directly in `config.json` when "
+            "`save_pretrained` is called for saving the model."
         )
 
 
