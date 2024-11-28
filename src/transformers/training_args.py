@@ -1350,7 +1350,12 @@ class TrainingArguments:
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
     hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
-    hub_private_repo: Optional[bool] = field(default=None, metadata={"help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."})
+    hub_private_repo: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
+        },
+    )
     hub_always_push: bool = field(
         default=False,
         metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
