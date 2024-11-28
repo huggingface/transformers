@@ -215,7 +215,7 @@ class TimesFMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         kv_write_indices: torch.Tensor | None = None,
         kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
@@ -257,7 +257,10 @@ class TimesFMAttention(nn.Module):
 
         # [batch_size, n_local_heads, input_len, max_seq_len]
         scores = torch.matmul(q, k.transpose(2, 3))
-        scores = scores + mask
+
+        if attention_mask is not None:
+            scores = scores + attention_mask
+
         scores = F.softmax(scores.float(), dim=-1).type_as(q)
 
         # [batch_size, n_local_heads, input_len, head_dim]
@@ -282,7 +285,7 @@ class TimesFMDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        mask: torch.Tensor,
+        attention_mask: torch.Tensor,
         paddings: torch.Tensor,
         kv_write_indices: torch.Tensor | None = None,
         kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
@@ -292,7 +295,7 @@ class TimesFMDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, scores = self.self_attn(
             hidden_states=hidden_states,
-            mask=mask,
+            attention_mask=attention_mask,
             kv_write_indices=kv_write_indices,
             kv_cache=kv_cache,
         )
@@ -332,7 +335,7 @@ class TimesFMStackedDecoder(nn.Module):
             kv_cache = kv_caches[i] if kv_caches is not None else None
             scores, hidden_states = layer(
                 hidden_states=hidden_states,
-                mask=mask,
+                attention_mask=mask,
                 paddings=paddings,
                 kv_write_indices=kv_write_indices,
                 kv_cache=kv_cache,
