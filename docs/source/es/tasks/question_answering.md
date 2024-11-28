@@ -195,7 +195,7 @@ En este punto, solo quedan tres pasos:
 ...     args=training_args,
 ...     train_dataset=tokenized_squad["train"],
 ...     eval_dataset=tokenized_squad["validation"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )
 

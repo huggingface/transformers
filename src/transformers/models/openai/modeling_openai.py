@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu_new, silu
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
@@ -524,7 +525,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
-class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
+class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -603,6 +604,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
+        # Overwritten -- old model with reduced inputs
         return {"input_ids": input_ids}
 
 

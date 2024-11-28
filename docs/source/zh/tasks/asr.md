@@ -298,7 +298,7 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=processor,
+...     processing_class=processor,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )

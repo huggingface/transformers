@@ -1,3 +1,4 @@
+import warnings
 from collections import UserDict
 from typing import List, Union
 
@@ -73,12 +74,12 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             else MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
         )
 
-    def __call__(self, images: Union[str, List[str], "Image", List["Image"]], **kwargs):
+    def __call__(self, image: Union[str, List[str], "Image", List["Image"]] = None, **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            image (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -97,9 +98,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
                 the call may block forever.
 
-            tokenizer_kwargs (`dict`, *optional*):
-                Additional dictionary of keyword arguments passed along to the tokenizer.
-
         Return:
             A list of dictionaries containing one entry per proposed label. Each dictionary contains the
             following keys:
@@ -107,7 +105,12 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             - **score** (`float`) -- The score attributed by the model to that label. It is a value between
                 0 and 1, computed as the `softmax` of `logits_per_image`.
         """
-        return super().__call__(images, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `image`
+        if "images" in kwargs:
+            image = kwargs.pop("images")
+        if image is None:
+            raise ValueError("Cannot call the zero-shot-image-classification pipeline without an images argument!")
+        return super().__call__(image, **kwargs)
 
     def _sanitize_parameters(self, tokenizer_kwargs=None, **kwargs):
         preprocess_params = {}
@@ -118,6 +121,10 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
         if tokenizer_kwargs is not None:
+            warnings.warn(
+                "The `tokenizer_kwargs` argument is deprecated and will be removed in version 5 of Transformers",
+                FutureWarning,
+            )
             preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
 
         return preprocess_params, {}, {}

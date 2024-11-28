@@ -44,7 +44,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "Qwen2Config": ["use_sliding_window"],
     "Qwen2MoeConfig": ["use_sliding_window"],
     "Qwen2VLConfig": ["use_sliding_window"],
-    "Gemma2Config": ["tie_word_embeddings"],
+    # `cache_implementation` should be in the default generation config, but we don't yet support per-model
+    # generation configs (TODO joao)
+    "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
@@ -129,6 +131,69 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_embed_dim",
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
+    ],
+    "ZambaConfig": [
+        "tie_word_embeddings",
+        "attn_layer_offset",
+        "attn_layer_period",
+    ],
+    "MllamaTextConfig": [
+        "initializer_range",
+    ],
+    "MllamaVisionConfig": [
+        "initializer_range",
+        "supported_aspect_ratios",
+    ],
+    "ConditionalDetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "cls_loss_coefficient",
+        "dice_loss_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_loss_coefficient",
+    ],
+    "DetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "dice_loss_coefficient",
+        "eos_coefficient",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_loss_coefficient",
+    ],
+    "GroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
+    "RTDetrConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+    ],
+    "YolosConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "eos_coefficient",
+        "giou_cost",
+        "giou_loss_coefficient",
     ],
 }
 
@@ -229,6 +294,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pad_index",
         "unk_index",
         "mask_index",
+        "image_token_index",  # for VLMs
         "image_size",
         "use_cache",
         "out_features",

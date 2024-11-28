@@ -76,7 +76,9 @@ def load_original_state_dict(model_id):
     if "lm_head.weight" not in original_state_dict:
         original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
 
-    del original_state_dict["model.image_newline"]  # not used in the original implementation because "merge_type=flat"
+    if "model.image_newline" in original_state_dict:
+        # not used in the original implementation because "merge_type=flat"
+        del original_state_dict["model.image_newline"]
     return original_state_dict
 
 
@@ -107,7 +109,7 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     image_processor = AutoImageProcessor.from_pretrained(vision_model_id)
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-    if "Qwen" in text_model_id:
+    if "siglip" in vision_model_id:
         vision_config = SiglipVisionConfig(
             hidden_size=1152,
             image_size=384,
@@ -128,8 +130,9 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     # llms-lab interleeave models do not use any selection startegy except for last hidden state
     if "Qwen" in text_model_id:
         config.image_token_index = 151646
-        config.vision_feature_select_strategy = "full"
-        config.vision_feature_layer = -1
+        if "siglip" in vision_model_id:
+            config.vision_feature_select_strategy = "full"
+            config.vision_feature_layer = -1
     else:
         config.pad_token_id = 32001
         config.image_token_index = 32000

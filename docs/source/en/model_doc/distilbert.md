@@ -66,6 +66,53 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
     * predicting the masked tokens correctly (but no next-sentence objective)
     * a cosine similarity between the hidden states of the student and the teacher model
 
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```
+from transformers import DistilBertModel
+model = DistilBertModel.from_pretrained("distilbert-base-uncased", torch_dtype=torch.float16, attn_implementation="sdpa")
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (NVIDIA GeForce RTX 2060-8GB, PyTorch 2.3.1, OS Ubuntu 20.04) with `float16` and the `distilbert-base-uncased` model with
+a MaskedLM head, we saw the following speedups during training and inference.
+
+#### Training
+
+| num_training_steps | batch_size | seq_len | is cuda | Time per batch (eager - s) | Time per batch (sdpa - s) | Speedup (%) | Eager peak mem (MB) | sdpa peak mem (MB) | Mem saving (%) |
+|--------------------|------------|---------|---------|----------------------------|---------------------------|-------------|---------------------|--------------------|----------------|
+| 100                | 1          | 128     | False   | 0.010                      | 0.008                     | 28.870      | 397.038             | 399.629            | -0.649         |
+| 100                | 1          | 256     | False   | 0.011                      | 0.009                     | 20.681      | 412.505             | 412.606            | -0.025         |
+| 100                | 2          | 128     | False   | 0.011                      | 0.009                     | 23.741      | 412.213             | 412.606            | -0.095         |
+| 100                | 2          | 256     | False   | 0.015                      | 0.013                     | 16.502      | 427.491             | 425.787            | 0.400          |
+| 100                | 4          | 128     | False   | 0.015                      | 0.013                     | 13.828      | 427.491             | 425.787            | 0.400          |
+| 100                | 4          | 256     | False   | 0.025                      | 0.022                     | 12.882      | 594.156             | 502.745            | 18.182         |
+| 100                | 8          | 128     | False   | 0.023                      | 0.022                     | 8.010       | 545.922             | 502.745            | 8.588          |
+| 100                | 8          | 256     | False   | 0.046                      | 0.041                     | 12.763      | 983.450             | 798.480            | 23.165         |
+
+#### Inference
+
+| num_batches | batch_size | seq_len | is cuda | is half | use mask | Per token latency eager (ms) | Per token latency SDPA (ms) | Speedup (%) | Mem eager (MB) | Mem BT (MB) | Mem saved (%) |
+|-------------|------------|---------|---------|---------|----------|-----------------------------|-----------------------------|-------------|----------------|--------------|---------------|
+| 50          | 2          | 64      | True    | True    | True     | 0.032                       | 0.025                       | 28.192      | 154.532        | 155.531      | -0.642        |
+| 50          | 2          | 128     | True    | True    | True     | 0.033                       | 0.025                       | 32.636      | 157.286        | 157.482      | -0.125        |
+| 50          | 4          | 64      | True    | True    | True     | 0.032                       | 0.026                       | 24.783      | 157.023        | 157.449      | -0.271        |
+| 50          | 4          | 128     | True    | True    | True     | 0.034                       | 0.028                       | 19.299      | 162.794        | 162.269      | 0.323         |
+| 50          | 8          | 64      | True    | True    | True     | 0.035                       | 0.028                       | 25.105      | 160.958        | 162.204      | -0.768        |
+| 50          | 8          | 128     | True    | True    | True     | 0.052                       | 0.046                       | 12.375      | 173.155        | 171.844      | 0.763         |
+| 50          | 16         | 64      | True    | True    | True     | 0.051                       | 0.045                       | 12.882      | 172.106        | 171.713      | 0.229         |
+| 50          | 16         | 128     | True    | True    | True     | 0.096                       | 0.081                       | 18.524      | 191.257        | 191.517      | -0.136        |
+
 
 ## Resources
 

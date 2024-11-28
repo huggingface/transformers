@@ -25,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1318,7 +1319,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 
         position_bias = self.embed_positions(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1341,8 +1342,8 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                 dropout_probability = torch.rand([])
                 skip_the_layer = dropout_probability < self.layerdrop
 
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.__call__,
@@ -1603,7 +1604,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 encoder_attention_mask, hidden_states.dtype, tgt_len=input_shape[-1]
             )
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1636,7 +1637,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             if self.training:
                 dropout_probability = torch.rand([])
                 skip_the_layer = dropout_probability < self.layerdrop
-            if skip_the_layer and not deepspeed_zero3_is_enabled:
+            if skip_the_layer and not synced_gpus:
                 continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
@@ -2424,6 +2425,8 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
+        # Note that this model doesn't inherit from the generation mixin, has unique generate function
+
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -3234,10 +3237,14 @@ class HifiGanResidualBlock(nn.Module):
         return (kernel_size * dilation - dilation) // 2
 
     def apply_weight_norm(self):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         for layer in self.convs1:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
         for layer in self.convs2:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
 
     def remove_weight_norm(self):
         for layer in self.convs1:
@@ -3310,12 +3317,16 @@ class SpeechT5HifiGan(PreTrainedModel):
                 module.bias.data.zero_()
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv_pre)
         for layer in self.upsampler:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
         for layer in self.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.conv_post)
+        weight_norm(self.conv_post)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv_pre)
