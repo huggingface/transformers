@@ -260,8 +260,6 @@ if is_accelerate_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
         from deepspeed.utils import groups as deepspeed_mpu
 
-    from accelerate.utils import parallel_state as mpu
-
 if is_accelerate_available("0.28.0"):
     from accelerate.utils import DataLoaderConfiguration
 

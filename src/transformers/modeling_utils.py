@@ -130,7 +130,6 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
-    from accelerate.utils import parallel_state as mpu
 
     accelerate_version = version.parse(importlib.metadata.version("accelerate"))
     if accelerate_version >= version.parse("0.31"):
