@@ -1167,6 +1167,7 @@ class GenerationTesterMixin:
             # case when some are accepted and some not is hard to reproduce, so let's hope this catches most errors :)
             if assistant_type == "random":
                 assistant_model = model_class(config).to(torch_device).eval()
+                set_model_for_less_flaky_test(assistant_model)
             else:
                 assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
