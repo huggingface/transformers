@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -122,9 +121,16 @@ class RelationDetrHungarianMatcher(nn.Module):
         self.focal_alpha = focal_alpha
         self.focal_gamma = focal_gamma
 
-    def calculate_class_cost(self, pred_logits, gt_labels, **kwargs):
-        pred_logits = pred_logits[:, gt_labels]
+    @torch.no_grad()
+    def calculate_cost(
+        self,
+        pred_boxes: Tensor,
+        pred_logits: Tensor,
+        gt_boxes: Tensor,
+        gt_labels: Tensor,
+    ):
         # Compute the classification cost.
+        pred_logits = pred_logits[:, gt_labels]
         neg_cost = sigmoid_focal_loss(
             pred_logits,
             torch.zeros_like(pred_logits),
@@ -139,58 +145,26 @@ class RelationDetrHungarianMatcher(nn.Module):
             gamma=self.focal_gamma,
             reduction="none",
         )
-        class_cost = pos_cost - neg_cost
+        class_cost = (pos_cost - neg_cost) * self.class_cost
 
-        return class_cost
-
-    def calculate_bbox_cost(self, pred_boxes, gt_boxes, **kwargs):
         # Compute the L1 cost between boxes
-        bbox_cost = torch.cdist(pred_boxes, gt_boxes, p=1)
-        return bbox_cost
+        bbox_cost = torch.cdist(pred_boxes, gt_boxes, p=1) * self.bbox_cost
 
-    def calculate_giou_cost(self, pred_boxes, gt_boxes, **kwargs):
         # Compute the giou cost betwen boxes
         giou_cost = -generalized_box_iou(center_to_corners_format(pred_boxes), center_to_corners_format(gt_boxes))
-        return giou_cost
-
-    @torch.no_grad()
-    def calculate_cost(self, **input_dict):
-        # Calculate class, bbox and giou cost
-        class_cost = self.calculate_class_cost(**input_dict) * self.class_cost
-        bbox_cost = self.calculate_bbox_cost(**input_dict) * self.bbox_cost
-        giou_cost = self.calculate_giou_cost(**input_dict) * self.giou_cost
+        giou_cost = giou_cost * self.giou_cost
 
         cost = class_cost + bbox_cost + giou_cost
-
-        if input_dict.get("pred_masks", None) is not None and input_dict.get("gt_masks", None) is not None:
-            cost_mask, cost_dice = self.calculate_mask_cost(**input_dict)
-            cost_mask = cost_mask * self.cost_mask
-            cost_dice = cost_dice * self.cost_dice
-
-            cost += cost_mask + cost_dice
 
         # Final cost matrix
         return cost
 
     @torch.no_grad()
-    def forward(
-        self,
-        pred_boxes: Tensor,
-        pred_logits: Tensor,
-        gt_boxes: Tensor,
-        gt_labels: Tensor,
-        pred_masks: Optional[Tensor] = None,
-        gt_masks: Optional[Tensor] = None,
-    ):
-        c = self.calculate_cost(
-            pred_boxes=pred_boxes,
-            pred_logits=pred_logits,
-            gt_boxes=gt_boxes,
-            gt_labels=gt_labels,
-            pred_masks=pred_masks,
-            gt_masks=gt_masks,
+    def forward(self, pred_boxes: Tensor, pred_logits: Tensor, gt_boxes: Tensor, gt_labels: Tensor):
+        matching_cost = self.calculate_cost(
+            pred_boxes=pred_boxes, pred_logits=pred_logits, gt_boxes=gt_boxes, gt_labels=gt_labels
         )
-        indices = linear_sum_assignment(c.cpu())
+        indices = linear_sum_assignment(matching_cost.cpu())
         src_ind = torch.as_tensor(indices[0], device=pred_logits.device)
         tgt_ind = torch.as_tensor(indices[1], device=pred_logits.device)
         return src_ind, tgt_ind
