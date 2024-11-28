@@ -43,7 +43,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    is_torch_greater_or_equal,
+    is_torch_flex_attn_available,
     logging,
 )
 from .configuration_gpt_neox import GPTNeoXConfig
@@ -52,7 +52,7 @@ from .configuration_gpt_neox import GPTNeoXConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
-if is_torch_greater_or_equal("2.5"):
+if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import flex_attention
 
 logger = logging.get_logger(__name__)
