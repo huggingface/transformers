@@ -836,6 +836,7 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
 
         from transformers.testing_utils import set_config_for_less_flaky_test, set_model_for_less_flaky_test
+
         set_config_for_less_flaky_test(config)
 
         model = SeamlessM4Tv2Model(config=config)
