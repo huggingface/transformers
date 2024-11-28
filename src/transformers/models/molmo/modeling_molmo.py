@@ -1303,7 +1303,7 @@ class MolmoVisionAttention(nn.Module):
 class MolmoVisionSdpaAttention(MolmoVisionAttention):
     """
     Molmo attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `MolmoAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    `MolmoVisionAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
@@ -1368,7 +1368,7 @@ class MolmoVisionSdpaAttention(MolmoVisionAttention):
 
 class MolmoVisionFlashAttention2(MolmoVisionAttention):
     """
-    MolmoAttention flash attention module. This module inherits from `MolmoAttention` as the weights of the module stays
+    MolmoVisionAttention flash attention module. This module inherits from `MolmoVisionAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -1700,9 +1700,10 @@ class MolmoVisionTransformer(nn.Module):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
         self.config = config
+        embed_dim = config.hidden_size
         self.embeddings = MolmoVisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MolmoVisionEncoder(config)  # necessary because of renaming issue in modular
-        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(MOLMO_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
@@ -2220,6 +2221,13 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        # update vocab size
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
+        return model_embeds
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -2258,6 +2266,9 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         image_features = self.adapter(image_features, image_masks)
 
         return image_features
+
+    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+        pass
 
     @add_start_docstrings_to_model_forward(MOLMO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MolmoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -2317,6 +2328,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2347,7 +2359,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             batch_size, num_crops, height, width = pixel_values.shape
             seq_len = inputs_embeds.size(1)
             hidden_size = inputs_embeds.size(2)
-            valid_crops = (pixel_values.abs().sum(dim=[2, 3]) > 0) 
+            valid_crops = pixel_values.abs().sum(dim=[2, 3]) > 0
 
             pixel_values_flat = pixel_values.view(-1, height, width)
             image_masks_flat = image_masks.view(-1, image_masks.size(-1))
@@ -2359,7 +2371,9 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             all_image_masks = image_masks_flat[valid_crops_flat]
             all_image_token_indices = image_token_indices_flat[valid_crops_flat]
 
-            batch_indices = torch.arange(batch_size, device=pixel_values.device).unsqueeze(1).expand(-1, num_crops).reshape(-1)
+            batch_indices = (
+                torch.arange(batch_size, device=pixel_values.device).unsqueeze(1).expand(-1, num_crops).reshape(-1)
+            )
             valid_batch_indices = batch_indices[valid_crops_flat]
             # now all valid crops together
             image_features = self.get_image_features(
@@ -2372,13 +2386,14 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             image_features_flat = image_features.view(-1, hidden_size)
             image_token_indices_flat = all_image_token_indices.view(-1)
 
-
-            valid_indices_mask = (image_token_indices_flat != -100)
+            valid_indices_mask = image_token_indices_flat != -100
             image_token_indices_flat[valid_indices_mask] += 1  # adjustment, TODO is this still needed
 
-            valid_batch_indices_expanded = valid_batch_indices.unsqueeze(1).expand(-1, all_image_token_indices.size(-1)).reshape(-1)
+            valid_batch_indices_expanded = (
+                valid_batch_indices.unsqueeze(1).expand(-1, all_image_token_indices.size(-1)).reshape(-1)
+            )
 
-            valid_positions = (image_token_indices_flat >= 0)
+            valid_positions = image_token_indices_flat >= 0
             valid_indices = image_token_indices_flat[valid_positions].long()
             valid_features = image_features_flat[valid_positions]
             valid_batch_indices = valid_batch_indices_expanded[valid_positions].long()

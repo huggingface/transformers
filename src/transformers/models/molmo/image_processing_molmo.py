@@ -85,8 +85,8 @@ def get_resize_output_image_size(
     scale = min(scale_x, scale_y)
 
     # Compute new dimensions
-    new_height = int(original_height * scale)
-    new_width = int(original_width * scale)
+    new_height = round(original_height * scale)
+    new_width = round(original_width * scale)
     return {"height": new_height, "width": new_width}
 
 

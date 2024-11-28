@@ -126,7 +126,7 @@ class MolmoVisionText2TextModelTester:
         self.batch_size = 3
         self.num_patches = 5
         self.image_size = 49
-        self.num_image_tokens = 80
+        self.num_image_tokens = 16
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
@@ -150,9 +150,8 @@ class MolmoVisionText2TextModelTester:
                 self.vision_config["patch_size"] ** 2 * 3,
             ]
         )
-        image_token_indices = (
-            torch.arange(self.num_image_tokens, device=torch_device).unsqueeze(0).repeat(self.batch_size, 1)
-        )
+        image_token_indices = torch.arange(self.num_image_tokens, device=torch_device)
+        image_token_indices = image_token_indices.unsqueeze(0).repeat(self.batch_size, self.num_patches, 1)
         image_masks = torch.ones_like(pixel_values)[..., 0]
         config = self.get_config()
 

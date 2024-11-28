@@ -42,7 +42,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_kwargs,
@@ -68,6 +67,9 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
+from ..clip.modeling_clip import (
+    CLIPVisionTransformer,
+)
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import (
@@ -87,7 +89,6 @@ from ..siglip.modeling_siglip import (
     SiglipMLP,
     SiglipSdpaAttention,
     SiglipVisionModel,
-    SiglipVisionTransformer,
 )
 
 
@@ -202,6 +203,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         pooling_height=2,
         pooling_width=2,
         pad_embed_dim=2048,
+        image_num_patches=24,
         image_feature_dropout=0.0,
         text_intermediate_size=37888,
         text_hidden_size=3584,
@@ -219,6 +221,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
         self.pad_embed_dim = pad_embed_dim
+        self.image_num_patches = image_num_patches
         self.image_feature_dropout = image_feature_dropout
         self.text_intermediate_size = text_intermediate_size
         self.text_hidden_size = text_hidden_size
@@ -411,6 +414,53 @@ class MolmoDecoderLayer(Qwen2DecoderLayer):
         self.self_attn = MOLMO_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
 
+MOLMO_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MolmoConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare Molmo Model outputting raw hidden-states without any specific head on top.",
+    MOLMO_START_DOCSTRING,
+)
+class MolmoPreTrainedModel(PreTrainedModel):
+    config_class = MolmoConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MolmoDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+
 class MolmoTextModel(Qwen2Model):
     def __init__(self, config):
         super().__init__(config)
@@ -549,14 +599,14 @@ class MolmoVisionEncoder(SiglipEncoder):
         self.layers = nn.ModuleList([MolmoVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
-class MolmoVisionTransformer(SiglipVisionTransformer):
+class MolmoVisionTransformer(CLIPVisionTransformer):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
         self.embeddings = MolmoVisionEmbeddings(config)
+        embed_dim = config.hidden_size
         self.encoder = MolmoVisionEncoder(config)  # necessary because of renaming issue in modular
-        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         del self.post_layernorm
-        del self.head
 
     def forward(
         self,
@@ -832,52 +882,6 @@ MOLMO_POOLING_ATTENTION_CLASSES = {
     "flash_attention_2": MolmoPoolingFlashAttention2,
 }
 
-MOLMO_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MolmoConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Molmo Model outputting raw hidden-states without any specific head on top.",
-    MOLMO_START_DOCSTRING,
-)
-class MolmoPreTrainedModel(PreTrainedModel):
-    config_class = MolmoConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["MolmoDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=self.config.initializer_range)
-
 
 @add_start_docstrings(
     """The adapter model from MOLMO that takes in image hidden states from vision tower.""",
@@ -942,7 +946,7 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
                 raise ValueError(image_padding_embed)
 
         image_features = self.image_feature_dropout(image_features)
-        num_patches = 24  # TODO: calculate from config or add in config
+        num_patches = self.config.image_num_patches
         image_features = image_features.reshape(
             (batch_size, patches) + (num_patches, num_patches) + (-1,),
         )
@@ -1116,28 +1120,53 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
         image_features = None
         if pixel_values is not None and image_token_indices is not None:
+            batch_size, num_crops, height, width = pixel_values.shape
+            seq_len = inputs_embeds.size(1)
+            hidden_size = inputs_embeds.size(2)
+            valid_crops = pixel_values.abs().sum(dim=[2, 3]) > 0
+
+            pixel_values_flat = pixel_values.view(-1, height, width)
+            image_masks_flat = image_masks.view(-1, image_masks.size(-1))
+            image_token_indices_flat = image_token_indices.view(-1, image_token_indices.size(-1))
+
+            valid_crops_flat = valid_crops.view(-1)
+
+            all_pixel_values = pixel_values_flat[valid_crops_flat]
+            all_image_masks = image_masks_flat[valid_crops_flat]
+            all_image_token_indices = image_token_indices_flat[valid_crops_flat]
+
+            batch_indices = (
+                torch.arange(batch_size, device=pixel_values.device).unsqueeze(1).expand(-1, num_crops).reshape(-1)
+            )
+            valid_batch_indices = batch_indices[valid_crops_flat]
+            # now all valid crops together
             image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                image_masks=image_masks,
+                pixel_values=all_pixel_values.unsqueeze(1),
+                image_masks=all_image_masks.unsqueeze(1),
                 vision_feature_layers=vision_feature_layers,
                 vision_feature_select_strategy=vision_feature_select_strategy,
+            )  # this returns [total_valid_crops, num_image_tokens, hidden_size]
+
+            image_features_flat = image_features.view(-1, hidden_size)
+            image_token_indices_flat = all_image_token_indices.view(-1)
+
+            valid_indices_mask = image_token_indices_flat != -100
+            image_token_indices_flat[valid_indices_mask] += 1  # adjustment, TODO is this still needed
+
+            valid_batch_indices_expanded = (
+                valid_batch_indices.unsqueeze(1).expand(-1, all_image_token_indices.size(-1)).reshape(-1)
             )
-            image_features = image_features.to(inputs_embeds.device)
-            image_token_indices = image_token_indices.to(inputs_embeds.device)
 
-            batch_size, seq_len, hidden_size = inputs_embeds.size()
-            inputs_embeds = inputs_embeds.view(-1, hidden_size)
-            image_features = image_features.view(-1, hidden_size)
-            image_token_indices = image_token_indices.view(-1)
+            valid_positions = image_token_indices_flat >= 0
+            valid_indices = image_token_indices_flat[valid_positions].long()
+            valid_features = image_features_flat[valid_positions]
+            valid_batch_indices = valid_batch_indices_expanded[valid_positions].long()
 
-            # TODO: pablo, this matches with orig when I added +1
-            image_token_indices[image_token_indices != -100] += 1
+            flat_indices = valid_batch_indices * seq_len + valid_indices
+            inputs_embeds_flat = inputs_embeds.view(-1, hidden_size)
 
-            # insert image features at specified positions
-            valid_indices = image_token_indices >= 0
-            inputs_embeds[image_token_indices[valid_indices]] += image_features[valid_indices]
-
-            inputs_embeds = inputs_embeds.view(batch_size, seq_len, hidden_size)
+            inputs_embeds_flat.index_add_(0, flat_indices, valid_features.to(inputs_embeds_flat.device))
+            inputs_embeds = inputs_embeds_flat.view(batch_size, seq_len, hidden_size)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -1251,8 +1280,8 @@ def get_resize_output_image_size(
     scale = min(scale_x, scale_y)
 
     # Compute new dimensions
-    new_height = int(original_height * scale)
-    new_width = int(original_width * scale)
+    new_height = round(original_height * scale)
+    new_width = round(original_width * scale)
     return {"height": new_height, "width": new_width}
 
 
@@ -1790,7 +1819,7 @@ class MolmoImageProcessor(BaseImageProcessor):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        images = make_list_of_images(images)
+        images = make_batched_images(images)
 
         if not valid_images(images):
             raise ValueError(
