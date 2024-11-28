@@ -33,6 +33,8 @@ from ...utils import (
 from .configuration_colpali import ColPaliConfig
 
 
+_CONFIG_FOR_DOC = "ColPaliConfig"
+
 COLPALI_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -191,7 +193,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING)
-    @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class="ColPaliConfig")
+    @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -202,6 +204,9 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, ColPaliForRetrievalOutput]:
+        r"""
+        Returns:
+        """
         if "pixel_values" in kwargs:
             kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
