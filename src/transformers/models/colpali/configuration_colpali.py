@@ -14,10 +14,13 @@
 # limitations under the License.
 """ColPali model configuration"""
 
-from copy import deepcopy
+import logging
 
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING
+
+
+logger = logging.getLogger(__name__)
 
 
 class ColPaliConfig(PretrainedConfig):
@@ -53,22 +56,25 @@ class ColPaliConfig(PretrainedConfig):
     ```
     """
 
+    model_type = "colpali"
+    sub_configs = {"vlm_config": PretrainedConfig}
+
     def __init__(
         self,
         vlm_config=None,
         embedding_dim: int = 128,
         **kwargs,
     ):
-        if isinstance(vlm_config, dict):
-            vlm_config = deepcopy(vlm_config)
-            vlm_config["model_type"] = vlm_config["model_type"] if "model_type" in vlm_config else "paligemma"
-            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif vlm_config is None:
+        super().__init__(**kwargs)
+
+        if vlm_config is None:
             vlm_config = CONFIG_MAPPING["paligemma"]()
+            logger.info(
+                "`vlm_config` is `None`. Initializing `vlm_config` with the `PaliGemmaConfig` with default values."
+            )
+
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
-
-        super().__init__(**kwargs)
 
     def ignore_index(self):
         raise AttributeError("Not needed for ColPali")
