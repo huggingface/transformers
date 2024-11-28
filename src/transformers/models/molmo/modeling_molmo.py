@@ -2315,7 +2315,6 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2343,28 +2342,50 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
         image_features = None
         if pixel_values is not None and image_token_indices is not None:
+            batch_size, num_crops, height, width = pixel_values.shape
+            seq_len = inputs_embeds.size(1)
+            hidden_size = inputs_embeds.size(2)
+            valid_crops = (pixel_values.abs().sum(dim=[2, 3]) > 0) 
+
+            pixel_values_flat = pixel_values.view(-1, height, width)
+            image_masks_flat = image_masks.view(-1, image_masks.size(-1))
+            image_token_indices_flat = image_token_indices.view(-1, image_token_indices.size(-1))
+
+            valid_crops_flat = valid_crops.view(-1)
+
+            all_pixel_values = pixel_values_flat[valid_crops_flat]
+            all_image_masks = image_masks_flat[valid_crops_flat]
+            all_image_token_indices = image_token_indices_flat[valid_crops_flat]
+
+            batch_indices = torch.arange(batch_size, device=pixel_values.device).unsqueeze(1).expand(-1, num_crops).reshape(-1)
+            valid_batch_indices = batch_indices[valid_crops_flat]
+            # now all valid crops together
             image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                image_masks=image_masks,
+                pixel_values=all_pixel_values.unsqueeze(1),
+                image_masks=all_image_masks.unsqueeze(1),
                 vision_feature_layers=vision_feature_layers,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
-            image_features = image_features.to(inputs_embeds.device)
-            image_token_indices = image_token_indices.to(inputs_embeds.device)
+            )  # this returns [total_valid_crops, num_image_tokens, hidden_size]
 
-            batch_size, seq_len, hidden_size = inputs_embeds.size()
-            inputs_embeds = inputs_embeds.view(-1, hidden_size)
-            image_features = image_features.view(-1, hidden_size)
-            image_token_indices = image_token_indices.view(-1)
+            image_features_flat = image_features.view(-1, hidden_size)
+            image_token_indices_flat = all_image_token_indices.view(-1)
 
-            # TODO: pablo, this matches with orig when I added +1
-            image_token_indices[image_token_indices != -100] += 1
 
-            # insert image features at specified positions
-            valid_indices = image_token_indices >= 0
-            inputs_embeds[image_token_indices[valid_indices]] += image_features[valid_indices]
+            valid_indices_mask = (image_token_indices_flat != -100)
+            image_token_indices_flat[valid_indices_mask] += 1  # adjustment, TODO is this still needed
 
-            inputs_embeds = inputs_embeds.view(batch_size, seq_len, hidden_size)
+            valid_batch_indices_expanded = valid_batch_indices.unsqueeze(1).expand(-1, all_image_token_indices.size(-1)).reshape(-1)
+
+            valid_positions = (image_token_indices_flat >= 0)
+            valid_indices = image_token_indices_flat[valid_positions].long()
+            valid_features = image_features_flat[valid_positions]
+            valid_batch_indices = valid_batch_indices_expanded[valid_positions].long()
+
+            flat_indices = valid_batch_indices * seq_len + valid_indices
+            inputs_embeds_flat = inputs_embeds.view(-1, hidden_size)
+
+            inputs_embeds_flat.index_add_(0, flat_indices, valid_features.to(inputs_embeds_flat.device))
+            inputs_embeds = inputs_embeds_flat.view(batch_size, seq_len, hidden_size)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
