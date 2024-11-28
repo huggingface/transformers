@@ -19,6 +19,7 @@ import math
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -227,6 +228,10 @@ class RelationDetrConfig(PretrainedConfig):
             # RelationDETR use multi-scale features as default according to official repo
             backbone_kwargs["out_indices"] = [2, 3, 4]
             backbone_kwargs["in_chans"] = num_channels
+        elif not use_timm_backbone and isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         verify_backbone_config_arguments(
             use_timm_backbone=use_timm_backbone,
