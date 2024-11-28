@@ -2452,5 +2452,9 @@ __all__ = [
     "MolmoTextAttention",
     "MolmoVisionAttention",
     "MolmoPoolingAttention",
+    "MolmoAdapterModel",
+    "MolmoTextModel",
+    "MolmoPreTrainedModel",
+    "MolmoForCausalLM",
     "MolmoForConditionalGeneration",
 ]

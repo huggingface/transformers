@@ -2810,6 +2810,8 @@ else:
     _import_structure["models.molmo"].extend(
         [
             "MolmoForConditionalGeneration",
+            "MolmoForCausalLM",
+            "MolmoTextModel",
             "MolmoPreTrainedModel",
         ]
     )
@@ -7456,6 +7458,12 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.molmo import (
+            MolmoForCausalLM,
+            MolmoForConditionalGeneration,
+            MolmoPreTrainedModel,
+            MolmoTextModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,

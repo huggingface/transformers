@@ -478,6 +478,13 @@ class MobileViTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class MolmoImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class NougatImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

@@ -735,3 +735,6 @@ class MolmoImageProcessor(BaseImageProcessor):
         if do_pad:
             data = self._pad_for_batching(data)
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["MolmoImageProcessor"]

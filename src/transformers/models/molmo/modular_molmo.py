@@ -2311,11 +2311,17 @@ class MolmoProcessor(ProcessorMixin):
 
 __all__ = [
     "MolmoConfig",
+    "MolmoImageProcessor",
+    "MolmoProcessor",
     "MolmoVisionConfig",
     "MolmoVisionEmbeddings",
     "MolmoVisionModel",
     "MolmoTextAttention",
     "MolmoVisionAttention",
     "MolmoPoolingAttention",
+    "MolmoAdapterModel",
+    "MolmoTextModel",
+    "MolmoPreTrainedModel",
+    "MolmoForCausalLM",
     "MolmoForConditionalGeneration",
 ]
