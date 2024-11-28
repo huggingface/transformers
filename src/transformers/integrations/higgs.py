@@ -451,18 +451,6 @@ def replace_with_higgs_linear(
             A boolean that indicates if the conversion has been successful or not. This is used for recursion and
             should not be passed by the user.
     """
-    if not is_flute_available():
-        raise ValueError("FLUTE is not available. Please install it with `pip install flute-kernel`")
-
-    if not is_hadamard_available():
-        raise ValueError(
-            "Fast Hadamard Transform is not available. Please install it with `pip install fast_hadamard_transform`"
-        )
-
-    if not is_accelerate_available():
-        raise ValueError(
-            f"HIGGS requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
-        )
 
     from accelerate import init_empty_weights
 
