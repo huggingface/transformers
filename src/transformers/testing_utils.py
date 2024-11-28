@@ -14,6 +14,7 @@
 
 import collections
 import contextlib
+import copy
 import doctest
 import functools
 import gc
@@ -1383,6 +1384,42 @@ def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
+
+
+def set_model_tester_for_less_flaky_test(test_case):
+    if hasattr(test_case.model_tester, "num_hidden_layers"):
+        test_case.model_tester.num_hidden_layers = 1
+    if hasattr(test_case.model_tester, "vision_config") and "num_hidden_layers" in test_case.model_tester.vision_config:
+        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
+        test_case.model_tester.vision_config["num_hidden_layers"] = 1
+    if hasattr(test_case.model_tester, "text_config") and "num_hidden_layers" in test_case.model_tester.text_config:
+        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
+        test_case.model_tester.text_config["num_hidden_layers"] = 1
+
+
+def set_config_for_less_flaky_test(config):
+    config.rms_norm_eps = 1.0
+    config.layer_norm_eps = 1.0
+    config.norm_eps = 1.0
+    config.norm_epsilon = 1.0
+    config.layer_norm_epsilon = 1.0
+
+    # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
+    # (We don't need the original epsilon values to check eager/sdpa matches)
+    for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
+        if hasattr(config, attr):
+            getattr(config, attr).rms_norm_eps = 1.0
+            getattr(config, attr).layer_norm_eps = 1.0
+            getattr(config, attr).norm_eps = 1.0
+            getattr(config, attr).norm_epsilon = 1.0
+            getattr(config, attr).layer_norm_epsilon = 1.0
+
+
+def set_model_for_less_flaky_test(model):
+    # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
+    for module in model.modules():
+        if type(module).__name__ in ["GemmaRMSNorm", "LayerNorm", "GroupNorm"]:
+            module.eps = 1.0
 
 
 class CaptureStd:
