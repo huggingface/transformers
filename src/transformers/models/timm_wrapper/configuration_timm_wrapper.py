@@ -59,7 +59,7 @@ class TimmWrapperConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "PretrainedConfig":
+    def from_dict(cls, config_dict: Dict[str, Any], **kwargs):
         # timm config stores the `num_classes` attribute in both the root of config and in the "pretrained_cfg" dict.
         # We are removing these attributes in order to have the native `transformers` num_labels attribute in config
         # and to avoid duplicate attributes
