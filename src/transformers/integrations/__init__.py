@@ -54,7 +54,6 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
-    "higgs": ["HiggsLinear", "quantize_with_higgs", "replace_with_higgs_linear"],
     "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
@@ -64,6 +63,7 @@ _import_structure = {
         "load_dequant_gguf_tensor",
         "load_gguf",
     ],
+    "higgs": ["HiggsLinear", "quantize_with_higgs", "replace_with_higgs_linear"],
     "hqq": ["prepare_for_hqq_linear"],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
