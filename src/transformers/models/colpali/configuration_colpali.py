@@ -15,6 +15,7 @@
 """ColPali model configuration"""
 
 import logging
+from copy import deepcopy
 
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING
@@ -65,16 +66,33 @@ class ColPaliConfig(PretrainedConfig):
         embedding_dim: int = 128,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if vlm_config is None:
             vlm_config = CONFIG_MAPPING["paligemma"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `PaliGemmaConfig` with default values."
             )
+        elif isinstance(vlm_config, dict):
+            vlm_config = deepcopy(vlm_config)
+            if "model_type" not in vlm_config:
+                raise KeyError(
+                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
+                )
+            elif vlm_config["model_type"] not in CONFIG_MAPPING:
+                raise ValueError(
+                    f"The model type `{vlm_config['model_type']}` is not supported. Please provide a valid model type."
+                )
+            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
+        elif isinstance(vlm_config, PretrainedConfig):
+            vlm_config = vlm_config
+        else:
+            raise TypeError(
+                f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
+            )
 
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
+
+        super().__init__(**kwargs)
 
     def ignore_index(self):
         raise AttributeError("Not needed for ColPali")
