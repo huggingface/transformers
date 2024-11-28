@@ -375,11 +375,12 @@ def create_circleci_config(folder=None):
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
-    print("Full list of job name inputs", {j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs})
-
-    collection_job = EmptyJob()
-    collection_job.job_name = "collection_job"
-    jobs = [collection_job] + jobs
+    else:
+        print("Full list of job name inputs", {j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs})
+        # Add a job waiting all the test jobs and aggregate their test summary files at the end
+        collection_job = EmptyJob()
+        collection_job.job_name = "collection_job"
+        jobs = [collection_job] + jobs
 
     config = {
         "version": "2.1",
