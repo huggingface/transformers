@@ -463,7 +463,7 @@ def replace_with_higgs_linear(
         )
 
     if linear_weights_not_to_quantize is None:
-        linear_weights_not_to_quantize = ["lm_head.weight"]
+        linear_weights_not_to_quantize = []
 
     from accelerate import init_empty_weights
 

@@ -1228,21 +1228,15 @@ class FbgemmFp8Config(QuantizationConfigMixin):
 @dataclass
 class HiggsConfig(QuantizationConfigMixin):
     """
-    This is a wrapper class about `aqlm` parameters.
+    HiggsConfig is a configuration class for quantization using the HIGGS method.
 
     Args:
-        in_group_size (`int`, *optional*, defaults to 8):
-            The group size along the input dimension.
-        out_group_size (`int`, *optional*, defaults to 1):
-            The group size along the output dimension. It's recommended to always use 1.
-        num_codebooks (`int`, *optional*, defaults to 1):
-            Number of codebooks for the Additive Quantization procedure.
-        nbits_per_codebook (`int`, *optional*, defaults to 16):
-            Number of bits encoding a single codebook vector. Codebooks size is 2**nbits_per_codebook.
-        linear_weights_not_to_quantize (`Optional[List[str]]`, *optional*):
-            List of full paths of `nn.Linear` weight parameters that shall not be quantized.
-        kwargs (`Dict[str, Any]`, *optional*):
-            Additional parameters from which to initialize the configuration object.
+        bits (int, *optional*, defaults to 4):
+            Number of bits to use for quantization. Default is 4.
+        p (int, *optional*, defaults to 2):
+            Parameter for the HIGGS quantization method. Default is 2.
+        linear_weights_not_to_quantize (`list`, *optional*, default to ["lm_head.weight"]):
+            List of linear weight names that should not be quantized.
     """
 
     def __init__(
@@ -1252,6 +1246,8 @@ class HiggsConfig(QuantizationConfigMixin):
         linear_weights_not_to_quantize: Optional[List[str]] = None,
         **kwargs,
     ):
+        if linear_weights_not_to_quantize is None:
+            linear_weights_not_to_quantize = ["lm_head.weight"]
         self.quant_method = QuantizationMethod.HIGGS
         self.bits = bits
         self.p = p
