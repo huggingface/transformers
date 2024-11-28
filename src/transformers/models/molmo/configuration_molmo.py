@@ -43,14 +43,10 @@ class MolmoVisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
@@ -64,10 +60,6 @@ class MolmoVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -89,21 +81,17 @@ class MolmoVisionConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=1024,
-        num_attention_heads=16,
         intermediate_size=4096,
-        image_num_key_value_heads=16,
         num_hidden_layers=23,
-        num_image_positions=577,
-        projection_dim=512,
+        num_attention_heads=16,
         num_channels=3,
         image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
+        num_image_positions=577,
         initializer_range=0.02,
-        initializer_factor=1.0,
-        residual_dropout=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -117,12 +105,8 @@ class MolmoVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.projection_dim = projection_dim
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.image_num_key_value_heads = image_num_key_value_heads
         self.num_image_positions = num_image_positions
-        self.residual_dropout = residual_dropout
 
 
 class MolmoPoolingConfig(PretrainedConfig):
@@ -232,11 +216,9 @@ class MolmoTextConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
+        vocab_size (`int`, *optional*, defaults to 152192):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MolmoTextModel`]
-        additional_vocab_size  (`int`, *optional*, defaults to 128):
-            Number of additional tokens added to the vocabulary size of the Molmo model.
         hidden_size (`int`, *optional*, defaults to 3584):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 37888):
@@ -338,8 +320,7 @@ class MolmoTextConfig(PretrainedConfig):
         num_attention_heads=28,
         num_hidden_layers=28,
         head_dim=128,
-        vocab_size=152064,
-        additional_vocab_size=128,
+        vocab_size=152192,
         intermediate_size=37888,
         hidden_act="swiglu",
         max_position_embeddings=4096,
@@ -359,7 +340,6 @@ class MolmoTextConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        self.additional_vocab_size = additional_vocab_size
         self.head_dim = head_dim
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

@@ -20,31 +20,20 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Union
+from typing import List, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 ### PROCESSING CODE
 
 
-class MolmoImagesKwargs(ImagesKwargs, total=False):
-    max_crops: Optional[int]
-    overlap_margins: Optional[List[int]]
-    base_image_input_size: Optional[List[int]]
-    image_token_length_w: Optional[int]
-    image_token_length_h: Optional[int]
-    image_patch_size: Optional[int]
-    image_padding_mask: Optional[bool]
-
-
 class MolmoProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MolmoImagesKwargs
     _defaults = {
         "images_kwargs": {
             "max_crops": 12,
