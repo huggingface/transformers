@@ -101,7 +101,7 @@ class ColPaliProcessor(ProcessorMixin):
     well as to compute the late-interaction retrieval score.
 
     [`ColPaliProcessor`] offers all the functionalities of [`PaliGemmaProcessor`]. See the [`~PaliGemmaProcessor.__call__`]
-     for more information.
+    for more information.
 
     Args:
         image_processor ([`SiglipImageProcessor`], *optional*):
@@ -301,6 +301,7 @@ class ColPaliProcessor(ProcessorMixin):
     def query_augmentation_token(self) -> str:
         """
         Return the query augmentation token.
+
         Query augmentation buffers are used as reasoning buffers during inference.
         """
         return self.tokenizer.pad_token
