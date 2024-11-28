@@ -19,6 +19,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn import functional as F
 
+from .. import RelationDetrConfig
 from ..image_transforms import center_to_corners_format
 from ..utils import is_scipy_available, requires_backends
 from .loss_for_object_detection import (
@@ -177,17 +178,7 @@ class RelationDetrLoss(nn.Module):
         2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
     """
 
-    def __init__(
-        self,
-        num_classes: int,
-        matcher: nn.Module,
-        loss_class: float = 1,
-        loss_bbox: float = 5,
-        loss_giou: float = 2,
-        alpha: float = 0.25,
-        gamma: float = 2.0,
-        two_stage_binary_cls=False,
-    ):
+    def __init__(self, config: RelationDetrConfig):
         """Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -198,14 +189,20 @@ class RelationDetrLoss(nn.Module):
             gamma: gamma in Focal loss
         """
         super().__init__()
-        self.num_classes = num_classes
-        self.matcher = matcher
-        self.loss_class = loss_class
-        self.loss_bbox = loss_bbox
-        self.loss_giou = loss_giou
-        self.alpha = alpha
-        self.gamma = gamma
-        self.two_stage_binary_cls = two_stage_binary_cls
+        self.num_labels = config.num_labels
+        self.matcher = RelationDetrHungarianMatcher(
+            class_cost=config.class_cost,
+            bbox_cost=config.bbox_cost,
+            giou_cost=config.giou_cost,
+            focal_alpha=config.focal_alpha,
+            focal_gamma=config.focal_gamma,
+        )
+        self.loss_class = config.class_loss_coefficient
+        self.loss_bbox = config.bbox_loss_coefficient
+        self.loss_giou = config.giou_loss_coefficient
+        self.alpha = config.focal_alpha
+        self.gamma = config.focal_gamma
+        self.two_stage_binary_cls = config.two_stage_binary_cls
 
     def loss_labels(self, outputs, targets, num_boxes, indices, **kwargs):
         assert "pred_boxes" in outputs
@@ -224,11 +221,9 @@ class RelationDetrLoss(nn.Module):
 
         # construct onehot targets, shape: (batch_size, num_queries, num_classes)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(
-            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
-        )
+        target_classes = torch.full(src_logits.shape[:2], self.num_labels, dtype=torch.int64, device=src_logits.device)
         target_classes[idx] = target_classes_o
-        target_classes_onehot = F.one_hot(target_classes, self.num_classes + 1)[..., :-1]
+        target_classes_onehot = F.one_hot(target_classes, self.num_labels + 1)[..., :-1]
 
         # construct iou_score, shape: (batch_size, num_queries)
         target_score = torch.zeros_like(target_classes, dtype=iou_score.dtype)
@@ -351,21 +346,7 @@ def RelationDetrForObjectDetectionLoss(
     denoising_meta_values=None,
     **kwargs,
 ):
-    criterion = RelationDetrLoss(
-        num_classes=config.num_labels,
-        matcher=RelationDetrHungarianMatcher(
-            class_cost=config.class_cost,
-            bbox_cost=config.bbox_cost,
-            giou_cost=config.giou_cost,
-            focal_alpha=config.focal_alpha,
-            focal_gamma=config.focal_gamma,
-        ),
-        loss_class=config.class_loss_coefficient,
-        loss_bbox=config.bbox_loss_coefficient,
-        loss_giou=config.giou_loss_coefficient,
-        alpha=config.focal_alpha,
-        gamma=config.focal_gamma,
-    )
+    criterion = RelationDetrLoss(config)
     device = outputs_class.device
     criterion.to(device)
 
