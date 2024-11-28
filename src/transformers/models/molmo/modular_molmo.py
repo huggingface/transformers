@@ -33,14 +33,15 @@ from ...image_transforms import (
     resize,
 )
 from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
-    OPENAI_Siglip_MEAN,
-    OPENAI_Siglip_STD,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -874,6 +875,8 @@ class MolmoPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @add_start_docstrings(
@@ -1212,6 +1215,29 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
 
 ### IMAGE PROCESSING CODE
+
+
+def make_batched_images(images) -> List[List[ImageInput]]:
+    """
+    Accepts images in list or nested list format, and makes a list of images for preprocessing.
+
+    Args:
+        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
+            The input image.
+
+    Returns:
+        list: A list of images.
+    """
+    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+        return [img for img_list in images for img in img_list]
+
+    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+        return images
+
+    elif is_valid_image(images):
+        return [images]
+
+    raise ValueError(f"Could not make batched video from {images}")
 
 
 def get_resize_output_image_size(
@@ -1726,8 +1752,8 @@ class MolmoImageProcessor(BaseImageProcessor):
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = OPENAI_Siglip_MEAN,
-        image_std: Optional[Union[float, List[float]]] = OPENAI_Siglip_STD,
+        image_mean: Optional[Union[float, List[float]]] = OPENAI_CLIP_MEAN,
+        image_std: Optional[Union[float, List[float]]] = OPENAI_CLIP_STD,
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
