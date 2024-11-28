@@ -3235,8 +3235,7 @@ class GenerationMixin:
             if self.device.type == "cuda":
                 logger.warning_once("Using `torch.compile`.")
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                self._set_compile_call(generation_config.compile_config)
-                model_forward = self.compiled_call
+                model_forward = self.get_compiled_call(generation_config.compile_config)
 
         is_prefill = True
         while self._has_unfinished_sequences(
