@@ -162,7 +162,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache for the v2 mixer
-class BambaAttentionDynamicCache(DynamicCache):
+class HybridMambaAttentionDynamicCache(DynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -254,11 +254,11 @@ class BambaAttentionDynamicCache(DynamicCache):
         return self.key_cache[layer_idx].shape[-2]
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        raise NotImplementedError("BambaAttentionDynamicCache does not have a legacy cache equivalent.")
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("BambaAttentionDynamicCache does not have a legacy cache equivalent.")
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 # Adapted from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding
 class BambaRotaryEmbedding(nn.Module):
@@ -382,7 +382,7 @@ class BambaAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[BambaAttentionDynamicCache] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -458,7 +458,7 @@ class BambaFlashAttention2(BambaAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[BambaAttentionDynamicCache] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -551,7 +551,7 @@ class BambaSdpaAttention(BambaAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[BambaAttentionDynamicCache] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -728,7 +728,7 @@ class BambaMixer(nn.Module):
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Optional[BambaAttentionDynamicCache] = None,
+        cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         # set up dimensions for reshapes later
@@ -891,7 +891,7 @@ class BambaMixer(nn.Module):
     def torch_forward(
         self,
         input_states,
-        cache_params: Optional[BambaAttentionDynamicCache] = None,
+        cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, seq_len, _ = input_states.shape
@@ -1092,7 +1092,7 @@ class BambaMixer(nn.Module):
     def forward(
         self,
         hidden_states,
-        cache_params: Optional[BambaAttentionDynamicCache] = None,
+        cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
@@ -1134,7 +1134,7 @@ class BambaDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[BambaAttentionDynamicCache] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1144,7 +1144,7 @@ class BambaDecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`BambaAttentionDynamicCache`, *optional*): cached past key and value projection states
+            past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1277,14 +1277,14 @@ BAMBA_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`BambaAttentionDynamicCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            A BambaAttentionDynamicCache object containing pre-computed hidden-states (keys and values in the
+        past_key_values (`HybridMambaAttentionDynamicCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            A HybridMambaAttentionDynamicCache object containing pre-computed hidden-states (keys and values in the
             self-attention blocks and convolution and ssm states in the mamba blocks) that can be used (see
             `past_key_values` input) to speed up sequential decoding.
             Key and value cache tensors have shape `(batch_size, num_heads, seq_len, head_dim)`.
             Convolution and ssm states tensors have shape `(batch_size, d_inner, d_conv)` and
             `(batch_size, d_inner, d_state)` respectively.
-            See the `BambaAttentionDynamicCache` class for more details.
+            See the `HybridMambaAttentionDynamicCache` class for more details.
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1356,7 +1356,7 @@ class BambaModel(BambaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[BambaAttentionDynamicCache] = None,
+        past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1387,7 +1387,7 @@ class BambaModel(BambaPreTrainedModel):
 
         if use_cache and past_key_values is None:
             logger.warning_once(
-                "Bamba requires an initialized `BambaAttentionDynamicCache` to return a cache. None was "
+                "Bamba requires an initialized `HybridMambaAttentionDynamicCache` to return a cache. None was "
                 "provided, so no cache will be returned."
             )
 
@@ -1547,7 +1547,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[BambaAttentionDynamicCache] = None,
+        past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1644,7 +1644,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `BambaAttentionDynamicCache`
+        # Overwitten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
 
         empty_past_kv = past_key_values is None
 
@@ -1657,7 +1657,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
         else:
-            past_key_values = BambaAttentionDynamicCache(
+            past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )
 
@@ -1692,8 +1692,8 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
         This is mostly the same as `_supports_cache_class` attribute, but add exception for `Bamba` model which
-        uses its own `BambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
+        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `BambaAttentionDynamicCache`).
+        for `HybridMambaAttentionDynamicCache`).
         """
         return False
