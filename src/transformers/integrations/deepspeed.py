@@ -285,9 +285,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 # keep the config object global to be able to access it anywhere during TrainingArguments life-cycle
 _hf_deepspeed_config_weak_ref = None
 
-# remove when a flag is added to the Deepspeed config in `accelerate`
-_hf_deepspeed_is_sp = None
-
 
 def set_hf_deepspeed_config(hf_deepspeed_config_obj):
     # this is a special weakref global object to allow us to get to Deepspeed config from APIs
@@ -311,12 +308,8 @@ def is_deepspeed_zero3_enabled():
 
 
 def is_deepspeed_sp_enabled():
-    # remove when a flag is added to the Deepspeed config in `accelerate`
-    if _hf_deepspeed_is_sp is not None:
-        return _hf_deepspeed_is_sp
-    elif _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
-        _hf_deepspeed_is_sp = _hf_deepspeed_config_weak_ref().get_value("sequence_parallel_size") > 1
-        return _hf_deepspeed_is_sp
+    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+        return _hf_deepspeed_config_weak_ref().is_sequence_parallel()
     else:
         return False
 
