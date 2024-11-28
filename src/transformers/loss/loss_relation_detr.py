@@ -47,7 +47,27 @@ def reduce_loss(loss, reduction: str = "sum"):
     raise ValueError("Only sum, mean and none are valid reduction")
 
 
+# Modified from from transformers.loss.loss_for_object_detection.py, remove num_boxes and rewrite code logic
 def sigmoid_focal_loss(inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2, reduction: str = "sum"):
+    """
+    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+
+    Args:
+        inputs (`torch.FloatTensor` of arbitrary shape):
+            The predictions for each example.
+        targets (`torch.FloatTensor` with the same shape as `inputs`)
+            A tensor storing the binary classification label for each element in the `inputs` (0 for the negative class
+            and 1 for the positive class).
+        alpha (`float`, *optional*, defaults to `0.25`):
+            Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
+        gamma (`int`, *optional*, defaults to `2`):
+            Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
+        reduction (`str`, *optional*, defaults to "sum"):
+            Specifies the reduction to apply to the output
+
+    Returns:
+        Loss tensor
+    """
     prob = inputs.sigmoid()
     target_score = targets.to(inputs.dtype)
     pos_weight = alpha * (1 - prob).pow(gamma)
@@ -58,23 +78,30 @@ def sigmoid_focal_loss(inputs: Tensor, targets: Tensor, alpha: float = 0.25, gam
     return reduce_loss(loss, reduction)
 
 
-def vari_sigmoid_focal_loss(
-    inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2, reduction: str = "sum"
-):
-    assert torch.all(targets >= 0), "targets should be non-negative"
-    indices = torch.sign(targets)  # targets may be 0~1 rather than 0 and 1
-    targets = targets.to(inputs.dtype)
-    prob = inputs.sigmoid().detach()
-    pos_weight = targets
-    neg_weight = (1 - alpha) * prob.pow(gamma)
-    weight = neg_weight * (1 - indices) + pos_weight * indices
-    loss = F.binary_cross_entropy_with_logits(inputs, targets, weight=weight, reduction="none")
-    return reduce_loss(loss, reduction)
-
-
 def score_aware_vari_sigmoid_focal_loss(
     inputs, targets, gt_score, alpha: float = 0.25, gamma: float = 2, reduction: str = "sum"
 ):
+    """
+    Computes the VariFocalLoss with binary style and gt_score as positive modulation.
+
+    Args:
+        inputs (`torch.FloatTensor` of arbitrary shape):
+            The predictions for each example.
+        targets (`torch.FloatTensor` with the same shape as `inputs`)
+            A tensor storing the binary classification label for each element in the inputs.
+        gt_score (`torch.FloatTensor` with the same shape as `inputs`):
+            A tensor storing the score for each element in the inputs (typically IoU), used as weight to
+            modulate positive supervision.
+        alpha (`float`, *optional*, defaults to `0.25`):
+            Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
+        gamma (`float`, *optional*, defaults to 2):
+            Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
+        reduction (`str`, *optional*, defaults to "sum"):
+            Specifies the reduction to apply to the output.
+
+    Returns:
+        Loss tensor
+    """
     prob = inputs.sigmoid().detach()
     target_score = targets * gt_score
     # NOTE: The only difference from sigmoid_focal_loss
@@ -94,19 +121,23 @@ class RelationDetrHungarianMatcher(nn.Module):
     un-matched (and thus treated as non-objects).
 
     Args:
-        class_cost:
+        class_cost (`float`, default=1.0):
             The relative weight of the classification error in the matching cost.
-        bbox_cost:
+        bbox_cost (`float`, default=1.0):
             The relative weight of the L1 error of the bounding box coordinates in the matching cost.
-        giou_cost:
+        giou_cost (`float`, default=1.0):
             The relative weight of the giou loss of the bounding box in the matching cost.
+        focal_alpha (`float`, default=0.25):
+            Alpha in Focal Loss.
+        focal_gamma (`float`, default=2.0):
+            Gamma in Focal Loss.
     """
 
     def __init__(
         self,
-        class_cost: float = 1,
-        bbox_cost: float = 1,
-        giou_cost: float = 1,
+        class_cost: float = 1.0,
+        bbox_cost: float = 1.0,
+        giou_cost: float = 1.0,
         focal_alpha: float = 0.25,
         focal_gamma: float = 2.0,
     ):
@@ -172,24 +203,40 @@ class RelationDetrHungarianMatcher(nn.Module):
 
 
 class RelationDetrLoss(nn.Module):
-    """This class computes the loss for DETR.
-    The process happens in two steps:
-        1) we compute hungarian assignment between ground truth boxes and the outputs of the model
-        2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
+    """
+    This class computes the loss for RelationDetrForObjectDetection. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
+
+    A note on the `num_classes` argument (copied from original repo in detr.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
+    https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223"
+
+
+    Args:
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        matcher (`RelationDetrHungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        loss_class (`float`):
+            Loss weight for the class classification loss.
+        loss_bbox (`float`):
+            Loss weight for box localization loss.
+        loss_giou (`float`):
+            Loss weight for generalized IoU loss.
+        alpha (`float`):
+            Alpha in Focal Loss.
+        gamma (`float`):
+            Gamma in Focal Loss.
+        two_stage_binary_cls (`bool`):
+            Whether to use two-stage binary classification loss.
     """
 
     def __init__(self, config: RelationDetrConfig):
-        """Create the criterion.
-        Parameters:
-            num_classes: number of object categories, omitting the special no-object category
-            matcher: module able to compute a matching between targets and proposals
-            weight_dict: dict containing as key the names of the losses and as values their relative weight.
-            losses: list of all the losses to be applied. See get_loss for list of available losses.
-            alpha: alpha in Focal Loss
-            gamma: gamma in Focal loss
-        """
         super().__init__()
-        self.num_labels = config.num_labels
+        self.num_classes = config.num_labels
         self.matcher = RelationDetrHungarianMatcher(
             class_cost=config.class_cost,
             bbox_cost=config.bbox_cost,
@@ -205,6 +252,10 @@ class RelationDetrLoss(nn.Module):
         self.two_stage_binary_cls = config.two_stage_binary_cls
 
     def loss_labels(self, outputs, targets, num_boxes, indices, **kwargs):
+        """
+        Computing the loss related to labels, VariFocalLoss. Targets dicts must contain the key "class_labels"
+        containing a tensor of dim [nb_target_boxes]
+        """
         assert "pred_boxes" in outputs
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
@@ -221,9 +272,11 @@ class RelationDetrLoss(nn.Module):
 
         # construct onehot targets, shape: (batch_size, num_queries, num_classes)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(src_logits.shape[:2], self.num_labels, dtype=torch.int64, device=src_logits.device)
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
         target_classes[idx] = target_classes_o
-        target_classes_onehot = F.one_hot(target_classes, self.num_labels + 1)[..., :-1]
+        target_classes_onehot = F.one_hot(target_classes, self.num_classes + 1)[..., :-1]
 
         # construct iou_score, shape: (batch_size, num_queries)
         target_score = torch.zeros_like(target_classes, dtype=iou_score.dtype)
@@ -243,9 +296,11 @@ class RelationDetrLoss(nn.Module):
         return losses
 
     def loss_boxes(self, outputs, targets, num_boxes, indices, **kwargs):
-        """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
-        targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
-        The target boxes are expected in format (center_x, center_y, h, w), normalized by the image size.
+        """
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
+
+        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
+        are expected in format (center_x, center_y, h, w), normalized by the image size.
         """
         assert "pred_boxes" in outputs
         idx = self._get_src_permutation_idx(indices)
@@ -310,11 +365,15 @@ class RelationDetrLoss(nn.Module):
         return {k + "_enc": v for k, v in losses_enc.items()}
 
     def forward(self, outputs, targets, indices=None):
-        """This performs the loss computation.
-        Parameters:
-             outputs: dict of tensors, see the output specification of the model for the format
-             targets: list of dicts, such that len(targets) == batch_size.
-                      The expected keys in each dict depends on the losses applied, see each loss' doc
+        """
+        This performs the loss computation.
+
+        Args:
+             outputs: (`dict`):
+                Dictionary of tensors, see the output specification of the model for the format.
+             targets (`List[dict]`):
+                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
+                losses applied, see each loss' doc.
         """
         # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
