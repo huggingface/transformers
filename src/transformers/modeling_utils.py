@@ -1818,9 +1818,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if hard_check_only:
             if not cls._supports_flex_attn:
-                # TODO: add contribution notice?
                 raise ValueError(
                     f"{cls.__name__} does not support an attention implementation through torch's flex_attention."
+                    " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/34809."
                     " If you believe this error is a bug, please open an issue in Transformers GitHub repository"
                     ' and load your model with the argument `attn_implementation="eager"` meanwhile.'
                     ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'

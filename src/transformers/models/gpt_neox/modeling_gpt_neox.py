@@ -18,7 +18,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -42,7 +41,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    get_torch_version,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_greater_or_equal,
@@ -137,7 +135,7 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value)
 
     # Reshape outputs
-    attn_output = GPTNeoXAttention._merge_heads(attn_output, num_attention_heads, attn_head_size)
+    attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
 
@@ -151,40 +149,22 @@ def flash_attention_forward(
     attention_dropout,
     training,
     target_dtype=torch.float16,
-    _flash_attn_uses_top_left_mask=False,
     **_kwargs,
 ):
     query_length = query.shape[-2]
 
     # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
     value_dtype = value.dtype
-    if query.dtype != value_dtype:
-        query = query.to(value_dtype)
-    if key.dtype != value_dtype:
-        key = key.to(value_dtype)
+    query = query.to(value_dtype)
+    key = key.to(value_dtype)
 
     # Permute to get the expected shape for Flash Attention
-    query = query.permute(0, 2, 1, 3)
-    key = key.permute(0, 2, 1, 3)
-    value = value.permute(0, 2, 1, 3)
-
-    # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-    # therefore the input hidden states gets silently casted in float32. Hence, we need
-    # cast them back in float16 / bfloat16 just to be sure everything works as expected.
-    # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-    input_dtype = query.dtype
-    if input_dtype == torch.float32:
-        logger.warning_once(
-            f"The input hidden states seems to be silently casted in float32, this might be related to"
-            f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-            f" {target_dtype}."
-        )
-
-        query = query.to(target_dtype)
-        key = key.to(target_dtype)
-        value = value.to(target_dtype)
+    query = query.transpose(1, 2)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
 
     attention_dropout = attention_dropout if training else 0.0
+    flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     # Compute attention
     attn_output = _flash_attention_forward(
@@ -196,15 +176,14 @@ def flash_attention_forward(
         dropout=attention_dropout,
         softmax_scale=norm_factor,
         is_causal=True,
-        use_top_left_mask=_flash_attn_uses_top_left_mask,
+        use_top_left_mask=flash_attn_uses_top_left_mask,
+        target_dtype=target_dtype,
     )
 
     return attn_output, None
 
 
-def sdpa_attention_forward(
-    query, key, value, attention_mask, attention_dropout, training, require_contiguous_qkv=False, **_kwargs
-):
+def sdpa_attention_forward(query, key, value, attention_mask, attention_dropout, training, **_kwargs):
     q_len = query.shape[-2]
 
     causal_mask = attention_mask
@@ -213,16 +192,13 @@ def sdpa_attention_forward(
 
     # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
     value_dtype = value.dtype
-    if query.dtype != value_dtype:
-        query = query.to(value_dtype)
-    if key.dtype != value_dtype:
-        key = key.to(value_dtype)
+    query = query.to(value_dtype)
+    key = key.to(value_dtype)
 
     # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
-    if require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
-        query = query.contiguous()
-        key = key.contiguous()
-        value = value.contiguous()
+    query = query.contiguous()
+    key = key.contiguous()
+    value = value.contiguous()
 
     # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
@@ -246,17 +222,14 @@ def sdpa_attention_forward(
 def flex_attention_forward(
     query, key, value, attention_mask, head_mask, norm_factor, output_attentions=False, **_kwargs
 ):
-    causal_mask_exists = attention_mask is not None
-    head_mask_exists = head_mask is not None
-
     causal_mask = attention_mask
-    if causal_mask_exists:
+    if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     def causal_mod(score, b, h, q_idx, kv_idx):
-        if causal_mask_exists:
+        if causal_mask is not None:
             score += causal_mask[b][0][q_idx][kv_idx]
-        if head_mask_exists:
+        if head_mask is not None:
             score += head_mask[b][h][0][0]
         return score
 
@@ -271,7 +244,7 @@ def flex_attention_forward(
     )
 
     attn_weights = attn_output[1] if output_attentions else None
-    attn_output = attn_output[0] if attn_output else attn_output
+    attn_output = attn_output[0] if output_attentions else attn_output
 
     # Reshape outputs
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -317,13 +290,6 @@ class GPTNeoXAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.is_causal = True
         self.layer_idx = layer_idx
-
-        # Attention specific information for the implementations
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     def _init_bias(self, max_positions, device=None):
         self.register_buffer(
@@ -380,17 +346,10 @@ class GPTNeoXAttention(nn.Module):
             "sdpa",
             "flash_attention_2",
         ]:
-            warning_msg = "Setting `attention_type` to `eager` because"
-
-            if output_attentions:
-                warning_msg += " `output_attentions=True`"
-            if output_attentions and head_mask is not None:
-                warning_msg += " and `head_mask` not None"
-            elif head_mask is not None:
-                warning_msg += " `head_mask` not None"
-            warning_msg += f" not supported in {attention_type}"
-
-            logger.warning_once(warning_msg)
+            logger.warning_once(
+                f"Setting `attention_type` to `eager` because `{attention_type}` does not support"
+                f" `output_attentions=True` or `head_mask`."
+            )
             attention_type = "eager"
 
         if (
@@ -399,7 +358,7 @@ class GPTNeoXAttention(nn.Module):
             and self.config._attn_implementation == "flex_attention"
         ):
             logger.warning_once(
-                f"Setting `attention_type` to `eager` because `dropout` is not supported in {attention_type}"
+                f"Setting `attention_type` to `eager` because `dropout` is not supported in `{attention_type}`."
             )
             attention_type = "eager"
 
@@ -415,9 +374,6 @@ class GPTNeoXAttention(nn.Module):
             training=self.training,
             # Flash Attention 2 specific
             target_dtype=target_dtype,
-            _flash_attn_uses_top_left_mask=self._flash_attn_uses_top_left_mask,
-            # SDPA specific
-            require_contiguous_qkv=self.require_contiguous_qkv,
             # Flex Attention specific
             output_attentions=output_attentions,
         )
