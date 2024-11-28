@@ -239,12 +239,17 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
 
 
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
+    def apply_mask(score, b, h, q_idx, kv_idx):
+        if mask is not None:
+            return score + mask[b][0][q_idx][kv_idx]
+        return torch.where(q_idx >= kv_idx, score, -float("inf"))
+
     attn_output = flex_attention(
         query,
         key,
         value,
+        apply_mask,
         enable_gqa=True,
-        scale=config.scaling,
         return_lse=output_attentions,
     )
     if not output_attentions:
