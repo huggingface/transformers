@@ -98,7 +98,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
 
         # If the input a torch tensor, then no conversion needed
         # Otherwise, we need to pass in a list of PIL images
-        if not isinstance(images, torch.Tensor):
+        if isinstance(images, torch.Tensor):
             images = self.val_transforms(images)
             # Add batch dimension if a single image
             images = images.unsqueeze(0) if images.ndim == 3 else images
