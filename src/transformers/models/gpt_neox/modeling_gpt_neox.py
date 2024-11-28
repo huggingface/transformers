@@ -330,7 +330,7 @@ class GPTNeoXAttention(nn.Module):
         # Flash Attention 2 specific handling for PEFT integration
         target_dtype = None
         if self.config._attn_implementation == "flash_attention_2":
-            input_dtype = query.dtype
+            input_dtype = value.dtype
             if input_dtype == torch.float32:
                 if torch.is_autocast_enabled():
                     target_dtype = torch.get_autocast_gpu_dtype()
