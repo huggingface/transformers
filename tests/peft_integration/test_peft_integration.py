@@ -158,14 +158,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 peft_logits_enabled = peft_model(dummy_input).logits
 
                 self.assertTrue(torch.allclose(peft_logits, peft_logits_enabled, atol=1e-12, rtol=1e-12))
-                self.assertFalse(
-                    torch.allclose(
-                        peft_logits_enabled,
-                        peft_logits_disabled,
-                        atol=1e-12,
-                        rtol=1e-12,
-                    )
-                )
+                self.assertFalse(torch.allclose(peft_logits_enabled, peft_logits_disabled, atol=1e-12, rtol=1e-12))
 
     def test_peft_add_adapter(self):
         """
@@ -336,21 +329,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # Logits comparison
                 self.assertFalse(
-                    torch.allclose(
-                        logits_adapter_1.logits,
-                        logits_adapter_2.logits,
-                        atol=1e-6,
-                        rtol=1e-6,
-                    )
+                    torch.allclose(logits_adapter_1.logits, logits_adapter_2.logits, atol=1e-6, rtol=1e-6)
                 )
-                self.assertFalse(
-                    torch.allclose(
-                        logits_original_model,
-                        logits_adapter_2.logits,
-                        atol=1e-6,
-                        rtol=1e-6,
-                    )
-                )
+                self.assertFalse(torch.allclose(logits_original_model, logits_adapter_2.logits, atol=1e-6, rtol=1e-6))
 
                 model.set_adapter(["adapter-2", "default"])
                 self.assertTrue(model.active_adapters() == ["adapter-2", "default"])
@@ -358,21 +339,10 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 logits_adapter_mixed = model(dummy_input)
                 self.assertFalse(
-                    torch.allclose(
-                        logits_adapter_1.logits,
-                        logits_adapter_mixed.logits,
-                        atol=1e-6,
-                        rtol=1e-6,
-                    )
+                    torch.allclose(logits_adapter_1.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
                 )
-
                 self.assertFalse(
-                    torch.allclose(
-                        logits_adapter_2.logits,
-                        logits_adapter_mixed.logits,
-                        atol=1e-6,
-                        rtol=1e-6,
-                    )
+                    torch.allclose(logits_adapter_2.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
                 )
 
                 # multi active adapter saving not supported
@@ -599,9 +569,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # this should always work
                 model.load_adapter(
-                    adapter_state_dict=dummy_state_dict,
-                    peft_config=peft_config,
-                    low_cpu_mem_usage=False,
+                    adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
                 )
 
                 if is_lcmu_supported:
@@ -672,9 +640,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 with CaptureLogger(logger) as cl:
                     model.load_adapter(
-                        adapter_state_dict=dummy_state_dict,
-                        peft_config=peft_config,
-                        low_cpu_mem_usage=False,
+                        adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
                     )
 
                 msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"

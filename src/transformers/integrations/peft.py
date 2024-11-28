@@ -433,8 +433,7 @@ class PeftAdapterMixin:
 
     def active_adapter(self) -> str:
         warnings.warn(
-            "The `active_adapter` method is deprecated and will be removed in a future version.",
-            FutureWarning,
+            "The `active_adapter` method is deprecated and will be removed in a future version.", FutureWarning
         )
 
         return self.active_adapters()[0]
@@ -511,9 +510,7 @@ class PeftAdapterMixin:
             )
         if isinstance(device_map, str):
             device_map = infer_auto_device_map(
-                self,
-                max_memory=max_memory,
-                no_split_module_classes=no_split_module_classes,
+                self, max_memory=max_memory, no_split_module_classes=no_split_module_classes
             )
         dispatch_model(
             self,
