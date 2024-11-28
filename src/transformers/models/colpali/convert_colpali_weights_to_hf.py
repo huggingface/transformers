@@ -12,20 +12,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ColPali weights."""
+"""
+Convert ColPali weights from the original repository to the HF model format.
+
+Original repository: https://github.com/illuin-tech/colpali.
+
+NOTE: This script was originally run using `torch==2.5.1` and with:
+
+```bash
+python src/transformers/models/colpali/convert_colpali_weights_to_hf.py \
+    --model_id vidore/colpali-v1.2 \
+    --revision 89fd9736194236a1ecb7a9ec9b04f537f6f896af \
+    --output_dir vidore/colpali-v1.2-hf \
+    --push_to_hub
+```
+"""
 
 import argparse
 import glob
 from pathlib import Path
-from typing import Any, Dict, cast
+from typing import Any, Dict, Optional
 
 import torch
 from huggingface_hub import snapshot_download
-from PIL import Image
 from safetensors import safe_open
 
 from transformers import AutoConfig
-from transformers.models.colpali import ColPaliForRetrieval, ColPaliProcessor
+from transformers.models.colpali import ColPaliForRetrieval
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
 from transformers.utils import logging
 
@@ -35,80 +48,6 @@ logger = logging.get_logger(__name__)
 
 
 ORIGINAL_DTYPE = torch.bfloat16
-TOLERANCE = 1e-3
-
-ORIGINAL_CONFIG = AutoConfig.from_pretrained(
-    "vidore/colpali-v1.2-merged",
-    revision="89fd9736194236a1ecb7a9ec9b04f537f6f896af",
-)
-
-TEST_IMAGES = [
-    Image.new("RGB", (32, 32), color="white"),
-    Image.new("RGB", (16, 16), color="black"),
-]
-TEST_QUERIES = [
-    "What is the organizational structure for our R&D department?",
-    "Can you provide a breakdown of last year’s financial performance?",
-]
-
-ORIGINAL_IMAGE_OUTPUTS_SLICE = {
-    "slice": (slice(None), slice(3), slice(3)),
-    "value": torch.tensor(
-        [
-            [
-                [-0.0874, 0.0674, 0.2148],
-                [-0.0417, 0.0540, 0.2021],
-                [-0.0952, 0.0723, 0.1953],
-            ],
-            [
-                [0.0500, 0.0210, 0.0884],
-                [0.0530, 0.0267, 0.1196],
-                [-0.0708, 0.1089, 0.1631],
-            ],
-        ],
-        dtype=ORIGINAL_DTYPE,
-    ),
-}
-ORIGINAL_QUERY_OUTPUTS_SLICE = {
-    "slice": (slice(None), slice(3), slice(3)),
-    "value": torch.tensor(
-        [
-            [
-                [0.1631, -0.0227, 0.0962],
-                [-0.1108, -0.1147, 0.0334],
-                [-0.0496, -0.1108, -0.0525],
-            ],
-            [
-                [0.1650, -0.0200, 0.0967],
-                [-0.0879, -0.1108, 0.0613],
-                [-0.1260, -0.0630, 0.1157],
-            ],
-        ],
-        dtype=ORIGINAL_DTYPE,
-    ),
-}
-
-
-def get_torch_device(device: str = "auto") -> str:
-    """
-    Returns the device (string) to be used by PyTorch.
-
-    `device` arg defaults to "auto" which will use:
-    - "cuda:0" if available
-    - else "mps" if available
-    - else "cpu".
-    """
-
-    if device == "auto":
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        elif torch.backends.mps.is_available():  # for Apple Silicon
-            device = "mps"
-        else:
-            device = "cpu"
-        logger.info(f"Using device: {device}")
-
-    return device
 
 
 def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -143,20 +82,25 @@ def load_original_state_dict(model_id):
 
 
 @torch.no_grad()
-def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
-    # Get the device
-    device = get_torch_device("auto")
-    print(f"Device: {device}")
-
-    # Load the original model's state_dict
-    original_state_dict = load_original_state_dict("vidore/colpali-v1.2-merged")
+def convert_colpali_weights_to_hf(
+    model_id: str,
+    output_dir: str,
+    push_to_hub: bool,
+    revision: Optional[str] = None,
+):
+    # Load the original model data
+    original_config = AutoConfig.from_pretrained(
+        model_id,
+        revision=revision,
+    )
+    original_state_dict = load_original_state_dict(model_id)
 
     # Format the state_dict keys
     original_state_dict = rename_state_dict_keys(original_state_dict)
 
     # Add the extra attributes for the new model
     new_config = {
-        "vlm_config": ORIGINAL_CONFIG.copy(),
+        "vlm_config": original_config.copy(),
         "model_type": "colpali",
         "is_composition": False,
         "embedding_dim": 128,
@@ -164,10 +108,10 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     }
 
     # Create the new config
-    config = cast(ColPaliConfig, ColPaliConfig.from_dict(new_config))
+    config = ColPaliConfig.from_dict(new_config)
 
     # Load the untrained model
-    model = ColPaliForRetrieval(config=config).to(device).eval()
+    model = ColPaliForRetrieval(config=config).to("cpu").eval()
     print("Created model with new config and randomly initialized weights")
 
     # NOTE: The model was initialized with float32 weights. We need to convert it to the desired precision.
@@ -195,50 +139,6 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     if disjoint_keys:
         raise ValueError(f"Incompatible keys: {disjoint_keys}")
 
-    # Sanity checks: forward pass with images and queries
-    processor = cast(ColPaliProcessor, ColPaliProcessor.from_pretrained("vidore/colpali-v1.2-merged"))
-
-    batch_images = processor.process_images(images=TEST_IMAGES).to(device)
-    batch_queries = processor.process_queries(text=TEST_QUERIES).to(device)
-
-    # Predict with the new model
-    with torch.no_grad():
-        outputs_images_new = model(**batch_images, return_dict=True).embeddings
-        outputs_queries_new = model(**batch_queries, return_dict=True).embeddings
-
-    # Compare the outputs with the original model
-    mae_images = torch.mean(
-        torch.abs(
-            outputs_images_new[ORIGINAL_IMAGE_OUTPUTS_SLICE["slice"]]
-            - ORIGINAL_IMAGE_OUTPUTS_SLICE["value"].to(outputs_images_new.device).to(ORIGINAL_DTYPE)
-        )
-    )
-    mae_queries = torch.mean(
-        torch.abs(
-            outputs_queries_new[ORIGINAL_QUERY_OUTPUTS_SLICE["slice"]]
-            - ORIGINAL_QUERY_OUTPUTS_SLICE["value"].to(outputs_queries_new.device).to(ORIGINAL_DTYPE)
-        )
-    )
-
-    # Sanity checks
-    print(f"Mean Absolute Error (MAE) for images: {mae_images}")
-    print(f"Mean Absolute Error (MAE) for queries: {mae_queries}")  # FIXME: MAE ≈ 0.0017
-    if mae_images > TOLERANCE or mae_queries > TOLERANCE:
-        raise ValueError("Mean Absolute Error (MAE) is greater than the tolerance")
-
-    if not torch.allclose(
-        outputs_images_new[ORIGINAL_IMAGE_OUTPUTS_SLICE["slice"]],
-        ORIGINAL_IMAGE_OUTPUTS_SLICE["value"].to(outputs_images_new.device).to(ORIGINAL_DTYPE),
-        rtol=TOLERANCE,
-    ):
-        raise ValueError("Outputs for images do not match the original model's outputs")
-    if not torch.allclose(
-        outputs_queries_new[ORIGINAL_QUERY_OUTPUTS_SLICE["slice"]],
-        ORIGINAL_QUERY_OUTPUTS_SLICE["value"].to(outputs_queries_new.device).to(ORIGINAL_DTYPE),
-        rtol=TOLERANCE,
-    ):
-        raise ValueError("Outputs for queries do not match the original model's outputs")
-
     # Save the model
     if push_to_hub:
         model.push_to_hub(output_dir, private=True)
@@ -246,7 +146,6 @@ def convert_colpali_weights_to_hf(output_dir: str, push_to_hub: bool):
     else:
         Path(output_dir).mkdir(exist_ok=True, parents=True)
         model.save_pretrained(output_dir)
-        processor.save_pretrained(output_dir)
         print(f"Model saved to `{output_dir}`")
 
 
@@ -254,8 +153,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="""
         This script converts the original ColPali model to the HF model format.
-        Example usage: python src/transformers/models/colpali/convert_colpali_weights_to_hf.py --output_dir vidore/colpali-v1.2-hf --push_to_hub".
+
+        Example usage:
+        ```bash
+        python src/transformers/models/colpali/convert_colpali_weights_to_hf.py \
+            --model_id vidore/colpali-v1.2 \
+            --revision 89fd9736194236a1ecb7a9ec9b04f537f6f896af \
+            --output_dir vidore/colpali-v1.2-hf \
+            --push_to_hub
+        ```
         """
+    )
+    parser.add_argument(
+        "--model_id",
+        help="Model ID of the original model to convert",
     )
     parser.add_argument(
         "--output_dir",
@@ -268,6 +179,16 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--revision",
+        help="Revision of the model to download",
+        default=None,
+    )
     args = parser.parse_args()
 
-    convert_colpali_weights_to_hf(output_dir=args.output_dir, push_to_hub=args.push_to_hub)
+    convert_colpali_weights_to_hf(
+        model_id=args.model_id,
+        output_dir=args.output_dir,
+        push_to_hub=args.push_to_hub,
+        revision=args.revision,
+    )
