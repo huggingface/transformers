@@ -39,6 +39,18 @@ def find_parent(model, name):
     return parent
 
 
+def get_num_sms_from_device(device):
+    target_device_cc = torch.cuda.get_device_capability(device=device)
+    if target_device_cc == (8, 6):
+        return 84
+    elif target_device_cc == (8, 0):
+        return 108
+    elif target_device_cc == (8, 9):
+        return 128
+    else:
+        raise NotImplementedError(f"Device capability {target_device_cc} not supported for FLUTE (yet?)")
+
+
 class HiggsHfQuantizer(HfQuantizer):
     """
     Quantizer of the HIGGS method. Enables the loading of prequantized models.
@@ -112,6 +124,11 @@ class HiggsHfQuantizer(HfQuantizer):
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)
 
+        module.num_sms_packed = torch.nn.Parameter(
+            torch.tensor(get_num_sms_from_device(target_device), device=target_device, dtype=torch.int32),
+            requires_grad=False,
+        )
+
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -133,11 +150,37 @@ class HiggsHfQuantizer(HfQuantizer):
         flute_workspaces = {}
         for name, module in model.named_modules():
             if isinstance(module, HiggsLinear):
+                # Every HiggsLinear needs a "workspace": a buffer for the unpacking operation.
+                # This buffer needs to be on the same device as the weights, but can be reused across modules otherwise.
                 if module.weight.device not in flute_workspaces:
                     flute_workspaces[module.weight.device] = flute.utils.make_workspace_streamk(
                         device=module.weight.device
                     )
                 module.workspace = flute_workspaces[module.weight.device]
+
+                # FLUTE weights are packed in a way that is optimized for a specific number of SMs (GPU streaming multiprocessors).
+                # If the model is loaded on a different device than the one it was saved on, we need to repack the weights.
+                if module.num_sms_packed.item() != get_num_sms_from_device(module.weight.device):
+                    new_device = module.weight.device
+                    new_num_sms = get_num_sms_from_device(new_device)
+                    module.weight.data = flute.utils.pack(
+                        flute.utils.unpack(
+                            weight=module.weight.data,
+                            scales=module.scales.data,
+                            workspace=module.workspace,
+                            num_bits=module.num_bits,
+                            group_size=256,
+                            num_sms_packed=module.num_sms_packed.item(),
+                        )
+                        .T.contiguous()
+                        .cpu(),
+                        module.num_bits,
+                        256,
+                    ).to(device=new_device)
+                    module.num_sms_packed = torch.nn.Parameter(
+                        torch.tensor(new_num_sms, device=new_device, dtype=torch.int32),
+                        requires_grad=False,
+                    )
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         from ..integrations import HiggsLinear

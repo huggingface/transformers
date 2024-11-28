@@ -373,7 +373,6 @@ class HiggsLinear(torch.nn.Module):
         in_features: int,
         out_features: int,
         num_bits: int,
-        num_sms_packed: int,
         bias=True,
         dtype: torch.dtype = None,
         device: torch.device = None,
@@ -382,7 +381,8 @@ class HiggsLinear(torch.nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.num_bits = num_bits
-        self.num_sms_packed = num_sms_packed
+
+        self.num_sms_packed = nn.Parameter(torch.tensor(-1, dtype=torch.int32, device=device), requires_grad=False)
 
         assert in_features % 256 == 0
         assert num_bits in [2, 3, 4]
@@ -486,7 +486,6 @@ def replace_with_higgs_linear(
                         out_features,
                         bias=module.bias is not None,
                         num_bits=quantization_config.bits,
-                        num_sms_packed=quantization_config.num_sms_packed,
                     )
                     has_been_replaced = True
 

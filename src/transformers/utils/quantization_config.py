@@ -1252,7 +1252,6 @@ class HiggsConfig(QuantizationConfigMixin):
         self.bits = bits
         self.p = p
         self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
-        self.num_sms_packed = 128
 
         self.post_init()
 
