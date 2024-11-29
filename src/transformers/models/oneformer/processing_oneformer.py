@@ -74,7 +74,7 @@ class OneFormerProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OneFormerImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-    optional_call_args = ["segmentation_maps", "task_inputs"]
+    optional_call_args = ["task_inputs", "segmentation_maps"]
 
     def __init__(
         self,
@@ -120,7 +120,7 @@ class OneFormerProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        # The following is to capture `segmentation_maps` and `task_inputs` arguments
+        # The following is to capture `task_inputs and `segmentation_maps` arguments
         # that may be passed as a positional argument.
         # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
         # or this conversation for more context:
@@ -169,8 +169,8 @@ class OneFormerProcessor(ProcessorMixin):
             **kwargs,
             **self.prepare_and_validate_optional_call_args(*args),
         )
-        segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
         task_inputs = output_kwargs["images_kwargs"].pop("task_inputs", None)
+        segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
         self._validate_input_types(images, task_inputs)
