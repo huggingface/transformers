@@ -1215,7 +1215,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.vqmodel = ChameleonVQVAE(config.vq_config)
+        self.vqmodel = ChameleonVQVAE._from_config(config.vq_config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
