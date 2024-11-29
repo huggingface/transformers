@@ -38,7 +38,7 @@ class DepthProConfig(PretrainedConfig):
             The number of channels before fusion.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         mlp_ratio (`int`, *optional*, defaults to 4):
             Ratio of the hidden size of the MLPs relative to the `hidden_size`.
@@ -58,7 +58,7 @@ class DepthProConfig(PretrainedConfig):
             To generate depth of same size as image,
             image_size / 2**n_fusion_blocks == patch_size / patch_embeddings_size
             where n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
-        patch_size (`int`, *optional*, defaults to 14):
+        patch_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -90,9 +90,11 @@ class DepthProConfig(PretrainedConfig):
             Hidden state dimensions during upsampling for each scaled image in `scaled_images_ratios`.
         use_batch_norm_in_fusion_residual (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
+        use_bias_in_fusion_residual (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the pre-activate residual units of the fusion blocks.
         use_fov_model (`bool`, *optional*, defaults to `True`):
             Whether to use `DepthProFOVModel` to generate the field of view.
-        num_fov_head_layers (`int`, *optional*, defaults to `2`):
+        num_fov_head_layers (`int`, *optional*, defaults to 2):
             Number of convolution layers in the head of `DepthProFOVModel`.
 
     Example:
