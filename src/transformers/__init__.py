@@ -387,6 +387,7 @@ _import_structure = {
     "models.deprecated.vit_hybrid": ["ViTHybridConfig"],
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
+    "models.depth_pro": ["DepthProConfig"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DinatConfig"],
@@ -408,7 +409,6 @@ _import_structure = {
         "DPRReaderTokenizer",
     ],
     "models.dpt": ["DPTConfig"],
-    "models.depth_pro": ["DepthProConfig"],
     "models.efficientnet": ["EfficientNetConfig"],
     "models.electra": [
         "ElectraConfig",
@@ -1193,10 +1193,10 @@ else:
     _import_structure["models.deprecated.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor", "DetrImageProcessorFast"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
-    _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
@@ -2078,6 +2078,13 @@ else:
             "DepthAnythingPreTrainedModel",
         ]
     )
+    _import_structure["models.depth_pro"].extend(
+        [
+            "DepthProForDepthEstimation",
+            "DepthProModel",
+            "DepthProPreTrainedModel",
+        ]
+    )
     _import_structure["models.detr"].extend(
         [
             "DetrForObjectDetection",
@@ -2136,13 +2143,6 @@ else:
             "DPTForSemanticSegmentation",
             "DPTModel",
             "DPTPreTrainedModel",
-        ]
-    )
-    _import_structure["models.depth_pro"].extend(
-        [
-            "DepthProForDepthEstimation",
-            "DepthProModel",
-            "DepthProPreTrainedModel",
         ]
     )
     _import_structure["models.efficientnet"].extend(
