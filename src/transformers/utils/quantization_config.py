@@ -1240,9 +1240,9 @@ class HiggsConfig(QuantizationConfigMixin):
 
     Args:
         bits (int, *optional*, defaults to 4):
-            Number of bits to use for quantization. Default is 4.
+            Number of bits to use for quantization. Can be 2, 3 or 4. Default is 4.
         p (int, *optional*, defaults to 2):
-            Parameter for the HIGGS quantization method. Default is 2.
+            Quantization grid dimension. 1 and 2 are supported. 2 is always better in practice. Default is 2.
         linear_weights_not_to_quantize (`list`, *optional*, default to ["lm_head.weight"]):
             List of linear weight names that should not be quantized.
     """
@@ -1267,7 +1267,8 @@ class HiggsConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        return
+        assert self.bits in [2, 3, 4], "bits must be 2, 3 or 4"
+        assert self.p in [1, 2], "p must be 1 or 2. 2 is always better in practice"
 
 
 @dataclass
