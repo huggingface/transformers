@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 from huggingface_hub import get_full_repo_name
 from packaging import version
@@ -66,6 +66,8 @@ from .utils.import_utils import is_optimum_neuron_available
 logger = logging.get_logger(__name__)
 log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
+
+T = TypeVar("T", bound="TrainingArguments")
 
 if is_torch_available():
     import torch
@@ -2555,6 +2557,15 @@ class TrainingArguments:
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string())
+
+    @classmethod
+    def from_json_file(cls: Type[T], json_file_path: str) -> T:
+        """
+        Constructs an instance from a json file
+        """
+        with open(json_file_path, "r", encoding="utf-8") as reader:
+            params = json.load(reader)
+        return cls(**params)
 
     def to_sanitized_dict(self) -> Dict[str, Any]:
         """
