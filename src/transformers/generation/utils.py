@@ -3199,6 +3199,8 @@ class GenerationMixin:
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
+        input_ids = torch.tensor([[88, 2, 37, 40, 82, 36, 80]])
+
         # init values
         pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
