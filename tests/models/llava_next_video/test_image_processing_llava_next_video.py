@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import LlavaNextVideoImageProcessor
 
 
-class LlavaNextVideoProcessingTester():
+class LlavaNextVideoProcessingTester:
     def __init__(
         self,
         parent,

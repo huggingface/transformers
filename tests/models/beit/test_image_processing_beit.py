@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import BeitImageProcessor
 
 
-class BeitImageProcessingTester():
+class BeitImageProcessingTester:
     def __init__(
         self,
         parent,

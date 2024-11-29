@@ -34,7 +34,7 @@ if is_torch_available():
     import torch
 
 
-class Idefics2ImageProcessingTester():
+class Idefics2ImageProcessingTester:
     def __init__(
         self,
         parent,

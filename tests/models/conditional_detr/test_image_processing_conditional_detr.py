@@ -35,7 +35,7 @@ if is_vision_available():
     from transformers import ConditionalDetrImageProcessor
 
 
-class ConditionalDetrImageProcessingTester():
+class ConditionalDetrImageProcessingTester:
     def __init__(
         self,
         parent,

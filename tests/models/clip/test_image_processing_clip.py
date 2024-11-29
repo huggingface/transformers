@@ -26,7 +26,7 @@ if is_vision_available():
     from transformers import CLIPImageProcessor
 
 
-class CLIPImageProcessingTester():
+class CLIPImageProcessingTester:
     def __init__(
         self,
         parent,
