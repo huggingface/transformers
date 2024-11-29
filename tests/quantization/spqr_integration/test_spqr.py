@@ -35,7 +35,6 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-# TODO(elvircrn)
 @require_torch_gpu
 class SpQRConfigTest(unittest.TestCase):
     def test_to_dict(self):
@@ -53,17 +52,21 @@ class SpQRConfigTest(unittest.TestCase):
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
         dict = {
-            "in_group_size": 32,
-            "num_codebooks": 8,
-            "nbits_per_codebook": 8,
+            "beta1": 16,
+            "beta2": 16,
+            "bits": 3,
             "linear_weights_not_to_quantize": ["lm_head.weight"],
+            "shapes": {
+                "model.layers.0.self_attn.q_proj.dense_weights.shape": 16
+            }
         }
         quantization_config = SpQRConfig.from_dict(dict)
 
-        self.assertEqual(dict["in_group_size"], quantization_config.in_group_size)
-        self.assertEqual(dict["num_codebooks"], quantization_config.num_codebooks)
-        self.assertEqual(dict["nbits_per_codebook"], quantization_config.nbits_per_codebook)
+        self.assertEqual(dict["beta1"], quantization_config.beta1)
+        self.assertEqual(dict["beta2"], quantization_config.beta2)
+        self.assertEqual(dict["bits"], quantization_config.bits)
         self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
+        self.assertEqual(dict["shapes"], quantization_config.shapes)
 
 
 @slow
@@ -71,7 +74,7 @@ class SpQRConfigTest(unittest.TestCase):
 @require_spqr
 @require_accelerate
 class SpQRTest(unittest.TestCase):
-    model_name = "BlackSamorez/Llama-2-7b-SPQR-2Bit-1x16-hf"
+    model_name = "elvircrn/Llama-2-7b-SPQR-3Bit-16x16-red_pajama-hf"
 
     input_text = "Hello my name is"
     max_new_tokens = 32
