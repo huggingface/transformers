@@ -1243,23 +1243,23 @@ class HiggsConfig(QuantizationConfigMixin):
             Number of bits to use for quantization. Can be 2, 3 or 4. Default is 4.
         p (int, *optional*, defaults to 2):
             Quantization grid dimension. 1 and 2 are supported. 2 is always better in practice. Default is 2.
-        linear_weights_not_to_quantize (`list`, *optional*, default to ["lm_head.weight"]):
-            List of linear weight names that should not be quantized.
+        modules_to_not_convert (`list`, *optional*, default to ["lm_head"]):
+            List of linear layers that should not be quantized.
     """
 
     def __init__(
         self,
         bits: int = 4,
         p: int = 2,
-        linear_weights_not_to_quantize: Optional[List[str]] = None,
+        modules_to_not_convert: Optional[List[str]] = None,
         **kwargs,
     ):
-        if linear_weights_not_to_quantize is None:
-            linear_weights_not_to_quantize = ["lm_head.weight"]
+        if modules_to_not_convert is None:
+            modules_to_not_convert = ["lm_head"]
         self.quant_method = QuantizationMethod.HIGGS
         self.bits = bits
         self.p = p
-        self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
+        self.modules_to_not_convert = modules_to_not_convert
 
         self.post_init()
 

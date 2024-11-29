@@ -52,10 +52,10 @@ class HiggsConfigTest(unittest.TestCase):
         """
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
-        dict = {"linear_weights_not_to_quantize": ["embed_tokens.weight", "lm_head.weight"], "quant_method": "higgs"}
+        dict = {"modules_to_not_convert": ["embed_tokens", "lm_head"], "quant_method": "higgs"}
         quantization_config = HiggsConfig.from_dict(dict)
 
-        self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
+        self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
 
@@ -120,7 +120,7 @@ class HiggsTest(unittest.TestCase):
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
-        quantization_config = HiggsConfig(linear_weights_not_to_quantize=["fc1.weight"])
+        quantization_config = HiggsConfig(modules_to_not_convert=["fc1"])
         model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)
         nb_higgs_linear = 0
         for module in model.modules():

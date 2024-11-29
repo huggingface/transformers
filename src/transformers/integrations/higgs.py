@@ -580,11 +580,9 @@ def replace_with_higgs_linear(
         current_key_name.append(name)
 
         if isinstance(module, nn.Linear):
-            # Check if the current key is not in the `quantization_config.linear_weights_not_to_quantize`
-            current_key_name_str = ".".join(current_key_name) + ".weight"
-            if not any(
-                current_key_name_str.endswith(key) for key in quantization_config.linear_weights_not_to_quantize
-            ):
+            # Check if the current key is not in the `quantization_config.modules_to_not_convert`
+            current_key_name_str = ".".join(current_key_name)
+            if not any(current_key_name_str.endswith(key) for key in quantization_config.modules_to_not_convert):
                 with init_empty_weights():
                     in_features = module.in_features
                     out_features = module.out_features
