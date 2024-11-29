@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import SuperPointImageProcessor
 
 
-class SuperPointImageProcessingTester(unittest.TestCase):
+class SuperPointImageProcessingTester():
     def __init__(
         self,
         parent,
@@ -45,7 +45,6 @@ class SuperPointImageProcessingTester(unittest.TestCase):
         do_resize=True,
         size=None,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 480, "width": 640}
         self.parent = parent
         self.batch_size = batch_size

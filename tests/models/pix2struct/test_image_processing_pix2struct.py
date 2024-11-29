@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers import Pix2StructImageProcessor
 
 
-class Pix2StructImageProcessingTester(unittest.TestCase):
+class Pix2StructImageProcessingTester():
     def __init__(
         self,
         parent,
@@ -48,7 +48,6 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         do_convert_rgb=True,
         patch_size=None,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size

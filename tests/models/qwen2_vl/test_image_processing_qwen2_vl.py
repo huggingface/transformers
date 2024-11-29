@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers import Qwen2VLImageProcessor
 
 
-class Qwen2VLImageProcessingTester(unittest.TestCase):
+class Qwen2VLImageProcessingTester():
     def __init__(
         self,
         parent,
@@ -53,7 +53,6 @@ class Qwen2VLImageProcessingTester(unittest.TestCase):
         merge_size=2,
         do_convert_rgb=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_resolution = min_resolution

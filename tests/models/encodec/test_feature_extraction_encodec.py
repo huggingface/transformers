@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class EnCodecFeatureExtractionTester(unittest.TestCase):
+class EnCodecFeatureExtractionTester():
     def __init__(
         self,
         parent,
@@ -62,7 +62,6 @@ class EnCodecFeatureExtractionTester(unittest.TestCase):
         sampling_rate=24000,
         return_attention_mask=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

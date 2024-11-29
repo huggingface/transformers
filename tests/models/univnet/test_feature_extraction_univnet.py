@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class UnivNetFeatureExtractionTester(unittest.TestCase):
+class UnivNetFeatureExtractionTester():
     def __init__(
         self,
         parent,
@@ -78,7 +78,6 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
         model_in_channels=64,
         pad_end_length=10,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

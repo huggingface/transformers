@@ -52,7 +52,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
+class SeamlessM4TFeatureExtractionTester():
     def __init__(
         self,
         parent,
@@ -66,7 +66,6 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         stride=2,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

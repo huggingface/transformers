@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class SpeechT5FeatureExtractionTester(unittest.TestCase):
+class SpeechT5FeatureExtractionTester():
     def __init__(
         self,
         parent,
@@ -70,7 +70,6 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
         mel_floor=1e-10,
         return_attention_mask=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

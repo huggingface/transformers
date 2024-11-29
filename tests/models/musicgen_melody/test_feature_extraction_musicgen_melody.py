@@ -69,7 +69,7 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 
 @require_torch
 @require_torchaudio
-class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
+class MusicgenMelodyFeatureExtractionTester():
     def __init__(
         self,
         parent,
@@ -81,7 +81,6 @@ class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
         sampling_rate=4_000,
         return_attention_mask=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class WhisperFeatureExtractionTester(unittest.TestCase):
+class WhisperFeatureExtractionTester():
     def __init__(
         self,
         parent,
@@ -65,7 +65,6 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
         return_attention_mask=False,
         do_normalize=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length

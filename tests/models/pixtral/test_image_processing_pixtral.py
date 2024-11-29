@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import PixtralImageProcessor
 
 
-class PixtralImageProcessingTester(unittest.TestCase):
+class PixtralImageProcessingTester():
     def __init__(
         self,
         parent,
@@ -51,7 +51,6 @@ class PixtralImageProcessingTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
-        super().__init__()
         size = size if size is not None else {"longest_edge": 24}
         patch_size = patch_size if patch_size is not None else {"height": 8, "width": 8}
         self.parent = parent

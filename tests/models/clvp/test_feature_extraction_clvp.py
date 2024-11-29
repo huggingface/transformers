@@ -57,7 +57,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class ClvpFeatureExtractionTester(unittest.TestCase):
+class ClvpFeatureExtractionTester():
     def __init__(
         self,
         parent,
@@ -71,7 +71,6 @@ class ClvpFeatureExtractionTester(unittest.TestCase):
         sampling_rate=4_000,
         return_attention_mask=False,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length
