@@ -74,6 +74,7 @@ class OneFormerProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OneFormerImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+    optional_call_args = ["segmentation_maps", "task_inputs"]
 
     def __init__(
         self,
@@ -116,19 +117,16 @@ class OneFormerProcessor(ProcessorMixin):
         if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
             raise ValueError("task_inputs must be semantic, instance, or panoptic.")
 
-    @staticmethod
-    def _add_args_for_backward_compatibility(args):
-        """
-        Remove this function once support for args is dropped in __call__
-        """
-        if len(args) > 2:
-            raise ValueError("Too many positional arguments")
-        return dict(zip(("task_inputs", "segmentation_maps"), args))
-
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        *args,  # to be deprecated
+        # The following is to capture `segmentation_maps` and `task_inputs` arguments
+        # that may be passed as a positional argument.
+        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
+        # or this conversation for more context:
+        # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
+        # This behavior is only needed for backward compatibility and will be removed in future versions.
+        *args,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -169,7 +167,7 @@ class OneFormerProcessor(ProcessorMixin):
             OneFormerProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
-            **self._add_args_for_backward_compatibility(args),
+            **self.prepare_and_validate_optional_call_args(*args),
         )
         segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
         task_inputs = output_kwargs["images_kwargs"].pop("task_inputs", None)
