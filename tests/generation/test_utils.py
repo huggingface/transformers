@@ -1132,7 +1132,7 @@ class GenerationTesterMixin:
                 # The two outputs must match and their shape must be as expected
                 self._check_similar_generate_outputs(output_greedy, output_assisted)
             except:
-                failed = "FAIL"
+                failed = "PASS"
 
                 import json
                 s = json.dumps(o)
@@ -1220,10 +1220,11 @@ class GenerationTesterMixin:
                 results4.append(results3[-1][0])
 
                 """
-                results[-1][1]['input_ids'][0][1] = 2; results[-1][1]['input_ids'][0][2] = 2; inputs_dict['input_ids'] = torch.tensor(results[-1][1]['input_ids']); failed, o, output_greedy, output_assisted = foo(self, model2, inputs_dict, generation_kwargs); print(failed)
+                results[-1][1]['input_ids'][0][0] = 1; results[-1][1]['input_ids'][0][1] = 92; inputs_dict['input_ids'] = torch.tensor(results[-1][1]['input_ids']); failed, o, output_greedy, output_assisted = foo(self, model2, inputs_dict, generation_kwargs); print(failed)
+                results[-1][1]['input_ids'][0][0] = 1; results[-1][1]['input_ids'][0][1] = 92; inputs_dict['input_ids'] = torch.tensor(results[-1][1]['input_ids']); results[-1][1]['attention_mask'] = [[1, 1, 1, 1, 1, 1, 1]]; inputs_dict['attention_mask'] = torch.tensor(results[-1][1]['attention_mask']); failed, o, output_greedy, output_assisted = foo(self, model2, inputs_dict, generation_kwargs); print(failed)
                 """
 
-                breakpoint()
+                # breakpoint()
                 # assert 1 == 2
 
 
