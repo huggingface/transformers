@@ -1228,7 +1228,7 @@ class GenerationTesterMixin:
                 for _ in range(500):
                     _, inputs_dict_2 = self.prepare_config_and_inputs_for_generate(batch_size=1)
                     results5.append(foo(self, model, inputs_dict_2, generation_kwargs))
-                    results6.append(results[-1][0])
+                    results6.append(results5[-1][0])
 
                 breakpoint()
                 assert 1 == 2
