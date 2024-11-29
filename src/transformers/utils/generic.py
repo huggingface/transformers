@@ -891,6 +891,9 @@ def is_timm_checkpoint(pretrained_model_name_or_path: str) -> bool:
     if pretrained_model_name_or_path is None:
         return False
 
+    # in case it's Path, not str
+    pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+
     is_file = os.path.isfile(pretrained_model_name_or_path)
     is_dir = os.path.isdir(pretrained_model_name_or_path)
     is_local = is_file or is_dir
