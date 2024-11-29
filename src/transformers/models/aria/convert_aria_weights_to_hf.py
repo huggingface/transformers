@@ -95,6 +95,7 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
     )
     tokenizer.add_tokens(AddedToken("<|img|>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
 
     processor = AriaProcessor.from_pretrained(
         text_model_id,
@@ -144,7 +145,7 @@ def main():
     )
     parser.add_argument(
         "--output_hub_path",
-        default="m-ric/Aria_hf_3",
+        default="m-ric/Aria_hf_2",
         help="Location on the hub of the converted model",
     )
     parser.add_argument(
@@ -163,8 +164,13 @@ def main():
     )
     tokenizer.add_tokens(AddedToken("<|img|>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
 
-    tokenizer.push_to_hub(args.output_hub_path)
+    processor = AriaProcessor.from_pretrained(
+        args.text_model_id,
+        tokenizer=tokenizer,
+    )
+    processor.push_to_hub(args.output_hub_path)
 
 
 if __name__ == "__main__":

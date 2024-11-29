@@ -847,8 +847,6 @@ class AriaProcessor(ProcessorMixin):
             The AriaImageProcessor to use for image preprocessing.
         tokenizer (`PreTrainedTokenizerBase`, *optional*):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        patch_size(`):
-            The patch size to use for the image processor.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
         size_conversion(`Dict`, *optional*):
@@ -856,7 +854,6 @@ class AriaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "image_token"]
     image_processor_class = "AriaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -864,14 +861,9 @@ class AriaProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer: Union[AutoTokenizer, str] = None,
-        patch_size: int = 490,
         chat_template: str = None,
         size_conversion: Optional[Dict] = None,
-        **kwargs,
     ):
-        if chat_template is None:
-            chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
-
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = {int(k): v for k, v in size_conversion.items()}
