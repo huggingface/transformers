@@ -482,7 +482,6 @@ class AutoImageProcessor:
 
         image_processor_class = None
         # TODO: @yoni, change logic in v4.48 (when use_fast set to True by default)
-        print("image_processor_type", image_processor_type)
         if image_processor_type is not None:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
