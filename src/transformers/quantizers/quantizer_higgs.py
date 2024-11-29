@@ -65,6 +65,9 @@ class HiggsHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
+        if not torch.cuda.is_available():
+            raise NotImplementedError("HIGGS quantization is only supported on GPU. Please use a different quantizer.")
+
         if not is_accelerate_available():
             raise ImportError("Using `higgs` quantization requires Accelerate: `pip install accelerate`")
 
@@ -78,15 +81,8 @@ class HiggsHfQuantizer(HfQuantizer):
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            if torch.cuda.is_available():
-                torch_dtype = torch.float16
-                logger.info(
-                    "CUDA available. Assuming HIGGS inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
-                )
-            else:
-                raise NotImplementedError(
-                    "HIGGS quantization is only supported on GPU. Please use a different quantizer."
-                )
+            torch_dtype = torch.float16
+
         return torch_dtype
 
     def create_quantized_param(

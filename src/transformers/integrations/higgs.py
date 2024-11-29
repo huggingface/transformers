@@ -14,8 +14,6 @@
 "HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
 
 from ..utils import (
-    ACCELERATE_MIN_VERSION,
-    is_accelerate_available,
     is_flute_available,
     is_hadamard_available,
     is_torch_available,
@@ -317,10 +315,6 @@ def get_higgs_grid(p: int, n: int):
 
 def quantize_with_higgs(weight, bits: int = 4, p: int = 2):
     assert len(weight.shape) == 2, "Only 2D weights are supported for now"
-    if weight.device.type != "cuda":
-        raise ValueError(
-            "You are attempting to load a HIGGS model with a device_map that contains a CPU or disk device."
-        )
 
     grid = get_higgs_grid(p, 2 ** (p * bits)).to(weight.device)
     grid_norm_2 = torch.linalg.norm(grid, axis=-1) ** 2
