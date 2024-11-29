@@ -58,13 +58,15 @@ if is_causal_conv1d_available():
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = all((
-    selective_state_update,
-    selective_scan_fn,
-    causal_conv1d_fn,
-    causal_conv1d_update,
-    mamba_inner_fn,
-))
+is_fast_path_available = all(
+    (
+        selective_state_update,
+        selective_scan_fn,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+        mamba_inner_fn,
+    )
+)
 
 _CHECKPOINT_FOR_DOC = "tiiuae/falcon-mamba-7b"
 _CONFIG_FOR_DOC = "FalconMambaConfig"
@@ -615,9 +617,9 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([
-            FalconMambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [FalconMambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+        )
 
         self.gradient_checkpointing = False
         self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
@@ -799,12 +801,14 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
 
-        model_inputs.update({
-            "cache_params": cache_params,
-            "use_cache": use_cache,
-            "cache_position": cache_position,
-            "attention_mask": attention_mask,
-        })
+        model_inputs.update(
+            {
+                "cache_params": cache_params,
+                "use_cache": use_cache,
+                "cache_position": cache_position,
+                "attention_mask": attention_mask,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(FALCONMAMBA_INPUTS_DOCSTRING)

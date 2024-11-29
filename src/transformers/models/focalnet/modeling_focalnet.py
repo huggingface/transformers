@@ -489,16 +489,18 @@ class FocalNetStage(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         drop_path = dpr[sum(config.depths[:index]) : sum(config.depths[: index + 1])]
 
-        self.layers = nn.ModuleList([
-            FocalNetLayer(
-                config=config,
-                index=index,
-                dim=dim,
-                input_resolution=input_resolution,
-                drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-            )
-            for i in range(config.depths[index])
-        ])
+        self.layers = nn.ModuleList(
+            [
+                FocalNetLayer(
+                    config=config,
+                    index=index,
+                    dim=dim,
+                    input_resolution=input_resolution,
+                    drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+                )
+                for i in range(config.depths[index])
+            ]
+        )
 
         if downsample is not None:
             self.downsample = downsample(
@@ -543,14 +545,16 @@ class FocalNetEncoder(nn.Module):
         self.num_stages = len(config.depths)
         self.config = config
 
-        self.stages = nn.ModuleList([
-            FocalNetStage(
-                config=config,
-                index=i_layer,
-                input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-            )
-            for i_layer in range(self.num_stages)
-        ])
+        self.stages = nn.ModuleList(
+            [
+                FocalNetStage(
+                    config=config,
+                    index=i_layer,
+                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                )
+                for i_layer in range(self.num_stages)
+            ]
+        )
 
         self.gradient_checkpointing = False
 

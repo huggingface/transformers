@@ -69,13 +69,15 @@ if is_causal_conv1d_available():
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = all((
-    selective_state_update,
-    selective_scan_fn,
-    causal_conv1d_fn,
-    causal_conv1d_update,
-    mamba_inner_fn,
-))
+is_fast_path_available = all(
+    (
+        selective_state_update,
+        selective_scan_fn,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+        mamba_inner_fn,
+    )
+)
 
 
 logger = logging.get_logger(__name__)
@@ -1591,15 +1593,17 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
-        model_inputs.update({
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-            "output_router_logits": output_router_logits,
-            "num_logits_to_keep": self.config.num_logits_to_keep,
-            "cache_position": cache_position,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+                "output_router_logits": output_router_logits,
+                "num_logits_to_keep": self.config.num_logits_to_keep,
+                "cache_position": cache_position,
+            }
+        )
         return model_inputs
 
 

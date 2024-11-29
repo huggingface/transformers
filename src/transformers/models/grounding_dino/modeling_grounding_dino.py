@@ -2094,12 +2094,14 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 in_channels = config.d_model
             self.input_proj_vision = nn.ModuleList(input_proj_list)
         else:
-            self.input_proj_vision = nn.ModuleList([
-                nn.Sequential(
-                    nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
-                    nn.GroupNorm(32, config.d_model),
-                )
-            ])
+            self.input_proj_vision = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                ]
+            )
 
         # Create text backbone
         self.text_backbone = AutoModel.from_config(

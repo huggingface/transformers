@@ -913,17 +913,19 @@ class MobileViTASPP(nn.Module):
         )
         self.convs.append(in_projection)
 
-        self.convs.extend([
-            MobileViTConvLayer(
-                config,
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=3,
-                dilation=rate,
-                use_activation="relu",
-            )
-            for rate in config.atrous_rates
-        ])
+        self.convs.extend(
+            [
+                MobileViTConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=3,
+                    dilation=rate,
+                    use_activation="relu",
+                )
+                for rate in config.atrous_rates
+            ]
+        )
 
         pool_layer = MobileViTASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)

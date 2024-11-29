@@ -227,9 +227,9 @@ class AlbertForSequenceClassificationWithPabee(AlbertPreTrainedModel):
 
         self.albert = AlbertModelWithPabee(config)
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
-        self.classifiers = nn.ModuleList([
-            nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)
-        ])
+        self.classifiers = nn.ModuleList(
+            [nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)]
+        )
 
         self.init_weights()
 

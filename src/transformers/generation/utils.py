@@ -3788,9 +3788,9 @@ class GenerationMixin:
                 batch_group_indices = []
 
                 for batch_idx in range(batch_size):
-                    batch_group_indices.extend([
-                        batch_idx * num_beams + idx for idx in range(group_start_idx, group_end_idx)
-                    ])
+                    batch_group_indices.extend(
+                        [batch_idx * num_beams + idx for idx in range(group_start_idx, group_end_idx)]
+                    )
                 group_input_ids = input_ids[batch_group_indices]
 
                 # select outputs of beams of current group only

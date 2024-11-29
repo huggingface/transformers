@@ -614,9 +614,9 @@ class SamPromptEncoder(nn.Module):
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
         self.input_image_size = config.image_size
 
-        self.point_embed = nn.ModuleList([
-            nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)
-        ])
+        self.point_embed = nn.ModuleList(
+            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
+        )
         self.hidden_size = config.hidden_size
         self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
 

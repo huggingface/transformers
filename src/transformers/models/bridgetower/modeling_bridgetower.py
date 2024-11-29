@@ -197,11 +197,13 @@ class BridgeTowerResidualAttention(nn.Module):
         self.attn = nn.MultiheadAttention(config.hidden_size, config.hidden_size // 64)
         self.ln_1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = nn.ModuleDict(
-            OrderedDict([
-                ("c_fc", nn.Linear(config.hidden_size, config.hidden_size * 4)),
-                ("gelu", QuickGELUActivation()),
-                ("c_proj", nn.Linear(config.hidden_size * 4, config.hidden_size)),
-            ])
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(config.hidden_size, config.hidden_size * 4)),
+                    ("gelu", QuickGELUActivation()),
+                    ("c_proj", nn.Linear(config.hidden_size * 4, config.hidden_size)),
+                ]
+            )
         )
         self.ln_2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn_mask = None
@@ -238,13 +240,13 @@ class BridgeTowerTransformer(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_hidden_layers = config.num_hidden_layers
         if config.remove_last_layer:
-            self.resblocks = nn.ModuleList([
-                BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers - 1)
-            ])
+            self.resblocks = nn.ModuleList(
+                [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers - 1)]
+            )
         else:
-            self.resblocks = nn.ModuleList([
-                BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers)
-            ])
+            self.resblocks = nn.ModuleList(
+                [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers)]
+            )
         self.stop_gradient = config.stop_gradient
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
@@ -352,9 +354,9 @@ class BridgeTowerVisionTransformer(nn.Module):
         self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.share_layernorm = config.share_layernorm
         if not config.share_layernorm:
-            self.ln_separate = nn.ModuleList([
-                nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)
-            ])
+            self.ln_separate = nn.ModuleList(
+                [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
+            )
 
     def forward(
         self,
@@ -1274,12 +1276,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_text_transform = nn.Linear(text_config.hidden_size, config.hidden_size)
             self.cross_modal_image_transform = nn.Linear(vision_config.hidden_size, config.hidden_size)
         else:
-            self.cross_modal_text_transform = nn.ModuleList([
-                nn.Linear(text_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)
-            ])
-            self.cross_modal_image_transform = nn.ModuleList([
-                nn.Linear(vision_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)
-            ])
+            self.cross_modal_text_transform = nn.ModuleList(
+                [nn.Linear(text_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
+            )
+            self.cross_modal_image_transform = nn.ModuleList(
+                [nn.Linear(vision_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
+            )
 
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
 
@@ -1292,12 +1294,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 ln.weight.data = self.vision_model.visual.ln_post.weight.data
                 ln.bias.data = self.vision_model.visual.ln_post.bias.data
 
-        self.cross_modal_image_layers = nn.ModuleList([
-            BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)
-        ])
-        self.cross_modal_text_layers = nn.ModuleList([
-            BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)
-        ])
+        self.cross_modal_image_layers = nn.ModuleList(
+            [BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)]
+        )
+        self.cross_modal_text_layers = nn.ModuleList(
+            [BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)]
+        )
 
         # Class token => Linear => Tanh
         self.cross_modal_image_pooler = BridgeTowerPooler(config)
@@ -1311,12 +1313,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_text_link_tower = BridgeTowerLinkTower(config)
             self.cross_modal_image_link_tower = BridgeTowerLinkTower(config)
         else:
-            self.cross_modal_text_link_tower = nn.ModuleList([
-                BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)
-            ])
-            self.cross_modal_image_link_tower = nn.ModuleList([
-                BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)
-            ])
+            self.cross_modal_text_link_tower = nn.ModuleList(
+                [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
+            )
+            self.cross_modal_image_link_tower = nn.ModuleList(
+                [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
+            )
 
         self.post_init()
 

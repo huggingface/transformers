@@ -628,9 +628,9 @@ class Gemma2Model(Gemma2PreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -1049,13 +1049,15 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         if num_logits_to_keep is not None:
             model_inputs["num_logits_to_keep"] = num_logits_to_keep
 
-        model_inputs.update({
-            "position_ids": position_ids,
-            "cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
         return model_inputs
 
 

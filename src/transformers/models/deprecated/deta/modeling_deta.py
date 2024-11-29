@@ -1463,12 +1463,14 @@ class DetaModel(DetaPreTrainedModel):
                 in_channels = config.d_model
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            self.input_proj = nn.ModuleList([
-                nn.Sequential(
-                    nn.Conv2d(intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
-                    nn.GroupNorm(32, config.d_model),
-                )
-            ])
+            self.input_proj = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                ]
+            )
 
         if not config.two_stage:
             self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
@@ -1791,9 +1793,9 @@ class DetaModel(DetaPreTrainedModel):
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits)))
             query_embed, target = torch.split(pos_trans_out, num_channels, dim=2)
 
-            topk_feats = torch.stack([
-                object_query_embedding[b][topk_proposals[b]] for b in range(batch_size)
-            ]).detach()
+            topk_feats = torch.stack(
+                [object_query_embedding[b][topk_proposals[b]] for b in range(batch_size)]
+            ).detach()
             target = target + self.pix_trans_norm(self.pix_trans(topk_feats))
         else:
             query_embed, target = torch.split(query_embeds, num_channels, dim=1)
@@ -2794,10 +2796,12 @@ class DetaStage1Assigner(nn.Module):
         for b in range(bs):
             anchors = outputs["anchors"][b]
             if len(targets[b]["boxes"]) == 0:
-                indices.append((
-                    torch.tensor([], dtype=torch.long, device=anchors.device),
-                    torch.tensor([], dtype=torch.long, device=anchors.device),
-                ))
+                indices.append(
+                    (
+                        torch.tensor([], dtype=torch.long, device=anchors.device),
+                        torch.tensor([], dtype=torch.long, device=anchors.device),
+                    )
+                )
                 continue
             iou, _ = box_iou(
                 center_to_corners_format(targets[b]["boxes"]),

@@ -662,9 +662,9 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 
         # gating
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = nn.ModuleList([
-            Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)
-        ])
+        self.experts = nn.ModuleList(
+            [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
+        )
 
         self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
@@ -952,9 +952,9 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            Qwen2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Qwen2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self._attn_implementation = config._attn_implementation
         self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen2MoeRotaryEmbedding(config=config)

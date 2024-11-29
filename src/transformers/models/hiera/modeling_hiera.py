@@ -580,19 +580,21 @@ class HieraStage(nn.Module):
         previous_stage_used_masked_attention = False
         if stage_num is not None:
             previous_stage_used_masked_attention = config.masked_unit_attention[stage_num - 1 if stage_num > 0 else 0]
-        self.layers = nn.ModuleList([
-            HieraLayer(
-                config=config,
-                hidden_size=hidden_size if i == 0 else hidden_size_output,
-                hidden_size_output=hidden_size_output,
-                num_heads=num_heads,
-                drop_path=drop_path[i],
-                query_stride=query_stride[i],
-                window_size=window_size,
-                use_mask_unit_attn=use_mask_unit_attn or (previous_stage_used_masked_attention and i == 0),
-            )
-            for i in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                HieraLayer(
+                    config=config,
+                    hidden_size=hidden_size if i == 0 else hidden_size_output,
+                    hidden_size_output=hidden_size_output,
+                    num_heads=num_heads,
+                    drop_path=drop_path[i],
+                    query_stride=query_stride[i],
+                    window_size=window_size,
+                    use_mask_unit_attn=use_mask_unit_attn or (previous_stage_used_masked_attention and i == 0),
+                )
+                for i in range(depth)
+            ]
+        )
 
     def forward(
         self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor], output_attentions: bool = False

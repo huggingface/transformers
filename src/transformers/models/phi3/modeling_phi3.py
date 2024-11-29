@@ -871,9 +871,9 @@ class Phi3Model(Phi3PreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
-        self.layers = nn.ModuleList([
-            Phi3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Phi3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self._attn_implementation = config._attn_implementation
         self.norm = Phi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

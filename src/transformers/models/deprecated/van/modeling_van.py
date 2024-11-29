@@ -178,10 +178,12 @@ class VanSpatialAttentionLayer(nn.Module):
     def __init__(self, hidden_size: int, hidden_act: str = "gelu"):
         super().__init__()
         self.pre_projection = nn.Sequential(
-            OrderedDict([
-                ("conv", nn.Conv2d(hidden_size, hidden_size, kernel_size=1)),
-                ("act", ACT2FN[hidden_act]),
-            ])
+            OrderedDict(
+                [
+                    ("conv", nn.Conv2d(hidden_size, hidden_size, kernel_size=1)),
+                    ("act", ACT2FN[hidden_act]),
+                ]
+            )
         )
         self.attention_layer = VanLargeKernelAttentionLayer(hidden_size)
         self.post_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
@@ -271,15 +273,17 @@ class VanStage(nn.Module):
     ):
         super().__init__()
         self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
-        self.layers = nn.Sequential(*[
-            VanLayer(
-                config,
-                hidden_size,
-                mlp_ratio=mlp_ratio,
-                drop_path_rate=drop_path_rate,
-            )
-            for _ in range(depth)
-        ])
+        self.layers = nn.Sequential(
+            *[
+                VanLayer(
+                    config,
+                    hidden_size,
+                    mlp_ratio=mlp_ratio,
+                    drop_path_rate=drop_path_rate,
+                )
+                for _ in range(depth)
+            ]
+        )
         self.normalization = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:

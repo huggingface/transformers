@@ -1356,10 +1356,12 @@ class LongT5Stack(LongT5PreTrainedModel):
         self.local_radius = config.local_radius
         self.block_len = self.local_radius + 1
 
-        self.block = nn.ModuleList([
-            LongT5Block(config, has_relative_attention_bias=bool(i == 0), layer_idx=i)
-            for i in range(config.num_layers)
-        ])
+        self.block = nn.ModuleList(
+            [
+                LongT5Block(config, has_relative_attention_bias=bool(i == 0), layer_idx=i)
+                for i in range(config.num_layers)
+            ]
+        )
         self.final_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 

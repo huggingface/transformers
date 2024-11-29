@@ -334,9 +334,9 @@ class EfficientFormerMeta3DLayers(nn.Module):
             config.drop_path_rate * (block_idx + sum(config.depths[:-1]))
             for block_idx in range(config.num_meta3d_blocks)
         ]
-        self.blocks = nn.ModuleList([
-            EfficientFormerMeta3D(config, config.hidden_sizes[-1], drop_path=drop_path) for drop_path in drop_paths
-        ])
+        self.blocks = nn.ModuleList(
+            [EfficientFormerMeta3D(config, config.hidden_sizes[-1], drop_path=drop_path) for drop_path in drop_paths]
+        )
 
     def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         all_attention_outputs = () if output_attentions else None
@@ -399,10 +399,12 @@ class EfficientFormerMeta4DLayers(nn.Module):
             config.drop_path_rate * (block_idx + sum(config.depths[:stage_idx])) for block_idx in range(num_layers)
         ]
 
-        self.blocks = nn.ModuleList([
-            EfficientFormerMeta4D(config, config.hidden_sizes[stage_idx], drop_path=drop_path)
-            for drop_path in drop_paths
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                EfficientFormerMeta4D(config, config.hidden_sizes[stage_idx], drop_path=drop_path)
+                for drop_path in drop_paths
+            ]
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         for layer_module in self.blocks:

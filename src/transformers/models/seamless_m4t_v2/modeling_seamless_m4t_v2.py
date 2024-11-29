@@ -702,9 +702,9 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         self.config = config
 
         self.dropout = nn.Dropout(config.speech_encoder_dropout)
-        self.layers = nn.ModuleList([
-            SeamlessM4Tv2ConformerEncoderLayer(config) for _ in range(config.speech_encoder_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [SeamlessM4Tv2ConformerEncoderLayer(config) for _ in range(config.speech_encoder_layers)]
+        )
 
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -2579,28 +2579,32 @@ class HifiGanResidualBlock(nn.Module):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
 
-        self.convs1 = nn.ModuleList([
-            nn.Conv1d(
-                channels,
-                channels,
-                kernel_size,
-                stride=1,
-                dilation=dilation[i],
-                padding=self.get_padding(kernel_size, dilation[i]),
-            )
-            for i in range(len(dilation))
-        ])
-        self.convs2 = nn.ModuleList([
-            nn.Conv1d(
-                channels,
-                channels,
-                kernel_size,
-                stride=1,
-                dilation=1,
-                padding=self.get_padding(kernel_size, 1),
-            )
-            for _ in range(len(dilation))
-        ])
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=dilation[i],
+                    padding=self.get_padding(kernel_size, dilation[i]),
+                )
+                for i in range(len(dilation))
+            ]
+        )
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=self.get_padding(kernel_size, 1),
+                )
+                for _ in range(len(dilation))
+            ]
+        )
 
     def get_padding(self, kernel_size, dilation=1):
         return (kernel_size * dilation - dilation) // 2

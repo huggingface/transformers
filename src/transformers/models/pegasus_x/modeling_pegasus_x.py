@@ -905,10 +905,14 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
-        self.layers = nn.ModuleList([
-            PegasusXEncoderLayer(stagger_blocks_this_layer=i % 2 == 1 and config.stagger_local_blocks, config=config)
-            for i in range(config.encoder_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                PegasusXEncoderLayer(
+                    stagger_blocks_this_layer=i % 2 == 1 and config.stagger_local_blocks, config=config
+                )
+                for i in range(config.encoder_layers)
+            ]
+        )
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False

@@ -82,9 +82,9 @@ class MarianSinusoidalPositionalEmbedding(nn.Embedding):
         the 2nd half of the vector. [dim // 2:]
         """
         n_pos, dim = out.shape
-        position_enc = np.array([
-            [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)
-        ])
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
         out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.Tensor(np.sin(position_enc[:, 0::2]))
@@ -741,9 +741,9 @@ class MarianEncoder(MarianPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)

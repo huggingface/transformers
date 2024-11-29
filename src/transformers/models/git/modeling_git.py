@@ -1201,11 +1201,13 @@ class GitModel(GitPreTrainedModel):
             raise ValueError("Memory key padding mask must be a boolean tensor.")
         zero_negative_infinity = torch.zeros_like(memory_key_padding_mask, dtype=tgt.dtype)
         zero_negative_infinity[memory_key_padding_mask] = float("-inf")
-        full_attention_mask = full_attention_mask.expand((
-            memory_key_padding_mask.shape[0],
-            num_memory + num_tgt,
-            num_memory + past_key_values_length + num_tgt,
-        ))
+        full_attention_mask = full_attention_mask.expand(
+            (
+                memory_key_padding_mask.shape[0],
+                num_memory + num_tgt,
+                num_memory + past_key_values_length + num_tgt,
+            )
+        )
         full_attention_mask = full_attention_mask.clone()
         origin_left = full_attention_mask[:, :, :num_memory]
         update = zero_negative_infinity[:, None, :]

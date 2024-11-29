@@ -132,9 +132,9 @@ class TvpLoss(nn.Module):
 
         losses_dict = {}
         for loss in self.losses:
-            losses_dict.update({
-                loss: self.loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)
-            })
+            losses_dict.update(
+                {loss: self.loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)}
+            )
 
         return losses_dict
 
@@ -697,22 +697,26 @@ class TvpFramePadPrompter(nn.Module):
             torch.randn([1, config.num_frames, 3, config.visual_prompt_size, config.max_img_size])
         )
         self.pad_left = nn.Parameter(
-            torch.randn([
-                1,
-                config.num_frames,
-                3,
-                config.max_img_size - config.visual_prompt_size * 2,
-                config.visual_prompt_size,
-            ])
+            torch.randn(
+                [
+                    1,
+                    config.num_frames,
+                    3,
+                    config.max_img_size - config.visual_prompt_size * 2,
+                    config.visual_prompt_size,
+                ]
+            )
         )
         self.pad_right = nn.Parameter(
-            torch.randn([
-                1,
-                config.num_frames,
-                3,
-                config.max_img_size - config.visual_prompt_size * 2,
-                config.visual_prompt_size,
-            ])
+            torch.randn(
+                [
+                    1,
+                    config.num_frames,
+                    3,
+                    config.max_img_size - config.visual_prompt_size * 2,
+                    config.visual_prompt_size,
+                ]
+            )
         )
 
     def interpolate_pad_encoding(self, prompt: torch.Tensor, height: int, width: int) -> torch.Tensor:

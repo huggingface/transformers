@@ -869,9 +869,9 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         embed_dim = config.vocab_size + 1
-        self.embed_tokens = nn.ModuleList([
-            nn.Embedding(embed_dim, config.hidden_size) for _ in range(config.num_codebooks)
-        ])
+        self.embed_tokens = nn.ModuleList(
+            [nn.Embedding(embed_dim, config.hidden_size) for _ in range(config.num_codebooks)]
+        )
 
         self.embed_positions = MusicgenMelodySinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -1129,9 +1129,9 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         self.model = MusicgenMelodyModel(config)
 
         self.num_codebooks = config.num_codebooks
-        self.lm_heads = nn.ModuleList([
-            nn.Linear(config.hidden_size, config.vocab_size, bias=False) for _ in range(config.num_codebooks)
-        ])
+        self.lm_heads = nn.ModuleList(
+            [nn.Linear(config.hidden_size, config.vocab_size, bias=False) for _ in range(config.num_codebooks)]
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

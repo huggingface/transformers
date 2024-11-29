@@ -74,29 +74,33 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
         model = model.transformer
 
     # Embeddings and output
-    tf_to_pt_map.update({
-        "model/transformer/word_embedding/lookup_table": model.word_embedding.weight,
-        "model/transformer/mask_emb/mask_emb": model.mask_emb,
-    })
+    tf_to_pt_map.update(
+        {
+            "model/transformer/word_embedding/lookup_table": model.word_embedding.weight,
+            "model/transformer/mask_emb/mask_emb": model.mask_emb,
+        }
+    )
 
     # Transformer blocks
     for i, b in enumerate(model.layer):
         layer_str = f"model/transformer/layer_{i}/"
-        tf_to_pt_map.update({
-            layer_str + "rel_attn/LayerNorm/gamma": b.rel_attn.layer_norm.weight,
-            layer_str + "rel_attn/LayerNorm/beta": b.rel_attn.layer_norm.bias,
-            layer_str + "rel_attn/o/kernel": b.rel_attn.o,
-            layer_str + "rel_attn/q/kernel": b.rel_attn.q,
-            layer_str + "rel_attn/k/kernel": b.rel_attn.k,
-            layer_str + "rel_attn/r/kernel": b.rel_attn.r,
-            layer_str + "rel_attn/v/kernel": b.rel_attn.v,
-            layer_str + "ff/LayerNorm/gamma": b.ff.layer_norm.weight,
-            layer_str + "ff/LayerNorm/beta": b.ff.layer_norm.bias,
-            layer_str + "ff/layer_1/kernel": b.ff.layer_1.weight,
-            layer_str + "ff/layer_1/bias": b.ff.layer_1.bias,
-            layer_str + "ff/layer_2/kernel": b.ff.layer_2.weight,
-            layer_str + "ff/layer_2/bias": b.ff.layer_2.bias,
-        })
+        tf_to_pt_map.update(
+            {
+                layer_str + "rel_attn/LayerNorm/gamma": b.rel_attn.layer_norm.weight,
+                layer_str + "rel_attn/LayerNorm/beta": b.rel_attn.layer_norm.bias,
+                layer_str + "rel_attn/o/kernel": b.rel_attn.o,
+                layer_str + "rel_attn/q/kernel": b.rel_attn.q,
+                layer_str + "rel_attn/k/kernel": b.rel_attn.k,
+                layer_str + "rel_attn/r/kernel": b.rel_attn.r,
+                layer_str + "rel_attn/v/kernel": b.rel_attn.v,
+                layer_str + "ff/LayerNorm/gamma": b.ff.layer_norm.weight,
+                layer_str + "ff/LayerNorm/beta": b.ff.layer_norm.bias,
+                layer_str + "ff/layer_1/kernel": b.ff.layer_1.weight,
+                layer_str + "ff/layer_1/bias": b.ff.layer_1.bias,
+                layer_str + "ff/layer_2/kernel": b.ff.layer_2.weight,
+                layer_str + "ff/layer_2/bias": b.ff.layer_2.bias,
+            }
+        )
 
     # Relative positioning biases
     if config.untie_r:
@@ -114,12 +118,14 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
         r_w_list = [model.r_w_bias]
         r_s_list = [model.r_s_bias]
         seg_embed_list = [model.seg_embed]
-    tf_to_pt_map.update({
-        "model/transformer/r_r_bias": r_r_list,
-        "model/transformer/r_w_bias": r_w_list,
-        "model/transformer/r_s_bias": r_s_list,
-        "model/transformer/seg_embed": seg_embed_list,
-    })
+    tf_to_pt_map.update(
+        {
+            "model/transformer/r_r_bias": r_r_list,
+            "model/transformer/r_w_bias": r_w_list,
+            "model/transformer/r_s_bias": r_s_list,
+            "model/transformer/seg_embed": seg_embed_list,
+        }
+    )
     return tf_to_pt_map
 
 
@@ -158,15 +164,15 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             array = np.transpose(array)
         if isinstance(pointer, list):
             # Here we will split the TF weights
-            assert len(pointer) == array.shape[0], (
-                f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
-            )
+            assert (
+                len(pointer) == array.shape[0]
+            ), f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
                 try:
-                    assert p_i.shape == arr_i.shape, (
-                        f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
-                    )
+                    assert (
+                        p_i.shape == arr_i.shape
+                    ), f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
@@ -174,9 +180,9 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert pointer.shape == array.shape, (
-                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-                )
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise

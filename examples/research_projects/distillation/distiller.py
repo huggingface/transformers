@@ -355,10 +355,12 @@ class Distiller:
                 self.step(input_ids=token_ids, attention_mask=attn_mask, lm_labels=lm_labels)
 
                 iter_bar.update()
-                iter_bar.set_postfix({
-                    "Last_loss": f"{self.last_loss:.2f}",
-                    "Avg_cum_loss": f"{self.total_loss_epoch / self.n_iter:.2f}",
-                })
+                iter_bar.set_postfix(
+                    {
+                        "Last_loss": f"{self.last_loss:.2f}",
+                        "Avg_cum_loss": f"{self.total_loss_epoch / self.n_iter:.2f}",
+                    }
+                )
             iter_bar.close()
 
             if self.is_master:

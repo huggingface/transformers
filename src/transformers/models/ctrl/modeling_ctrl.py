@@ -324,9 +324,9 @@ class CTRLModel(CTRLPreTrainedModel):
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
 
         self.dropout = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([
-            EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop) for _ in range(config.n_layer)
-        ])
+        self.h = nn.ModuleList(
+            [EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop) for _ in range(config.n_layer)]
+        )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         # Initialize weights and apply final processing

@@ -705,17 +705,19 @@ class ClapAudioStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.ModuleList([
-            ClapAudioLayer(
-                config=config,
-                dim=dim,
-                input_resolution=input_resolution,
-                num_heads=num_heads,
-                drop_path_rate=drop_path[i],
-                shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-            )
-            for i in range(depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                ClapAudioLayer(
+                    config=config,
+                    dim=dim,
+                    input_resolution=input_resolution,
+                    num_heads=num_heads,
+                    drop_path_rate=drop_path[i],
+                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                )
+                for i in range(depth)
+            ]
+        )
 
         # patch merging layer
         if downsample is not None:
@@ -832,18 +834,20 @@ class ClapAudioEncoder(nn.Module):
         grid_size = self.patch_embed.grid_size
         self.input_resolutions = [(grid_size[0] // (2**i), grid_size[1] // (2**i)) for i in range(self.num_layers)]
 
-        self.layers = nn.ModuleList([
-            ClapAudioStage(
-                config=config,
-                dim=int(config.patch_embeds_hidden_size * 2**i_layer),
-                input_resolution=self.input_resolutions[i_layer],
-                depth=config.depths[i_layer],
-                num_heads=config.num_attention_heads[i_layer],
-                drop_path=drop_path_rate[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                downsample=ClapAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
-            )
-            for i_layer in range(self.num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                ClapAudioStage(
+                    config=config,
+                    dim=int(config.patch_embeds_hidden_size * 2**i_layer),
+                    input_resolution=self.input_resolutions[i_layer],
+                    depth=config.depths[i_layer],
+                    num_heads=config.num_attention_heads[i_layer],
+                    drop_path=drop_path_rate[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    downsample=ClapAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
+                )
+                for i_layer in range(self.num_layers)
+            ]
+        )
 
         self.gradient_checkpointing = False
 

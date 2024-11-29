@@ -729,12 +729,14 @@ def _crop_past_key_values(model, past_key_values, max_length):
     new_past = []
     if model.config.is_encoder_decoder:
         for idx in range(len(past_key_values)):
-            new_past.append((
-                past_key_values[idx][0][:, :, :max_length, :],
-                past_key_values[idx][1][:, :, :max_length, :],
-                past_key_values[idx][2],
-                past_key_values[idx][3],
-            ))
+            new_past.append(
+                (
+                    past_key_values[idx][0][:, :, :max_length, :],
+                    past_key_values[idx][1][:, :, :max_length, :],
+                    past_key_values[idx][2],
+                    past_key_values[idx][3],
+                )
+            )
         past_key_values = tuple(new_past)
     # gptbigcode is special and stores kv in shape (batch_size, seq_len, dim), if it's a multi_query model
     elif "gptbigcode" in model.__class__.__name__.lower() or (
@@ -751,10 +753,12 @@ def _crop_past_key_values(model, past_key_values, max_length):
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):
             if past_key_values[idx] != ([], []):
-                new_past.append((
-                    past_key_values[idx][0][:, :, :max_length, :],
-                    past_key_values[idx][1][:, :, :max_length, :],
-                ))
+                new_past.append(
+                    (
+                        past_key_values[idx][0][:, :, :max_length, :],
+                        past_key_values[idx][1][:, :, :max_length, :],
+                    )
+                )
             else:
                 new_past.append((past_key_values[idx][0], past_key_values[idx][1]))
         past_key_values = tuple(new_past)

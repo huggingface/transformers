@@ -1109,9 +1109,9 @@ class Blip2QFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([
-            Blip2QFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layer = nn.ModuleList(
+            [Blip2QFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(

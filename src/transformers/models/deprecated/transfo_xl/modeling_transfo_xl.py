@@ -53,10 +53,12 @@ def build_tf_to_pytorch_map(model, config):
 
     if hasattr(model, "transformer"):
         # We are loading in a TransfoXLLMHeadModel => we will load also the Adaptive Softmax
-        tf_to_pt_map.update({
-            "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
-            "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias,
-        })
+        tf_to_pt_map.update(
+            {
+                "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
+                "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias,
+            }
+        )
         for i, (out_l, proj_l, tie_proj) in enumerate(
             zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
         ):
@@ -80,19 +82,21 @@ def build_tf_to_pytorch_map(model, config):
     # Transformer blocks
     for i, b in enumerate(model.layers):
         layer_str = f"transformer/layer_{i}/"
-        tf_to_pt_map.update({
-            layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
-            layer_str + "rel_attn/LayerNorm/beta": b.dec_attn.layer_norm.bias,
-            layer_str + "rel_attn/o/kernel": b.dec_attn.o_net.weight,
-            layer_str + "rel_attn/qkv/kernel": b.dec_attn.qkv_net.weight,
-            layer_str + "rel_attn/r/kernel": b.dec_attn.r_net.weight,
-            layer_str + "ff/LayerNorm/gamma": b.pos_ff.layer_norm.weight,
-            layer_str + "ff/LayerNorm/beta": b.pos_ff.layer_norm.bias,
-            layer_str + "ff/layer_1/kernel": b.pos_ff.CoreNet[0].weight,
-            layer_str + "ff/layer_1/bias": b.pos_ff.CoreNet[0].bias,
-            layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
-            layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
-        })
+        tf_to_pt_map.update(
+            {
+                layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
+                layer_str + "rel_attn/LayerNorm/beta": b.dec_attn.layer_norm.bias,
+                layer_str + "rel_attn/o/kernel": b.dec_attn.o_net.weight,
+                layer_str + "rel_attn/qkv/kernel": b.dec_attn.qkv_net.weight,
+                layer_str + "rel_attn/r/kernel": b.dec_attn.r_net.weight,
+                layer_str + "ff/LayerNorm/gamma": b.pos_ff.layer_norm.weight,
+                layer_str + "ff/LayerNorm/beta": b.pos_ff.layer_norm.bias,
+                layer_str + "ff/layer_1/kernel": b.pos_ff.CoreNet[0].weight,
+                layer_str + "ff/layer_1/bias": b.pos_ff.CoreNet[0].bias,
+                layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
+                layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
+            }
+        )
 
     # Relative positioning biases
     if config.untie_r:
@@ -151,9 +155,9 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert pointer.shape == array.shape, (
-                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-                )
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -1234,9 +1238,9 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        assert self.config.pad_token_id is not None or batch_size == 1, (
-            "Cannot handle batch sizes > 1 if no padding token is defined."
-        )
+        assert (
+            self.config.pad_token_id is not None or batch_size == 1
+        ), "Cannot handle batch sizes > 1 if no padding token is defined."
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:

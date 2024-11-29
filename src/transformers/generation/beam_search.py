@@ -309,11 +309,13 @@ class BeamSearchScorer(BeamScorer):
                 next_scores[batch_idx].max().item(), cur_len, decoder_prompt_len
             )
 
-        return UserDict({
-            "next_beam_scores": next_beam_scores.view(-1),
-            "next_beam_tokens": next_beam_tokens.view(-1),
-            "next_beam_indices": next_beam_indices.view(-1),
-        })
+        return UserDict(
+            {
+                "next_beam_scores": next_beam_scores.view(-1),
+                "next_beam_tokens": next_beam_tokens.view(-1),
+                "next_beam_indices": next_beam_indices.view(-1),
+            }
+        )
 
     def finalize(
         self,
@@ -405,11 +407,13 @@ class BeamSearchScorer(BeamScorer):
                 # inserting only the first eos_token_id
                 decoded[i, sent_lengths[i]] = eos_token_id[0]
 
-        return UserDict({
-            "sequences": decoded,
-            "sequence_scores": best_scores,
-            "beam_indices": indices,
-        })
+        return UserDict(
+            {
+                "sequences": decoded,
+                "sequence_scores": best_scores,
+                "beam_indices": indices,
+            }
+        )
 
 
 class ConstrainedBeamSearchScorer(BeamScorer):
@@ -657,11 +661,13 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 next_scores[batch_idx].max().item(), cur_len, decoder_prompt_len
             )
 
-        return UserDict({
-            "next_beam_scores": next_beam_scores.view(-1),
-            "next_beam_tokens": next_beam_tokens.view(-1),
-            "next_beam_indices": next_beam_indices.view(-1),
-        })
+        return UserDict(
+            {
+                "next_beam_scores": next_beam_scores.view(-1),
+                "next_beam_tokens": next_beam_tokens.view(-1),
+                "next_beam_indices": next_beam_indices.view(-1),
+            }
+        )
 
     def step_sentence_constraint(
         self,
@@ -912,11 +918,13 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 # inserting only the first eos_token_id
                 decoded[i, sent_lengths[i]] = eos_token_id[0]
 
-        return UserDict({
-            "sequences": decoded,
-            "sequence_scores": best_scores,
-            "beam_indices": indices,
-        })
+        return UserDict(
+            {
+                "sequences": decoded,
+                "sequence_scores": best_scores,
+                "beam_indices": indices,
+            }
+        )
 
 
 class BeamHypotheses:

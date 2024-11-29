@@ -340,9 +340,9 @@ class FastSpeech2ConformerSpeechDecoderPostnet(nn.Module):
         super().__init__()
         self.config = config
         self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
-        self.layers = nn.ModuleList([
-            FastSpeech2ConformerBatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [FastSpeech2ConformerBatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
+        )
 
     def forward(self, hidden_states: torch.Tensor):
         outputs_before_postnet = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
@@ -877,9 +877,9 @@ class FastSpeech2ConformerEncoder(nn.Module):
 
         self.pos_enc = FastSpeech2ConformerRelPositionalEncoding(config, module_config)
 
-        self.conformer_layers = nn.ModuleList([
-            FastSpeech2ConformerEncoderLayer(config, module_config) for _ in range(module_config["layers"])
-        ])
+        self.conformer_layers = nn.ModuleList(
+            [FastSpeech2ConformerEncoderLayer(config, module_config) for _ in range(module_config["layers"])]
+        )
 
     def forward(
         self,
@@ -1385,28 +1385,32 @@ class HifiGanResidualBlock(nn.Module):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
 
-        self.convs1 = nn.ModuleList([
-            nn.Conv1d(
-                channels,
-                channels,
-                kernel_size,
-                stride=1,
-                dilation=dilation[i],
-                padding=self.get_padding(kernel_size, dilation[i]),
-            )
-            for i in range(len(dilation))
-        ])
-        self.convs2 = nn.ModuleList([
-            nn.Conv1d(
-                channels,
-                channels,
-                kernel_size,
-                stride=1,
-                dilation=1,
-                padding=self.get_padding(kernel_size, 1),
-            )
-            for _ in range(len(dilation))
-        ])
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=dilation[i],
+                    padding=self.get_padding(kernel_size, dilation[i]),
+                )
+                for i in range(len(dilation))
+            ]
+        )
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=self.get_padding(kernel_size, 1),
+                )
+                for _ in range(len(dilation))
+            ]
+        )
 
     def get_padding(self, kernel_size, dilation=1):
         return (kernel_size * dilation - dilation) // 2

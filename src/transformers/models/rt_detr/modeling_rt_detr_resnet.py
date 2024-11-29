@@ -74,29 +74,31 @@ class RTDetrResNetEmbeddings(nn.Module):
 
     def __init__(self, config: RTDetrResNetConfig):
         super().__init__()
-        self.embedder = nn.Sequential(*[
-            RTDetrResNetConvLayer(
-                config.num_channels,
-                config.embedding_size // 2,
-                kernel_size=3,
-                stride=2,
-                activation=config.hidden_act,
-            ),
-            RTDetrResNetConvLayer(
-                config.embedding_size // 2,
-                config.embedding_size // 2,
-                kernel_size=3,
-                stride=1,
-                activation=config.hidden_act,
-            ),
-            RTDetrResNetConvLayer(
-                config.embedding_size // 2,
-                config.embedding_size,
-                kernel_size=3,
-                stride=1,
-                activation=config.hidden_act,
-            ),
-        ])
+        self.embedder = nn.Sequential(
+            *[
+                RTDetrResNetConvLayer(
+                    config.num_channels,
+                    config.embedding_size // 2,
+                    kernel_size=3,
+                    stride=2,
+                    activation=config.hidden_act,
+                ),
+                RTDetrResNetConvLayer(
+                    config.embedding_size // 2,
+                    config.embedding_size // 2,
+                    kernel_size=3,
+                    stride=1,
+                    activation=config.hidden_act,
+                ),
+                RTDetrResNetConvLayer(
+                    config.embedding_size // 2,
+                    config.embedding_size,
+                    kernel_size=3,
+                    stride=1,
+                    activation=config.hidden_act,
+                ),
+            ]
+        )
         self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.num_channels = config.num_channels
 
@@ -146,10 +148,12 @@ class RTDetrResNetBasicLayer(nn.Module):
         super().__init__()
         if in_channels != out_channels:
             self.shortcut = (
-                nn.Sequential(*[
-                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
-                    RTDetrResNetShortCut(in_channels, out_channels, stride=1),
-                ])
+                nn.Sequential(
+                    *[
+                        nn.AvgPool2d(2, 2, 0, ceil_mode=True),
+                        RTDetrResNetShortCut(in_channels, out_channels, stride=1),
+                    ]
+                )
                 if should_apply_shortcut
                 else nn.Identity()
             )
@@ -195,10 +199,14 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
         if stride == 2:
-            self.shortcut = nn.Sequential(*[
-                nn.AvgPool2d(2, 2, 0, ceil_mode=True),
-                RTDetrResNetShortCut(in_channels, out_channels, stride=1) if should_apply_shortcut else nn.Identity(),
-            ])
+            self.shortcut = nn.Sequential(
+                *[
+                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
+                    RTDetrResNetShortCut(in_channels, out_channels, stride=1)
+                    if should_apply_shortcut
+                    else nn.Identity(),
+                ]
+            )
         else:
             self.shortcut = (
                 RTDetrResNetShortCut(in_channels, out_channels, stride=stride)

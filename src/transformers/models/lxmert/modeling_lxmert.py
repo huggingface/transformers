@@ -740,9 +740,9 @@ class LxmertVisualObjHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder_dict = nn.ModuleDict({
-            key: nn.Linear(config.hidden_size, self.visual_losses[key]["num"]) for key in self.visual_losses
-        })
+        self.decoder_dict = nn.ModuleDict(
+            {key: nn.Linear(config.hidden_size, self.visual_losses[key]["num"]) for key in self.visual_losses}
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)

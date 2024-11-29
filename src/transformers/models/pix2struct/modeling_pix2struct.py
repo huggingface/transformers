@@ -1282,10 +1282,12 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
-        self.layer = nn.ModuleList([
-            Pix2StructTextBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i)
-            for i in range(config.num_layers)
-        ])
+        self.layer = nn.ModuleList(
+            [
+                Pix2StructTextBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i)
+                for i in range(config.num_layers)
+            ]
+        )
         self.final_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 

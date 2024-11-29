@@ -830,9 +830,9 @@ class TvltDecoder(nn.Module):
         decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.ModuleList([
-            TvltLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)
-        ])
+        self.decoder_layers = nn.ModuleList(
+            [TvltLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
+        )
 
         self.layernorm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
 

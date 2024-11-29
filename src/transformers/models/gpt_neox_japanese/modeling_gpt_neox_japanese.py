@@ -546,9 +546,9 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         self.config = config
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([
-            GPTNeoXJapaneseLayer(config=config, layer_number=i) for i in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [GPTNeoXJapaneseLayer(config=config, layer_number=i) for i in range(config.num_hidden_layers)]
+        )
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = GPTNeoXJapaneseRotaryEmbedding(config=config)
 

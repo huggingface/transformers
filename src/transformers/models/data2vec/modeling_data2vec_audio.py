@@ -158,10 +158,12 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate([
-            spec_aug_mask_idx,
-            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
-        ])
+        spec_aug_mask_idx = np.concatenate(
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+            ]
+        )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
@@ -258,9 +260,9 @@ class Data2VecAudioPositionalConvLayer(nn.Module):
 class Data2VecAudioPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layers = nn.ModuleList([
-            Data2VecAudioPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)
-        ])
+        self.layers = nn.ModuleList(
+            [Data2VecAudioPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)]
+        )
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.transpose(1, 2)
@@ -275,9 +277,9 @@ class Data2VecAudioFeatureEncoder(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.conv_layers = nn.ModuleList([
-            Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
-        ])
+        self.conv_layers = nn.ModuleList(
+            [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+        )
         self.gradient_checkpointing = False
         self._requires_grad = True
 

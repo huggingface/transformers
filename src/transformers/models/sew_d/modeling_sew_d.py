@@ -146,10 +146,12 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate([
-            spec_aug_mask_idx,
-            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
-        ])
+        spec_aug_mask_idx = np.concatenate(
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+            ]
+        )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)

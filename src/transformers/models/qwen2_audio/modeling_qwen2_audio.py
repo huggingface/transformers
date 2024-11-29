@@ -698,9 +698,9 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1302,14 +1302,16 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             model_inputs = {"input_ids": input_ids}
 
         feature_attention_mask = kwargs.get("feature_attention_mask", None)
-        model_inputs.update({
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "attention_mask": attention_mask,
-            "input_features": input_features,
-            "feature_attention_mask": feature_attention_mask,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "input_features": input_features,
+                "feature_attention_mask": feature_attention_mask,
+            }
+        )
         return model_inputs
 
     def _update_model_kwargs_for_generation(

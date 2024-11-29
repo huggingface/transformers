@@ -753,9 +753,9 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self._attn_implementation = config._attn_implementation
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.rotary_emb = Starcoder2RotaryEmbedding(config=config)

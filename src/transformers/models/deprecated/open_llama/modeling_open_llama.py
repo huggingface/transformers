@@ -824,12 +824,14 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update({
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "attention_mask": attention_mask,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+            }
+        )
         return model_inputs
 
     @staticmethod

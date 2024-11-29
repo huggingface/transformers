@@ -1261,9 +1261,9 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
             )
 
         depth = len(config.extract_layers)
-        self.reduces = nn.ModuleList([
-            nn.Linear(config.vision_config.hidden_size, config.reduce_dim) for _ in range(depth)
-        ])
+        self.reduces = nn.ModuleList(
+            [nn.Linear(config.vision_config.hidden_size, config.reduce_dim) for _ in range(depth)]
+        )
 
         decoder_config = copy.deepcopy(config.vision_config)
         decoder_config.hidden_size = config.reduce_dim

@@ -506,16 +506,18 @@ class DinatStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.layers = nn.ModuleList([
-            DinatLayer(
-                config=config,
-                dim=dim,
-                num_heads=num_heads,
-                dilation=dilations[i],
-                drop_path_rate=drop_path_rate[i],
-            )
-            for i in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                DinatLayer(
+                    config=config,
+                    dim=dim,
+                    num_heads=num_heads,
+                    dilation=dilations[i],
+                    drop_path_rate=drop_path_rate[i],
+                )
+                for i in range(depth)
+            ]
+        )
 
         # patch merging layer
         if downsample is not None:
@@ -552,18 +554,20 @@ class DinatEncoder(nn.Module):
         self.num_levels = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.levels = nn.ModuleList([
-            DinatStage(
-                config=config,
-                dim=int(config.embed_dim * 2**i_layer),
-                depth=config.depths[i_layer],
-                num_heads=config.num_heads[i_layer],
-                dilations=config.dilations[i_layer],
-                drop_path_rate=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                downsample=DinatDownsampler if (i_layer < self.num_levels - 1) else None,
-            )
-            for i_layer in range(self.num_levels)
-        ])
+        self.levels = nn.ModuleList(
+            [
+                DinatStage(
+                    config=config,
+                    dim=int(config.embed_dim * 2**i_layer),
+                    depth=config.depths[i_layer],
+                    num_heads=config.num_heads[i_layer],
+                    dilations=config.dilations[i_layer],
+                    drop_path_rate=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    downsample=DinatDownsampler if (i_layer < self.num_levels - 1) else None,
+                )
+                for i_layer in range(self.num_levels)
+            ]
+        )
 
     def forward(
         self,

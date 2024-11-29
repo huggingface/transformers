@@ -465,12 +465,12 @@ class BeamSearchScorerTS(torch.nn.Module):
 
         for batch_idx in range(batch_size):
             if self._done[batch_idx]:
-                assert self.hypo_len(batch_idx) >= self.num_beams, (
-                    "Batch can only be done if at least {} beams have been generated".format(self.num_beams)
-                )
-                assert eos_token_id is not None and pad_token_id is not None, (
-                    "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
-                )
+                assert (
+                    self.hypo_len(batch_idx) >= self.num_beams
+                ), "Batch can only be done if at least {} beams have been generated".format(self.num_beams)
+                assert (
+                    eos_token_id is not None and pad_token_id is not None
+                ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                 # pad the batch
                 next_beam_scores[batch_idx, :] = 0
                 next_beam_tokens[batch_idx, :] = pad_token_id
@@ -636,9 +636,9 @@ class BARTBeamSearchGenerator(BARTGenerator):
         num_beams = self.beam_scorer.num_beams
         batch_beam_size, cur_len = input_ids.shape
 
-        assert num_beams * batch_size == batch_beam_size, (
-            f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
-        )
+        assert (
+            num_beams * batch_size == batch_beam_size
+        ), f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
 
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9

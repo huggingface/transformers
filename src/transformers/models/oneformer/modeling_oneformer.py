@@ -1302,12 +1302,14 @@ class OneFormerPixelDecoder(nn.Module):
                 )
             self.input_projections = nn.ModuleList(input_projections_list)
         else:
-            self.input_projections = nn.ModuleList([
-                nn.Sequential(
-                    nn.Conv2d(transformer_in_channels[-1], config.conv_dim, kernel_size=1),
-                    nn.GroupNorm(32, config.conv_dim),
-                )
-            ])
+            self.input_projections = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(transformer_in_channels[-1], config.conv_dim, kernel_size=1),
+                        nn.GroupNorm(32, config.conv_dim),
+                    )
+                ]
+            )
 
         self.encoder = OneFormerPixelDecoderEncoderOnly(config)
 
@@ -2178,9 +2180,9 @@ class OneFormerTransformerDecoder(nn.Module):
 
         self.num_feature_levels = 3
 
-        self.layers = nn.ModuleList([
-            OneFormerTransformerDecoderLayer(config) for _ in range(config.decoder_layers - 1)
-        ])
+        self.layers = nn.ModuleList(
+            [OneFormerTransformerDecoderLayer(config) for _ in range(config.decoder_layers - 1)]
+        )
 
         self.query_input_projection = nn.Conv2d(in_channels, config.hidden_dim, kernel_size=1)
 
@@ -2525,10 +2527,12 @@ class OneFormerTextContextDecoder(nn.Module):
             nn.Linear(visual_dim, transformer_width),
         )
 
-        self.decoder = nn.ModuleList([
-            OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout, layer_norm_eps)
-            for _ in range(transformer_layers)
-        ])
+        self.decoder = nn.ModuleList(
+            [
+                OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout, layer_norm_eps)
+                for _ in range(transformer_layers)
+            ]
+        )
 
         self.out_proj = nn.Sequential(
             nn.LayerNorm(transformer_width, eps=layer_norm_eps), nn.Linear(transformer_width, visual_dim)
@@ -2613,9 +2617,9 @@ class OneFormerTextTransformer(nn.Module):
         super().__init__()
         self.width = width
         self.num_layers = layers
-        self.layers = nn.Sequential(*[
-            OneFormerTextTransformerLayer(width, heads, attn_mask, layer_norm_eps) for _ in range(layers)
-        ])
+        self.layers = nn.Sequential(
+            *[OneFormerTextTransformerLayer(width, heads, attn_mask, layer_norm_eps) for _ in range(layers)]
+        )
         self.use_checkpoint = use_checkpoint
 
     def forward(self, hidden_states: torch.Tensor):

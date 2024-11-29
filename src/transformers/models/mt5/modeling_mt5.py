@@ -713,9 +713,9 @@ def load_tf_weights_in_mt5(model, config, tf_checkpoint_path):
             logger.info(f"Transposing numpy weight of shape {array.shape} for {name}")
             array = np.transpose(array)
         try:
-            assert pointer.shape == array.shape, (
-                f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-            )
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -872,9 +872,9 @@ class MT5Stack(MT5PreTrainedModel):
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
-        self.block = nn.ModuleList([
-            MT5Block(config, has_relative_attention_bias=bool(i == 0), layer_idx=i) for i in range(config.num_layers)
-        ])
+        self.block = nn.ModuleList(
+            [MT5Block(config, has_relative_attention_bias=bool(i == 0), layer_idx=i) for i in range(config.num_layers)]
+        )
         self.final_layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 

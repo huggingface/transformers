@@ -176,10 +176,12 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate([
-            spec_aug_mask_idx,
-            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
-        ])
+        spec_aug_mask_idx = np.concatenate(
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+            ]
+        )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
@@ -657,13 +659,15 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         super().__init__()
         self.config = config
 
-        self.layers = nn.ModuleList([
-            nn.Linear(
-                config.num_mel_bins if i == 0 else config.speech_decoder_prenet_units,
-                config.speech_decoder_prenet_units,
-            )
-            for i in range(config.speech_decoder_prenet_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.Linear(
+                    config.num_mel_bins if i == 0 else config.speech_decoder_prenet_units,
+                    config.speech_decoder_prenet_units,
+                )
+                for i in range(config.speech_decoder_prenet_layers)
+            ]
+        )
 
         self.final_layer = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
         self.encode_positions = SpeechT5ScaledPositionalEncoding(
@@ -750,9 +754,9 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
         self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
         self.prob_out = nn.Linear(config.hidden_size, config.reduction_factor)
 
-        self.layers = nn.ModuleList([
-            SpeechT5BatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [SpeechT5BatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
+        )
 
     def forward(self, hidden_states: torch.Tensor):
         outputs_before_postnet = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
@@ -3205,28 +3209,32 @@ class HifiGanResidualBlock(nn.Module):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
 
-        self.convs1 = nn.ModuleList([
-            nn.Conv1d(
-                channels,
-                channels,
-                kernel_size,
-                stride=1,
-                dilation=dilation[i],
-                padding=self.get_padding(kernel_size, dilation[i]),
-            )
-            for i in range(len(dilation))
-        ])
-        self.convs2 = nn.ModuleList([
-            nn.Conv1d(
-                channels,
-                channels,
-                kernel_size,
-                stride=1,
-                dilation=1,
-                padding=self.get_padding(kernel_size, 1),
-            )
-            for _ in range(len(dilation))
-        ])
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=dilation[i],
+                    padding=self.get_padding(kernel_size, dilation[i]),
+                )
+                for i in range(len(dilation))
+            ]
+        )
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=self.get_padding(kernel_size, 1),
+                )
+                for _ in range(len(dilation))
+            ]
+        )
 
     def get_padding(self, kernel_size, dilation=1):
         return (kernel_size * dilation - dilation) // 2

@@ -753,19 +753,21 @@ class CanineEncoder(nn.Module):
     ):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([
-            CanineLayer(
-                config,
-                local,
-                always_attend_to_first_position,
-                first_position_attends_to_all,
-                attend_from_chunk_width,
-                attend_from_chunk_stride,
-                attend_to_chunk_width,
-                attend_to_chunk_stride,
-            )
-            for _ in range(config.num_hidden_layers)
-        ])
+        self.layer = nn.ModuleList(
+            [
+                CanineLayer(
+                    config,
+                    local,
+                    always_attend_to_first_position,
+                    first_position_attends_to_all,
+                    attend_from_chunk_width,
+                    attend_from_chunk_stride,
+                    attend_to_chunk_width,
+                    attend_to_chunk_stride,
+                )
+                for _ in range(config.num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
 
     def forward(

@@ -635,17 +635,19 @@ class MaskFormerSwinStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.ModuleList([
-            MaskFormerSwinLayer(
-                config=config,
-                dim=dim,
-                input_resolution=input_resolution,
-                num_heads=num_heads,
-                drop_path_rate=drop_path[i],
-                shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-            )
-            for i in range(depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                MaskFormerSwinLayer(
+                    config=config,
+                    dim=dim,
+                    input_resolution=input_resolution,
+                    num_heads=num_heads,
+                    drop_path_rate=drop_path[i],
+                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                )
+                for i in range(depth)
+            ]
+        )
 
         # patch merging layer
         if downsample is not None:
@@ -691,18 +693,20 @@ class MaskFormerSwinEncoder(nn.Module):
         self.num_layers = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.layers = nn.ModuleList([
-            MaskFormerSwinStage(
-                config=config,
-                dim=int(config.embed_dim * 2**i_layer),
-                input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                depth=config.depths[i_layer],
-                num_heads=config.num_heads[i_layer],
-                drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                downsample=MaskFormerSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
-            )
-            for i_layer in range(self.num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                MaskFormerSwinStage(
+                    config=config,
+                    dim=int(config.embed_dim * 2**i_layer),
+                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                    depth=config.depths[i_layer],
+                    num_heads=config.num_heads[i_layer],
+                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    downsample=MaskFormerSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
+                )
+                for i_layer in range(self.num_layers)
+            ]
+        )
 
         self.gradient_checkpointing = False
 
@@ -892,9 +896,9 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         if "stem" in self.out_features:
             raise ValueError("This backbone does not support 'stem' in the `out_features`.")
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-        self.hidden_states_norms = nn.ModuleList([
-            nn.LayerNorm(num_channels) for num_channels in self.num_features[1:]
-        ])
+        self.hidden_states_norms = nn.ModuleList(
+            [nn.LayerNorm(num_channels) for num_channels in self.num_features[1:]]
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -576,12 +576,14 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
             if self.action_weight != 1 or self.reward_weight != 1 or self.value_weight != 1:
                 # make weights
                 n_states = int(np.ceil(sequence_length / self.transition_dim))
-                weights = torch.cat([
-                    torch.ones(self.observation_dim, device=trajectories.device),
-                    torch.ones(self.action_dim, device=trajectories.device) * self.action_weight,
-                    torch.ones(1, device=trajectories.device) * self.reward_weight,
-                    torch.ones(1, device=trajectories.device) * self.value_weight,
-                ])
+                weights = torch.cat(
+                    [
+                        torch.ones(self.observation_dim, device=trajectories.device),
+                        torch.ones(self.action_dim, device=trajectories.device) * self.action_weight,
+                        torch.ones(1, device=trajectories.device) * self.reward_weight,
+                        torch.ones(1, device=trajectories.device) * self.value_weight,
+                    ]
+                )
                 weights = weights.repeat(n_states)
                 weights = weights[1:].repeat(batch_size, 1)
                 loss = loss * weights.view(-1)

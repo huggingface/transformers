@@ -93,10 +93,12 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
     """
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
-        tokens = torch.cat([
-            torch.zeros(max_n_lyric_tokens - len(full_tokens), dtype=torch.long).to(full_tokens.device),
-            full_tokens,
-        ])
+        tokens = torch.cat(
+            [
+                torch.zeros(max_n_lyric_tokens - len(full_tokens), dtype=torch.long).to(full_tokens.device),
+                full_tokens,
+            ]
+        )
         indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
     else:
         midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
@@ -2299,9 +2301,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         vqvae_config = config.vqvae_config
         self.vqvae = JukeboxVQVAE(vqvae_config)
         self.set_shared_params(config)
-        self.priors = nn.ModuleList([
-            JukeboxPrior(config.prior_configs[level], level) for level in range(config.nb_priors)
-        ])
+        self.priors = nn.ModuleList(
+            [JukeboxPrior(config.prior_configs[level], level) for level in range(config.nb_priors)]
+        )
 
     def set_shared_params(self, model_config):
         """

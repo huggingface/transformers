@@ -688,17 +688,19 @@ class DonutSwinStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.ModuleList([
-            DonutSwinLayer(
-                config=config,
-                dim=dim,
-                input_resolution=input_resolution,
-                num_heads=num_heads,
-                drop_path_rate=drop_path[i],
-                shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-            )
-            for i in range(depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                DonutSwinLayer(
+                    config=config,
+                    dim=dim,
+                    input_resolution=input_resolution,
+                    num_heads=num_heads,
+                    drop_path_rate=drop_path[i],
+                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                )
+                for i in range(depth)
+            ]
+        )
 
         # patch merging layer
         if downsample is not None:
@@ -748,18 +750,20 @@ class DonutSwinEncoder(nn.Module):
         self.num_layers = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.layers = nn.ModuleList([
-            DonutSwinStage(
-                config=config,
-                dim=int(config.embed_dim * 2**i_layer),
-                input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                depth=config.depths[i_layer],
-                num_heads=config.num_heads[i_layer],
-                drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                downsample=DonutSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
-            )
-            for i_layer in range(self.num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                DonutSwinStage(
+                    config=config,
+                    dim=int(config.embed_dim * 2**i_layer),
+                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                    depth=config.depths[i_layer],
+                    num_heads=config.num_heads[i_layer],
+                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    downsample=DonutSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
+                )
+                for i_layer in range(self.num_layers)
+            ]
+        )
 
         self.gradient_checkpointing = False
 

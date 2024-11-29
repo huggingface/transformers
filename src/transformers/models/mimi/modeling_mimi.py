@@ -854,9 +854,9 @@ class MimiTransformerModel(nn.Module):
     def __init__(self, config: MimiConfig):
         super().__init__()
 
-        self.layers = nn.ModuleList([
-            MimiTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [MimiTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self._attn_implementation = config._attn_implementation
 
         self.gradient_checkpointing = False

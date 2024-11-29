@@ -71,15 +71,19 @@ class XPathEmbeddings(nn.Module):
         self.xpath_unitseq2_inner = nn.Linear(config.xpath_unit_hidden_size * self.max_depth, 4 * config.hidden_size)
         self.inner2emb = nn.Linear(4 * config.hidden_size, config.hidden_size)
 
-        self.xpath_tag_sub_embeddings = nn.ModuleList([
-            nn.Embedding(config.max_xpath_tag_unit_embeddings, config.xpath_unit_hidden_size)
-            for _ in range(self.max_depth)
-        ])
+        self.xpath_tag_sub_embeddings = nn.ModuleList(
+            [
+                nn.Embedding(config.max_xpath_tag_unit_embeddings, config.xpath_unit_hidden_size)
+                for _ in range(self.max_depth)
+            ]
+        )
 
-        self.xpath_subs_sub_embeddings = nn.ModuleList([
-            nn.Embedding(config.max_xpath_subs_unit_embeddings, config.xpath_unit_hidden_size)
-            for _ in range(self.max_depth)
-        ])
+        self.xpath_subs_sub_embeddings = nn.ModuleList(
+            [
+                nn.Embedding(config.max_xpath_subs_unit_embeddings, config.xpath_unit_hidden_size)
+                for _ in range(self.max_depth)
+            ]
+        )
 
     def forward(self, xpath_tags_seq=None, xpath_subs_seq=None):
         xpath_tags_embeddings = []

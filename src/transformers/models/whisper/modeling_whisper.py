@@ -179,10 +179,12 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate([
-            spec_aug_mask_idx,
-            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
-        ])
+        spec_aug_mask_idx = np.concatenate(
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+            ]
+        )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
@@ -1039,9 +1041,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1110,9 +1112,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
-        self.layers = nn.ModuleList([
-            WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
+        )
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self._use_sdpa = config._attn_implementation == "sdpa"
 

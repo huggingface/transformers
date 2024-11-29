@@ -563,10 +563,12 @@ class LayoutLMv2VisualBackbone(nn.Module):
             logger.warning("using `AvgPool2d` instead of `AdaptiveAvgPool2d`")
             input_shape = (224, 224)
             backbone_stride = self.backbone.output_shape()[self.out_feature_key].stride
-            self.pool = nn.AvgPool2d((
-                math.ceil(math.ceil(input_shape[0] / backbone_stride) / config.image_feature_pool_shape[0]),
-                math.ceil(math.ceil(input_shape[1] / backbone_stride) / config.image_feature_pool_shape[1]),
-            ))
+            self.pool = nn.AvgPool2d(
+                (
+                    math.ceil(math.ceil(input_shape[0] / backbone_stride) / config.image_feature_pool_shape[0]),
+                    math.ceil(math.ceil(input_shape[1] / backbone_stride) / config.image_feature_pool_shape[1]),
+                )
+            )
         else:
             self.pool = nn.AdaptiveAvgPool2d(config.image_feature_pool_shape[:2])
         if len(config.image_feature_pool_shape) == 2:

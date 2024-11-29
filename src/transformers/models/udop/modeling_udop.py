@@ -362,14 +362,14 @@ def combine_image_text_embeddings(
         max_len = image_embeddings.size(1)
     else:
         max_len = max_len - inputs_embeds.size(1)
-    inputs_vision_patches = torch.stack([
-        pad_sequence(item, max_len, torch.zeros_like(image_embeddings[0, 0])) for item in input_vision_patches
-    ])
+    inputs_vision_patches = torch.stack(
+        [pad_sequence(item, max_len, torch.zeros_like(image_embeddings[0, 0])) for item in input_vision_patches]
+    )
     visual_bbox = torch.stack([pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_bbox])
     if attention_mask is not None:
-        visual_attention_mask = torch.stack([
-            pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask
-        ])
+        visual_attention_mask = torch.stack(
+            [pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask]
+        )
 
     inputs_embeds = torch.cat([inputs_embeds, inputs_vision_patches], 1)
     bbox = torch.cat([bbox, visual_bbox], 1)
@@ -1269,9 +1269,9 @@ class UdopStack(UdopPreTrainedModel):
         self._max_length = config.max_length
         self.num_layers = config.num_layers
 
-        self.block = nn.ModuleList([
-            UdopBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i) for i in range(self.num_layers)
-        ])
+        self.block = nn.ModuleList(
+            [UdopBlock(config, has_relative_attention_bias=bool(i == 0), layer_idx=i) for i in range(self.num_layers)]
+        )
         self.final_layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
         self.dropout = nn.Dropout(config.dropout_rate)

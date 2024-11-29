@@ -869,9 +869,9 @@ class PhiModel(PhiPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
-        self.layers = nn.ModuleList([
-            PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = PhiRotaryEmbedding(config=config)
 

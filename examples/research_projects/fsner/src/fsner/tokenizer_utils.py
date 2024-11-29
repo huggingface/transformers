@@ -80,12 +80,14 @@ class FSNERTokenizerUtils:
             for start_id in start_indexes:
                 for end_id in end_indexes:
                     if start_id < end_id:
-                        output.append((
-                            start_id,
-                            end_id,
-                            p_start[idx][start_id].item(),
-                            p_end[idx][end_id].item(),
-                        ))
+                        output.append(
+                            (
+                                start_id,
+                                end_id,
+                                p_start[idx][start_id].item(),
+                                p_end[idx][end_id].item(),
+                            )
+                        )
 
             output.sort(key=lambda tup: (tup[2] * tup[3]), reverse=True)
             temp = []

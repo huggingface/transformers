@@ -134,11 +134,13 @@ def _pad_extra_bos_eos_tokens(
             # locate where the valid tokens end and then add the eos token
             if isin_mps_friendly(each_input_id, pad_token_id).sum():
                 pos = torch.where(each_input_id == pad_token_id)[0].min()
-                modified_input_ids[i] = torch.concatenate([
-                    each_input_id[:pos],
-                    torch.tensor([eos_token_id], device=input_ids.device),
-                    each_input_id[pos:],
-                ])
+                modified_input_ids[i] = torch.concatenate(
+                    [
+                        each_input_id[:pos],
+                        torch.tensor([eos_token_id], device=input_ids.device),
+                        each_input_id[pos:],
+                    ]
+                )
             else:
                 # if there are no pad tokens present, then add eos to the end
                 modified_input_ids[i] = torch.nn.functional.pad(each_input_id, (0, 1), value=eos_token_id)
@@ -600,15 +602,17 @@ class ClvpConditioningEncoder(nn.Module):
 
         # define group norms to be used before each attention layer
         num_groups = self.compute_groupnorm_groups(self.decoder_config.hidden_size)
-        self.group_norms = nn.ModuleList([
-            nn.GroupNorm(num_groups, self.decoder_config.hidden_size, eps=1e-5, affine=True)
-            for _ in range(self.decoder_config.num_mel_attn_blocks)
-        ])
+        self.group_norms = nn.ModuleList(
+            [
+                nn.GroupNorm(num_groups, self.decoder_config.hidden_size, eps=1e-5, affine=True)
+                for _ in range(self.decoder_config.num_mel_attn_blocks)
+            ]
+        )
 
         # define the attention layers
-        self.mel_attn_blocks = nn.ModuleList([
-            ClvpSelfAttention(self.decoder_config) for _ in range(self.decoder_config.num_mel_attn_blocks)
-        ])
+        self.mel_attn_blocks = nn.ModuleList(
+            [ClvpSelfAttention(self.decoder_config) for _ in range(self.decoder_config.num_mel_attn_blocks)]
+        )
 
         self.gradient_checkpointing = False
 
@@ -1407,12 +1411,14 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update({
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "token_type_ids": token_type_ids,
-        })
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+                "token_type_ids": token_type_ids,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(CLVP_DECODER_INPUTS_DOCSTRING)

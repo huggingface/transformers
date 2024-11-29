@@ -1922,9 +1922,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             total_decoder_name="",
             total_encoder_name="",
         ):
-            assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
-                f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
-            )
+            assert isinstance(decoder_pointer, nn.Module) and isinstance(
+                encoder_pointer, nn.Module
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -1938,9 +1938,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             encoder_modules = encoder_pointer._modules
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
-                assert len(encoder_modules) > 0, (
-                    f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
-                )
+                assert (
+                    len(encoder_modules) > 0
+                ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
                 all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
@@ -4118,11 +4118,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hf_quantizer is not None:
                 special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
 
-            special_dtypes.update({
-                name: torch.float32
-                for name, _ in model.named_parameters()
-                if any(m in name for m in keep_in_fp32_modules)
-            })
+            special_dtypes.update(
+                {
+                    name: torch.float32
+                    for name, _ in model.named_parameters()
+                    if any(m in name for m in keep_in_fp32_modules)
+                }
+            )
 
             target_dtype = torch_dtype
 
@@ -4604,11 +4606,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                             pass
                         else:
-                            mismatched_keys.append((
-                                checkpoint_key,
-                                state_dict[checkpoint_key].shape,
-                                model_state_dict[model_key].shape,
-                            ))
+                            mismatched_keys.append(
+                                (
+                                    checkpoint_key,
+                                    state_dict[checkpoint_key].shape,
+                                    model_state_dict[model_key].shape,
+                                )
+                            )
                             del state_dict[checkpoint_key]
             return mismatched_keys
 
@@ -4822,10 +4826,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " training."
             )
         if len(mismatched_keys) > 0:
-            mismatched_warning = "\n".join([
-                f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
-                for key, shape1, shape2 in mismatched_keys
-            ])
+            mismatched_warning = "\n".join(
+                [
+                    f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                    for key, shape1, shape2 in mismatched_keys
+                ]
+            )
             logger.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
@@ -4840,9 +4846,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # torch.nn.ParameterList is a special case where two parameter keywords
         # are appended to the module name, *e.g.* bert.special_embeddings.0
-        module_keys = module_keys.union({
-            ".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()
-        })
+        module_keys = module_keys.union(
+            {".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()}
+        )
 
         retrieved_modules = []
         # retrieve all modules that has at least one missing weight name
@@ -5182,9 +5188,9 @@ class PoolerEndLogits(nn.Module):
         Returns:
             `torch.Tensor`: The end logits for SQuAD.
         """
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -5250,9 +5256,9 @@ class PoolerAnswerClass(nn.Module):
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
             start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
@@ -5552,9 +5558,9 @@ def expand_device_map(device_map, param_names, start_prefix):
     new_device_map = {}
     param_names = [p[len(start_prefix) :] for p in param_names if p.startswith(start_prefix)]
     for module, device in device_map.items():
-        new_device_map.update({
-            p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""
-        })
+        new_device_map.update(
+            {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
+        )
     return new_device_map
 
 

@@ -576,10 +576,12 @@ class BeitRelativePositionBias(nn.Module):
         )
         new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
 
-        new_relative_position_bias_table = torch.cat([
-            new_sub_table,
-            old_relative_position_bias_table[old_num_relative_distance - 3 :],
-        ])
+        new_relative_position_bias_table = torch.cat(
+            [
+                new_sub_table,
+                old_relative_position_bias_table[old_num_relative_distance - 3 :],
+            ]
+        )
 
         key = window_size
         if key not in self.relative_position_indices.keys():
@@ -615,14 +617,16 @@ class BeitEncoder(nn.Module):
 
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layer = nn.ModuleList([
-            BeitLayer(
-                config,
-                window_size=window_size if config.use_relative_position_bias else None,
-                drop_path_rate=dpr[i],
-            )
-            for i in range(config.num_hidden_layers)
-        ])
+        self.layer = nn.ModuleList(
+            [
+                BeitLayer(
+                    config,
+                    window_size=window_size if config.use_relative_position_bias else None,
+                    drop_path_rate=dpr[i],
+                )
+                for i in range(config.num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
 
     def forward(

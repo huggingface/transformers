@@ -1211,9 +1211,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.vocabulary_mapping = ChameleonImageVocabularyMapping(config.vocabulary_map)
         decoder_layer = ChameleonDecoderLayer if not self.config.swin_norm else ChameleonSwinDecoderLayer
-        self.layers = nn.ModuleList([
-            decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.vqmodel = ChameleonVQVAE(config.vq_config)
         self.gradient_checkpointing = False
@@ -1679,11 +1679,13 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values
 
-        model_inputs.update({
-            "position_ids": position_ids,
-            "cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
         return model_inputs

@@ -705,11 +705,13 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_size = self.patch_size
-            patch_attention_mask = torch.ones((
-                batch_size,
-                pixel_values.size(2) // patch_size,
-                pixel_values.size(3) // patch_size,
-            ))
+            patch_attention_mask = torch.ones(
+                (
+                    batch_size,
+                    pixel_values.size(2) // patch_size,
+                    pixel_values.size(3) // patch_size,
+                )
+            )
             patch_attention_mask = patch_attention_mask.to(dtype=torch.bool, device=pixel_values.device)
 
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
@@ -1290,15 +1292,17 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         else:
             pixel_values = pixel_values
             pixel_attention_mask = pixel_attention_mask
-        model_inputs.update({
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "pixel_attention_mask": pixel_attention_mask,
-            "image_hidden_states": image_hidden_states,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "pixel_attention_mask": pixel_attention_mask,
+                "image_hidden_states": image_hidden_states,
+            }
+        )
         return model_inputs
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration._update_model_kwargs_for_generation

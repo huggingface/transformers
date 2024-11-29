@@ -248,9 +248,9 @@ class MgpstrEncoder(nn.Module):
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
 
-        self.blocks = nn.Sequential(*[
-            MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)
-        ])
+        self.blocks = nn.Sequential(
+            *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
+        )
 
     def forward(self, hidden_states, output_attentions=False, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None

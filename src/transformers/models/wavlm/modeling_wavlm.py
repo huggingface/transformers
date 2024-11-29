@@ -162,10 +162,12 @@ def _compute_mask_indices(
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
 
-        spec_aug_mask_idx = np.concatenate([
-            spec_aug_mask_idx,
-            np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
-        ])
+        spec_aug_mask_idx = np.concatenate(
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+            ]
+        )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
@@ -674,9 +676,9 @@ class WavLMEncoder(nn.Module):
         self.pos_conv_embed = WavLMPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([
-            WavLMEncoderLayer(config, has_relative_position_bias=(i == 0)) for i in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [WavLMEncoderLayer(config, has_relative_position_bias=(i == 0)) for i in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -756,10 +758,12 @@ class WavLMEncoderStableLayerNorm(nn.Module):
         self.pos_conv_embed = WavLMPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([
-            WavLMEncoderLayerStableLayerNorm(config, has_relative_position_bias=(i == 0))
-            for i in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                WavLMEncoderLayerStableLayerNorm(config, has_relative_position_bias=(i == 0))
+                for i in range(config.num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
 
     def forward(

@@ -95,12 +95,14 @@ class SegGptModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
-        prompt_pixel_values = floats_tensor([
-            self.batch_size,
-            self.num_channels,
-            self.image_size // 2,
-            self.image_size,
-        ])
+        prompt_pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.num_channels,
+                self.image_size // 2,
+                self.image_size,
+            ]
+        )
         prompt_masks = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
 
         labels = None
@@ -379,11 +381,13 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 3, 896, 448))
         self.assertEqual(outputs.pred_masks.shape, expected_shape)
 
-        expected_slice = torch.tensor([
-            [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
-            [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
-            [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
-        ]).to(torch_device)
+        expected_slice = torch.tensor(
+            [
+                [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
+                [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
+                [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
+            ]
+        ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_slice, atol=1e-4))
 
@@ -418,11 +422,13 @@ class SegGptModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, feature_ensemble=True)
 
         expected_shape = torch.Size((2, 3, 896, 448))
-        expected_slice = torch.tensor([
-            [[-2.1201, -2.1192, -2.1189], [-2.1217, -2.1210, -2.1204], [-2.1216, -2.1202, -2.1194]],
-            [[-2.0393, -2.0390, -2.0387], [-2.0402, -2.0402, -2.0397], [-2.0400, -2.0394, -2.0388]],
-            [[-1.8083, -1.8076, -1.8077], [-1.8105, -1.8102, -1.8099], [-1.8105, -1.8095, -1.8090]],
-        ]).to(torch_device)
+        expected_slice = torch.tensor(
+            [
+                [[-2.1201, -2.1192, -2.1189], [-2.1217, -2.1210, -2.1204], [-2.1216, -2.1202, -2.1194]],
+                [[-2.0393, -2.0390, -2.0387], [-2.0402, -2.0402, -2.0397], [-2.0400, -2.0394, -2.0388]],
+                [[-1.8083, -1.8076, -1.8077], [-1.8105, -1.8102, -1.8099], [-1.8105, -1.8095, -1.8090]],
+            ]
+        ).to(torch_device)
 
         self.assertEqual(outputs.pred_masks.shape, expected_shape)
         self.assertTrue(torch.allclose(outputs.pred_masks[0, :, 448:451, :3], expected_slice, atol=4e-4))

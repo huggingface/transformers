@@ -2478,10 +2478,12 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             num_channels=self.num_query_channels,
             **decoder_kwargs,
         )
-        self.padding = nn.ParameterDict({
-            modality: nn.Parameter(torch.randn(1, self.num_query_channels - decoder.num_query_channels))
-            for modality, decoder in modalities.items()
-        })
+        self.padding = nn.ParameterDict(
+            {
+                modality: nn.Parameter(torch.randn(1, self.num_query_channels - decoder.num_query_channels))
+                for modality, decoder in modalities.items()
+            }
+        )
 
     @property
     def num_query_channels(self) -> int:
@@ -3435,13 +3437,15 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         self.modalities = nn.ModuleDict(modalities)
         self.min_padding_size = min_padding_size
         self.mask_probs = mask_probs if mask_probs is not None else {}
-        self.padding = nn.ParameterDict({
-            modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
-            for modality, preprocessor in modalities.items()
-        })
-        self.mask = nn.ParameterDict({
-            modality: nn.Parameter(torch.randn(1, self.num_channels)) for modality, _ in self.mask_probs.items()
-        })
+        self.padding = nn.ParameterDict(
+            {
+                modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
+                for modality, preprocessor in modalities.items()
+            }
+        )
+        self.mask = nn.ParameterDict(
+            {modality: nn.Parameter(torch.randn(1, self.num_channels)) for modality, _ in self.mask_probs.items()}
+        )
 
     @property
     def num_channels(self) -> int:

@@ -867,17 +867,19 @@ class MobileViTV2ASPP(nn.Module):
         )
         self.convs.append(in_projection)
 
-        self.convs.extend([
-            MobileViTV2ConvLayer(
-                config,
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=3,
-                dilation=rate,
-                use_activation="relu",
-            )
-            for rate in config.atrous_rates
-        ])
+        self.convs.extend(
+            [
+                MobileViTV2ConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=3,
+                    dilation=rate,
+                    use_activation="relu",
+                )
+                for rate in config.atrous_rates
+            ]
+        )
 
         pool_layer = MobileViTV2ASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)

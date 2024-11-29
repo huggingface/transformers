@@ -806,9 +806,9 @@ class GemmaDecoderLayer(LlamaDecoderLayer):
 class GemmaModel(LlamaModel):
     def __init__(self, config: GemmaConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList([
-            GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.rotary_emb  # Gemma does not implement rotary emb at the modeling level yet!
         self.post_init()

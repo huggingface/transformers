@@ -1806,12 +1806,14 @@ class WhisperGenerationMixin(GenerationMixin):
                 sliced_tokens = seek_sequence[last_slice:current_slice]
                 start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
-                segments.append({
-                    "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
-                    "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
-                    "tokens": sliced_tokens,
-                    "result": seek_outputs[idx],
-                })
+                segments.append(
+                    {
+                        "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
+                        "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
+                        "tokens": sliced_tokens,
+                        "result": seek_outputs[idx],
+                    }
+                )
                 if return_token_timestamps:
                     segments[-1]["token_timestamps"] = (
                         token_timestamps[last_slice:current_slice] + time_offset[prev_idx]

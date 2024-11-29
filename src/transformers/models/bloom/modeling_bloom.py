@@ -921,12 +921,14 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
                 dim=-1,
             )
 
-        model_inputs.update({
-            "cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-        })
+        model_inputs.update(
+            {
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)

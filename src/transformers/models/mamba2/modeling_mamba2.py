@@ -1019,12 +1019,14 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update({
-            "attention_mask": attention_mask,
-            "cache_params": cache_params,
-            "use_cache": use_cache,
-            "cache_position": cache_position,
-        })
+        model_inputs.update(
+            {
+                "attention_mask": attention_mask,
+                "cache_params": cache_params,
+                "use_cache": use_cache,
+                "cache_position": cache_position,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING)

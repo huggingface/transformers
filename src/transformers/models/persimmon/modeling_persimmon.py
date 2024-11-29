@@ -588,9 +588,9 @@ class PersimmonModel(PersimmonPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            PersimmonDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [PersimmonDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.rotary_emb = PersimmonRotaryEmbedding(config=config)

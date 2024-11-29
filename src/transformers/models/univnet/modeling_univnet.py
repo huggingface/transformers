@@ -390,9 +390,9 @@ class UnivNetLvcBlock(nn.Module):
 
         self.kernel_predictor = UnivNetKernelPredictor(config, self.kernel_size, self.num_blocks)
 
-        self.resblocks = nn.ModuleList([
-            UnivNetLvcResidualBlock(config, self.kernel_size, self.dilations[i]) for i in range(self.num_blocks)
-        ])
+        self.resblocks = nn.ModuleList(
+            [UnivNetLvcResidualBlock(config, self.kernel_size, self.dilations[i]) for i in range(self.num_blocks)]
+        )
 
     def forward(self, hidden_states: torch.Tensor, spectrogram: torch.Tensor):
         # hidden_states: (batch_size, hidden_channels, seq_length)
@@ -503,14 +503,16 @@ class UnivNetModel(PreTrainedModel):
             hop_length = hop_length * stride
             hop_lengths.append(hop_length)
 
-        self.resblocks = nn.ModuleList([
-            UnivNetLvcBlock(
-                config,
-                layer_id=i,
-                lvc_hop_size=hop_lengths[i],
-            )
-            for i in range(num_layers)
-        ])
+        self.resblocks = nn.ModuleList(
+            [
+                UnivNetLvcBlock(
+                    config,
+                    layer_id=i,
+                    lvc_hop_size=hop_lengths[i],
+                )
+                for i in range(num_layers)
+            ]
+        )
 
         self.conv_post = nn.Conv1d(config.model_hidden_channels, 1, 7, padding=3, padding_mode="reflect")
 

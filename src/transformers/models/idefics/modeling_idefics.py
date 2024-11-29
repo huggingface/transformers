@@ -1042,15 +1042,15 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 perceiver_config.resampler_n_latents,
             )
 
-        self.layers = nn.ModuleList([
-            IdeficsDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [IdeficsDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
+        )
 
         self.cross_layer_interval = config.cross_layer_interval
         num_cross_layers = config.num_hidden_layers // self.cross_layer_interval
-        self.gated_cross_attn_layers = nn.ModuleList([
-            IdeficsGatedCrossAttentionLayer(config) for _ in range(num_cross_layers)
-        ])
+        self.gated_cross_attn_layers = nn.ModuleList(
+            [IdeficsGatedCrossAttentionLayer(config) for _ in range(num_cross_layers)]
+        )
         self.gradient_checkpointing = False
 
         self.norm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1698,20 +1698,24 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             model_inputs.update({"inputs_embeds": inputs_embeds, "input_ids": None})
         else:
             # The clone here is for the same reason as for `position_ids`.
-            model_inputs.update({
-                "input_ids": input_ids.clone(memory_format=torch.contiguous_format),
-                "inputs_embeds": None,
-            })
+            model_inputs.update(
+                {
+                    "input_ids": input_ids.clone(memory_format=torch.contiguous_format),
+                    "inputs_embeds": None,
+                }
+            )
 
-        model_inputs.update({
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "cache_position": cache_position,
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "image_attention_mask": image_attention_mask,
-            "interpolate_pos_encoding": kwargs.get("interpolate_pos_encoding", False),
-        })
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "cache_position": cache_position,
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "image_attention_mask": image_attention_mask,
+                "interpolate_pos_encoding": kwargs.get("interpolate_pos_encoding", False),
+            }
+        )
 
         return model_inputs
 

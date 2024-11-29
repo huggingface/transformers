@@ -1098,13 +1098,15 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update({
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        })
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+            }
+        )
         return model_inputs
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
@@ -1279,9 +1281,9 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        assert self.config.pad_token_id is not None or batch_size == 1, (
-            "Cannot handle batch sizes > 1 if no padding token is defined."
-        )
+        assert (
+            self.config.pad_token_id is not None or batch_size == 1
+        ), "Cannot handle batch sizes > 1 if no padding token is defined."
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:

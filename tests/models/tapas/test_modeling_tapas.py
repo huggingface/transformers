@@ -949,23 +949,29 @@ class TapasUtilitiesTest(unittest.TestCase):
         Returns:
         SegmentedTensors with the tables.
         """
-        values = torch.tensor([
-            [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
-            [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
-        ])
+        values = torch.tensor(
+            [
+                [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
+                [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
+            ]
+        )
         row_index = IndexMap(
-            indices=torch.tensor([
-                [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
-                [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
-            ]),
+            indices=torch.tensor(
+                [
+                    [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+                    [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+                ]
+            ),
             num_segments=3,
             batch_dims=1,
         )
         col_index = IndexMap(
-            indices=torch.tensor([
-                [[0, 0, 1], [0, 0, 1], [0, 0, 1]],
-                [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
-            ]),
+            indices=torch.tensor(
+                [
+                    [[0, 0, 1], [0, 0, 1], [0, 0, 1]],
+                    [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
+                ]
+            ),
             num_segments=3,
             batch_dims=1,
         )

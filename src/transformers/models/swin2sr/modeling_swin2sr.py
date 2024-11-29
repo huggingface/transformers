@@ -615,17 +615,19 @@ class Swin2SRStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.layers = nn.ModuleList([
-            Swin2SRLayer(
-                config=config,
-                dim=dim,
-                input_resolution=input_resolution,
-                num_heads=num_heads,
-                shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-                pretrained_window_size=pretrained_window_size,
-            )
-            for i in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                Swin2SRLayer(
+                    config=config,
+                    dim=dim,
+                    input_resolution=input_resolution,
+                    num_heads=num_heads,
+                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                    pretrained_window_size=pretrained_window_size,
+                )
+                for i in range(depth)
+            ]
+        )
 
         if config.resi_connection == "1conv":
             self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
@@ -681,18 +683,20 @@ class Swin2SREncoder(nn.Module):
         self.num_stages = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.stages = nn.ModuleList([
-            Swin2SRStage(
-                config=config,
-                dim=config.embed_dim,
-                input_resolution=(grid_size[0], grid_size[1]),
-                depth=config.depths[stage_idx],
-                num_heads=config.num_heads[stage_idx],
-                drop_path=dpr[sum(config.depths[:stage_idx]) : sum(config.depths[: stage_idx + 1])],
-                pretrained_window_size=0,
-            )
-            for stage_idx in range(self.num_stages)
-        ])
+        self.stages = nn.ModuleList(
+            [
+                Swin2SRStage(
+                    config=config,
+                    dim=config.embed_dim,
+                    input_resolution=(grid_size[0], grid_size[1]),
+                    depth=config.depths[stage_idx],
+                    num_heads=config.num_heads[stage_idx],
+                    drop_path=dpr[sum(config.depths[:stage_idx]) : sum(config.depths[: stage_idx + 1])],
+                    pretrained_window_size=0,
+                )
+                for stage_idx in range(self.num_stages)
+            ]
+        )
 
         self.gradient_checkpointing = False
 

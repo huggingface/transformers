@@ -451,25 +451,27 @@ class CvtStage(nn.Module):
 
         drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
 
-        self.layers = nn.Sequential(*[
-            CvtLayer(
-                num_heads=config.num_heads[self.stage],
-                embed_dim=config.embed_dim[self.stage],
-                kernel_size=config.kernel_qkv[self.stage],
-                padding_q=config.padding_q[self.stage],
-                padding_kv=config.padding_kv[self.stage],
-                stride_kv=config.stride_kv[self.stage],
-                stride_q=config.stride_q[self.stage],
-                qkv_projection_method=config.qkv_projection_method[self.stage],
-                qkv_bias=config.qkv_bias[self.stage],
-                attention_drop_rate=config.attention_drop_rate[self.stage],
-                drop_rate=config.drop_rate[self.stage],
-                drop_path_rate=drop_path_rates[self.stage],
-                mlp_ratio=config.mlp_ratio[self.stage],
-                with_cls_token=config.cls_token[self.stage],
-            )
-            for _ in range(config.depth[self.stage])
-        ])
+        self.layers = nn.Sequential(
+            *[
+                CvtLayer(
+                    num_heads=config.num_heads[self.stage],
+                    embed_dim=config.embed_dim[self.stage],
+                    kernel_size=config.kernel_qkv[self.stage],
+                    padding_q=config.padding_q[self.stage],
+                    padding_kv=config.padding_kv[self.stage],
+                    stride_kv=config.stride_kv[self.stage],
+                    stride_q=config.stride_q[self.stage],
+                    qkv_projection_method=config.qkv_projection_method[self.stage],
+                    qkv_bias=config.qkv_bias[self.stage],
+                    attention_drop_rate=config.attention_drop_rate[self.stage],
+                    drop_rate=config.drop_rate[self.stage],
+                    drop_path_rate=drop_path_rates[self.stage],
+                    mlp_ratio=config.mlp_ratio[self.stage],
+                    with_cls_token=config.cls_token[self.stage],
+                )
+                for _ in range(config.depth[self.stage])
+            ]
+        )
 
     def forward(self, hidden_state):
         cls_token = None

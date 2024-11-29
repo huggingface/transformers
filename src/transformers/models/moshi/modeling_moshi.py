@@ -1036,16 +1036,18 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         self.text_embed_tokens = nn.Embedding(config.vocab_size + 1, config.hidden_size)
 
         # the last codebook is never used as input
-        self.embed_tokens = nn.ModuleList([
-            nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(config.num_codebooks - 1)
-        ])
+        self.embed_tokens = nn.ModuleList(
+            [nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(config.num_codebooks - 1)]
+        )
 
         self.input_projections = MoshiFlexibleLinear(config.input_size, config.hidden_size, config.num_codebooks)
 
-        self.layers = nn.ModuleList([
-            MoshiDecoderLayer(config, layer_idx, use_flexible_linear=True, use_rope=False)
-            for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                MoshiDecoderLayer(config, layer_idx, use_flexible_linear=True, use_rope=False)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
+        )
 
         self.lm_heads = MoshiFlexibleLinear(config.hidden_size, config.audio_vocab_size, config.num_codebooks)
         self._attn_implementation = config._attn_implementation
@@ -1417,10 +1419,12 @@ class MoshiModel(MoshiPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size + 1, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            MoshiDecoderLayer(config, layer_idx, use_flexible_linear=False)
-            for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                MoshiDecoderLayer(config, layer_idx, use_flexible_linear=False)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
+        )
         self.norm = MoshiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
@@ -1858,9 +1862,9 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     def __init__(self, config: MoshiConfig):
         super().__init__(config)
         # We have 2 * num_codebooks audio embedding layers because we have the user input channel and the model output channel.
-        self.embed_tokens = nn.ModuleList([
-            nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(2 * config.num_codebooks)
-        ])
+        self.embed_tokens = nn.ModuleList(
+            [nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(2 * config.num_codebooks)]
+        )
         self.audio_encoder = AutoModel.from_config(
             config.audio_encoder_config, attn_implementation=config._attn_implementation
         )
@@ -1957,9 +1961,9 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 inputs_embeds = self.decoder.model.embed_tokens(input_ids)
 
             if audio_codes is not None:
-                audio_inputs_embeds = sum([
-                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
-                ])
+                audio_inputs_embeds = sum(
+                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                )
                 inputs_embeds = (
                     audio_inputs_embeds
                     if inputs_embeds is None
@@ -2102,20 +2106,22 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             audio_inputs_embeds = None
             if user_audio_codes is not None and moshi_audio_codes is not None:
                 audio_codes = torch.cat([moshi_audio_codes, user_audio_codes], dim=1)
-                audio_inputs_embeds = sum([
-                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
-                ])
+                audio_inputs_embeds = sum(
+                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                )
             elif moshi_audio_codes is not None:
                 audio_codes = moshi_audio_codes
-                audio_inputs_embeds = sum([
-                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
-                ])
+                audio_inputs_embeds = sum(
+                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                )
             elif user_audio_codes is not None:
                 audio_codes = user_audio_codes
-                audio_inputs_embeds = sum([
-                    self.embed_tokens[codebook](audio_codes[:, codebook + self.num_codebooks])
-                    for codebook in range(audio_codes.shape[1])
-                ])
+                audio_inputs_embeds = sum(
+                    [
+                        self.embed_tokens[codebook](audio_codes[:, codebook + self.num_codebooks])
+                        for codebook in range(audio_codes.shape[1])
+                    ]
+                )
 
             if input_ids is not None:
                 inputs_embeds = self.decoder.model.embed_tokens(input_ids)

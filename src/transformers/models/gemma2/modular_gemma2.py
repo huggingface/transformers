@@ -540,9 +540,9 @@ class Gemma2PreTrainedModel(GemmaPreTrainedModel):
 class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):
         super().__init__(config)
-        self.layers = nn.ModuleList([
-            Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.post_init()
 
     def forward(
@@ -849,13 +849,15 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         if num_logits_to_keep is not None:
             model_inputs["num_logits_to_keep"] = num_logits_to_keep
 
-        model_inputs.update({
-            "position_ids": position_ids,
-            "cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
         return model_inputs
 
 

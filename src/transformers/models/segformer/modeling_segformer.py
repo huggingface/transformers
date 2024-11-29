@@ -395,9 +395,9 @@ class SegformerEncoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norm = nn.ModuleList([
-            nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)
-        ])
+        self.layer_norm = nn.ModuleList(
+            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
+        )
 
     def forward(
         self,

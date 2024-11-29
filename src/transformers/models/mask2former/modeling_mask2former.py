@@ -569,9 +569,9 @@ class Mask2FormerLoss(nn.Module):
         batch_size, num_queries, _ = pred_logits.shape
         criterion = nn.CrossEntropyLoss(weight=self.empty_weight)
         idx = self._get_predictions_permutation_indices(indices)  # shape of (batch_size, num_queries)
-        target_classes_o = torch.cat([
-            target[j] for target, (_, j) in zip(class_labels, indices)
-        ])  # shape of (batch_size, num_queries)
+        target_classes_o = torch.cat(
+            [target[j] for target, (_, j) in zip(class_labels, indices)]
+        )  # shape of (batch_size, num_queries)
         target_classes = torch.full(
             (batch_size, num_queries), fill_value=self.num_labels, dtype=torch.int64, device=pred_logits.device
         )
@@ -1086,9 +1086,9 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
 
         self.config = config
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([
-            Mask2FormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Mask2FormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)]
+        )
 
     @staticmethod
     def get_reference_points(spatial_shapes_list, valid_ratios, device):
@@ -1230,12 +1230,14 @@ class Mask2FormerPixelDecoder(nn.Module):
                 )
             self.input_projections = nn.ModuleList(input_projections_list)
         else:
-            self.input_projections = nn.ModuleList([
-                nn.Sequential(
-                    nn.Conv2d(transformer_in_channels[-1], feature_dim, kernel_size=1),
-                    nn.GroupNorm(32, feature_dim),
-                )
-            ])
+            self.input_projections = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(transformer_in_channels[-1], feature_dim, kernel_size=1),
+                        nn.GroupNorm(32, feature_dim),
+                    )
+                ]
+            )
 
         self.encoder = Mask2FormerPixelDecoderEncoderOnly(config)
         self.mask_projection = nn.Conv2d(feature_dim, mask_dim, kernel_size=1, stride=1, padding=0)
@@ -1784,9 +1786,9 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         self.num_feature_levels = 3  # level embedding (3 scales)
         self.decoder_layers = config.decoder_layers - 1
 
-        self.layers = nn.ModuleList([
-            Mask2FormerMaskedAttentionDecoderLayer(self.config) for _ in range(self.decoder_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Mask2FormerMaskedAttentionDecoderLayer(self.config) for _ in range(self.decoder_layers)]
+        )
         self.layernorm = nn.LayerNorm(config.hidden_dim)
 
         self.mask_predictor = Mask2FormerMaskPredictor(

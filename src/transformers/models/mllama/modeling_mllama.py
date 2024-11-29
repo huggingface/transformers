@@ -2193,14 +2193,16 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         if num_logits_to_keep is not None:
             model_inputs["num_logits_to_keep"] = num_logits_to_keep
 
-        model_inputs.update({
-            "position_ids": position_ids,
-            "cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-            "cross_attention_mask": cross_attention_mask,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+                "cross_attention_mask": cross_attention_mask,
+            }
+        )
 
         # If we're in pre-fill or cacheless decoding step, then we need pixel_values and aspect ratios
         # to compute image hidden states, otherwise they are cached within each cross attn layer

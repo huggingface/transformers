@@ -370,9 +370,9 @@ class GLPNEncoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norm = nn.ModuleList([
-            nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)
-        ])
+        self.layer_norm = nn.ModuleList(
+            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
+        )
 
     def forward(
         self,
@@ -606,9 +606,9 @@ class GLPNDecoder(nn.Module):
         reserved_hidden_sizes = config.hidden_sizes[::-1]
         out_channels = config.decoder_hidden_size
 
-        self.stages = nn.ModuleList([
-            GLPNDecoderStage(hidden_size, out_channels) for hidden_size in reserved_hidden_sizes
-        ])
+        self.stages = nn.ModuleList(
+            [GLPNDecoderStage(hidden_size, out_channels) for hidden_size in reserved_hidden_sizes]
+        )
         # don't fuse in first stage
         self.stages[0].fusion = None
 

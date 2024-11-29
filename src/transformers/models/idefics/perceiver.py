@@ -79,13 +79,17 @@ class IdeficsPerceiverResampler(nn.Module):
             else config.vision_config.embed_dim * 4
         )
         # Create Transformer Blocks
-        self.blocks = nn.ModuleList([
-            nn.ModuleList([
-                IdeficsPerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms),
-                IdeficsMLP(self.intermediate_dim, config),
-            ])
-            for _ in range(depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                nn.ModuleList(
+                    [
+                        IdeficsPerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms),
+                        IdeficsMLP(self.intermediate_dim, config),
+                    ]
+                )
+                for _ in range(depth)
+            ]
+        )
         self.layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(self, context: torch.Tensor) -> torch.Tensor:

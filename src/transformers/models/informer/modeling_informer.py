@@ -242,9 +242,9 @@ class InformerSinusoidalPositionalEmbedding(nn.Embedding):
         the 2nd half of the vector. [dim // 2:]
         """
         n_pos, dim = out.shape
-        position_enc = np.array([
-            [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)
-        ])
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
         out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.Tensor(np.sin(position_enc[:, 0::2]))
@@ -1090,9 +1090,9 @@ class InformerEncoder(InformerPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         if config.distil:
-            self.conv_layers = nn.ModuleList([
-                InformerConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)
-            ])
+            self.conv_layers = nn.ModuleList(
+                [InformerConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)]
+            )
             self.conv_layers.append(None)
         else:
             self.conv_layers = [None] * config.encoder_layers

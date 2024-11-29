@@ -2260,18 +2260,20 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             lst = seqs
         # Returns the raw outputs of the model given an input sequence.
         device = next(self.parameters()).device
-        aatype = collate_dense_tensors([
-            torch.from_numpy(
-                residue_constants.sequence_to_onehot(
-                    sequence=seq,
-                    mapping=residue_constants.restype_order_with_x,
-                    map_unknown_to_x=True,
+        aatype = collate_dense_tensors(
+            [
+                torch.from_numpy(
+                    residue_constants.sequence_to_onehot(
+                        sequence=seq,
+                        mapping=residue_constants.restype_order_with_x,
+                        map_unknown_to_x=True,
+                    )
                 )
-            )
-            .to(device)
-            .argmax(dim=1)
-            for seq in lst
-        ])  # B=1 x L
+                .to(device)
+                .argmax(dim=1)
+                for seq in lst
+            ]
+        )  # B=1 x L
         mask = collate_dense_tensors([aatype.new_ones(len(seq)) for seq in lst])
         position_ids = (
             torch.arange(aatype.shape[1], device=device).expand(len(lst), -1)

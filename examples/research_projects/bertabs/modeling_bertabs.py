@@ -161,9 +161,9 @@ class TransformerDecoder(nn.Module):
         self.pos_emb = PositionalEncoding(dropout, self.embeddings.embedding_dim)
 
         # Build TransformerDecoder.
-        self.transformer_layers = nn.ModuleList([
-            TransformerDecoderLayer(d_model, heads, d_ff, dropout) for _ in range(num_layers)
-        ])
+        self.transformer_layers = nn.ModuleList(
+            [TransformerDecoderLayer(d_model, heads, d_ff, dropout) for _ in range(num_layers)]
+        )
 
         self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 

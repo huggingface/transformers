@@ -210,9 +210,9 @@ class ConvNextStage(nn.Module):
         else:
             self.downsampling_layer = nn.Identity()
         drop_path_rates = drop_path_rates or [0.0] * depth
-        self.layers = nn.Sequential(*[
-            ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)
-        ])
+        self.layers = nn.Sequential(
+            *[ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.downsampling_layer(hidden_states)

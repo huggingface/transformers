@@ -977,9 +977,9 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         head_dim = config.embed_dim // config.num_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList([
-            Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
+        )
         self.merger = PatchMerger(
             dim=config.hidden_size, context_dim=config.embed_dim, spatial_merge_size=config.spatial_merge_size
         )
@@ -1051,9 +1051,9 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            Qwen2VLDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Qwen2VLDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self._attn_implementation = config._attn_implementation
         self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen2VLRotaryEmbedding(config=config)
@@ -1814,15 +1814,17 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                 past_key_values=past_key_values,
             )
 
-        model_inputs.update({
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "pixel_values_videos": pixel_values_videos,
-            "image_grid_thw": image_grid_thw,
-            "video_grid_thw": video_grid_thw,
-            "cache_position": cache_position,
-        })
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "pixel_values_videos": pixel_values_videos,
+                "image_grid_thw": image_grid_thw,
+                "video_grid_thw": video_grid_thw,
+                "cache_position": cache_position,
+            }
+        )
         return model_inputs

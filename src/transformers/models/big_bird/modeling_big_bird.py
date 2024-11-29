@@ -1550,9 +1550,9 @@ class BigBirdEncoder(nn.Module):
         self.config = config
         self.attention_type = config.attention_type
 
-        self.layer = nn.ModuleList([
-            BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layer = nn.ModuleList(
+            [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def set_attention_type(self, value: str):
