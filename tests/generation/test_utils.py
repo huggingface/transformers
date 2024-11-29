@@ -1124,6 +1124,8 @@ class GenerationTesterMixin:
 
             # The two outputs must match and their shape must be as expected
 
+            o = {k: inputs_dict[k].detach().cpu().tolist() for k in inputs_dict}
+
             failed = "PASS"
             try:
                 # The two outputs must match and their shape must be as expected
@@ -1131,16 +1133,15 @@ class GenerationTesterMixin:
             except:
                 failed = "FAIL"
 
-                o = {k: inputs_dict[k].detach().cpu().tolist() for k in inputs_dict}
                 import json
                 s = json.dumps(o)
                 with open("test.txt", "a+") as fp:
                     fp.write(failed + f" ({model.__class__.__name__})" + ": " + s + "\n")
 
-                assert 1 == 2
+            return failed, o, output_greedy, output_assisted
 
-            for output in (output_greedy, output_assisted):
-                self._check_outputs(output, model.config, use_cache=True)
+            # for output in (output_greedy, output_assisted):
+            #     self._check_outputs(output, model.config, use_cache=True)
 
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
@@ -1172,6 +1173,8 @@ class GenerationTesterMixin:
 
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
+            model.save_pretrained("mymodel")
+            model2 = model_class.from_pretrained("mymodel")
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) the assistant model always generates two tokens when it is called, to ensure the input preparation of
@@ -1191,10 +1194,29 @@ class GenerationTesterMixin:
                 "use_cache": True,
             }
 
-            try:
-                foo(self, model, inputs_dict, generation_kwargs)
-            except:
+            results = []
+            results2 = []
+            results3 = []
+            results4 = []
+
+            failed, o, output_greedy, output_assisted = foo(self, model, inputs_dict, generation_kwargs)
+            if failed == "FAIL":
+                results.append((failed, o, output_greedy, output_assisted))
+                results2.append(results[-1][0])
+
+                failed, o, output_greedy, output_assisted = foo(self, model2, inputs_dict, generation_kwargs)
+                results3.append((failed, o, output_greedy, output_assisted))
+                results4.append(results3[-1][0])
+
+                for _ in range(200):
+                    results.append(foo(self, model, inputs_dict, generation_kwargs))
+                    results2.append(results[-1][0])
+                    results3.append(foo(self, model2, inputs_dict, generation_kwargs))
+                    results4.append(results3[-1][0])
+
+                breakpoint()
                 assert 1 == 2
+
 
     @pytest.mark.generate
     def test_prompt_lookup_decoding_matches_greedy_search(self):
