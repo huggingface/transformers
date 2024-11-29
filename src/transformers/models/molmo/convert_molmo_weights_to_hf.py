@@ -23,7 +23,7 @@ import regex as re
 import torch
 from safetensors.torch import load_file
 
-from transformers import Qwen2TokenizerFast
+from transformers import GPT2TokenizerFast, Qwen2TokenizerFast
 from transformers.models.molmo import MolmoForConditionalGeneration
 from transformers.models.molmo.configuration_molmo import (
     MolmoConfig,
@@ -64,9 +64,10 @@ CHAT_TEMPLATE = (
 # r"text_model.layers.(\d+).attention.wqkv.weight": r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.blocks.(\d+).att_proj.(bias|weight)":                            r"language_model.model.layers.\1.self_attn.qkv_proj.\2", # fused attentions will need to be sliced later
+    r"transformer.blocks.(\d+).(q|k)_norm.weight":                                 r"language_model.model.layers.\1.self_attn.\2_norm.layer.weight",
     r"transformer.blocks.(\d+).attn_norm.weight":                                  r"language_model.model.layers.\1.input_layernorm.weight",
     r"transformer.blocks.(\d+).attn_out.weight":                                   r"language_model.model.layers.\1.self_attn.o_proj.weight",
-    r"transformer.blocks.(\d+).ff_norm.weight":                                    r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"transformer.blocks.(\d+).ff_norm.weight":                                    r"language_model.model.layers.\1.post_attention_layernorm.layer.weight",
     r"transformer.blocks.(\d+).ff_out.weight":                                     r"language_model.model.layers.\1.mlp.fc2.weight",
     r"transformer.blocks.(\d+).ff_proj.weight":                                    r"language_model.model.layers.\1.mlp.fc1.weight",
     r"transformer.ff_out.weight":                                                  r"language_model.lm_head.weight",
@@ -165,7 +166,7 @@ def write_model(
         max_position_embeddings=original_config["max_position_embeddings"],
         layer_norm_eps=original_config["layer_norm_eps"],
         rope_theta=original_config["rope_theta"],
-        vocab_size=original_config["vocab_size"] + 128,
+        vocab_size=original_config["vocab_size"] + 128 if variant != "7B-O" else original_config["vocab_size"] + 202,
         tie_word_embeddings=original_config["tie_word_embeddings"],
     )
 
@@ -175,6 +176,25 @@ def write_model(
     if variant == "72B":
         pooling_config.text_intermediate_size = 59136
         pooling_config.text_hidden_size = 8192
+        text_config.qkv_bias = True
+        text_config.use_attention_layer_norm = False
+        text_config.use_post_attention_layernorm = True
+        text_config.use_post_mlp_layernorm = False
+    elif variant == "7B-O":
+        pooling_config.text_intermediate_size = 22016
+        pooling_config.text_hidden_size = 4096
+        text_config.qkv_bias = original_config["qkv_bias"]
+        text_config.use_attention_layer_norm = original_config["attention_layer_norm"]
+        text_config.use_post_attention_layernorm = False
+        text_config.use_post_mlp_layernorm = True
+    elif variant == "7B-D":
+        text_config.qkv_bias = True
+        text_config.use_attention_layer_norm = False
+        text_config.use_post_attention_layernorm = True
+        text_config.use_post_mlp_layernorm = False
+
+    text_config.o_proj_bias = False
+
     config = MolmoConfig(
         text_config=text_config.to_dict(),
         vision_config=vision_config.to_dict(),
@@ -194,7 +214,6 @@ def write_model(
     safetensors_path = os.path.join(input_base_path, "model.safetensors.index.json")
     with open(safetensors_path, "r") as index_file:
         original_weights_file = json.load(index_file)
-
     print("Converting model...")
     all_keys = list(original_weights_file["weight_map"].keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
@@ -203,8 +222,11 @@ def write_model(
     for old_key, new_key in new_keys.items():
         new_key = new_key.removeprefix("model.")
         # remap keys
+        if "post_attention_layernorm" in new_key and variant == "7B-O":
+            new_key = new_key.replace("post_attention_layernorm", "post_mlp_layernorm")
         state_dict[new_key] = state_dict.pop(old_key)
         # Post-process the current_parameter.
+
         if "qkv_proj" in new_key:
             # need to slice qkv fusing here
             fused_qkv = state_dict[new_key]
@@ -276,9 +298,13 @@ def write_model(
         "im_patch_token": "<im_end>",
         "im_col_token": "<im_col>",
     }
-    tokenizer = Qwen2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
-    tokenizer.bos_token = tokenizer.eos_token
-    tokenizer.bos_token_id = tokenizer.eos_token_id
+    if variant in ["7B-D", "72B"]:
+        tokenizer = Qwen2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
+        tokenizer.bos_token = tokenizer.eos_token
+        tokenizer.bos_token_id = tokenizer.eos_token_id
+    elif variant == "7B-O":
+        tokenizer = GPT2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
+        tokenizer.save_pretrained(model_path)
     image_processor = MolmoImageProcessor.from_pretrained(input_base_path)
     processor = MolmoProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=CHAT_TEMPLATE)
     processor.save_pretrained(model_path)
@@ -307,7 +333,11 @@ def main():
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(
-        "--variant", default="7B", nargs="?", choices=["7B", "72B"], help="Whether to convert the 7B or 72B variant."
+        "--variant",
+        default="7B-D",
+        nargs="?",
+        choices=["7B-D", "7B-O", "72B"],
+        help="Whether to convert the 7B-D, 7B-O or 72B variant.",
     )
     args = parser.parse_args()
     write_model(

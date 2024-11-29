@@ -255,6 +255,42 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+class MolmoRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        MolmoRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class ConditionalMolmoRMSNorm(nn.Module):
+    def __init__(self, hidden_size, use_layer_norm: bool = True, eps=1e-5):
+        """
+        Depending on configuration, will be a layernorm (for 7B-O) or a no-op (for 7B-D and 72B).
+        """
+        super().__init__()
+
+        if use_layer_norm:
+            self.layer = MolmoRMSNorm(hidden_size, eps=eps)
+        else:
+            self.layer = nn.Identity()
+
+    def forward(self, input_tensor):
+        return self.layer(input_tensor)
+
+
 class MolmoTextAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -287,10 +323,20 @@ class MolmoTextAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.o_proj_bias)
+
+        self.q_norm = ConditionalMolmoRMSNorm(
+            hidden_size=self.hidden_size,
+            use_layer_norm=config.use_attention_layer_norm,
+        )
+
+        self.k_norm = ConditionalMolmoRMSNorm(
+            hidden_size=(self.hidden_size // self.num_heads) * self.num_key_value_heads,
+            use_layer_norm=config.use_attention_layer_norm,
+        )
 
         self.rotary_emb = MolmoRotaryEmbedding(config=self.config)
 
@@ -310,6 +356,9 @@ class MolmoTextAttention(nn.Module):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -402,6 +451,9 @@ class MolmoTextSdpaAttention(MolmoTextAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -492,6 +544,9 @@ class MolmoTextFlashAttention2(MolmoTextAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -576,26 +631,6 @@ class MolmoTextFlashAttention2(MolmoTextAttention):
         return attn_output, attn_weights, past_key_value
 
 
-class MolmoRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        MolmoRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 MOLMO_TEXT_ATTENTION_CLASSES = {
     "eager": MolmoTextAttention,
     "sdpa": MolmoTextSdpaAttention,
@@ -616,7 +651,12 @@ class MolmoDecoderLayer(nn.Module):
         self.self_attn = MOLMO_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = MolmoMLP(config)
         self.input_layernorm = MolmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MolmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = ConditionalMolmoRMSNorm(
+            config.hidden_size, use_layer_norm=config.use_post_attention_layernorm, eps=config.rms_norm_eps
+        )
+        self.post_mlp_layernorm = ConditionalMolmoRMSNorm(
+            config.hidden_size, use_layer_norm=config.use_post_mlp_layernorm, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -673,6 +713,7 @@ class MolmoDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_mlp_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
