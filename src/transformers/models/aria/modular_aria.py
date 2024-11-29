@@ -234,7 +234,6 @@ class AriaConfig(PretrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
-        print("Initializing config", self.vision_config)
 
         super().__init__(**kwargs)
 
@@ -1266,13 +1265,14 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens = (special_image_mask).sum(dim=1)[0][0].item()
+                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
             else:
                 image_embeds = input_ids == self.config.image_token_index
                 special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (image_embeds).sum(dim=-1)[0].item()
+                n_image_tokens = (image_embeds).sum(dim=1).sum(dim=0)
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
+                pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
             )
             n_images, n_features_per_image = image_features.shape[0], image_features.shape[1]
