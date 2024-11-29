@@ -2147,7 +2147,7 @@ class PagedAttentionCache(Cache):
             self.value_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, V_D, device=device, dtype=dtype))
             self.batch_reserve(self.paged_attentions[i], torch.tensor([max_cache_len for _ in range(batch_size)]))
 
-        block_mask = create_block_mask(noop_mask, batch_size, 1, max_cached_seq_len, max_cached_seq_len, device=device, BLOCK_SIZE=page_size)
+        block_mask = create_block_mask(noop_mask, batch_size, 1, max_cache_len, max_cache_len, device=device, BLOCK_SIZE=page_size)
         self.block_mask = self.paged_attentions[0].convert_logical_block_mask(block_mask)
         self.score_mods = []
         self.score_mods.append(None)
