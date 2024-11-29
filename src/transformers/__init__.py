@@ -813,7 +813,6 @@ _import_structure = {
     "models.swinv2": ["Swinv2Config"],
     "models.switch_transformers": ["SwitchTransformersConfig"],
     "models.t5": ["T5Config"],
-    "models.timesfm": ["TimesFMConfig"],
     "models.table_transformer": ["TableTransformerConfig"],
     "models.tapas": [
         "TapasConfig",
@@ -821,6 +820,7 @@ _import_structure = {
     ],
     "models.textnet": ["TextNetConfig"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
+    "models.timesfm": ["TimesFMConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.timm_wrapper": ["TimmWrapperConfig"],
@@ -3708,12 +3708,6 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
-    _import_structure["models.timesfm"].extend(
-        [
-            "TimesFMModel",
-            "TimesFMPreTrainedModel",
-        ]
-    )
     _import_structure["models.table_transformer"].extend(
         [
             "TableTransformerForObjectDetection",
@@ -3744,6 +3738,12 @@ else:
             "TimeSeriesTransformerForPrediction",
             "TimeSeriesTransformerModel",
             "TimeSeriesTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.timesfm"].extend(
+        [
+            "TimesFMModel",
+            "TimesFMPreTrainedModel",
         ]
     )
     _import_structure["models.timesformer"].extend(
