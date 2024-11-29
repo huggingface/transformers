@@ -1625,21 +1625,68 @@ class AriaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
-    """
-    Aria model for conditional generation tasks.
+ARIA_INPUTS_DOCSTRING = """
+        Args:
+            input_ids (`torch.LongTensor`, *optional*):
+                Input token IDs.
+            pixel_values (`torch.FloatTensor`, *optional*):
+                Pixel values of the images.
+            pixel_mask (`torch.LongTensor`, *optional*):
+                Mask for the pixel values.
+            attention_mask (`torch.Tensor`, *optional*):
+                Attention mask.
+            position_ids (`torch.LongTensor`, *optional*):
+                Position IDs.
+            past_key_values (`List[torch.FloatTensor]`, *optional*):
+                Past key values for efficient processing.
+            inputs_embeds (`torch.FloatTensor`, *optional*):
+                Input embeddings.
+            labels (`torch.LongTensor`, *optional*):
+                Labels for computing the language modeling loss.
+            use_cache (`bool`, *optional*):
+                Whether to use the model's cache mechanism.
+            output_attentions (`bool`, *optional*):
+                Whether to output attention weights.
+            output_hidden_states (`bool`, *optional*):
+                Whether to output hidden states.
+            return_dict (`bool`, *optional*):
+                Whether to return a `ModelOutput` object.
+            num_logits_to_keep (`int`, *optional*, defaults to 0):
+                Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
+            cache_position (`torch.LongTensor`, *optional*):
+                Cache positions.
+            **loss_kwargs:
+                Additional keyword arguments for loss calculation.
+"""
+
+ARIA_START_DOCSTRING = """
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AriaConfig`]:
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    """Aria model for conditional generation tasks.
 
     This model combines a vision tower, a multi-modal projector, and a language model
-    to perform tasks that involve both image and text inputs.
-
-    Args:
-        config (`AriaConfig`):
-            Configuration object for the model.
-    """
-
+    to perform tasks that involve both image and text inputs.""",
+    ARIA_START_DOCSTRING,
+)
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
+    config_class = AriaConfig
     _supports_flash_attn_2 = True
     _supports_sdpa = False
-    config_class = AriaConfig
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
@@ -1711,6 +1758,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         flattened_mask = patch_attention_mask.flatten(1)
         return torch.logical_not(flattened_mask)
 
+    @add_start_docstrings_to_model_forward(
+        "Forward pass of the `AriaForConditionalGeneration` model.", ARIA_INPUTS_DOCSTRING
+    )
+    @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1729,48 +1780,63 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         **loss_kwargs,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
-        """
-        Forward pass of the `AriaForConditionalGeneration` model.
-
-        This method processes both text and image inputs, merges them if necessary,
-        and generates output using the language model.
-
+        r"""
         Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Input token IDs.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Pixel values of the images.
-            pixel_mask (`torch.LongTensor`, *optional*):
-                Mask for the pixel values.
-            attention_mask (`torch.Tensor`, *optional*):
-                Attention mask.
-            position_ids (`torch.LongTensor`, *optional*):
-                Position IDs.
-            past_key_values (`List[torch.FloatTensor]`, *optional*):
-                Past key values for efficient processing.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Input embeddings.
-            labels (`torch.LongTensor`, *optional*):
-                Labels for computing the language modeling loss.
-            use_cache (`bool`, *optional*):
-                Whether to use the model's cache mechanism.
-            output_attentions (`bool`, *optional*):
-                Whether to output attention weights.
-            output_hidden_states (`bool`, *optional*):
-                Whether to output hidden states.
-            return_dict (`bool`, *optional*):
-                Whether to return a `ModelOutput` object.
-            num_logits_to_keep (`int`, *optional*, defaults to 0):
-                Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
-            cache_position (`torch.LongTensor`, *optional*):
-                Cache positions.
-            **loss_kwargs:
-                Additional keyword arguments for loss calculation.
-
         Returns:
-            `Union[Tuple, AriaCausalLMOutputWithPast]`:
-                Model outputs.
-        """
+
+        Example:
+
+        ```python
+        >>> import requests
+        >>> import torch
+        >>> from PIL import Image
+        >>> from io import BytesIO
+
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+
+        >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
+        >>> image1 = load_image("https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg")
+        >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+        >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
+
+        >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
+        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", torch_dtype=torch.bfloat16, device_map="auto")
+
+        >>> # Create inputs
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image"},
+        ...             {"type": "text", "text": "In this image, we can see the city of New York, and more specifically the Statue of Liberty."},
+        ...             {"type": "image"},
+        ...             {"type": "text", "text": "What can we see in this image?"},
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image"},
+        ...             {"type": "text", "text": "In which city is that bridge located?"},
+        ...         ]
+        ...     }
+        ... ]
+
+        >>> prompts = [processor.apply_chat_template([message], add_generation_prompt=True) for message in messages]
+        >>> images = [[image1, image2], [image3]]
+        >>> inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to(model.device)
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=256)
+        >>> generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        >>> print(generated_texts[0])
+        Assistant: There are buildings, trees, lights, and water visible in this image.
+
+        >>> print(generated_texts[1])
+        Assistant: The bridge is in San Francisco.
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
