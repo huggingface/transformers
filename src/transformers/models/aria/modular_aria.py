@@ -198,11 +198,11 @@ class AriaConfig(PretrainedConfig):
     def __init__(
         self,
         vision_config=None,
-        vision_feature_layer=-1,
-        text_config=None,
-        projector_patch_to_query_dict=None,
-        ignore_index=-100,
-        image_token_index=9,
+        vision_feature_layer: int = -1,
+        text_config: AriaTextConfig = None,
+        projector_patch_to_query_dict: Dict = None,
+        ignore_index: int = -100,
+        image_token_index: int = 9,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -437,10 +437,10 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean=None,
-        image_std=None,
-        max_image_size=980,
-        min_image_size=336,
+        image_mean: List[float] = None,
+        image_std: List[float] = None,
+        max_image_size: int = 980,
+        min_image_size: int = 336,
         split_resolutions: Optional[List[Tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
@@ -837,7 +837,6 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
         "return_tensors": TensorType.PYTORCH,
     }
 
-
 class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
@@ -872,6 +871,7 @@ class AriaProcessor(ProcessorMixin):
             tokenizer.pad_token = tokenizer.unk_token
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
 
     def __call__(
         self,
@@ -1243,41 +1243,41 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-ARIA_INPUTS_DOCSTRING = """
-        Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Input token IDs.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Pixel values of the images.
-            pixel_mask (`torch.LongTensor`, *optional*):
-                Mask for the pixel values.
-            attention_mask (`torch.Tensor`, *optional*):
-                Attention mask.
-            position_ids (`torch.LongTensor`, *optional*):
-                Position IDs.
-            past_key_values (`List[torch.FloatTensor]`, *optional*):
-                Past key values for efficient processing.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Input embeddings.
-            labels (`torch.LongTensor`, *optional*):
-                Labels for computing the language modeling loss.
-            use_cache (`bool`, *optional*):
-                Whether to use the model's cache mechanism.
-            output_attentions (`bool`, *optional*):
-                Whether to output attention weights.
-            output_hidden_states (`bool`, *optional*):
-                Whether to output hidden states.
-            return_dict (`bool`, *optional*):
-                Whether to return a `ModelOutput` object.
-            num_logits_to_keep (`int`, *optional*, defaults to 0):
-                Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
-            cache_position (`torch.LongTensor`, *optional*):
-                Cache positions.
-            **loss_kwargs:
-                Additional keyword arguments for loss calculation.
+ARIA_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor`, *optional*):
+            Input token IDs.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel values of the images.
+        pixel_mask (`torch.LongTensor`, *optional*):
+            Mask for the pixel values.
+        attention_mask (`torch.Tensor`, *optional*):
+            Attention mask.
+        position_ids (`torch.LongTensor`, *optional*):
+            Position IDs.
+        past_key_values (`List[torch.FloatTensor]`, *optional*):
+            Past key values for efficient processing.
+        inputs_embeds (`torch.FloatTensor`, *optional*):
+            Input embeddings.
+        labels (`torch.LongTensor`, *optional*):
+            Labels for computing the language modeling loss.
+        use_cache (`bool`, *optional*):
+            Whether to use the model's cache mechanism.
+        output_attentions (`bool`, *optional*):
+            Whether to output attention weights.
+        output_hidden_states (`bool`, *optional*):
+            Whether to output hidden states.
+        return_dict (`bool`, *optional*):
+            Whether to return a `ModelOutput` object.
+        num_logits_to_keep (`int`, *optional*, defaults to 0):
+            Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
+        cache_position (`torch.LongTensor`, *optional*):
+            Cache positions.
+        **loss_kwargs:
+            Additional keyword arguments for loss calculation.
 """
 
-ARIA_START_DOCSTRING = """
+ARIA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -1376,9 +1376,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         flattened_mask = patch_attention_mask.flatten(1)
         return torch.logical_not(flattened_mask)
 
-    @add_start_docstrings_to_model_forward(
-        "Forward pass of the `AriaForConditionalGeneration` model.", ARIA_INPUTS_DOCSTRING
-    )
+    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
     def forward(
         self,
@@ -1400,6 +1398,11 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         r"""
         Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics3ForConditionalGeneration`).
+                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
+                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         Returns:
 
         Example:

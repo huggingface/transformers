@@ -864,9 +864,10 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
 
     # We went too far by one (perhaps more if there are a lot of new lines)
     idx -= 1
-    while len(obj_doc_lines[idx].strip()) == 0:
-        arguments[current_arg] = arguments[current_arg][:-1]
-        idx -= 1
+    if current_arg:
+        while len(obj_doc_lines[idx].strip()) == 0:
+            arguments[current_arg] = arguments[current_arg][:-1]
+            idx -= 1
     # And we went too far by one again.
     idx += 1
 
@@ -1001,16 +1002,15 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
                 continue
 
         # Check docstring
-        try:
-            result = match_docstring_with_signature(obj)
-            if result is not None:
-                old_doc, new_doc = result
-            else:
-                old_doc, new_doc = None, None
-        except Exception as e:
-            print(e)
-            hard_failures.append(name)
-            continue
+        result = match_docstring_with_signature(obj)
+        if result is not None:
+            old_doc, new_doc = result
+        else:
+            old_doc, new_doc = None, None
+        # except Exception as e:
+        #     print(e)
+        #     hard_failures.append(name)
+        #     continue
         if old_doc != new_doc:
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)

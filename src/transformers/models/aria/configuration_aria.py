@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -17,6 +18,29 @@ class AriaTextConfig(PretrainedConfig):
     This class extends the LlamaConfig to include additional parameters specific to the Mixture of Experts (MoE) architecture.
 
     Args:
+        vocab_size (`<fill_type>`, *optional*, defaults to 32000): <fill_docstring>
+        hidden_size (`<fill_type>`, *optional*, defaults to 4096): <fill_docstring>
+        intermediate_size (`<fill_type>`, *optional*, defaults to 11008): <fill_docstring>
+        num_hidden_layers (`<fill_type>`, *optional*, defaults to 32): <fill_docstring>
+        num_attention_heads (`<fill_type>`, *optional*, defaults to 32): <fill_docstring>
+        num_key_value_heads (`<fill_type>`, *optional*): <fill_docstring>
+        hidden_act (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
+        max_position_embeddings (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
+        rms_norm_eps (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+        use_cache (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        pad_token_id (`int`, *optional*, defaults to 2):
+            The padding token ID.
+        bos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        pretraining_tp (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        rope_theta (`<fill_type>`, *optional*, defaults to 10000.0): <fill_docstring>
+        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+        attention_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        mlp_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        head_dim (`<fill_type>`, *optional*): <fill_docstring>
         moe_intermediate_size (`int`, *optional*, defaults to 4096):
             The intermediate size for MoE layers.
         moe_num_experts (`int`, *optional*, defaults to 8):
@@ -169,11 +193,11 @@ class AriaConfig(PretrainedConfig):
     def __init__(
         self,
         vision_config=None,
-        vision_feature_layer=-1,
-        text_config=None,
-        projector_patch_to_query_dict=None,
-        ignore_index=-100,
-        image_token_index=9,
+        vision_feature_layer: int = -1,
+        text_config: AriaTextConfig = None,
+        projector_patch_to_query_dict: Dict = None,
+        ignore_index: int = -100,
+        image_token_index: int = 9,
         initializer_range: float = 0.02,
         **kwargs,
     ):

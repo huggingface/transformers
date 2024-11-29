@@ -124,8 +124,8 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
     model.save_pretrained("local_aria", safe_serialization=False)
     processor.save_pretrained("local_aria")
     print("Pushing to hub")
-    model.push_to_hub(output_hub_path)
-    processor.push_to_hub(output_hub_path)
+    model.push_to_hub(output_hub_path, create_pr=True)
+    processor.push_to_hub(output_hub_path, create_pr=True)
 
 
 def main():
@@ -145,7 +145,7 @@ def main():
     )
     parser.add_argument(
         "--output_hub_path",
-        default="m-ric/Aria_hf_2",
+        default="rhymes-ai/Aria",
         help="Location on the hub of the converted model",
     )
     parser.add_argument(
@@ -154,23 +154,23 @@ def main():
         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
     )
     args = parser.parse_args()
-    # convert_aria_llama_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.text_model_id,
-        extra_special_tokens={
-            "image_token": "<|img|>",
-            "pad_token": "<pad>",
-        },
-    )
-    tokenizer.add_tokens(AddedToken("<|img|>", special=True, normalized=False), special_tokens=True)
-    tokenizer.add_special_tokens({"pad_token": "<pad>"})
-    tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
+    convert_aria_llama_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
+    # tokenizer = AutoTokenizer.from_pretrained(
+    #     args.text_model_id,
+    #     extra_special_tokens={
+    #         "image_token": "<|img|>",
+    #         "pad_token": "<pad>",
+    #     },
+    # )
+    # tokenizer.add_tokens(AddedToken("<|img|>", special=True, normalized=False), special_tokens=True)
+    # tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    # tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
 
-    processor = AriaProcessor.from_pretrained(
-        args.text_model_id,
-        tokenizer=tokenizer,
-    )
-    processor.push_to_hub(args.output_hub_path)
+    # processor = AriaProcessor.from_pretrained(
+    #     args.text_model_id,
+    #     tokenizer=tokenizer,
+    # )
+    # processor.push_to_hub(args.output_hub_path)
 
 
 if __name__ == "__main__":

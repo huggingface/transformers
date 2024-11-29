@@ -47,7 +47,7 @@ class AriaImageProcessingTester(unittest.TestCase):
         size=None,
         max_image_size=980,
         min_image_size=336,
-        split_ratio=None,
+        split_resolutions=None,
         split_image=True,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
@@ -66,7 +66,7 @@ class AriaImageProcessingTester(unittest.TestCase):
         self.resample = resample
         self.max_image_size = max_image_size
         self.min_image_size = min_image_size
-        self.split_ratio = split_ratio if split_ratio is not None else [[2, 2]]
+        self.split_resolutions = split_resolutions if split_resolutions is not None else [[980, 980]]
         self.split_image = split_image
         self.do_normalize = do_normalize
         self.image_mean = image_mean
@@ -79,7 +79,7 @@ class AriaImageProcessingTester(unittest.TestCase):
             "image_std": self.image_std,
             "max_image_size": self.max_image_size,
             "min_image_size": self.min_image_size,
-            "split_ratio": self.split_ratio,
+            "split_resolutions": self.split_resolutions,
             "split_image": self.split_image,
             "do_convert_rgb": self.do_convert_rgb,
             "do_normalize": self.do_normalize,

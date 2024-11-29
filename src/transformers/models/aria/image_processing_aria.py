@@ -121,10 +121,10 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean=None,
-        image_std=None,
-        max_image_size=980,
-        min_image_size=336,
+        image_mean: List[float] = None,
+        image_std: List[float] = None,
+        max_image_size: int = 980,
+        min_image_size: int = 336,
         split_resolutions: Optional[List[Tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
