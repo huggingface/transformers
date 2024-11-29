@@ -36,27 +36,27 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-# @require_torch_gpu
-# class HiggsConfigTest(unittest.TestCase):
-#     def test_to_dict(self):
-#         """
-#         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
-#         """
-#         quantization_config = HiggsConfig()
-#         config_to_dict = quantization_config.to_dict()
+@require_torch_gpu
+class HiggsConfigTest(unittest.TestCase):
+    def test_to_dict(self):
+        """
+        Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
+        """
+        quantization_config = HiggsConfig()
+        config_to_dict = quantization_config.to_dict()
 
-#         for key in config_to_dict:
-#             self.assertEqual(getattr(quantization_config, key), config_to_dict[key])
+        for key in config_to_dict:
+            self.assertEqual(getattr(quantization_config, key), config_to_dict[key])
 
-#     def test_from_dict(self):
-#         """
-#         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
-#         """
-#         dict = {"linear_weights_not_to_quantize": ["embed_tokens.weight", "lm_head.weight"], "quant_method": "higgs"}
-#         quantization_config = HiggsConfig.from_dict(dict)
+    def test_from_dict(self):
+        """
+        Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
+        """
+        dict = {"linear_weights_not_to_quantize": ["embed_tokens.weight", "lm_head.weight"], "quant_method": "higgs"}
+        quantization_config = HiggsConfig.from_dict(dict)
 
-#         self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
-#         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
+        self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
+        self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
 
 @slow
@@ -73,44 +73,6 @@ class HiggsTest(unittest.TestCase):
     EXPECTED_OUTPUT = "A quick brown fox jumps over the lazy dog"
 
     device_map = "cuda"
-
-    offload_device_map = {
-        "model.embed_tokens": 0,
-        "model.layers.0": 0,
-        "model.layers.1": 0,
-        "model.layers.2": 0,
-        "model.layers.3": 0,
-        "model.layers.4": 0,
-        "model.layers.5": 0,
-        "model.layers.6": 0,
-        "model.layers.7": 0,
-        "model.layers.8": 0,
-        "model.layers.9": 0,
-        "model.layers.10": 0,
-        "model.layers.11": 0,
-        "model.layers.12": 0,
-        "model.layers.13": 0,
-        "model.layers.14": 0,
-        "model.layers.15": 0,
-        "model.layers.16": "cpu",
-        "model.layers.17": "cpu",
-        "model.layers.18": "cpu",
-        "model.layers.19": "cpu",
-        "model.layers.20": "disk",
-        "model.layers.21": "disk",
-        "model.layers.22": "disk",
-        "model.layers.23": "disk",
-        "model.layers.24": "disk",
-        "model.layers.25": "disk",
-        "model.layers.26": "disk",
-        "model.layers.27": "disk",
-        "model.layers.28": "disk",
-        "model.layers.29": "disk",
-        "model.layers.30": "disk",
-        "model.layers.31": "disk",
-        "model.norm": "disk",
-        "lm_head": "disk",
-    }
 
     # called only once for all test in this class
     @classmethod
@@ -149,23 +111,23 @@ class HiggsTest(unittest.TestCase):
                 nb_linears += 1
 
         model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)
-        nb_fbgemm_linear = 0
+        nb_higgs_linear = 0
         for module in model.modules():
             if isinstance(module, HiggsLinear):
-                nb_fbgemm_linear += 1
+                nb_higgs_linear += 1
 
-        self.assertEqual(nb_linears - 1, nb_fbgemm_linear)
+        self.assertEqual(nb_linears - 1, nb_higgs_linear)
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
         quantization_config = HiggsConfig(linear_weights_not_to_quantize=["fc1.weight"])
         model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)
-        nb_fbgemm_linear = 0
+        nb_higgs_linear = 0
         for module in model.modules():
             if isinstance(module, HiggsLinear):
-                nb_fbgemm_linear += 1
+                nb_higgs_linear += 1
 
-        self.assertEqual(nb_linears - 24, nb_fbgemm_linear)
+        self.assertEqual(nb_linears - 24, nb_higgs_linear)
 
     def test_quantized_model(self):
         """
@@ -221,34 +183,3 @@ class HiggsTest(unittest.TestCase):
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-
-# @require_torch_gpu
-# @require_accelerate
-# @require_flute_hadamard
-# class HiggsLinearTest(unittest.TestCase):
-#     def test_linear_preserves_shape(self):
-#         """
-#         Test that HiggsLinear preserves shape when in_features == out_features.
-#         """
-#         from transformers.integrations import HiggsLinear
-
-#         with init_empty_weights(include_buffers=True):
-#             linear = HiggsLinear(1024, 1024, num_bits=4, num_sms_packed=128, bias=True)
-#             x = torch.rand((17, 23, 1024))
-
-#         # x_ = linear(x)
-#         # self.assertEqual(x_.shape, x.shape) # TODO: Fix this
-
-#     def test_linear_with_diff_feature_size_preserves_shape(self):
-#         """
-#         Test that HiggsLinear generates the correct shape when in_features != out_features.
-#         """
-#         from transformers.integrations import HiggsLinear
-
-#         with init_empty_weights(include_buffers=True):
-#             linear = HiggsLinear(1024, 2048, num_bits=4, num_sms_packed=128, bias=True)
-#             x = torch.rand((17, 23, 1024))
-
-#         # x_ = linear(x)
-#         # self.assertEqual(x_.shape, (17, 23, 2048)) # TODO: Fix this
