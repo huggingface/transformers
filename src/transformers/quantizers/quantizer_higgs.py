@@ -30,15 +30,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Finds the parent of a node module named "name"
-def find_parent(model, name):
-    module_tree = name.split(".")[:-1]
-    parent = model
-    for m in module_tree:
-        parent = parent._modules[m]
-    return parent
-
-
 def get_num_sms_from_device(device):
     target_device_cc = torch.cuda.get_device_capability(device=device)
     if target_device_cc == (8, 6):
@@ -48,12 +39,14 @@ def get_num_sms_from_device(device):
     elif target_device_cc == (8, 9):
         return 128
     else:
-        raise NotImplementedError(f"Device capability {target_device_cc} not supported for FLUTE (yet?) to verify your device capability check out https://developer.nvidia.com/cuda-gpus")
+        raise NotImplementedError(
+            f"Device capability {target_device_cc} not supported for FLUTE (yet?) to verify your device capability check out https://developer.nvidia.com/cuda-gpus"
+        )
 
 
 class HiggsHfQuantizer(HfQuantizer):
     """
-    Quantizer of the HIGGS method. Enables the loading of prequantized models.
+    Quantizer of the HIGGS method. Enables the loading of prequantized models and in-flight quantization of full-precision models.
     """
 
     requires_calibration = False
