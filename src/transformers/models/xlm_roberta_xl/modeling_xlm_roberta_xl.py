@@ -210,11 +210,14 @@ class XLMRobertaXLSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(hidden_states))
             key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
             value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+            breakpoint()
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
+            breakpoint()
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
+        breakpoint()
 
         use_cache = past_key_value is not None
         if self.is_decoder:
