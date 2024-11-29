@@ -788,14 +788,6 @@ class TimesFMModel(TimesFMPreTrainedModel):
 
         self.context_len = config.context_len
         self.horizon_len = config.horizon_len
-        self.input_patch_len = config.patch_len
-        self.output_patch_len = config.horizon_len
-        self.num_layers = config.num_layers
-        self.model_dims = config.model_dim
-        self.quantiles = config.quantiles
-        self.num_heads = config.num_heads
-        self.batch_size = config.batch_size
-        self._horizon_start = self.context_len - self.input_patch_len
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -905,24 +897,9 @@ class TimesFMModel(TimesFMPreTrainedModel):
 
         input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
 
-        input_ts_in = torch.from_numpy(
-            np.array(
-                input_ts,
-                dtype=np.float32,
-            )
-        )
-        input_padding_in = torch.from_numpy(
-            np.array(
-                input_padding,
-                dtype=np.float32,
-            )
-        )
-        inp_freq_in = torch.from_numpy(
-            np.array(
-                inp_freq,
-                dtype=np.int32,
-            )
-        ).long()
+        input_ts_in = torch.from_numpy(np.array(input_ts, dtype=np.float32))
+        input_padding_in = torch.from_numpy(np.array(input_padding, dtype=np.float32))
+        inp_freq_in = torch.from_numpy(np.array(inp_freq, dtype=np.int32)).long()
         mean_outputs, full_outputs, last_hidden_state, all_attentions, all_hidden_states = self.decoder.decode(
             input_ts=input_ts_in,
             paddings=input_padding_in,

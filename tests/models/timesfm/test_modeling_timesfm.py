@@ -64,7 +64,6 @@ class TimesFMModelTester:
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         use_positional_embedding: bool = True,
-        batch_size: int = 32,
         initializer_factor: float = 0.0,
         is_training: bool = False,
     ):
@@ -84,7 +83,6 @@ class TimesFMModelTester:
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
         self.use_positional_embedding = use_positional_embedding
-        self.batch_size = batch_size
         self.initializer_factor = initializer_factor
         self.is_training = is_training
 
@@ -112,7 +110,6 @@ class TimesFMModelTester:
             tolerance=self.tolerance,
             rms_norm_eps=self.rms_norm_eps,
             use_positional_embedding=self.use_positional_embedding,
-            batch_size=self.batch_size,
             initializer_factor=self.initializer_factor,
         )
 
