@@ -3132,7 +3132,7 @@ class ParallelMode(Enum):
 
 def serialize_parameter(k, v):
     if k == "torch_dtype" and not isinstance(v, str):
-        return str(k).split(".")[1]
+        return str(v).split(".")[1]
     if isinstance(v, dict):
         return {key: serialize_parameter(key, value) for key, value in v.items()}
     if isinstance(v, Enum):
