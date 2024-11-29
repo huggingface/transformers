@@ -858,6 +858,12 @@ class DetrImageProcessor(BaseImageProcessor):
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
+        if "max_size" in kwargs:
+            logger.error(
+                "The `max_size` parameter is deprecated. "
+                "Please specify in `size['longest_edge'] instead`.",
+            )
+
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         # Backwards compatibility
         size = {"shortest_edge": size, "longest_edge": 1333} if isinstance(size, int) else size
@@ -982,6 +988,12 @@ class DetrImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
+        if "max_size" in kwargs:
+            logger.error(
+                "The `max_size` parameter is deprecated. "
+                "Please specify in `size['longest_edge'] instead`.",
+            )
+
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
@@ -1321,6 +1333,12 @@ class DetrImageProcessor(BaseImageProcessor):
                 "use `do_pad` instead."
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
+
+        if "max_size" in kwargs:
+            logger.error(
+                "The `max_size` argument is deprecated, use"
+                " `size['longest_edge']` instead."
+            )
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size

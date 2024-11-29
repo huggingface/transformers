@@ -532,6 +532,12 @@ class RTDetrImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
+        if "max_size" in kwargs:
+            logger.error(
+                "The `max_size` parameter is deprecated. "
+                "Please specify in `size['longest_edge'] instead`.",
+            )
+
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
