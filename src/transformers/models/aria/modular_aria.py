@@ -837,6 +837,7 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
         "return_tensors": TensorType.PYTORCH,
     }
 
+
 class AriaProcessor(ProcessorMixin):
     """
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
@@ -871,7 +872,6 @@ class AriaProcessor(ProcessorMixin):
             tokenizer.pad_token = tokenizer.unk_token
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
 
     def __call__(
         self,
