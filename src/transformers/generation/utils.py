@@ -3239,6 +3239,7 @@ class GenerationMixin:
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
                 model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)
 
+
         i = 0
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
@@ -3267,7 +3268,9 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
+            breakpoint()
             next_token_logits = outputs.logits[:, -1, :].clone().float()
+
             next_token_logits = next_token_logits.to(input_ids.device)
 
             # pre-process distribution
@@ -4262,6 +4265,7 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
 
+            breakpoint()
             #  1. Fetch candidate sequences from a `CandidateGenerator`
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
 

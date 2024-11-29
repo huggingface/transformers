@@ -225,6 +225,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "logits_processor": self.logits_processor,
         }
 
+        breakpoint()
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
 
         # 3. Update variables for the next round of candidate generation
@@ -233,6 +234,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
+
+        breakpoint()
         return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):

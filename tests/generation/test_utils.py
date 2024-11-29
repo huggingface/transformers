@@ -1234,8 +1234,9 @@ class GenerationTesterMixin:
                 output_assisted.sequences
                 output_greedy.scores[0] - output_assisted.scores[0]
                                 
+                del inputs_dict['token_type_ids']
                 torch.argmax(model(**inputs_dict).logits[:, -1:, :])
-                model(**inputs_dict).logits[:, 0, :]
+                model(**inputs_dict).logits[:, -1, :]
                 
                 # not the same as there is logit processor
                 output_greedy.scores[0] - model(**inputs_dict).logits[:, 0, :]
