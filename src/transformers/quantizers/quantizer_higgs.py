@@ -48,7 +48,7 @@ def get_num_sms_from_device(device):
     elif target_device_cc == (8, 9):
         return 128
     else:
-        raise NotImplementedError(f"Device capability {target_device_cc} not supported for FLUTE (yet?)")
+        raise NotImplementedError(f"Device capability {target_device_cc} not supported for FLUTE (yet?) to verify your device capability check out https://developer.nvidia.com/cuda-gpus")
 
 
 class HiggsHfQuantizer(HfQuantizer):
