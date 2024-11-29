@@ -49,14 +49,19 @@ class GptqHfQuantizer(HfQuantizer):
         self.optimum_quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
-        gptq_supports_cpu = (is_auto_gptq_available() and version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")) or is_gptqmodel_available()
+        gptq_supports_cpu = (
+            is_auto_gptq_available()
+            and version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
+        ) or is_gptqmodel_available()
         if not gptq_supports_cpu and not torch.cuda.is_available():
             raise RuntimeError("GPU is required to quantize or run quantize model.")
         elif not (is_optimum_available() and (is_auto_gptq_available() or is_gptqmodel_available())):
             raise ImportError(
                 "Loading a GPTQ quantized model requires optimum (`pip install optimum`) and auto-gptq or gptqmodel library (`pip install auto-gptq` or `pip install gptqmodel`)"
             )
-        elif is_auto_gptq_available() and version.parse(importlib.metadata.version("auto_gptq")) < version.parse("0.4.2"):
+        elif is_auto_gptq_available() and version.parse(importlib.metadata.version("auto_gptq")) < version.parse(
+            "0.4.2"
+        ):
             raise ImportError(
                 "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel`"
             )
