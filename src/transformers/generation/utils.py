@@ -3257,6 +3257,14 @@ class GenerationMixin:
             else:
                 outputs = model_forward(self, return_dict=True, **model_inputs)
 
+            if i == 1:
+                new_model_inputs = {k: v for k, v in model_inputs.items()}
+                new_model_inputs["input_ids"] = input_ids
+                new_model_inputs["past_key_values"] = None
+                outputs2 = self(**new_model_inputs, return_dict=True)
+                outputs2.logits[:, -1]
+                breakpoint()
+
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,

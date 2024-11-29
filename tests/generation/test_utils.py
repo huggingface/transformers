@@ -1108,8 +1108,6 @@ class GenerationTesterMixin:
 
         def foo(self, model, inputs_dict, generation_kwargs):
 
-            inputs_dict['input_ids'] = torch.tensor([[88, 1, 37, 40, 82, 36, 80]])
-
             generation_kwargs = copy.deepcopy(generation_kwargs)
             output_greedy = model.generate(**generation_kwargs, **inputs_dict)
 
