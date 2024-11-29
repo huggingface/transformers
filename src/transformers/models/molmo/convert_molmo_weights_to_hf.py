@@ -141,6 +141,7 @@ def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1
 def write_model(
     model_path,
     input_base_path,
+    variant,
     safe_serialization=True,
 ):
     os.makedirs(model_path, exist_ok=True)
@@ -171,6 +172,9 @@ def write_model(
     # vision and pooling args should be same across al model checkpoints which are the default values
     vision_config = MolmoVisionConfig()
     pooling_config = MolmoPoolingConfig()
+    if variant == "72B":
+        pooling_config.text_intermediate_size = 59136
+        pooling_config.text_hidden_size = 8192
     config = MolmoConfig(
         text_config=text_config.to_dict(),
         vision_config=vision_config.to_dict(),
@@ -302,10 +306,14 @@ def main():
         type=List[str],
         help="The list of special tokens that should be added to the model.",
     )
+    parser.add_argument(
+        "--variant", default="7B", nargs="?", choices=["7B", "72B"], help="Whether to convert the 7B or 72B variant."
+    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
+        variant=args.variant,
         safe_serialization=args.safe_serialization,
     )
 

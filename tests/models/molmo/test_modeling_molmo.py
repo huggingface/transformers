@@ -34,7 +34,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -274,6 +274,25 @@ class MolmoForConditionalGenerationModelTest(
     def test_generate_compile_1_end_to_end(self):
         pass
 
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad and "class_embedding" not in name:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                if "class_embedding" in name:
+                    self.assertTrue(
+                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
 
 @require_torch
 class MolmoForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -360,7 +379,6 @@ class MolmoForConditionalGenerationIntegrationTest(unittest.TestCase):
          152065, 152065, 152065, 152067, 152064,   2657,     25,  60785,    419,
            2168,     13,  21388,     25]])
         # fmt: on
-        breakpoint()
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=20)
