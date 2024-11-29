@@ -20,7 +20,14 @@ An image processor is in charge of preparing input features for vision models an
 
 Fast image processors are available for a few models and more will be added in the future. They are based on the [torchvision](https://pytorch.org/vision/stable/index.html) library and provide a significant speed-up, especially when processing on GPU.
 They have the same API as the base image processors and can be used as drop-in replacements.
-Fast image processors are used by default when available and when the `torchvision` library is installed. To force the use of a standard processor, you can set the `use_fast` argument to `False` when instantiating the image processor.
+To use a fast image processor, you need to install the `torchvision` library, and set the `use_fast` argument to `True` when instantiating the image processor:
+
+```python
+from transformers import AutoImageProcessor
+
+processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", use_fast=True)
+```
+Note that `use_fast` will be set to `True` by default in a future release.
 
 When using a fast image processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.
 
