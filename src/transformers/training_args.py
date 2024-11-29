@@ -2547,7 +2547,7 @@ class TrainingArguments:
         """
         Serializes this instance to a JSON string.
         """
-        return json.dumps(self.__training_args_dict__, indent=2)
+        return json.dumps(self.__training_args_params__, indent=2)
 
     def to_json_file(self, json_file_path: str):
         """
