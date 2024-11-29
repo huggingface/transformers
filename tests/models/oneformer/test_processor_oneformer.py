@@ -59,7 +59,7 @@ def prepare_metadata(class_info_file, repo_path="shi-labs/oneformer_demo"):
     return metadata
 
 
-class OneFormerProcessorTester(unittest.TestCase):
+class OneFormerProcessorTester():
     def __init__(
         self,
         parent,
@@ -81,7 +81,6 @@ class OneFormerProcessorTester(unittest.TestCase):
         class_info_file="ade20k_panoptic.json",
         num_text=10,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
