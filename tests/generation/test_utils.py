@@ -1169,7 +1169,22 @@ class GenerationTesterMixin:
             output_assisted = model.generate(**generation_kwargs, **inputs_dict)
 
             # The two outputs must match and their shape must be as expected
-            self._check_similar_generate_outputs(output_greedy, output_assisted)
+
+            failed = "PASS"
+            try:
+                # The two outputs must match and their shape must be as expected
+                self._check_similar_generate_outputs(output_greedy, output_assisted)
+            except:
+                failed = "FAIL"
+
+                o = {k: inputs_dict[k].detach().cpu().tolist() for k in inputs_dict}
+                import json
+                s = json.dumps(o)
+                with open("test.txt", "a+") as fp:
+                    fp.write(failed + f" ({model.__class__.__name__})" + ": " + s + "\n")
+
+                assert 1 == 2
+
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, model.config, use_cache=True)
 
