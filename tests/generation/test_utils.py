@@ -1211,7 +1211,7 @@ class GenerationTesterMixin:
             results6 = []
 
             failed, o, output_greedy, output_assisted = foo(self, model, inputs_dict, generation_kwargs)
-            if failed == "FAIL":
+            if failed == "PASS":
                 results.append((failed, o, output_greedy, output_assisted))
                 results2.append(results[-1][0])
 
@@ -1219,19 +1219,12 @@ class GenerationTesterMixin:
                 results3.append((failed, o, output_greedy, output_assisted))
                 results4.append(results3[-1][0])
 
-                for _ in range(100):
-                    results.append(foo(self, model, inputs_dict, generation_kwargs))
-                    results2.append(results[-1][0])
-                    results3.append(foo(self, model2, inputs_dict, generation_kwargs))
-                    results4.append(results3[-1][0])
-
-                for _ in range(500):
-                    _, inputs_dict_2 = self.prepare_config_and_inputs_for_generate(batch_size=1)
-                    results5.append(foo(self, model, inputs_dict_2, generation_kwargs))
-                    results6.append(results5[-1][0])
+                """
+                results[-1][1]['input_ids'][0][1] = 2; results[-1][1]['input_ids'][0][2] = 2; inputs_dict['input_ids'] = torch.tensor(results[-1][1]['input_ids']); failed, o, output_greedy, output_assisted = foo(self, model2, inputs_dict, generation_kwargs); print(failed)
+                """
 
                 breakpoint()
-                assert 1 == 2
+                # assert 1 == 2
 
 
     @pytest.mark.generate
