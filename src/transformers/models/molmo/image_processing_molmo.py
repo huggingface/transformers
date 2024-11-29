@@ -20,7 +20,7 @@
 # limitations under the License.
 
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -44,6 +44,9 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging
 
+
+if TYPE_CHECKING:
+    from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
 

@@ -63,9 +63,16 @@ from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
-    replace_return_docstrings,
 )
+from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import (
+    CLIPMLP,
+    CLIPAttention,
+    CLIPEncoder,
+    CLIPEncoderLayer,
+    CLIPFlashAttention2,
+    CLIPSdpaAttention,
+    CLIPVisionModel,
     CLIPVisionTransformer,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
@@ -78,16 +85,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2Model,
     Qwen2SdpaAttention,
 )
-from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import (
-    SiglipAttention,
-    SiglipEncoder,
-    SiglipEncoderLayer,
-    SiglipFlashAttention2,
-    SiglipMLP,
-    SiglipSdpaAttention,
-    SiglipVisionModel,
-)
 
 
 if is_flash_attn_2_available():
@@ -96,7 +93,7 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-class MolmoVisionConfig(SiglipVisionConfig):
+class MolmoVisionConfig(CLIPVisionConfig):
     r"""
     This is the configuration class to store the configuration of a [`MolmoVisionModel`]. It is used to instantiate a
     `MolmoVisionModel` according to the specified arguments, defining the model architecture. Instantiating a
@@ -528,7 +525,7 @@ class MolmoSwiGLU(nn.Module):
 
 
 # text modules inherited from Qwen2
-class MolmoMLP(SiglipMLP):
+class MolmoMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__()
         self.activation_fn = MolmoSwiGLU()
@@ -662,19 +659,19 @@ class MolmoMultiModalProjector(nn.Module):
         return hidden_states
 
 
-# Molmo image components inherited from SiglipVision
+# Molmo image components inherited from CLIPVision
 # We have different attention classes for the txt and the image components, they need to be propagated back correctly
 
 
-class MolmoVisionAttention(SiglipAttention):
+class MolmoVisionAttention(CLIPAttention):
     pass
 
 
-class MolmoVisionSdpaAttention(MolmoVisionAttention, SiglipSdpaAttention):
+class MolmoVisionSdpaAttention(MolmoVisionAttention, CLIPSdpaAttention):
     pass
 
 
-class MolmoVisionFlashAttention2(MolmoVisionAttention, SiglipFlashAttention2):
+class MolmoVisionFlashAttention2(MolmoVisionAttention, CLIPFlashAttention2):
     pass
 
 
@@ -705,34 +702,31 @@ class MolmoVisionEmbeddings(nn.Module):
             "position_ids", torch.arange(config.num_image_positions).expand((1, -1)), persistent=False
         )
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size, patches, height, width = pixel_values.shape
-        if not interpolate_pos_encoding and (height != self.image_size):
+        if height != self.image_size:
             raise ValueError(f"Input image size ({height}) doesn't match model" f" ({self.image_size}).")
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
         class_embeds = self.class_embedding.expand(batch_size, patches, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=2)
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids).unsqueeze(1)
+        embeddings = embeddings + self.position_embedding(self.position_ids).unsqueeze(1)
         return embeddings.flatten(0, 1)  # NOTE: DON'T FLATTEN MORE TO MATCH ORIG IMPL
 
 
-class MolmoVisionMLP(SiglipMLP):
+class MolmoVisionMLP(CLIPMLP):
     pass
 
 
-class MolmoVisionEncoderLayer(SiglipEncoderLayer):
+class MolmoVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
         self.self_attn = MOLMO_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = MolmoVisionMLP(config)
 
 
-class MolmoVisionEncoder(SiglipEncoder):
+class MolmoVisionEncoder(CLIPEncoder):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`MolmoVisionEncoderLayer`].
@@ -755,7 +749,6 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         del self.post_layernorm
 
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
     def forward(
         self,
         pixel_values,
@@ -774,7 +767,7 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -794,6 +787,10 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+class MolmoVisionModel(CLIPVisionModel):
+    pass
 
 
 class MolmoPoolingAttention(nn.Module):
@@ -1125,20 +1122,12 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
             image_features = self.image_pooling_2d(queries, image_features)[0]
 
         # Round up in case we need to pad the image features for pooling
-        h = (num_patches + self.config.pooling_height - 1) // self.config.pooling_height
-        w = (num_patches + self.config.pooling_width - 1) // self.config.pooling_width
+        patch_height = (num_patches + self.config.pooling_height - 1) // self.config.pooling_height
+        patch_width = (num_patches + self.config.pooling_width - 1) // self.config.pooling_width
 
-        image_features = image_features.reshape(batch_size, patches, h * w, -1)
+        image_features = image_features.reshape(batch_size, patches, patch_height * patch_width, -1)
         image_features = self.multi_modal_projector(image_features)
         return image_features
-
-
-class MolmoVisionModel(SiglipVisionModel):
-    config_class = MolmoVisionConfig  # needed because renames
-
-    def __init__(self, config: MolmoVisionConfig):
-        super().__init__()
-        self.vision_model = MolmoVisionTransformer(config)
 
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):

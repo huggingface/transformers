@@ -20,7 +20,7 @@
 # limitations under the License.
 
 
-from typing import List, Union
+from typing import TYPE_CHECKING, List, Union
 
 import numpy as np
 
@@ -28,6 +28,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+if TYPE_CHECKING:
+    from ...processing_utils import ProcessorMixin
 
 
 ### PROCESSING CODE
