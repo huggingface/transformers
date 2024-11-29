@@ -1138,6 +1138,40 @@ class GenerationTesterMixin:
                 with open("test.txt", "a+") as fp:
                     fp.write(failed + f" ({model.__class__.__name__})" + ": " + s + "\n")
 
+            # ==================================================================================
+            # Try 2nd time
+
+            output_greedy = model.generate(**generation_kwargs, **inputs_dict)
+
+            # test with the same assistant model or randomly init one
+            # in the first case all candidate tokens are accepted, in the second none is accepted
+            # case when some are accepted and some not is hard to reproduce, so let's hope this catches most errors :)
+            if assistant_type == "random":
+                assistant_model = model_class(config).to(torch_device).eval()
+            else:
+                assistant_model = model
+            assistant_model.generation_config.num_assistant_tokens = 2  # see b)
+            assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
+            generation_kwargs.update({"assistant_model": assistant_model})
+            output_assisted = model.generate(**generation_kwargs, **inputs_dict)
+
+            # The two outputs must match and their shape must be as expected
+
+            o = {k: inputs_dict[k].detach().cpu().tolist() for k in inputs_dict}
+
+            failed = "PASS"
+            try:
+                # The two outputs must match and their shape must be as expected
+                self._check_similar_generate_outputs(output_greedy, output_assisted)
+            except:
+                failed = "FAIL"
+
+                import json
+                s = json.dumps(o)
+                with open("test.txt", "a+") as fp:
+                    fp.write(failed + f" ({model.__class__.__name__})" + ": " + s + "\n")
+            # ==================================================================================
+
             return failed, o, output_greedy, output_assisted
 
             # for output in (output_greedy, output_assisted):
@@ -1208,6 +1242,7 @@ class GenerationTesterMixin:
             results4 = []
 
             failed, o, output_greedy, output_assisted = foo(self, model, inputs_dict, generation_kwargs)
+            # failed, o, output_greedy, output_assisted = foo(self, model, inputs_dict, generation_kwargs)
             if failed == "FAIL":
                 results.append((failed, o, output_greedy, output_assisted))
                 results2.append(results[-1][0])
