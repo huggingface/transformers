@@ -453,9 +453,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         size = size if size is not None else {"height": 640, "width": 640}
-        size = (
-            {"shortest_edge": size, "longest_edge": 1333} if isinstance(size, int) else size
-        )  # Backwards compatibility
+        size = {'shortest_edge': size, 'longest_edge': 1333} if isinstance(size, int) else size # Backwards compatibility
         size = get_size_dict(size, default_to_square=False)
 
         if do_convert_annotations is None:
