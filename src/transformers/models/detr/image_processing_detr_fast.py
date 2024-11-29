@@ -362,7 +362,6 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = {'shortest_edge': size, 'longest_edge': 1333} if isinstance(size, int) else size # Backwards compatibility
         size = get_size_dict(size, default_to_square=False)
 
         # Backwards compatibility
