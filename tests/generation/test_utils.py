@@ -1132,12 +1132,15 @@ class GenerationTesterMixin:
                 # The two outputs must match and their shape must be as expected
                 self._check_similar_generate_outputs(output_greedy, output_assisted)
             except:
-                failed = "PASS"
+                failed = "FAIL"
 
-                import json
-                s = json.dumps(o)
-                with open("test.txt", "a+") as fp:
-                    fp.write(failed + f" ({model.__class__.__name__})" + ": " + s + "\n")
+            diffs = [float(torch.amax(torch.abs(output_greedy.scores[idx] - output_assisted.scores[idx])).detach().cpu()) for idx in range(len(output_greedy.scores))]
+            o["diffs"] = diffs
+
+            import json
+            s = json.dumps(o)
+            with open("test.txt", "a+") as fp:
+                fp.write(failed + f" ({model.__class__.__name__})" + ": " + s + "\n")
 
             return failed, o, output_greedy, output_assisted
 
@@ -1211,7 +1214,7 @@ class GenerationTesterMixin:
             results6 = []
 
             failed, o, output_greedy, output_assisted = foo(self, model, inputs_dict, generation_kwargs)
-            if failed == "PASS":
+            if failed == "FAIL":
                 results.append((failed, o, output_greedy, output_assisted))
                 results2.append(results[-1][0])
 
@@ -1224,8 +1227,8 @@ class GenerationTesterMixin:
                 results[-1][1]['input_ids'][0][0] = 1; results[-1][1]['input_ids'][0][1] = 92; inputs_dict['input_ids'] = torch.tensor(results[-1][1]['input_ids']); results[-1][1]['attention_mask'] = [[1, 1, 1, 1, 1, 1, 1]]; inputs_dict['attention_mask'] = torch.tensor(results[-1][1]['attention_mask']); failed, o, output_greedy, output_assisted = foo(self, model2, inputs_dict, generation_kwargs); print(failed)
                 """
 
-                # breakpoint()
-                # assert 1 == 2
+            breakpoint()
+            # assert 1 == 2
 
 
     @pytest.mark.generate
