@@ -402,25 +402,37 @@ class AriaImageProcessor(BaseImageProcessor):
     Initialize the AriaImageProcessor.
 
     Args:
-        max_image_size (`int`, *optional*, defaults to 980):
-            Maximum image size.
-        min_image_size (`int`, *optional*, defaults to 336):
-            Minimum image size.
         image_mean (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
             Mean values for normalization.
         image_std (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
             Standard deviation values for normalization.
+        max_image_size (`int`, *optional*, defaults to 980):
+            Maximum image size.
+        min_image_size (`int`, *optional*, defaults to 336):
+            Minimum image size.
         split_ratio (`list`, *optional*, defaults to a list of common split ratios as tuples):
             The ratio for splitting the image.
+        split_image (`bool`, *optional*, defaults to False):
+            Whether to split the image.
+        do_convert_rgb (`bool`, *optional*, defaults to True):
+            Whether to convert the image to RGB.
+        do_normalize (`bool`, *optional*, defaults to True):
+            Whether to normalize the image.
+        resample (PILImageResampling, *optional*, defaults to BICUBIC):
+            The resampling filter to use if resizing the image.
     """
 
     def __init__(
         self,
-        max_image_size=980,
-        min_image_size=336,
         image_mean=None,
         image_std=None,
+        max_image_size=980,
+        min_image_size=336,
         split_ratio: Optional[List[Tuple[int, int]]] = None,
+        split_image: Optional[bool] = False,
+        do_convert_rgb: Optional[bool] = True,
+        do_normalize: Optional[bool] = True,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -457,19 +469,23 @@ class AriaImageProcessor(BaseImageProcessor):
             ]
         else:
             self.split_ratio = split_ratio
+        self.split_image = split_image
+        self.do_convert_rgb = do_convert_rgb
+        self.do_normalize = do_normalize
+        self.resample = resample
 
     def preprocess(
         self,
         images: Union[ImageInput, List[ImageInput]],
-        max_image_size: Optional[int] = None,
-        min_image_size: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        split_image: Optional[bool] = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        max_image_size: Optional[int] = None,
+        min_image_size: Optional[int] = None,
+        split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
+        return_tensors: Optional[Union[str, TensorType]] = "pt",
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -479,24 +495,24 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             images (ImageInput or list of ImageInput):
                 The input image or a list of images.
+            image_mean (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
+                Mean values for normalization.
+            image_std (`list`, *optional*, defaults to [0.5, 0.5, 0.5]):
+                Standard deviation values for normalization.
             max_image_size (`int`, *optional*, defaults to `self.max_image_size` (980)):
                 Maximum image size.
             min_image_size (`int`, *optional*, defaults to `self.min_image_size` (336)):
                 Minimum image size.
-            return_tensors (`str` or `TensorType`, *optional*, defaults to "pt"):
-                The type of tensor to return.
             split_image (`bool`, *optional*, defaults to False):
                 Whether to split the image.
-            image_mean (`float`, *optional*, defaults to None):
-                The mean value of the image.
-            image_std (`float`, *optional*, defaults to None):
-                The standard deviation of the image.
             do_convert_rgb (`bool`, *optional*, defaults to True):
                 Whether to convert the image to RGB.
             do_normalize (`bool`, *optional*, defaults to True):
                 Whether to normalize the image.
             resample (PILImageResampling, *optional*, defaults to BICUBIC):
                 The resampling filter to use if resizing the image.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to "pt"):
+                The type of tensor to return.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`:
@@ -527,8 +543,14 @@ class AriaImageProcessor(BaseImageProcessor):
         """
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        max_image_size = self.max_image_size if max_image_size is None else max_image_size
-        min_image_size = self.min_image_size if min_image_size is None else min_image_size
+        max_image_size = max_image_size if max_image_size is not None else self.max_image_size
+        min_image_size = min_image_size if min_image_size is not None else self.min_image_size
+        return_tensors = return_tensors if return_tensors is not None else self.return_tensors
+        split_image = split_image if split_image is not None else self.split_image
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        resample = resample if resample is not None else self.resample
+
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
