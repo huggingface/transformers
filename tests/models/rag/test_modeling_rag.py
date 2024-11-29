@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import gc
 import json
 import os
 import shutil
@@ -29,6 +28,7 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
+    cleanup,
     get_tests_dir,
     require_sentencepiece,
     require_tokenizers,
@@ -196,8 +196,7 @@ class RagTestMixin:
         shutil.rmtree(self.tmpdirname)
 
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def get_retriever(self, config):
         dataset = Dataset.from_dict(
@@ -653,7 +652,7 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
     def config_and_inputs(self):
         question_encoder_tester = DPRModelTester(self)
         dpr_config_and_inputs = question_encoder_tester.prepare_config_and_inputs()
-        generator_tester = T5ModelTester(self, vocab_size=1100)
+        generator_tester = T5ModelTester(self, vocab_size=1101)
         t5_config_and_inputs = generator_tester.prepare_config_and_inputs()
 
         (question_encoder_config, input_ids, _, input_mask, _, _, _) = dpr_config_and_inputs
@@ -684,8 +683,7 @@ class RagModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def sequence_model(self):
@@ -1043,8 +1041,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def get_rag_config(self):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")

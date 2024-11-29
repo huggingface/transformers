@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 하이퍼파라미터 탐색 백엔드로 사용하기 전에 아래의 명령어를 사용하여 라이브러리들을 설치하세요.
 ```bash
-pip install optuna/sigopt/wandb/ray[tune] 
+pip install optuna/sigopt/wandb/ray[tune]
 ```
 
 ## 예제에서 하이퍼파라미터 탐색을 활성화하는 방법 [[how-to-enable-hyperparameter-search-in-example]]
@@ -100,7 +100,7 @@ wandb의 경우, 해당 [object_parameter](https://docs.wandb.ai/guides/sweeps/c
 ...     train_dataset=small_train_dataset,
 ...     eval_dataset=small_eval_dataset,
 ...     compute_metrics=compute_metrics,
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     model_init=model_init,
 ...     data_collator=data_collator,
 ... )

@@ -37,5 +37,5 @@ help people access the inner representations, mainly adapted from the great work
 - retrieving heads output values and gradients to be able to compute head importance score and prune head as explained
   in https://arxiv.org/abs/1905.10650.
 
-To help you understand and use these features, we have added a specific example script: [bertology.py](https://github.com/huggingface/transformers/tree/main/examples/research_projects/bertology/run_bertology.py) while extract information and prune a model pre-trained on
+To help you understand and use these features, we have added a specific example script: [bertology.py](https://github.com/huggingface/transformers/tree/main/examples/research_projects/bertology/run_bertology.py) which extracts information and prune a model pre-trained on
 GLUE.

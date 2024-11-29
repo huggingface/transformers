@@ -18,17 +18,21 @@ import shutil
 import tempfile
 import unittest
 
+import numpy as np
+
 from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.models.wav2vec2_bert import Wav2Vec2BertProcessor
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
+from ...test_processing_common import ProcessorTesterMixin
 from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 
 
-# Copied from tests.models.wav2vec2.test_processor_wav2vec2.Wav2Vec2ProcessorTest with Wav2Vec2FeatureExtractor->SeamlessM4TFeatureExtractor, Wav2Vec2Processor->Wav2Vec2BertProcessor
-class Wav2Vec2BertProcessorTest(unittest.TestCase):
+class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Wav2Vec2BertProcessor
+
     def setUp(self):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
@@ -40,7 +44,7 @@ class Wav2Vec2BertProcessorTest(unittest.TestCase):
             "eos_token": "</s>",
         }
         feature_extractor_map = {
-            "feature_size": 1,
+            "feature_size": 80,
             "padding_value": 0.0,
             "sampling_rate": 16000,
             "return_attention_mask": False,
@@ -55,6 +59,9 @@ class Wav2Vec2BertProcessorTest(unittest.TestCase):
 
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
+
+        tokenizer = self.get_tokenizer()
+        tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()
@@ -122,13 +129,28 @@ class Wav2Vec2BertProcessorTest(unittest.TestCase):
         processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
-
         encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str)
 
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
+
+    def test_padding_argument_not_ignored(self):
+        # padding, or any other overlap arg between audio extractor and tokenizer
+        # should be passed to both text and audio and not ignored
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        # padding = True should not raise an error and will if the audio processor popped its value to None
+        # processor(input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt")
+        _ = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
 
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()

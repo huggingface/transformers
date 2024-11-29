@@ -18,7 +18,13 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig"],
+    "configuration_utils": [
+        "BaseWatermarkingConfig",
+        "GenerationConfig",
+        "GenerationMode",
+        "SynthIDTextWatermarkingConfig",
+        "WatermarkingConfig",
+    ],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -43,6 +49,7 @@ else:
     _import_structure["candidate_generator"] = [
         "AssistedCandidateGenerator",
         "CandidateGenerator",
+        "EarlyExitCandidateGenerator",
         "PromptLookupCandidateGenerator",
     ]
     _import_structure["logits_process"] = [
@@ -55,7 +62,6 @@ else:
         "ExponentialDecayLengthPenalty",
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
-        "ForceTokensLogitsProcessor",
         "HammingDiversityLogitsProcessor",
         "InfNanRemoveLogitsProcessor",
         "LogitNormalization",
@@ -72,6 +78,7 @@ else:
         "SequenceBiasLogitsProcessor",
         "SuppressTokensLogitsProcessor",
         "SuppressTokensAtBeginLogitsProcessor",
+        "SynthIDTextWatermarkLogitsProcessor",
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
@@ -84,6 +91,7 @@ else:
         "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
+        "ConfidenceCriteria",
         "EosTokenCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
@@ -110,6 +118,9 @@ else:
     _import_structure["watermarking"] = [
         "WatermarkDetector",
         "WatermarkDetectorOutput",
+        "BayesianDetectorModel",
+        "BayesianDetectorConfig",
+        "SynthIDTextWatermarkDetector",
     ]
 
 try:
@@ -179,7 +190,13 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig
+    from .configuration_utils import (
+        BaseWatermarkingConfig,
+        GenerationConfig,
+        GenerationMode,
+        SynthIDTextWatermarkingConfig,
+        WatermarkingConfig,
+    )
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -190,7 +207,12 @@ if TYPE_CHECKING:
     else:
         from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
-        from .candidate_generator import AssistedCandidateGenerator, CandidateGenerator, PromptLookupCandidateGenerator
+        from .candidate_generator import (
+            AssistedCandidateGenerator,
+            CandidateGenerator,
+            EarlyExitCandidateGenerator,
+            PromptLookupCandidateGenerator,
+        )
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -201,7 +223,6 @@ if TYPE_CHECKING:
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
-            ForceTokensLogitsProcessor,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
             LogitNormalization,
@@ -218,6 +239,7 @@ if TYPE_CHECKING:
             SequenceBiasLogitsProcessor,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
+            SynthIDTextWatermarkLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
@@ -227,6 +249,7 @@ if TYPE_CHECKING:
             WhisperTimeStampLogitsProcessor,
         )
         from .stopping_criteria import (
+            ConfidenceCriteria,
             EosTokenCriteria,
             MaxLengthCriteria,
             MaxNewTokensCriteria,
@@ -254,6 +277,9 @@ if TYPE_CHECKING:
             SampleEncoderDecoderOutput,
         )
         from .watermarking import (
+            BayesianDetectorConfig,
+            BayesianDetectorModel,
+            SynthIDTextWatermarkDetector,
             WatermarkDetector,
             WatermarkDetectorOutput,
         )

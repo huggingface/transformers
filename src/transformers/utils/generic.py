@@ -24,7 +24,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, ContextManager, Iterable, List, Optional, Tuple
+from typing import Any, ContextManager, Iterable, List, Optional, Tuple, TypedDict
 
 import numpy as np
 from packaging import version
@@ -854,3 +854,16 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
         return wrapper
 
     return decorator
+
+
+class LossKwargs(TypedDict, total=False):
+    """
+    Keyword arguments to be passed to the loss function
+
+    Attributes:
+        num_items_in_batch (`int`, *optional*):
+            Number of items in the batch. It is recommended to pass it when
+            you are doing gradient accumulation.
+    """
+
+    num_items_in_batch: Optional[int]

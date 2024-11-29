@@ -64,23 +64,24 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
+    env:
+      # `CI_BRANCH_PUSH`: The branch name from the push event
+      # `CI_BRANCH_WORKFLOW_RUN`: The name of the branch on which this workflow is triggered by `workflow_run` event
+      # `CI_SHA_PUSH`: The commit SHA from the push event
+      # `CI_SHA_WORKFLOW_RUN`: The commit SHA that triggers this workflow by `workflow_run` event
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
       - name: Prepare custom environment variables
         shell: bash
-        # `CI_BRANCH_PUSH`: The branch name from the push event
-        # `CI_BRANCH_WORKFLOW_RUN`: The name of the branch on which this workflow is triggered by `workflow_run` event
         # `CI_BRANCH`: The non-empty branch name from the above two (one and only one of them is empty)
-        # `CI_SHA_PUSH`: The commit SHA from the push event
-        # `CI_SHA_WORKFLOW_RUN`: The commit SHA that triggers this workflow by `workflow_run` event
         # `CI_SHA`: The non-empty commit SHA from the above two (one and only one of them is empty)
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -159,6 +160,12 @@ jobs:
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      # For the meaning of these environment variables, see the job `Setup`
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -166,11 +173,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -256,6 +259,12 @@ jobs:
 #        run_tests_torch_cuda_extensions_single_gpu,
 #        run_tests_torch_cuda_extensions_multi_gpu
     ]
+    env:
+      # For the meaning of these environment variables, see the job `Setup`
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Preliminary job status
         shell: bash
@@ -271,11 +280,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -324,6 +329,7 @@ jobs:
         # We pass `needs.setup_gpu.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
+          pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup_gpu.outputs.matrix }}"
