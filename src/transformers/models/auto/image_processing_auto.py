@@ -416,7 +416,8 @@ class AutoImageProcessor:
             kwargs["token"] = use_auth_token
 
         config = kwargs.pop("config", None)
-        use_fast = kwargs.pop("use_fast", True)
+        # TODO: @yoni, change in v4.48 (use_fast set to True by default)
+        use_fast = kwargs.pop("use_fast", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
@@ -480,7 +481,18 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
+        # TODO: @yoni, change logic in v4.48 (when use_fast set to True by default)
+        print("image_processor_type", image_processor_type)
         if image_processor_type is not None:
+            # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
+            if use_fast is None:
+                use_fast = image_processor_type.endswith("Fast")
+                if not use_fast:
+                    logger.warning_once(
+                        "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
+                        "`use_fast=True` will be the default behavior in v4.48, even if the model was saved with a slow processor. "
+                        "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
+                    )
             # Update class name to reflect the use_fast option. If class is not found, we fall back to the slow version.
             if use_fast and not is_torchvision_available():
                 logger.warning_once(
