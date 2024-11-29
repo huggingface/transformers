@@ -3255,7 +3255,6 @@ class GenerationMixin:
 
             if i == 0:
                 outputs = self(**model_inputs, return_dict=True)
-                i += 1
             else:
                 if i == 1:
                     breakpoint()
@@ -3269,6 +3268,8 @@ class GenerationMixin:
                 outputs2 = self(**new_model_inputs, return_dict=True)
                 outputs2.logits[:, -1]
                 breakpoint()
+
+            i += 1
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
