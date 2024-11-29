@@ -13,6 +13,8 @@
 # limitations under the License.
 "HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
 
+from math import sqrt
+
 from ..utils import (
     is_flute_available,
     is_hadamard_available,
@@ -439,7 +441,7 @@ def get_higgs_grid(p: int, n: int):
         raise NotImplementedError(f"Unsupported p={p}, n={n}")
 
 
-def quantize_with_higgs(weight, bits: int = 4, p: int = 2):
+def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256, hadamard_size: int = 1024):
     assert len(weight.shape) == 2, "Only 2D weights are supported for now"
 
     grid = get_higgs_grid(p, 2 ** (p * bits)).to(weight.device)
@@ -448,11 +450,11 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2):
     device = weight.device
     weight = weight.clone().float()
     # Pad to Hadamard transform size
-    weight = pad_to_block(weight, [1], 1024)
+    weight = pad_to_block(weight, [1], hadamard_size)
 
     # Scale and Hadamard transform
-    mult = weight.shape[1] // 1024
-    weight = weight.reshape(-1, mult, 1024)
+    mult = weight.shape[1] // hadamard_size
+    weight = weight.reshape(-1, mult, hadamard_size)
     scales = torch.linalg.norm(weight, axis=-1)
     weight = hadamard_transform(weight, 1) / scales[:, :, None]
 
@@ -466,14 +468,14 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2):
     del weight
 
     codes = codes.reshape(codes.shape[0], -1)
-    scales = scales / 32
+    scales = scales / sqrt(hadamard_size)
 
     weight, scales, tables, tables2 = prepare_data_transposed(
         codes,
-        torch.repeat_interleave(scales.half(), 1024 // 256, dim=1),
+        torch.repeat_interleave(scales.half(), hadamard_size // group_size, dim=1),
         grid.half(),
         num_bits=bits,
-        group_size=256,
+        group_size=group_size,
         vector_size=p,
         dtype=torch.float16,
         device=device,
@@ -496,15 +498,18 @@ class HiggsLinear(torch.nn.Module):
         bias=True,
         dtype: torch.dtype = None,
         device: torch.device = None,
+        group_size: int = 256,
+        hadamard_size: int = 1024,
     ):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.num_bits = num_bits
-
+        self.group_size = group_size
+        self.hadamard_size = hadamard_size
         self.num_sms_packed = nn.Parameter(torch.tensor(-1, dtype=torch.int32, device=device), requires_grad=False)
 
-        assert in_features % 256 == 0
+        assert in_features % group_size == 0
         assert num_bits in [2, 3, 4]
 
         self.weight = nn.Parameter(
@@ -512,7 +517,7 @@ class HiggsLinear(torch.nn.Module):
             requires_grad=False,
         )
         self.scales = nn.Parameter(
-            torch.empty((out_features, in_features // 256), dtype=dtype, device=device), requires_grad=False
+            torch.empty((out_features, in_features // group_size), dtype=dtype, device=device), requires_grad=False
         )
         self.tables = nn.Parameter(torch.empty((2**num_bits,), dtype=dtype, device=device), requires_grad=False)
         self.tables2 = nn.Parameter(
@@ -527,11 +532,11 @@ class HiggsLinear(torch.nn.Module):
         self.workspace = None  # must be set externally to be reused among layers
 
     def forward(self, x):
-        x = pad_to_block(x, [-1], 1024)
+        x = pad_to_block(x, [-1], self.hadamard_size)
 
         orig_shape = x.shape
-        x = x.reshape(-1, 1024)
-        x = hadamard_transform(x, scale=1 / 32)
+        x = x.reshape(-1, self.hadamard_size)
+        x = hadamard_transform(x, scale=1 / sqrt(self.hadamard_size))
         x = x.reshape(orig_shape)
 
         if self.workspace is None:
@@ -545,7 +550,7 @@ class HiggsLinear(torch.nn.Module):
             self.tables2.view(dtype=torch.float32),
             self.workspace,
             self.num_bits,
-            256,
+            self.group_size,
         )
 
 
