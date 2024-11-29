@@ -49,7 +49,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from ..llava_next.image_processing_llava_next import divide_to_patches, make_batched_images
+from ..llava_next.image_processing_llava_next import divide_to_patches, make_batched_images, LlavaNextImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -396,7 +396,7 @@ class AriaProjector(nn.Module):
         return out
 
 
-class AriaImageProcessor(BaseImageProcessor):
+class AriaImageProcessor(BaseImageProcessor, LlavaNextImageProcessor):
     """
     A vision processor for the Aria model that handles image preprocessing.
     Initialize the AriaImageProcessor.
@@ -410,8 +410,8 @@ class AriaImageProcessor(BaseImageProcessor):
             Maximum image size.
         min_image_size (`int`, *optional*, defaults to 336):
             Minimum image size.
-        split_ratio (`list`, *optional*, defaults to a list of common split ratios as tuples):
-            The ratio for splitting the image.
+        split_resolutions (`list`, *optional*, defaults to a list of common split ratios as tuples):
+            The optimal resolutions for splitting the image.
         split_image (`bool`, *optional*, defaults to False):
             Whether to split the image.
         do_convert_rgb (`bool`, *optional*, defaults to True):
@@ -428,7 +428,7 @@ class AriaImageProcessor(BaseImageProcessor):
         image_std=None,
         max_image_size=980,
         min_image_size=336,
-        split_ratio: Optional[List[Tuple[int, int]]] = None,
+        split_resolutions: Optional[List[Tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
@@ -445,8 +445,8 @@ class AriaImageProcessor(BaseImageProcessor):
         self.min_image_size = min_image_size
         self.image_mean = image_mean
         self.image_std = image_std
-        if split_ratio is None:
-            self.split_ratio = [
+        if split_resolutions is None:
+            self.split_resolutions = [
                 (1, 2),
                 (1, 3),
                 (1, 4),
@@ -468,12 +468,11 @@ class AriaImageProcessor(BaseImageProcessor):
                 (8, 1),
             ]
         else:
-            self.split_ratio = split_ratio
+            self.split_resolutions = split_resolutions
         self.split_image = split_image
         self.do_convert_rgb = do_convert_rgb
         self.do_normalize = do_normalize
         self.resample = resample
-
     def preprocess(
         self,
         images: Union[ImageInput, List[ImageInput]],
@@ -481,10 +480,10 @@ class AriaImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         max_image_size: Optional[int] = None,
         min_image_size: Optional[int] = None,
-        split_image: Optional[bool] = False,
-        do_convert_rgb: Optional[bool] = True,
-        do_normalize: Optional[bool] = True,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        split_image: Optional[bool] = None,
+        do_convert_rgb: Optional[bool] = None,
+        do_normalize: Optional[bool] = None,
+        resample: PILImageResampling = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -503,13 +502,13 @@ class AriaImageProcessor(BaseImageProcessor):
                 Maximum image size.
             min_image_size (`int`, *optional*, defaults to `self.min_image_size` (336)):
                 Minimum image size.
-            split_image (`bool`, *optional*, defaults to False):
+            split_image (`bool`, *optional*, defaults to `self.split_image` (False)):
                 Whether to split the image.
-            do_convert_rgb (`bool`, *optional*, defaults to True):
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb` (True)):
                 Whether to convert the image to RGB.
-            do_normalize (`bool`, *optional*, defaults to True):
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize` (True)):
                 Whether to normalize the image.
-            resample (PILImageResampling, *optional*, defaults to BICUBIC):
+            resample (PILImageResampling, *optional*, defaults to `self.resample` (BICUBIC)):
                 The resampling filter to use if resizing the image.
             return_tensors (`str` or `TensorType`, *optional*, defaults to "pt"):
                 The type of tensor to return.
@@ -545,7 +544,6 @@ class AriaImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         max_image_size = max_image_size if max_image_size is not None else self.max_image_size
         min_image_size = min_image_size if min_image_size is not None else self.min_image_size
-        return_tensors = return_tensors if return_tensors is not None else self.return_tensors
         split_image = split_image if split_image is not None else self.split_image
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -587,8 +585,9 @@ class AriaImageProcessor(BaseImageProcessor):
             if split_image:
                 crop_images = self.get_image_patches(
                     image,
-                    self.split_ratio,
+                    self.split_resolutions,
                     max_image_size,
+                    resample,
                     data_format=input_data_format,
                     input_data_format=input_data_format,
                 )
@@ -752,7 +751,7 @@ class AriaProcessor(ProcessorMixin):
 
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
-        self.size_conversion = size_conversion
+        self.size_conversion = {int(k): v for k, v in size_conversion.items()}
 
         if tokenizer is not None and tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.unk_token

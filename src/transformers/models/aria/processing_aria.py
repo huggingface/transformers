@@ -63,7 +63,7 @@ class AriaProcessor(ProcessorMixin):
 
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
-        self.size_conversion = size_conversion
+        self.size_conversion = {int(k): v for k, v in size_conversion.items()}
 
         if tokenizer is not None and tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.unk_token

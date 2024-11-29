@@ -4,12 +4,12 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import List, Optional, Tuple, Union
-
+from typing import List, Optional, Tuple, Union, Iterable
+import math
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, select_best_resolution
-from ...image_transforms import convert_to_rgb, pad, resize, to_channel_dimension_format
+from ...image_transforms import convert_to_rgb, pad, resize, to_channel_dimension_format, PaddingMode
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -23,6 +23,22 @@ from ...image_utils import (
 )
 from ...utils import TensorType
 
+
+def _get_patch_output_size(image, target_resolution, input_data_format):
+    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
+    target_height, target_width = target_resolution
+
+    scale_w = target_width / original_width
+    scale_h = target_height / original_height
+
+    if scale_w < scale_h:
+        new_width = target_width
+        new_height = min(math.ceil(original_height * scale_w), target_height)
+    else:
+        new_height = target_height
+        new_width = min(math.ceil(original_width * scale_h), target_width)
+
+    return new_height, new_width
 
 def make_batched_images(images) -> List[List[ImageInput]]:
     """
@@ -89,8 +105,8 @@ class AriaImageProcessor(BaseImageProcessor):
             Maximum image size.
         min_image_size (`int`, *optional*, defaults to 336):
             Minimum image size.
-        split_ratio (`list`, *optional*, defaults to a list of common split ratios as tuples):
-            The ratio for splitting the image.
+        split_resolutions (`list`, *optional*, defaults to a list of common resolutions as tuples):
+            The optimal resolutions for splitting the image.
         split_image (`bool`, *optional*, defaults to False):
             Whether to split the image.
         do_convert_rgb (`bool`, *optional*, defaults to True):
@@ -107,7 +123,7 @@ class AriaImageProcessor(BaseImageProcessor):
         image_std=None,
         max_image_size=980,
         min_image_size=336,
-        split_ratio: Optional[List[Tuple[int, int]]] = None,
+        split_resolutions: Optional[List[Tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_normalize: Optional[bool] = True,
@@ -124,8 +140,8 @@ class AriaImageProcessor(BaseImageProcessor):
         self.min_image_size = min_image_size
         self.image_mean = image_mean
         self.image_std = image_std
-        if split_ratio is None:
-            self.split_ratio = [
+        if split_resolutions is None:
+            split_resolutions = [
                 (1, 2),
                 (1, 3),
                 (1, 4),
@@ -146,12 +162,124 @@ class AriaImageProcessor(BaseImageProcessor):
                 (7, 1),
                 (8, 1),
             ]
-        else:
-            self.split_ratio = split_ratio
+            split_resolutions = [(el[0]*490, el[1]*490) for el in split_resolutions]
+        self.split_resolutions = split_resolutions
         self.split_image = split_image
         self.do_convert_rgb = do_convert_rgb
         self.do_normalize = do_normalize
         self.resample = resample
+
+
+    def _resize_for_patching(
+        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+    ) -> np.array:
+        """
+        Resizes an image to a target resolution while maintaining aspect ratio.
+
+        Args:
+            image (np.array):
+                The input image.
+            target_resolution (tuple):
+                The target resolution (height, width) of the image.
+            resample (`PILImageResampling`):
+                Resampling filter to use if resizing the image.
+            input_data_format (`ChannelDimension` or `str`):
+                The channel dimension format of the input image.
+
+        Returns:
+            np.array: The resized and padded image.
+        """
+        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+
+        # Resize the image
+        resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
+
+        return resized_image
+
+    def _pad_for_patching(
+        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+    ) -> np.array:
+        """
+        Pad an image to a target resolution while maintaining aspect ratio.
+        """
+        target_height, target_width = target_resolution
+        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+
+        paste_x = (target_width - new_width) // 2
+        paste_y = (target_height - new_height) // 2
+
+        padded_image = self.pad(image, padding=((paste_y, paste_y), (paste_x, paste_x)))
+
+        return padded_image
+
+
+    def pad(
+        self,
+        image: np.ndarray,
+        padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+        mode: PaddingMode = PaddingMode.CONSTANT,
+        constant_values: Union[float, Iterable[float]] = 0.0,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """
+        Pads the `image` with the specified `padding` and `mode`. Padding can be in the (`height`, `width`)
+        dimension of in the (`num_patches`) dimension. In the second case an iterable if tuples is expected
+        as input.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad.
+            padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+                Padding to apply to the edges of the height, width axes. Can be one of three formats:
+                - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
+                - `((before, after),)` yields same before and after pad for height and width.
+                - `(pad,)` or int is a shortcut for before = after = pad width for all axes.
+            mode (`PaddingMode`):
+                The padding mode to use. Can be one of:
+                    - `"constant"`: pads with a constant value.
+                    - `"reflect"`: pads with the reflection of the vector mirrored on the first and last values of the
+                    vector along each axis.
+                    - `"replicate"`: pads with the replication of the last value on the edge of the array along each axis.
+                    - `"symmetric"`: pads with the reflection of the vector mirrored along the edge of the array.
+            constant_values (`float` or `Iterable[float]`, *optional*):
+                The value to use for the padding if `mode` is `"constant"`.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
+
+        Returns:
+            `np.ndarray`: The padded image.
+
+        """
+
+        # call the general `pad` if padding on `height/width`, otherwise it's the `num_patched` dim
+        if isinstance(padding, int) or len(padding) != 4:
+            return pad(image, padding, mode, constant_values, data_format, input_data_format)
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+        if mode == PaddingMode.CONSTANT:
+            image = np.pad(image, padding, mode="constant", constant_values=constant_values)
+        elif mode == PaddingMode.REFLECT:
+            image = np.pad(image, padding, mode="reflect")
+        elif mode == PaddingMode.REPLICATE:
+            image = np.pad(image, padding, mode="edge")
+        elif mode == PaddingMode.SYMMETRIC:
+            image = np.pad(image, padding, mode="symmetric")
+        else:
+            raise ValueError(f"Invalid padding mode: {mode}")
+        image = (
+            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+        )
+        return image
 
     def preprocess(
         self,
@@ -160,10 +288,10 @@ class AriaImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         max_image_size: Optional[int] = None,
         min_image_size: Optional[int] = None,
-        split_image: Optional[bool] = False,
-        do_convert_rgb: Optional[bool] = True,
-        do_normalize: Optional[bool] = True,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        split_image: Optional[bool] = None,
+        do_convert_rgb: Optional[bool] = None,
+        do_normalize: Optional[bool] = None,
+        resample: PILImageResampling = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -182,13 +310,13 @@ class AriaImageProcessor(BaseImageProcessor):
                 Maximum image size.
             min_image_size (`int`, *optional*, defaults to `self.min_image_size` (336)):
                 Minimum image size.
-            split_image (`bool`, *optional*, defaults to False):
+            split_image (`bool`, *optional*, defaults to `self.split_image` (False)):
                 Whether to split the image.
-            do_convert_rgb (`bool`, *optional*, defaults to True):
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb` (True)):
                 Whether to convert the image to RGB.
-            do_normalize (`bool`, *optional*, defaults to True):
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize` (True)):
                 Whether to normalize the image.
-            resample (PILImageResampling, *optional*, defaults to BICUBIC):
+            resample (PILImageResampling, *optional*, defaults to `self.resample` (BICUBIC)):
                 The resampling filter to use if resizing the image.
             return_tensors (`str` or `TensorType`, *optional*, defaults to "pt"):
                 The type of tensor to return.
@@ -224,7 +352,6 @@ class AriaImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         max_image_size = max_image_size if max_image_size is not None else self.max_image_size
         min_image_size = min_image_size if min_image_size is not None else self.min_image_size
-        return_tensors = return_tensors if return_tensors is not None else self.return_tensors
         split_image = split_image if split_image is not None else self.split_image
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -266,8 +393,9 @@ class AriaImageProcessor(BaseImageProcessor):
             if split_image:
                 crop_images = self.get_image_patches(
                     image,
-                    self.split_ratio,
+                    self.split_resolutions,
                     max_image_size,
+                    resample,
                     data_format=input_data_format,
                     input_data_format=input_data_format,
                 )
