@@ -1373,9 +1373,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "`PretrainedConfig`. To create a model from a pretrained model use "
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
-        # Save config and origin of the pretrained weights if given in model
         if not getattr(config, "_attn_implementation_autoset", False):
-            config = self._autoset_attn_implementation(config, torch_dtype=config.torch_dtype, check_device_map=False)
+            # config usually has a `torch_dtype` but we need the next line for the `no_super_init` tests
+            dtype = config.torch_dtype if hasattr(config, "torch_dtype") else torch.get_default_dtype()
+            config = self._autoset_attn_implementation(config, torch_dtype=dtype, check_device_map=False)
         self.config = config
 
         self.name_or_path = config.name_or_path
