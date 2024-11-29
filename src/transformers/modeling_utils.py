@@ -29,8 +29,8 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
-from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from multiprocessing import Process
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 from zipfile import is_zipfile
 
 import torch
@@ -52,7 +52,6 @@ from .pytorch_utils import (  # noqa: F401
     find_pruneable_heads_and_indices,
     id_tensor_storage,
     is_torch_greater_or_equal_than_1_13,
-    is_torch_greater_or_equal_than_2_4,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
@@ -90,6 +89,7 @@ from .utils import (
     is_peft_available,
     is_remote_url,
     is_safetensors_available,
+    is_torch_greater_or_equal,
     is_torch_sdpa_available,
     is_torch_xla_available,
     logging,
@@ -139,6 +139,7 @@ logger = logging.get_logger(__name__)
 
 _init_weights = True
 _is_quantized = False
+_is_ds_init_called = False
 
 
 def is_fsdp_enabled():
@@ -168,6 +169,10 @@ else:
 
 if is_peft_available():
     from .utils import find_adapter_config_file
+
+
+SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
+
 
 TORCH_INIT_FUNCTIONS = {
     "uniform_": nn.init.uniform_,
@@ -224,6 +229,19 @@ def set_quantized_state():
         yield
     finally:
         _is_quantized = False
+
+
+# Skip recursive calls to deepspeed.zero.Init to avoid pinning errors.
+# This issue occurs with ZeRO stage 3 when using NVMe offloading.
+# For more details, refer to issue #34429.
+@contextmanager
+def set_zero3_state():
+    global _is_ds_init_called
+    _is_ds_init_called = True
+    try:
+        yield
+    finally:
+        _is_ds_init_called = False
 
 
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
@@ -1404,13 +1422,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch_dtype=torch_dtype,
             )
 
-        if is_deepspeed_zero3_enabled() and not _is_quantized:
+        if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
+            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
+            with ContextManagers(init_contexts):
                 model = cls(config, **kwargs)
 
         else:
@@ -2881,7 +2900,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if module_map:
             filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: state_dict[tensor].contiguous() for tensor in tensors}
+            shard = {}
+            for tensor in tensors:
+                shard[tensor] = state_dict[tensor].contiguous()
+                # delete reference, see https://github.com/huggingface/transformers/pull/34890
+                del state_dict[tensor]
+
             # remake shard with onloaded parameters if necessary
             if module_map:
                 if accelerate_version < version.parse("0.31"):
@@ -2907,6 +2931,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
+
+        del state_dict
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
@@ -3056,7 +3082,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: Type[SpecificPreTrainedModelType],
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
         *model_args,
         config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
@@ -3066,10 +3092,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
-        use_safetensors: bool = None,
+        use_safetensors: Optional[bool] = None,
         weights_only: bool = True,
         **kwargs,
-    ) -> "PreTrainedModel":
+    ) -> SpecificPreTrainedModelType:
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -3760,11 +3786,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     **has_file_kwargs,
                                 }
                                 if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                                    Thread(
+                                    Process(
                                         target=auto_conversion,
                                         args=(pretrained_model_name_or_path,),
                                         kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
-                                        name="Thread-autoconversion",
+                                        name="Process-auto_conversion",
                                     ).start()
                         else:
                             # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
@@ -3964,11 +3990,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         init_contexts = [no_init_weights(_enable=_fast_init)]
         tp_device = None
 
-        if is_deepspeed_zero3_enabled() and not is_quantized:
+        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
+            init_contexts = [
+                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                set_zero3_state(),
+            ] + init_contexts
         elif low_cpu_mem_usage:
             if not is_accelerate_available():
                 raise ImportError(
@@ -5006,7 +5035,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_mesh (`torch.distributed.DeviceMesh`):
                 The device mesh to use for tensor parallelism.
         """
-        if not is_torch_greater_or_equal_than_2_4:
+        if not is_torch_greater_or_equal("2.5"):
             raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
 
         # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
