@@ -59,6 +59,7 @@ COLPALI_START_DOCSTRING = r"""
 class ColPaliPreTrainedModel(PreTrainedModel):
     config_class = ColPaliConfig
     base_model_prefix = "model"
+    _no_split_modules = []
 
     def _init_weights(self, module):
         std = (

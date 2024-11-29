@@ -31,7 +31,7 @@ class ColPaliConfig(PretrainedConfig):
     from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
 
     Creating a configuration with the default settings will result in a configuration where the VLM backbone is set to the
-    default PaliGemma configuration.
+    default PaliGemma configuration, i.e the one from [vidore/colpali-v1.2](https://huggingface.co/vidore/colpali-v1.2).
 
     The ColPali config is very similar to [`PaligemmaConfig`], but with an extra attribute defining the embedding dimension.
 
@@ -93,9 +93,6 @@ class ColPaliConfig(PretrainedConfig):
         self.embedding_dim = embedding_dim
 
         super().__init__(**kwargs)
-
-    def ignore_index(self):
-        raise AttributeError("Not needed for ColPali")
 
 
 __all__ = ["ColPaliConfig"]
