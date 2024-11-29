@@ -1207,6 +1207,8 @@ class GenerationTesterMixin:
             results2 = []
             results3 = []
             results4 = []
+            results5 = []
+            results6 = []
 
             failed, o, output_greedy, output_assisted = foo(self, model, inputs_dict, generation_kwargs)
             if failed == "FAIL":
@@ -1222,6 +1224,11 @@ class GenerationTesterMixin:
                     results2.append(results[-1][0])
                     results3.append(foo(self, model2, inputs_dict, generation_kwargs))
                     results4.append(results3[-1][0])
+
+                for _ in range(500):
+                    _, inputs_dict_2 = self.prepare_config_and_inputs_for_generate(batch_size=1)
+                    results5.append(foo(self, model, inputs_dict_2, generation_kwargs))
+                    results6.append(results[-1][0])
 
                 breakpoint()
                 assert 1 == 2
