@@ -278,10 +278,10 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
-        sequence_bias (`Dict[Tuple[int], float]`, *optional*)):
-            Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
-            sequence being selected, while negative biases do the opposite. Check
-            [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
+        sequence_bias (`List[List[List[int], float]]`, *optional*)):
+            List of pairs that contain a non-empty list of token ids and a float bias , e.g, `[[[32, 69], -1.7], [[92], 0.2]]`.
+            Positive biases increase the odds of the sequence being selected, while negative biases do the opposite.
+            Check [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
         token_healing (`bool`, *optional*, defaults to `False`):
             Heal tail tokens of prompts by replacing them with their appropriate extensions.
             This enhances the quality of completions for prompts affected by greedy tokenization bias.
@@ -743,28 +743,34 @@ class GenerationConfig(PushToHubMixin):
                         raise ValueError(
                             f"`{arg}` must be either a `List[List[List[int]]]` or `List[List[int]]`, but got {value}."
                         )
+
         if self.sequence_bias is not None:
-            if (
-                not isinstance(self.sequence_bias, dict)
-                and not isinstance(self.sequence_bias, list)
-                or len(self.sequence_bias) == 0
-            ):
+            if not isinstance(self.sequence_bias, list) or len(self.sequence_bias) == 0:
                 raise ValueError(
-                    f"`sequence_bias` has to be a non-empty dictionary, or non-empty list of lists but is {self.sequence_bias}."
+                    f"`sequence_bias` must be a non-empty list of lists and a bias float, in the format `List[List[List[int], float]]`, but got {self.sequence_bias}."
                 )
-            if isinstance(self.sequence_bias, dict) and any(
-                not isinstance(sequence_ids, tuple) for sequence_ids in self.sequence_bias.keys()
-            ):
-                raise ValueError(f"`sequence_bias` has to be a dict with tuples as keys, but is {self.sequence_bias}.")
-            if isinstance(self.sequence_bias, dict) and any(
-                any((not isinstance(token_id, int) or token_id < 0) for token_id in sequence_ids)
-                or len(sequence_ids) == 0
-                for sequence_ids in self.sequence_bias.keys()
-            ):
-                raise ValueError(
-                    f"Each key in `sequence_bias` has to be a non-empty tuple of positive integers, but is "
-                    f"{self.sequence_bias}."
-                )
+
+            for inner_list in self.sequence_bias:
+                if not isinstance(inner_list, list) or len(inner_list) != 2:
+                    raise ValueError(
+                        f"Each element in `sequence_bias` must be a list of two elements a list of integers and a float [List[int], float], but got {inner_list}."
+                    )
+
+                sequence_ids = inner_list[0]
+                if (
+                    not isinstance(sequence_ids, list)
+                    or len(sequence_ids) == 0
+                    or any(not isinstance(token_id, int) or token_id < 0 for token_id in sequence_ids)
+                ):
+                    raise ValueError(
+                        f"The first element of each inner list in `sequence_bias` must be a non-empty list of positive integers, but got {sequence_ids}."
+                    )
+
+                bias = inner_list[1]
+                if not isinstance(bias, float):
+                    raise ValueError(
+                        f"The second element of each inner list in `sequence_bias` must be a float, but got {bias}."
+                    )
 
         # Validation of attribute relations:
         fix_location = ""
