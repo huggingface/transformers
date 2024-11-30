@@ -660,7 +660,7 @@ def merge(patches, batch_size, merge_out_size):
         # patches are not created when scaled image size is equal to patch size
         return patches
 
-    box_size = int(math.sqrt(num_patches // batch_size))
+    box_size = math.ceil(math.sqrt(num_patches // batch_size))
     """
     merge_out_size = (box_size - 2) * (out_size - 2 * padding) + (2) * (out_size - padding)
     padding = (merge_out_size - box_size * out_size) / (6 - 2 * box_size)
@@ -805,11 +805,6 @@ class DepthProEncoder(nn.Module):
             raise ValueError("Input tensor must have shape (B, C, H, W).")
 
         B, C, H, W = pixel_values.shape
-
-        if not (H == W == self.config.image_size):
-            raise ValueError(
-                f"Height={H} and Width={W} doesnot match the specified image_size={self.config.image_size} in config."
-            )
 
         if not (C == self.config.num_channels):
             raise ValueError(

@@ -113,7 +113,7 @@ class DepthProImageProcessor(BaseImageProcessor):
 
     def resize(
         self,
-        images: List[np.ndarray],
+        image: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         antialias: bool = False,
@@ -125,8 +125,8 @@ class DepthProImageProcessor(BaseImageProcessor):
         Resize an image to `(size["height"], size["width"])`.
 
         Args:
-            images (`List[np.ndarray]`):
-                Images to resize.
+            image (`np.ndarray`):
+                Image to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
@@ -157,16 +157,13 @@ class DepthProImageProcessor(BaseImageProcessor):
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         output_size = (size["height"], size["width"])
 
-        images = np.stack(images)
-        images = torch.from_numpy(images)
-
         return torch.nn.functional.interpolate(
             # input should be (B, C, H, W)
-            input=images,
+            input=torch.from_numpy(image).unsqueeze(0),
             size=output_size,
             mode=pil_torch_interpolation_mapping[resample].value,
             antialias=antialias,
-        )
+        ).squeeze(0).numpy()
 
     def _validate_input_arguments(
         self,
@@ -321,8 +318,15 @@ class DepthProImageProcessor(BaseImageProcessor):
         # depth-pro scales the image before resizing it
         # uses torch interpolation which requires ChannelDimension.FIRST
         if do_resize:
-            images = self.resize(images, size=size_dict, resample=resample, antialias=antialias)
-            images = images.numpy()
+            images = [
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    antialias=antialias,
+                )
+                for image in images
+            ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

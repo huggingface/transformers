@@ -69,6 +69,7 @@ from . import (
     deit,
     deprecated,
     depth_anything,
+    depth_pro,
     detr,
     dialogpt,
     dinat,
