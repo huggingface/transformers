@@ -30,7 +30,8 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_timesfm"] = [
-        "TimesFMModel",
+        "TimesFMModelForPrediction",
+        "TimesFMDecoder",
         "TimesFMPreTrainedModel",
     ]
 
@@ -43,10 +44,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_timesfm import (
-            TimesFMModel,
-            TimesFMPreTrainedModel,
-        )
+        from .modeling_timesfm import TimesFMDecoder, TimesFMModelForPrediction, TimesFMPreTrainedModel
 
 else:
     import sys

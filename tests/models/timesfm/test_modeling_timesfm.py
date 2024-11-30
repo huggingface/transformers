@@ -40,9 +40,7 @@ if is_torch_fx_available():
 
 
 if is_torch_available():
-    from transformers import (
-        TimesFMModel,
-    )
+    from transformers import TimesFMModelForPrediction
 
 
 class TimesFMModelTester:
@@ -66,6 +64,7 @@ class TimesFMModelTester:
         use_positional_embedding: bool = True,
         initializer_factor: float = 0.0,
         is_training: bool = False,
+        batch_size: int = 3,
     ):
         self.parent = parent
         self.patch_len = patch_len
@@ -85,6 +84,7 @@ class TimesFMModelTester:
         self.use_positional_embedding = use_positional_embedding
         self.initializer_factor = initializer_factor
         self.is_training = is_training
+        self.batch_size = batch_size
 
         # The size of test input
         self.seq_length = context_len // patch_len
@@ -148,8 +148,8 @@ class TimesFMModelTester:
 
 @require_torch
 class TimesFMModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TimesFMModel,) if is_torch_available() else ()
-    all_generative_model_classes = (TimesFMModel,) if is_torch_available() else ()
+    all_model_classes = (TimesFMModelForPrediction,) if is_torch_available() else ()
+    all_generative_model_classes = (TimesFMModelForPrediction,) if is_torch_available() else ()
     all_parallelizable_model_classes = ()
     fx_compatible = False
     test_pruning = False
@@ -164,7 +164,7 @@ class TimesFMModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_create_and_run_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = TimesFMModel(config)
+        model = TimesFMModelForPrediction(config)
         model.to(torch_device)
         model.eval()
         results = model(**inputs_dict)
@@ -180,7 +180,7 @@ class TimesFMModelTest(ModelTesterMixin, unittest.TestCase):
 
     # the main input name is `inputs`
     def test_model_main_input_name(self):
-        model_signature = inspect.signature(getattr(TimesFMModel, "forward"))
+        model_signature = inspect.signature(getattr(TimesFMModelForPrediction, "forward"))
         # The main input is the name of the argument after `self`
         observed_main_input_name = list(model_signature.parameters.keys())[1]
-        self.assertEqual(TimesFMModel.main_input_name, observed_main_input_name)
+        self.assertEqual(TimesFMModelForPrediction.main_input_name, observed_main_input_name)

@@ -37,9 +37,15 @@ from .configuration_timesfm import TimesFMConfig
 
 
 @dataclass
-class TimesFMOutput(BaseModelOutput):
-    mean_predictions: np.ndarray = None
-    full_predictions: np.ndarray = None
+class TimesFMDecoderOutput(BaseModelOutput):
+    loc: np.ndarray | None = None
+    scale: np.ndarray | None = None
+
+
+@dataclass
+class TimesFMOutputForPrediction(BaseModelOutput):
+    mean_predictions: np.ndarray | None = None
+    full_predictions: np.ndarray | None = None
 
 
 class TimesFMTransformerMLP(nn.Module):
@@ -553,8 +559,8 @@ class TimesFMPreTrainedModel(PreTrainedModel):
             pass
 
 
-class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
-    """Patched time-series decoder."""
+class TimesFMDecoder(TimesFMPreTrainedModel):
+    """Patched time-series decoder without any specific output layer."""
 
     def __init__(self, config: TimesFMConfig):
         super().__init__(config)
@@ -566,11 +572,6 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
             hidden_dims=config.model_dim,
         )
         self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.model_dim)
-        self.horizon_ff_layer = TimesFMResidualBlock(
-            input_dims=config.model_dim,
-            output_dims=config.horizon_len * (1 + len(config.quantiles)),
-            hidden_dims=config.model_dim,
-        )
         self.stacked_transformer = TimesFMStackedDecoder(config=config)
         if self.config.use_positional_embedding:
             self.position_emb = TimesFMPositionalEmbedding(
@@ -599,11 +600,6 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
             outputs,
         )
         return outputs, (mu, sigma)
-
-    def _reverse_transform(self, outputs: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        """Output is of shape [B, N, P, Q]."""
-        mu, sigma = stats
-        return outputs * sigma[:, None, None, None] + mu[:, None, None, None]
 
     def _preprocess_input(
         self,
@@ -649,23 +645,6 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
 
         return model_input, patched_padding, stats, patched_inputs
 
-    def _postprocess_output(
-        self,
-        model_output: torch.Tensor,
-        num_outputs: int,
-        stats: tuple[torch.Tensor, torch.Tensor],
-    ) -> torch.Tensor:
-        """Postprocess output of stacked transformer."""
-
-        # B x N x (H.Q)
-        output_ts = self.horizon_ff_layer(model_output)
-
-        # Reshape using view
-        b, n, _ = output_ts.shape
-        output_ts = output_ts.view(b, n, self.config.horizon_len, num_outputs)
-
-        return self._reverse_transform(output_ts, stats)
-
     def forward(
         self,
         input_ts: torch.Tensor,
@@ -673,8 +652,7 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-        num_outputs = len(self.config.quantiles) + 1
+    ) -> TimesFMDecoderOutput:
         model_input, patched_padding, stats, _ = self._preprocess_input(
             input_ts=input_ts,
             input_padding=input_padding,
@@ -693,8 +671,96 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
         else:
             all_hidden_states = None
 
-        output_ts = self._postprocess_output(transformer_output.last_hidden_state, num_outputs, stats)
-        return output_ts, transformer_output.attentions, all_hidden_states
+        return TimesFMDecoderOutput(
+            last_hidden_state=transformer_output.last_hidden_state,
+            hidden_states=all_hidden_states,
+            attentions=transformer_output.attentions if output_attentions else None,
+            loc=stats[0],
+            scale=stats[1],
+        )
+
+
+class TimesFMModelForPrediction(TimesFMPreTrainedModel):
+    def __init__(self, config: TimesFMConfig):
+        super().__init__(config)
+
+        self.config = config
+        self.context_len = config.context_len
+        self.horizon_len = config.horizon_len
+
+        self.decoder = TimesFMDecoder(config)
+
+        # quantile and mean output
+        self.horizon_ff_layer = TimesFMResidualBlock(
+            input_dims=config.model_dim,
+            output_dims=config.horizon_len * (1 + len(config.quantiles)),
+            hidden_dims=config.model_dim,
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def _preprocess(self, inputs: Sequence[np.array], freq: Sequence[int]) -> tuple[np.array, np.array, int]:
+        """Formats and pads raw inputs to feed into the model.
+
+        This function both pads each time series to match the context length, and
+        pads the inputs to meet the SPMD shape requirement.
+
+        Args:
+          inputs: A list of 1d Tensors. Each JTensor is the context time series of
+            a single forecast task.
+          freq: list of frequencies
+
+        Returns:
+        A tuple of:
+        - the padded input time series to meet the model required context.
+        - the padding indicator.
+        - the number of padded examples for SPMD so that each core has the same
+            number (a multiple of `batch_size`) of examples.
+        """
+        input_ts, input_padding, inp_freq = [], [], []
+
+        for i, ts in enumerate(inputs):
+            input_len = ts.shape[0]
+            padding = np.zeros(shape=(input_len + self.horizon_len,), dtype=float)
+            if input_len < self.context_len:
+                num_front_pad = self.context_len - input_len
+                ts = np.concatenate([np.zeros(shape=(num_front_pad,), dtype=float), ts], axis=0)
+                padding = np.concatenate([np.ones(shape=(num_front_pad,), dtype=float), padding], axis=0)
+            elif input_len > self.context_len:
+                ts = ts[-self.context_len :]
+                padding = padding[-(self.context_len + self.horizon_len) :]
+
+            input_ts.append(ts)
+            input_padding.append(padding)
+            inp_freq.append(freq[i])
+
+        return (
+            np.stack(input_ts, axis=0),
+            np.stack(input_padding, axis=0),
+            np.array(inp_freq).astype(np.int32).reshape(-1, 1),
+        )
+
+    def _postprocess_output(
+        self,
+        model_output: torch.Tensor,
+        stats: tuple[torch.Tensor, torch.Tensor],
+    ) -> torch.Tensor:
+        """Postprocess output of stacked transformer."""
+
+        # B x N x (H.Q)
+        output_ts = self.horizon_ff_layer(model_output)
+
+        # Reshape using view
+        b, n, _ = output_ts.shape
+        output_ts = output_ts.view(b, n, self.config.horizon_len, len(self.config.quantiles) + 1)
+
+        return self._reverse_transform(output_ts, stats)
+
+    def _reverse_transform(self, outputs: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """Output is of shape [B, N, P, Q]."""
+        mu, sigma = stats
+        return outputs * sigma[:, None, None, None] + mu[:, None, None, None]
 
     def decode(
         self,
@@ -732,6 +798,7 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
         final_out = input_ts
         context_len = final_out.shape[1]
         full_outputs = []
+
         if paddings.shape[1] != final_out.shape[1] + horizon_len:
             raise ValueError(
                 "Length of paddings must match length of input + horizon_len:"
@@ -744,13 +811,18 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
             current_padding = paddings[:, 0 : final_out.shape[1]]
             input_ts = final_out[:, -max_len:]
             input_padding = current_padding[:, -max_len:]
-            fprop_outputs, all_attentions, all_hidden_states = self.forward(
+            decoder_output = self.decoder(
                 input_ts,
                 input_padding,
                 freq,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+            fprop_outputs = self._postprocess_output(
+                decoder_output.last_hidden_state,
+                (decoder_output.loc, decoder_output.scale),
+            )
+
             if return_forecast_on_context and step_index == 0:
                 # For the first decodings step, collect the model forecast on the
                 # context except the unavailable first input batch forecast.
@@ -775,62 +847,12 @@ class PatchedTimeSeriesDecoder(TimesFMPreTrainedModel):
             # `full_outputs` indexing starts at the forecast horizon.
             full_outputs = torch.concatenate(full_outputs, axis=1)[:, 0:horizon_len, :]
 
-        return full_outputs[:, :, 0], full_outputs, fprop_outputs, all_attentions, all_hidden_states
-
-
-class TimesFMModel(TimesFMPreTrainedModel):
-    def __init__(self, config: TimesFMConfig):
-        super().__init__(config)
-
-        self.config = config
-
-        self.decoder = PatchedTimeSeriesDecoder(config)
-
-        self.context_len = config.context_len
-        self.horizon_len = config.horizon_len
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def _preprocess(self, inputs: Sequence[np.array], freq: Sequence[int]) -> tuple[np.array, np.array, int]:
-        """Formats and pads raw inputs to feed into the model.
-
-        This function both pads each time series to match the context length, and
-        pads the inputs to meet the SPMD shape requirement.
-
-        Args:
-          inputs: A list of 1d JTensors. Each JTensor is the context time series of
-            a single forecast task.
-          freq: list of frequencies
-
-        Returns:
-        A tuple of:
-        - the padded input time series to meet the model required context.
-        - the padding indicator.
-        - the number of padded examples for SPMD so that each core has the same
-            number (a multiple of `batch_size`) of examples.
-        """
-        input_ts, input_padding, inp_freq = [], [], []
-
-        for i, ts in enumerate(inputs):
-            input_len = ts.shape[0]
-            padding = np.zeros(shape=(input_len + self.horizon_len,), dtype=float)
-            if input_len < self.context_len:
-                num_front_pad = self.context_len - input_len
-                ts = np.concatenate([np.zeros(shape=(num_front_pad,), dtype=float), ts], axis=0)
-                padding = np.concatenate([np.ones(shape=(num_front_pad,), dtype=float), padding], axis=0)
-            elif input_len > self.context_len:
-                ts = ts[-self.context_len :]
-                padding = padding[-(self.context_len + self.horizon_len) :]
-
-            input_ts.append(ts)
-            input_padding.append(padding)
-            inp_freq.append(freq[i])
-
         return (
-            np.stack(input_ts, axis=0),
-            np.stack(input_padding, axis=0),
-            np.array(inp_freq).astype(np.int32).reshape(-1, 1),
+            full_outputs[:, :, 0],
+            full_outputs,
+            decoder_output.last_hidden_state,
+            decoder_output.attentions,
+            decoder_output.hidden_states,
         )
 
     def forward(
@@ -844,12 +866,12 @@ class TimesFMModel(TimesFMPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> TimesFMOutputForPrediction:
         """Forecasts on a list of time series.
 
         Args:
           inputs: list of time series forecast contexts. Each context time series
-            should be in a format convertible to JTensor by `jnp.array`.
+            should be in a format convertible to Tensor.
           freq: frequency of each context time series. 0 for high frequency
             (default), 1 for medium, and 2 for low. Notice this is different from
             the `freq` required by `forecast_on_df`.
@@ -862,7 +884,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
             have non-negative values.
 
         Returns:
-        A tuple for JTensors:
+        A tuple for Tensors:
         - the mean forecast of size (# inputs, # forecast horizon),
         - the full forecast (mean + quantiles) of size
             (# inputs,  # forecast horizon, 1 + # quantiles).
@@ -900,7 +922,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
         input_ts_in = torch.from_numpy(np.array(input_ts, dtype=np.float32))
         input_padding_in = torch.from_numpy(np.array(input_padding, dtype=np.float32))
         inp_freq_in = torch.from_numpy(np.array(inp_freq, dtype=np.int32)).long()
-        mean_outputs, full_outputs, last_hidden_state, all_attentions, all_hidden_states = self.decoder.decode(
+        mean_outputs, full_outputs, last_hidden_state, all_attentions, all_hidden_states = self.decode(
             input_ts=input_ts_in,
             paddings=input_padding_in,
             freq=inp_freq_in,
@@ -918,7 +940,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
             full_outputs = torch.maximum(full_outputs, 0.0)
 
         if return_dict:
-            return TimesFMOutput(
+            return TimesFMOutputForPrediction(
                 last_hidden_state=last_hidden_state,
                 attentions=all_attentions if output_attentions else None,
                 hidden_states=all_hidden_states if output_hidden_states else None,
