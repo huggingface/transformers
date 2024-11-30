@@ -22,6 +22,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+import numpy as np
+
+
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
 from ..utils import (
@@ -721,7 +724,7 @@ class GenerationConfig(PushToHubMixin):
                 if arg == "bad_words_ids":
                     if any(
                         not isinstance(inner_list, list)
-                        or any(not isinstance(token_id, int) or token_id < 0 for token_id in inner_list)
+                        or any(not isinstance(token_id, (int, np.integer)) or token_id < 0 for token_id in inner_list)
                         for inner_list in value
                     ):
                         raise ValueError(
@@ -745,32 +748,54 @@ class GenerationConfig(PushToHubMixin):
                         )
 
         if self.sequence_bias is not None:
-            if not isinstance(self.sequence_bias, list) or len(self.sequence_bias) == 0:
+            if (
+                not isinstance(self.sequence_bias, list)
+                and not isinstance(self.sequence_bias, dict)  # for BC
+                or len(self.sequence_bias) == 0
+            ):
                 raise ValueError(
-                    f"`sequence_bias` must be a non-empty list of lists and a bias float, in the format `List[List[List[int], float]]`, but got {self.sequence_bias}."
+                    f"`sequence_bias` must be a non-empty list of lists of token ids and a float bias in the format `List[List[List[int], float]]`, e.g. `[[[32, 69], -1.7], [[92], 0.2]]`, but got {self.sequence_bias}."
                 )
 
-            for inner_list in self.sequence_bias:
-                if not isinstance(inner_list, list) or len(inner_list) != 2:
-                    raise ValueError(
-                        f"Each element in `sequence_bias` must be a list of two elements a list of integers and a float [List[int], float], but got {inner_list}."
-                    )
+            if isinstance(self.sequence_bias, list):
+                for inner_list in self.sequence_bias:
+                    if not isinstance(inner_list, list) or len(inner_list) != 2:
+                        raise ValueError(
+                            f"Each element in `sequence_bias` must be a list of two elements [List[int], float], but got {inner_list}."
+                        )
 
-                sequence_ids = inner_list[0]
-                if (
-                    not isinstance(sequence_ids, list)
-                    or len(sequence_ids) == 0
-                    or any(not isinstance(token_id, int) or token_id < 0 for token_id in sequence_ids)
-                ):
-                    raise ValueError(
-                        f"The first element of each inner list in `sequence_bias` must be a non-empty list of positive integers, but got {sequence_ids}."
-                    )
+                    sequence_ids, bias = inner_list[0], inner_list[1]
+                    if (
+                        not isinstance(sequence_ids, list)
+                        or len(sequence_ids) == 0
+                        or any(
+                            not isinstance(token_id, (int, np.integer)) or token_id < 0 for token_id in sequence_ids
+                        )
+                    ):
+                        raise ValueError(
+                            f"The first element of each inner list in `sequence_bias` must be a non-empty list of positive integers, but got {sequence_ids}."
+                        )
 
-                bias = inner_list[1]
-                if not isinstance(bias, float):
-                    raise ValueError(
-                        f"The second element of each inner list in `sequence_bias` must be a float, but got {bias}."
-                    )
+                    if not isinstance(bias, float):
+                        raise ValueError(
+                            f"The second element of each inner list in `sequence_bias` must be a float, but got {bias}."
+                        )
+
+            elif isinstance(self.sequence_bias, dict):
+                for sequence_ids, bias in self.sequence_bias.items():
+                    if (
+                        not isinstance(sequence_ids, tuple)
+                        or len(sequence_ids) == 0
+                        or any(
+                            not isinstance(token_id, (int, np.integer)) or token_id < 0 for token_id in sequence_ids
+                        )
+                    ):
+                        raise ValueError(
+                            f"Each key in `sequence_bias` must be a non-empty tuple of positive integers, but got {sequence_ids}."
+                        )
+
+                    if not isinstance(bias, float):
+                        raise ValueError(f"The value for each key in `sequence_bias` must be a float, but got {bias}.")
 
         # Validation of attribute relations:
         fix_location = ""
