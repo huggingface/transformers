@@ -12,7 +12,7 @@ from transformers.generation.candidate_generator import (
     AssistantVocabTranslatorCache,
     AssistedCandidateGeneratorDifferentTokenizers,
 )
- 
+
 
 class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
     def test_no_intersection(self):
