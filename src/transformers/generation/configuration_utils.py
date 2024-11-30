@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import numpy as np
 
-
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
 from ..utils import (
