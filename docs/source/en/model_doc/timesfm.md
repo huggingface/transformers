@@ -37,34 +37,14 @@ The original code can be found [here](https://github.com/google-research/timesfm
 
 [[autodoc]] TimesFMConfig
 
-## TimesFMModel
+## TimesFMDecoder
 
-[[autodoc]] TimesFMModel
+[[autodoc]] TimesFMDecoder
     - forward
 
-## TimesFMForConditionalGeneration
+## TimesFMModelForPrediction
 
-[[autodoc]] TimesFMForConditionalGeneration
-    - forward
-
-## TimesFMEncoderModel
-
-[[autodoc]] TimesFMEncoderModel
-    - forward
-
-## TimesFMForSequenceClassification
-
-[[autodoc]] TimesFMForSequenceClassification
-    - forward
-
-## TimesFMForTokenClassification
-
-[[autodoc]] TimesFMForTokenClassification
-    - forward
-
-## TimesFMForQuestionAnswering
-
-[[autodoc]] TimesFMForQuestionAnswering
+[[autodoc]] TimesFMModelForPrediction
     - forward
 
 </pt>

@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 class TimesFMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimesFMModel`] or a [`TFTimesFMModel`]. It is used to
+    This is the configuration class to store the configuration of a [`TimesFMModelForPrediction`] or a [`TFTimesFMDecoder`]. It is used to
     instantiate a TimesFM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the TimesFM
     [google/timesfm-1.0-200m](https://huggingface.co/google/timesfm-1.0-200m) architecture.
@@ -54,8 +54,6 @@ class TimesFMConfig(PretrainedConfig):
             be defined as `num_heads * head_dim`.
         num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
         tolerance (`float`, *optional*, defaults to 1e-06):
             The tolerance for the quantile loss.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -69,8 +67,6 @@ class TimesFMConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
     """
 
     model_type = "timesfm"
@@ -93,14 +89,12 @@ class TimesFMConfig(PretrainedConfig):
         intermediate_size: int = 1280,
         head_dim: int = 80,
         num_heads: int = 16,
-        dropout_rate: float = 0.1,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         use_positional_embedding: bool = True,
         initializer_factor: float = 1.0,
-        attention_dropout: float = 0.0,
         **kwargs,
     ):
         self.patch_len = patch_len
@@ -114,12 +108,10 @@ class TimesFMConfig(PretrainedConfig):
         self.head_dim = head_dim
         self.num_layers = num_layers
         self.num_heads = num_heads
-        self.dropout_rate = dropout_rate
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
         self.use_positional_embedding = use_positional_embedding
         self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
 
         super().__init__(
             is_encoder_decoder=self.is_encoder_decoder,
