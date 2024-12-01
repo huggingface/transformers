@@ -16,50 +16,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...cache_utils import Cache, StaticCache
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
     logging,
-    replace_return_docstrings,
 )
-from .configuration_diffllama import DiffLlamaConfig
+from ..gemma.modeling_gemma import GemmaForCausalLM
 from ..llama.modeling_llama import (
+    LlamaDecoderLayer,
+    LlamaForQuestionAnswering,
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
+    LlamaModel,
+    LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
-    LlamaDecoderLayer,
-    LlamaPreTrainedModel,
-    LlamaModel,
-    LlamaForSequenceClassification,
-    LlamaForQuestionAnswering,
-    LlamaForTokenClassification
 )
 from ..mistral.modeling_mistral import MistralMLP
-from ..gemma.modeling_gemma import GemmaForCausalLM
+from .configuration_diffllama import DiffLlamaConfig
 
 
 logger = logging.get_logger(__name__)
@@ -499,8 +483,7 @@ class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     _no_split_modules = ["DiffLlamaDecoderLayer"]
 
 
-
-class DiffLlamaModel(LlamaModel):
+class DiffLlamaModel(DiffLlamaPreTrainedModel, LlamaModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`DiffLlamaDecoderLayer`]
 
@@ -521,7 +504,6 @@ class DiffLlamaModel(LlamaModel):
         self.post_init()
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM with GEMMA->DIFFLLAMA,Gemma->DiffLlama,gemma->diffllama
 class DiffLlamaForCausalLM(GemmaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
