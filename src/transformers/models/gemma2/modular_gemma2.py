@@ -322,7 +322,12 @@ def flex_attention_forward(
 
 
 def sdpa_attention_forward(
-    config: Gemma2Config, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: torch.Tensor, **_kwargs
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
 ) -> Tuple[torch.Tensor, None]:
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
