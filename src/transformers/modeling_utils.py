@@ -2429,7 +2429,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
         mean_embeddings = torch.mean(old_embeddings_weight, axis=0)
         old_centered_embeddings = old_embeddings_weight - mean_embeddings
-        covariance = old_centered_embeddings.T @ old_centered_embeddings / old_num_tokens
+        covariance = old_centered_embeddings.T @ old_centered_embeddings / (old_num_tokens - 1)
 
         # Check if the covariance is positive definite.
         eigenvalues = torch.linalg.eigvals(covariance)
