@@ -1526,6 +1526,7 @@ class SpQRConfig(QuantizationConfigMixin):
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
+
     def __init__(
         self,
         bits: int = 3,
