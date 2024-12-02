@@ -208,6 +208,7 @@ def prepare_img():
 
 
 @require_torch
+@require_timm
 @require_vision
 class TimmWrapperModelIntegrationTest(unittest.TestCase):
     # some popular ones
