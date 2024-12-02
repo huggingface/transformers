@@ -1763,3 +1763,6 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+
+__all__ = ["DeformableDetrImageProcessor"]

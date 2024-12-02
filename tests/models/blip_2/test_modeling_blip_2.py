@@ -2346,11 +2346,16 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         ].strip()
 
         # Test output
+<<<<<<< HEAD
         print(predictions[0].tolist(), generated_text)
         self.assertEqual(
             predictions[0].tolist(),
             [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118],
         )
+=======
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         self.assertEqual("a woman sitting on the beach with a dog", generated_text)
 
         # image and context
@@ -2366,6 +2371,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         ].strip()
 
         # Test output
+<<<<<<< HEAD
         self.assertEqual(
             predictions[0].tolist(),
             [
@@ -2396,6 +2402,11 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             generated_text,
             "Question: which city is this? Answer: it's not a city, it's a beach",
         )
+=======
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
+        self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def test_inference_interpolate_pos_encoding(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
@@ -2412,9 +2423,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             0
         ].strip()
 
+<<<<<<< HEAD
         self.assertEqual(
             predictions[0].tolist(), [2, 102, 693, 8, 2335, 15, 5, 4105, 50118]
         )
+=======
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 102, 693, 8, 2335, 15, 5, 4105, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         self.assertEqual(generated_text, "a woman and dog on the beach")
 
     def test_inference_opt_batched_beam_search(self):
@@ -2432,6 +2448,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs, num_beams=2)
 
         # Test output (in this case, slightly different from greedy search)
+<<<<<<< HEAD
         self.assertEqual(
             predictions[0].tolist(),
             [2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118],
@@ -2440,6 +2457,11 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             predictions[1].tolist(),
             [2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118],
         )
+=======
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
+        self.assertEqual(predictions[1].tolist(), expected_ids)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def test_inference_t5(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
@@ -2476,10 +2498,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         ].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [0, 3, 7, 152, 67, 839, 1],
-        )
+        self.assertEqual(predictions[0].tolist(), [0, 3, 7, 152, 67, 839, 1])
         self.assertEqual(generated_text, "san diego")
 
     def test_inference_t5_batched_beam_search(self):

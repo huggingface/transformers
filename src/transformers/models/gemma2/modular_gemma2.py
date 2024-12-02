@@ -213,7 +213,14 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
     pass
 
 
-def eager_attention_forward(config, query, key, value, mask, **_kwargs):
+def eager_attention_forward(
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -240,8 +247,19 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
 
 
 def flash_attention_forward(
+<<<<<<< HEAD
     config, query, key, value, mask, target_dtype=torch.float16, **_kwargs
 ):
+=======
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    target_dtype: torch.dtype = torch.float16,
+    **_kwargs,
+) -> Tuple[torch.Tensor, None]:
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     if mask is not None:
         seq_len = mask.shape[1]
         query = query[:, :, :seq_len]
@@ -283,8 +301,19 @@ def flash_attention_forward(
 
 
 def flex_attention_forward(
+<<<<<<< HEAD
     config, query, key, value, mask, output_attentions=False, **_kwargs
 ):
+=======
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    output_attentions: bool = False,
+    **_kwargs,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
         score = soft_cap * torch.tanh(score / soft_cap)
@@ -302,12 +331,22 @@ def flex_attention_forward(
         return_lse=output_attentions,
     )
     if not output_attentions:
-        return attn_output, None
+        attn_weights = None
     else:
-        return attn_output[0], attn_output[1]
+        attn_output, attn_weights = attn_output
+
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
 
 
-def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
+def sdpa_attention_forward(
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, None]:
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
 
@@ -335,6 +374,7 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
         is_causal=is_causal,
         scale=config.scaling,
     )
+    attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, None
 
 
@@ -437,6 +477,7 @@ class Gemma2Attention(nn.Module):
                 key_states, value_states, self.layer_idx, cache_kwargs
             )
 
+<<<<<<< HEAD
         if output_attentions and self.config._attn_implementation in [
             "sdpa",
             "flash_attention_2",
@@ -445,6 +486,11 @@ class Gemma2Attention(nn.Module):
                 "Setting `attention_type` to `flex_attention` because `output_attentions=True`"
             )
             attention_type = "eager"
+=======
+        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
+            attention_type = "flex_attention"
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         else:
             attention_type = self.config._attn_implementation
 

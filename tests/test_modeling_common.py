@@ -2788,7 +2788,8 @@ class ModelTesterMixin:
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
-                    else:
+                    # model might return non-tensors objects (e.g. Cache class)
+                    elif isinstance(tuple_object, torch.Tensor):
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object),
@@ -3055,7 +3056,11 @@ class ModelTesterMixin:
             self.assertLessEqual(
                 max_diff,
                 tol,
+<<<<<<< HEAD
                 f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}).",
+=======
+                f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}",
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
             )
         else:
             raise ValueError(
@@ -3149,7 +3154,7 @@ class ModelTesterMixin:
 
             tf_model_class = getattr(transformers, tf_model_class_name)
 
-            pt_model = model_class(config)
+            pt_model = model_class(config).eval()
             tf_model = tf_model_class(config)
 
             pt_inputs_dict = self._prepare_for_class(inputs_dict, model_class)

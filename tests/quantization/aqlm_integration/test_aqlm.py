@@ -17,6 +17,7 @@ import gc
 import importlib
 import tempfile
 import unittest
+from unittest import skip
 
 from packaging import version
 
@@ -164,6 +165,9 @@ class AqlmTest(unittest.TestCase):
 
         self.assertEqual(nb_linears - 1, nb_aqlm_linear)
 
+    @skip(
+        "inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions. Waiting for the fix from AQLM side"
+    )
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -189,6 +193,9 @@ class AqlmTest(unittest.TestCase):
                 model_id, quantization_config=quantization_config
             )
 
+    @skip(
+        "inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions. Waiting for the fix from AQLM side"
+    )
     def test_save_pretrained(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded
@@ -209,6 +216,9 @@ class AqlmTest(unittest.TestCase):
                 self.EXPECTED_OUTPUT,
             )
 
+    @skip(
+        "inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions. Waiting for the fix from AQLM side"
+    )
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
         """

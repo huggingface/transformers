@@ -120,3 +120,6 @@ class RTDetrResNetConfig(BackboneConfigMixin, PretrainedConfig):
                 stage_names=self.stage_names,
             )
         )
+
+
+__all__ = ["RTDetrResNetConfig"]

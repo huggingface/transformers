@@ -869,3 +869,6 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             )
 
         return results
+
+
+__all__ = ["RTDetrImageProcessorFast"]

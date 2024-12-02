@@ -492,7 +492,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 stride_right,
                 self.torch_dtype,
             ):
-                yield item
+                yield {**item, **extra}
         else:
             if (
                 self.type == "seq2seq_whisper"

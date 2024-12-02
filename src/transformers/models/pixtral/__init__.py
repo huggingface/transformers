@@ -17,6 +17,10 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+<<<<<<< HEAD
+=======
+    is_torchvision_available,
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     is_vision_available,
 )
 
@@ -46,6 +50,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_pixtral"] = ["PixtralImageProcessor"]
 
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_pixtral_fast"] = ["PixtralImageProcessorFast"]
+
 
 if TYPE_CHECKING:
     from .configuration_pixtral import PixtralVisionConfig
@@ -69,6 +81,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_pixtral import PixtralImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_pixtral_fast import PixtralImageProcessorFast
 
 else:
     import sys

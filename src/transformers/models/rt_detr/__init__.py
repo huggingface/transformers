@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from typing import TYPE_CHECKING
 
+<<<<<<< HEAD
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
@@ -51,40 +53,27 @@ else:
         "RTDetrResNetBackbone",
         "RTDetrResNetPreTrainedModel",
     ]
+=======
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
 
 if TYPE_CHECKING:
-    from .configuration_rt_detr import RTDetrConfig
-    from .configuration_rt_detr_resnet import RTDetrResNetConfig
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_rt_detr import RTDetrImageProcessor
-        from .image_processing_rt_detr_fast import RTDetrImageProcessorFast
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_rt_detr import (
-            RTDetrForObjectDetection,
-            RTDetrModel,
-            RTDetrPreTrainedModel,
-        )
-        from .modeling_rt_detr_resnet import (
-            RTDetrResNetBackbone,
-            RTDetrResNetPreTrainedModel,
-        )
-
+    from .configuration_rt_detr import *
+    from .configuration_rt_detr_resnet import *
+    from .image_processing_rt_detr import *
+    from .image_processing_rt_detr_fast import *
+    from .modeling_rt_detr import *
+    from .modeling_rt_detr_resnet import *
 else:
     import sys
 
+<<<<<<< HEAD
     sys.modules[__name__] = _LazyModule(
         __name__, globals()["__file__"], _import_structure, module_spec=__spec__
     )
+=======
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e

@@ -193,7 +193,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.make_log_bucket_position
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -216,10 +215,14 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     return bucket_pos
 
 
+<<<<<<< HEAD
 # Copied from transformers.models.deberta_v2.modeling_deberta_v2.build_relative_position
 def build_relative_position(
     query_size, key_size, bucket_size=-1, max_position=-1, device=None
 ):
+=======
+def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     """
     Build relative position according to the query and key
 
@@ -283,7 +286,6 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     )
 
 
-# Copied from transformers.models.deberta.modeling_deberta.get_mask
 def get_mask(input, local_context):
     if not isinstance(local_context, DropoutContext):
         dropout = local_context
@@ -523,7 +525,6 @@ class SEWDFeatureExtractor(SEWDFeatureEncoder):
         )
 
 
-# Copied from transformers.models.deberta.modeling_deberta.ContextPooler
 class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -546,7 +547,6 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
-# Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
     """
     Masked Softmax which is optimized for saving memory
@@ -624,7 +624,6 @@ class XSoftmax(torch.autograd.Function):
         )
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DropoutContext
 class DropoutContext:
     def __init__(self):
         self.dropout = 0
@@ -633,7 +632,6 @@ class DropoutContext:
         self.reuse_mask = True
 
 
-# Copied from transformers.models.deberta.modeling_deberta.XDropout
 class XDropout(torch.autograd.Function):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
 
@@ -677,7 +675,6 @@ class XDropout(torch.autograd.Function):
         return symbolic_opset12.dropout(g, input, dropout_p, train)
 
 
-# Copied from transformers.models.deberta.modeling_deberta.StableDropout
 class StableDropout(nn.Module):
     """
     Optimized dropout module for stabilizing the training
@@ -727,13 +724,12 @@ class StableDropout(nn.Module):
             return self.drop_prob
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaV2->SEWD, DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
 class SEWDSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = StableDropout(config.activation_dropout)
+        self.dropout = nn.Dropout(config.activation_dropout)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -742,7 +738,6 @@ class SEWDSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DisentangledSelfAttention with attention_probs_dropout_prob->attention_dropout, hidden_dropout_prob->activation_dropout
 class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
@@ -1005,7 +1000,6 @@ class DisentangledSelfAttention(nn.Module):
         return score
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaAttention with Deberta->SEWD
 class SEWDAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1058,13 +1052,12 @@ class SEWDIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaOutput with DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
 class SEWDOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = StableDropout(config.activation_dropout)
+        self.dropout = nn.Dropout(config.activation_dropout)
         self.config = config
 
     def forward(self, hidden_states, input_tensor):
@@ -1074,7 +1067,6 @@ class SEWDOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->SEWD
 class SEWDLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1109,7 +1101,6 @@ class SEWDLayer(nn.Module):
             return layer_output
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.ConvLayer
 class ConvLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1154,7 +1145,6 @@ class ConvLayer(nn.Module):
         return output_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DebertaV2Encoder with DebertaV2->SEWD
 class SEWDTransformerEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 

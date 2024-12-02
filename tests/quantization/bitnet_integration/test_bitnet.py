@@ -65,12 +65,17 @@ class BitNetTest(unittest.TestCase):
         """
         Load the model
         """
+<<<<<<< HEAD
         cls.tokenizer = AutoTokenizer.from_pretrained(
             "meta-llama/Meta-Llama-3-8B-Instruct"
         )
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name, device_map=cls.device
         )
+=======
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def tearDown(self):
         gc.collect()
@@ -99,20 +104,25 @@ class BitNetTest(unittest.TestCase):
 
         self.assertEqual(nb_linears - 1, nb_bitnet_linear)
 
-    def test_quantized_model(self, quantized_model, tokenizer):
+    def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
         """
         input_text = "What are we having for dinner?"
         expected_output = "What are we having for dinner? What are we going to do for fun this weekend?"
-        input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+        input_ids = self.tokenizer(input_text, return_tensors="pt").to("cuda")
 
+<<<<<<< HEAD
         output = quantized_model.generate(
             **input_ids, max_new_tokens=11, do_sample=False
         )
         self.assertEqual(
             tokenizer.decode(output[0], skip_special_tokens=True), expected_output
         )
+=======
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=11, do_sample=False)
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def test_packing_unpacking(self):
         """
@@ -121,9 +131,12 @@ class BitNetTest(unittest.TestCase):
 
         from transformers.integrations import pack_weights, unpack_weights
 
-        u = torch.randint(0, 255, (1024, 1024), dtype=torch.uint8)
+        u = torch.randint(0, 255, (256, 256), dtype=torch.uint8)
         unpacked_u = unpack_weights(u, dtype=torch.bfloat16)
-        self.assertEqual(pack_weights(unpacked_u), u)
+        repacked_u = pack_weights(unpacked_u)
+        for i in range(u.shape[0]):
+            for j in range(u.shape[1]):
+                self.assertEqual(repacked_u[i][j], u[i][j])
 
     def test_activation_quant(self):
         """
@@ -137,15 +150,20 @@ class BitNetTest(unittest.TestCase):
         )
         layer.to(self.device)
 
+<<<<<<< HEAD
         input_tensor = torch.tensor(
             [[1.0, -1.0, -1.0, 1.0], [1.0, -1.0, 1.0, 1.0]], dtype=torch.float32
         ).to(torch_device)
+=======
+        input_tensor = torch.tensor([1.0, -1.0, -1.0, 1.0], dtype=torch.float32).to(torch_device)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # Quantize the input tensor
         quantized_tensor, scale = layer.activation_quant(input_tensor)
 
         # Verify the output quantized tensor
-        self.assertEqual(quantized_tensor, input_tensor)
+        for i in range(input_tensor.shape[0]):
+            self.assertEqual(quantized_tensor[i] / scale, input_tensor[i])
 
         # Verify the scale tensor
         self.assertEqual(scale, 127)

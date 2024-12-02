@@ -14,6 +14,7 @@
 
 from typing import TYPE_CHECKING
 
+<<<<<<< HEAD
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
@@ -46,37 +47,26 @@ else:
         "DetrModel",
         "DetrPreTrainedModel",
     ]
+=======
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
 
 if TYPE_CHECKING:
-    from .configuration_detr import DetrConfig, DetrOnnxConfig
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_detr import DetrFeatureExtractor
-        from .image_processing_detr import DetrImageProcessor
-        from .image_processing_detr_fast import DetrImageProcessorFast
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_detr import (
-            DetrForObjectDetection,
-            DetrForSegmentation,
-            DetrModel,
-            DetrPreTrainedModel,
-        )
-
+    from .configuration_detr import *
+    from .feature_extraction_detr import *
+    from .image_processing_detr import *
+    from .image_processing_detr_fast import *
+    from .modeling_detr import *
 else:
     import sys
 
+<<<<<<< HEAD
     sys.modules[__name__] = _LazyModule(
         __name__, globals()["__file__"], _import_structure, module_spec=__spec__
     )
+=======
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e

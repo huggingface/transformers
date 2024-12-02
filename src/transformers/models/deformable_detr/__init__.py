@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from typing import TYPE_CHECKING
 
+<<<<<<< HEAD
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
@@ -88,3 +90,20 @@ else:
     sys.modules[__name__] = _LazyModule(
         __name__, globals()["__file__"], _import_structure, module_spec=__spec__
     )
+=======
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
+
+
+if TYPE_CHECKING:
+    from .configuration_deformable_detr import *
+    from .feature_extraction_deformable_detr import *
+    from .image_processing_deformable_detr import *
+    from .image_processing_deformable_detr_fast import *
+    from .modeling_deformable_detr import *
+else:
+    import sys
+
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e

@@ -702,8 +702,8 @@ class TrainingArguments:
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             `huggingface-cli login`.
-        hub_private_repo (`bool`, *optional*, defaults to `False`):
-            If True, the Hub repo will be set to private.
+        hub_private_repo (`bool`, *optional*):
+            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
@@ -1452,12 +1452,21 @@ class TrainingArguments:
         default="every_save",
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
+<<<<<<< HEAD
     hub_token: Optional[str] = field(
         default=None, metadata={"help": "The token to use to push to the Model Hub."}
     )
     hub_private_repo: bool = field(
         default=False,
         metadata={"help": "Whether the model repository is private or not."},
+=======
+    hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    hub_private_repo: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
+        },
+>>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     )
     hub_always_push: bool = field(
         default=False,
@@ -3161,7 +3170,7 @@ class TrainingArguments:
         model_id: str,
         strategy: Union[str, HubStrategy] = "every_save",
         token: Optional[str] = None,
-        private_repo: bool = False,
+        private_repo: Optional[bool] = None,
         always_push: bool = False,
     ):
         """
@@ -3202,7 +3211,7 @@ class TrainingArguments:
                 The token to use to push the model to the Hub. Will default to the token in the cache folder obtained
                 with `huggingface-cli login`.
             private_repo (`bool`, *optional*, defaults to `False`):
-                If True, the Hub repo will be set to private.
+                Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             always_push (`bool`, *optional*, defaults to `False`):
                 Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
                 finished.
