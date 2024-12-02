@@ -1512,6 +1512,20 @@ class BitNetConfig(QuantizationConfigMixin):
 
 @dataclass
 class SpQRConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `spqr` parameters. Refer to the original publication for more details.
+
+    Args:
+        bits (`int`, *optional*, defaults to 3):
+            Specifies the bit count for the weights and first order zero-points and scales.
+            Currently only bits = 3 is supported.
+        beta1 (`int`, *optional*, defaults to 16):
+            SpQR tile width. Currently only beta1 = 16 is supported.
+        beta2 (`int`, *optional*, defaults to 16):
+            SpQR tile height. Currently only beta2 = 16 is supported.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
     def __init__(
         self,
         bits: int = 3,
@@ -1537,6 +1551,13 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("beta1 must be an int")
         if not isinstance(self.beta2, int):
             raise TypeError("beta2 must be an int")
-        # TODO: Validate
+
+        if self.bits != 3:
+            raise ValueError("SpQR currently only supports bits = 3")
+        if self.beta1 != 16:
+            raise ValueError("SpQR currently only supports beta1 = 16")
+        if self.beta2 != 16:
+            raise ValueError("SpQR currently only supports beta2 = 16")
+
         if not isinstance(self.shapes, dict):
             raise TypeError("shapes must be a dict")
