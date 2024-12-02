@@ -371,6 +371,14 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
         interpolate_pos_encoding: bool = False,
         resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        if output_attentions or head_mask is not None:
+            logger.warning_once(
+                "`BeitSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
+                "support `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, "
+                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+
         mixed_query_layer = self.query(hidden_states)
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
