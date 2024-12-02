@@ -75,10 +75,9 @@ class NemotronLayerNorm1P(nn.LayerNorm):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
 
     def forward(self, input: Tensor) -> Tensor:
-        args = _cast_if_autocast_enabled(
-            input, self.normalized_shape, self.weight + 1, self.bias, self.eps
-        )
-        with torch.cuda.amp.autocast(enabled=False):
+
+        args = _cast_if_autocast_enabled(input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
+        with torch.amp.autocast(input.device.type, enabled=False):
             return F.layer_norm(*args)
 
 
@@ -884,14 +883,10 @@ class NemotronModel(NemotronPreTrainedModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-<<<<<<< HEAD
-            cache_position = torch.arange(
-                inputs_embeds.shape[1], device=inputs_embeds.device
-=======
+
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
