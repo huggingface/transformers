@@ -18,7 +18,7 @@ from typing import Dict, Iterable, Optional, Union
 import numpy as np
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
-from .image_transforms import center_crop, normalize, rescale
+from .image_transforms import center_crop, normalize, rescale, unnormalize
 from .image_utils import ChannelDimension
 from .utils import logging
 
@@ -109,6 +109,43 @@ class BaseImageProcessor(ImageProcessingMixin):
             `np.ndarray`: The normalized image.
         """
         return normalize(
+            image, mean=mean, std=std, data_format=data_format, input_data_format=input_data_format, **kwargs
+        )
+
+    def unnormalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to unnormalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for unnormalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for unnormalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        return unnormalize(
             image, mean=mean, std=std, data_format=data_format, input_data_format=input_data_format, **kwargs
         )
 

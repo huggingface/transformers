@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Chameleon."""
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -44,6 +44,7 @@ if is_torch_available():
     import torch
 if is_vision_available():
     import PIL
+    from PIL import Image
 
 
 def make_batched_images(images) -> List[List[ImageInput]]:
@@ -368,19 +369,22 @@ class ChameleonImageProcessor(BaseImageProcessor):
 
     def postprocess(
         self,
-        pixel_values: "torch.Tensor",
+        images: ImageInput,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_unnormalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> "torch.Tensor":
         """
         Postprocess a batch of pixel values to images.
 
         Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
-                A batch or single tensor of pixel values to postprocess.
+            images (`ImageInput`):
+                Image to postprocess. Expects a single or batch of images with pixel values.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -392,9 +396,24 @@ class ChameleonImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for unnormalization. Only has an effect if `do_unnormalize` is set to
                 `True`.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `PIL.Image` or `'pil'`: Return a batch of type `PIL.Image`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
-        Returns:
-            `torch.Tensor`: A batch or a single tensor of pixel values.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
@@ -402,54 +421,24 @@ class ChameleonImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        if do_unnormalize:
-            pixel_values = self.unnormalize(pixel_values, mean=image_mean, std=image_std)
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
-        if do_rescale:
-            pixel_values *= rescale_factor
+        postprocessed_images = []
+        for image in images:
+            if do_unnormalize:
+                image = self.unnormalize(
+                    image, mean=image_mean, std=image_std, data_format=data_format, input_data_format=input_data_format
+                )
 
-        return torch.clip(pixel_values, 0, 255).to(dtype=torch.uint8)
+            if do_rescale:
+                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                image = image.clip(0, 255).astype(np.uint8)
 
-    def unnormalize(
-        self,
-        pixel_values: "torch.Tensor",
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-    ) -> "torch.Tensor":
-        """
-        Unnormalizes `pixel_values` using the mean and standard deviation specified by `mean` and `std`.
+            if do_unnormalize and do_rescale and return_tensors == "pil":
+                image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
+                image = Image.fromarray(image)
+            postprocessed_images.append(image)
 
-        pixel_values = (pixel_values * std) + mean
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
-                Batch of pixel values to postprocess.
-            mean (`float` or `Iterable[float]`):
-                The mean to use for unnormalization.
-            std (`float` or `Iterable[float]`):
-                The standard deviation to use for unnormalization.
-            data_format (`ChannelDimension`, *optional*):
-                The channel dimension format of the output image. If unset, will use the inferred format from the input.
-        """
-        channel_axis = 1 if pixel_values.ndim == 4 else 0
-        num_channels = pixel_values.shape[channel_axis]
-
-        if isinstance(mean, Iterable):
-            if len(mean) != num_channels:
-                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
-        else:
-            mean = [mean] * num_channels
-        mean = torch.tensor(mean, dtype=pixel_values.dtype, device=pixel_values.device)
-
-        if isinstance(std, Iterable):
-            if len(std) != num_channels:
-                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
-        else:
-            std = [std] * num_channels
-        std = torch.tensor(std, dtype=pixel_values.dtype, device=pixel_values.device)
-
-        if pixel_values.ndim == 4:
-            pixel_values = (pixel_values * std.view(1, -1, 1, 1)) + mean.view(1, -1, 1, 1)
-        else:
-            pixel_values = (pixel_values * std.view(-1, 1, 1)) + mean.view(-1, 1, 1)
-        return pixel_values
+        return_tensors = return_tensors if return_tensors != "pil" else None
+        return BatchFeature(data={"pixel_values": postprocessed_images}, tensor_type=return_tensors)
