@@ -169,10 +169,6 @@ class SpQRTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @unittest.skipUnless(
-        is_spqr_available(),
-        "test requires `spqr_quant`",
-    )
     def test_quantized_model_compile(self):
         """
         Simple test that checks if the quantized model is working properly
