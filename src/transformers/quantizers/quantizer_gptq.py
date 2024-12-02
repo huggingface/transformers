@@ -39,7 +39,7 @@ class GptqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    required_packages = ["optimum", "gptqmodel"]
+    required_packages = ["optimum", "auto_gptq", "gptqmodel"]
     optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
