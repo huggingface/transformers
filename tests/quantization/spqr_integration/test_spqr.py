@@ -55,17 +55,15 @@ class SpQRConfigTest(unittest.TestCase):
             "beta1": 16,
             "beta2": 16,
             "bits": 3,
-            "linear_weights_not_to_quantize": ["lm_head.weight"],
-            "shapes": {
-                "model.layers.0.self_attn.q_proj.dense_weights.shape": 16
-            }
+            "modules_to_not_convert": ["lm_head.weight"],
+            "shapes": {"model.layers.0.self_attn.q_proj.dense_weights.shape": 16},
         }
         quantization_config = SpQRConfig.from_dict(dict)
 
         self.assertEqual(dict["beta1"], quantization_config.beta1)
         self.assertEqual(dict["beta2"], quantization_config.beta2)
         self.assertEqual(dict["bits"], quantization_config.bits)
-        self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
+        self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["shapes"], quantization_config.shapes)
 
 
@@ -128,12 +126,12 @@ class SpQRTest(unittest.TestCase):
 
         self.assertEqual(nb_linears, nb_spqr_linear)
 
-        # Try with `linear_weights_not_to_quantize`
+        # Try with `modules_to_not_convert`
         with init_empty_weights():
             model = OPTForCausalLM(config)
 
         model, _ = replace_with_spqr_linear(
-            model, quantization_config=quantization_config, linear_weights_not_to_quantize=["lm_head.weight"]
+            model, quantization_config=quantization_config, modules_to_not_convert=["lm_head.weight"]
         )
         nb_spqr_linear = 0
         for module in model.modules():
