@@ -1537,3 +1537,5 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("beta1 must be an int")
         if not isinstance(self.beta2, int):
             raise TypeError("beta2 must be an int")
+        if not isinstance(self.shapes, dict):
+            raise TypeError("shapes must be a dict")
