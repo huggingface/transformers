@@ -1091,7 +1091,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
         run_compressed (`bool`, *optional*, defaults to `True`): compress weights (usually linear) modules
-            as compressed weights, using `format` method
+            as compressed weights, following the method specified on `format` arg above
     """
 
     def __init__(

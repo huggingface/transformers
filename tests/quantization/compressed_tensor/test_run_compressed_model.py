@@ -13,13 +13,13 @@ if is_torch_available():
 @require_compressed_tensors
 @require_torch
 class CompressedTensorsTest(unittest.TestCase):
+    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense-hf-quantizer"
     tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
     tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
-    llama3_8b_fp8 = "nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat"
 
     prompt = "Paris is the capital of which country?"
 
-    stubs = [tinyllama_w4a16, tinyllama_w4a16, tinyllama_w8a8, llama3_8b_fp8]
+    stubs = [tinyllama_w8a16, tinyllama_w4a16, tinyllama_w8a8]
 
     def tearDown(self):
         gc.collect()
@@ -68,3 +68,28 @@ class CompressedTensorsTest(unittest.TestCase):
 
             # No modules should be CompressedLinear
             assert compressed_linear_counts == 0
+
+    def test_run_compressed_outputs_match(self):
+        """Check that run_compressed=True/False output are the same"""
+
+        from transformers import AutoTokenizer
+        from transformers.utils.quantization_config import CompressedTensorsConfig
+
+        quantization_config = CompressedTensorsConfig(run_compressed=False)
+
+        for stub in self.stubs:
+            tokenizer = AutoTokenizer.from_pretrained(stub)
+            input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
+
+            model_run_compressed__True = AutoModelForCausalLM.from_pretrained(
+                stub,
+            )
+            output_rc_true = model_run_compressed__True.generate(input_ids, max_new_tokens=100)
+
+            model_run_compressed__False = AutoModelForCausalLM.from_pretrained(
+                stub,
+                quantization_config=quantization_config,
+            )
+            output_rc_false = model_run_compressed__False.generate(input_ids, max_new_tokens=100)
+
+            assert tokenizer.decode(output_rc_true[0]) == tokenizer.decode(output_rc_false[0])

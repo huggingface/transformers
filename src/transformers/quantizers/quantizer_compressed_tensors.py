@@ -110,7 +110,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
-        # models need to be decompressed carry out run qat
+        # models need to be decompressed carry out qat
         return not self.run_compressed or not self.is_compressed
 
     def is_serializable(self, safe_serialization=None):
