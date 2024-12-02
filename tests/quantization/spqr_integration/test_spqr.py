@@ -25,7 +25,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_spqr_available, is_torch_available
+from transformers.utils import is_accelerate_available, is_torch_available
 
 
 if is_torch_available():
