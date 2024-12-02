@@ -34,7 +34,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -79,10 +83,14 @@ def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
         raise ValueError("indices must be a 2-dimensional tensor.")
 
     if sparse_qk_prod.size(2) != 32:
-        raise ValueError("The size of the second dimension of sparse_qk_prod must be 32.")
+        raise ValueError(
+            "The size of the second dimension of sparse_qk_prod must be 32."
+        )
 
     if sparse_qk_prod.size(3) != 32:
-        raise ValueError("The size of the third dimension of sparse_qk_prod must be 32.")
+        raise ValueError(
+            "The size of the third dimension of sparse_qk_prod must be 32."
+        )
 
     index_vals = sparse_qk_prod.max(dim=-2).values.transpose(-1, -2)
     index_vals = index_vals.contiguous()
@@ -90,7 +98,9 @@ def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
     indices = indices.int()
     indices = indices.contiguous()
 
-    max_vals, max_vals_scatter = mra_cuda_kernel.index_max(index_vals, indices, query_num_block, key_num_block)
+    max_vals, max_vals_scatter = mra_cuda_kernel.index_max(
+        index_vals, indices, query_num_block, key_num_block
+    )
     max_vals_scatter = max_vals_scatter.transpose(-1, -2)[:, :, None, :]
 
     return max_vals, max_vals_scatter
@@ -107,7 +117,9 @@ def sparse_mask(mask, indices, block_size=32):
         raise ValueError("indices must be a 2-dimensional tensor.")
 
     if mask.shape[0] != indices.shape[0]:
-        raise ValueError("mask and indices must have the same size in the zero-th dimension.")
+        raise ValueError(
+            "mask and indices must have the same size in the zero-th dimension."
+        )
 
     batch_size, seq_len = mask.shape
     num_block = seq_len // block_size
@@ -127,13 +139,21 @@ def mm_to_sparse(dense_query, dense_key, indices, block_size=32):
     _, key_size, dim = dense_key.size()
 
     if query_size % block_size != 0:
-        raise ValueError("query_size (size of first dimension of dense_query) must be divisible by block_size.")
+        raise ValueError(
+            "query_size (size of first dimension of dense_query) must be divisible by block_size."
+        )
 
     if key_size % block_size != 0:
-        raise ValueError("key_size (size of first dimension of dense_key) must be divisible by block_size.")
+        raise ValueError(
+            "key_size (size of first dimension of dense_key) must be divisible by block_size."
+        )
 
-    dense_query = dense_query.reshape(batch_size, query_size // block_size, block_size, dim).transpose(-1, -2)
-    dense_key = dense_key.reshape(batch_size, key_size // block_size, block_size, dim).transpose(-1, -2)
+    dense_query = dense_query.reshape(
+        batch_size, query_size // block_size, block_size, dim
+    ).transpose(-1, -2)
+    dense_key = dense_key.reshape(
+        batch_size, key_size // block_size, block_size, dim
+    ).transpose(-1, -2)
 
     if len(dense_query.size()) != 4:
         raise ValueError("dense_query must be a 4-dimensional tensor.")
@@ -166,15 +186,23 @@ def sparse_dense_mm(sparse_query, indices, dense_key, query_num_block, block_siz
     batch_size, key_size, dim = dense_key.size()
 
     if key_size % block_size != 0:
-        raise ValueError("key_size (size of first dimension of dense_key) must be divisible by block_size.")
+        raise ValueError(
+            "key_size (size of first dimension of dense_key) must be divisible by block_size."
+        )
 
     if sparse_query.size(2) != block_size:
-        raise ValueError("The size of the second dimension of sparse_query must be equal to the block_size.")
+        raise ValueError(
+            "The size of the second dimension of sparse_query must be equal to the block_size."
+        )
 
     if sparse_query.size(3) != block_size:
-        raise ValueError("The size of the third dimension of sparse_query must be equal to the block_size.")
+        raise ValueError(
+            "The size of the third dimension of sparse_query must be equal to the block_size."
+        )
 
-    dense_key = dense_key.reshape(batch_size, key_size // block_size, block_size, dim).transpose(-1, -2)
+    dense_key = dense_key.reshape(
+        batch_size, key_size // block_size, block_size, dim
+    ).transpose(-1, -2)
 
     if len(sparse_query.size()) != 4:
         raise ValueError("sparse_query must be a 4-dimensional tensor.")
@@ -194,13 +222,20 @@ def sparse_dense_mm(sparse_query, indices, dense_key, query_num_block, block_siz
     indices = indices.contiguous()
     dense_key = dense_key.contiguous()
 
-    dense_qk_prod = mra_cuda_kernel.sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
-    dense_qk_prod = dense_qk_prod.transpose(-1, -2).reshape(batch_size, query_num_block * block_size, dim)
+    dense_qk_prod = mra_cuda_kernel.sparse_dense_mm(
+        sparse_query, indices, dense_key, query_num_block
+    )
+    dense_qk_prod = dense_qk_prod.transpose(-1, -2).reshape(
+        batch_size, query_num_block * block_size, dim
+    )
     return dense_qk_prod
 
 
 def transpose_indices(indices, dim_1_block, dim_2_block):
-    return ((indices % dim_2_block) * dim_1_block + torch.div(indices, dim_2_block, rounding_mode="floor")).long()
+    return (
+        (indices % dim_2_block) * dim_1_block
+        + torch.div(indices, dim_2_block, rounding_mode="floor")
+    ).long()
 
 
 class MraSampledDenseMatMul(torch.autograd.Function):
@@ -218,7 +253,9 @@ class MraSampledDenseMatMul(torch.autograd.Function):
         query_num_block = dense_query.size(1) // block_size
         key_num_block = dense_key.size(1) // block_size
         indices_T = transpose_indices(indices, query_num_block, key_num_block)
-        grad_key = sparse_dense_mm(grad.transpose(-1, -2), indices_T, dense_query, key_num_block)
+        grad_key = sparse_dense_mm(
+            grad.transpose(-1, -2), indices_T, dense_query, key_num_block
+        )
         grad_query = sparse_dense_mm(grad, indices, dense_key, query_num_block)
         return grad_query, grad_key, None, None
 
@@ -230,7 +267,9 @@ class MraSampledDenseMatMul(torch.autograd.Function):
 class MraSparseDenseMatMul(torch.autograd.Function):
     @staticmethod
     def forward(ctx, sparse_query, indices, dense_key, query_num_block):
-        sparse_qk_prod = sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
+        sparse_qk_prod = sparse_dense_mm(
+            sparse_query, indices, dense_key, query_num_block
+        )
         ctx.save_for_backward(sparse_query, indices, dense_key)
         ctx.query_num_block = query_num_block
         return sparse_qk_prod
@@ -241,13 +280,17 @@ class MraSparseDenseMatMul(torch.autograd.Function):
         query_num_block = ctx.query_num_block
         key_num_block = dense_key.size(1) // sparse_query.size(-1)
         indices_T = transpose_indices(indices, query_num_block, key_num_block)
-        grad_key = sparse_dense_mm(sparse_query.transpose(-1, -2), indices_T, grad, key_num_block)
+        grad_key = sparse_dense_mm(
+            sparse_query.transpose(-1, -2), indices_T, grad, key_num_block
+        )
         grad_query = mm_to_sparse(grad, dense_key, indices)
         return grad_query, None, grad_key, None
 
     @staticmethod
     def operator_call(sparse_query, indices, dense_key, query_num_block):
-        return MraSparseDenseMatMul.apply(sparse_query, indices, dense_key, query_num_block)
+        return MraSparseDenseMatMul.apply(
+            sparse_query, indices, dense_key, query_num_block
+        )
 
 
 class MraReduceSum:
@@ -264,16 +307,25 @@ class MraReduceSum:
         _, _, block_size, _ = sparse_query.size()
         batch_size, num_block = indices.size()
 
-        sparse_query = sparse_query.sum(dim=2).reshape(batch_size * num_block, block_size)
+        sparse_query = sparse_query.sum(dim=2).reshape(
+            batch_size * num_block, block_size
+        )
 
-        batch_idx = torch.arange(indices.size(0), dtype=torch.long, device=indices.device)
+        batch_idx = torch.arange(
+            indices.size(0), dtype=torch.long, device=indices.device
+        )
         global_idxes = (
-            torch.div(indices, key_num_block, rounding_mode="floor").long() + batch_idx[:, None] * query_num_block
+            torch.div(indices, key_num_block, rounding_mode="floor").long()
+            + batch_idx[:, None] * query_num_block
         ).reshape(batch_size * num_block)
         temp = torch.zeros(
-            (batch_size * query_num_block, block_size), dtype=sparse_query.dtype, device=sparse_query.device
+            (batch_size * query_num_block, block_size),
+            dtype=sparse_query.dtype,
+            device=sparse_query.device,
         )
-        output = temp.index_add(0, global_idxes, sparse_query).reshape(batch_size, query_num_block, block_size)
+        output = temp.index_add(0, global_idxes, sparse_query).reshape(
+            batch_size, query_num_block, block_size
+        )
 
         output = output.reshape(batch_size, query_num_block * block_size)
         return output
@@ -289,38 +341,57 @@ def get_low_resolution_logit(query, key, block_size, mask=None, value=None):
 
     value_hat = None
     if mask is not None:
-        token_count = mask.reshape(batch_size, num_block_per_row, block_size).sum(dim=-1)
-        query_hat = query.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim=-2) / (
-            token_count[:, :, None] + 1e-6
+        token_count = mask.reshape(batch_size, num_block_per_row, block_size).sum(
+            dim=-1
         )
-        key_hat = key.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim=-2) / (
-            token_count[:, :, None] + 1e-6
-        )
+        query_hat = query.reshape(
+            batch_size, num_block_per_row, block_size, head_dim
+        ).sum(dim=-2) / (token_count[:, :, None] + 1e-6)
+        key_hat = key.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(
+            dim=-2
+        ) / (token_count[:, :, None] + 1e-6)
         if value is not None:
-            value_hat = value.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim=-2) / (
-                token_count[:, :, None] + 1e-6
-            )
+            value_hat = value.reshape(
+                batch_size, num_block_per_row, block_size, head_dim
+            ).sum(dim=-2) / (token_count[:, :, None] + 1e-6)
     else:
-        token_count = block_size * torch.ones(batch_size, num_block_per_row, dtype=torch.float, device=query.device)
-        query_hat = query.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim=-2)
-        key_hat = key.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim=-2)
+        token_count = block_size * torch.ones(
+            batch_size, num_block_per_row, dtype=torch.float, device=query.device
+        )
+        query_hat = query.reshape(
+            batch_size, num_block_per_row, block_size, head_dim
+        ).mean(dim=-2)
+        key_hat = key.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(
+            dim=-2
+        )
         if value is not None:
-            value_hat = value.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim=-2)
+            value_hat = value.reshape(
+                batch_size, num_block_per_row, block_size, head_dim
+            ).mean(dim=-2)
 
-    low_resolution_logit = torch.matmul(query_hat, key_hat.transpose(-1, -2)) / math.sqrt(head_dim)
+    low_resolution_logit = torch.matmul(
+        query_hat, key_hat.transpose(-1, -2)
+    ) / math.sqrt(head_dim)
 
-    low_resolution_logit_row_max = low_resolution_logit.max(dim=-1, keepdims=True).values
+    low_resolution_logit_row_max = low_resolution_logit.max(
+        dim=-1, keepdims=True
+    ).values
 
     if mask is not None:
         low_resolution_logit = (
-            low_resolution_logit - 1e4 * ((token_count[:, None, :] * token_count[:, :, None]) < 0.5).float()
+            low_resolution_logit
+            - 1e4 * ((token_count[:, None, :] * token_count[:, :, None]) < 0.5).float()
         )
 
     return low_resolution_logit, token_count, low_resolution_logit_row_max, value_hat
 
 
 def get_block_idxes(
-    low_resolution_logit, num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks
+    low_resolution_logit,
+    num_blocks,
+    approx_mode,
+    initial_prior_first_n_blocks,
+    initial_prior_diagonal_n_blocks,
 ):
     """
     Compute the indices of the subset of components to be used in the approximation.
@@ -329,8 +400,14 @@ def get_block_idxes(
 
     if initial_prior_diagonal_n_blocks > 0:
         offset = initial_prior_diagonal_n_blocks // 2
-        temp_mask = torch.ones(total_blocks_per_row, total_blocks_per_row, device=low_resolution_logit.device)
-        diagonal_mask = torch.tril(torch.triu(temp_mask, diagonal=-offset), diagonal=offset)
+        temp_mask = torch.ones(
+            total_blocks_per_row,
+            total_blocks_per_row,
+            device=low_resolution_logit.device,
+        )
+        diagonal_mask = torch.tril(
+            torch.triu(temp_mask, diagonal=-offset), diagonal=offset
+        )
         low_resolution_logit = low_resolution_logit + diagonal_mask[None, :, :] * 5e3
 
     if initial_prior_first_n_blocks > 0:
@@ -342,13 +419,19 @@ def get_block_idxes(
         )
 
     top_k_vals = torch.topk(
-        low_resolution_logit.reshape(batch_size, -1), num_blocks, dim=-1, largest=True, sorted=False
+        low_resolution_logit.reshape(batch_size, -1),
+        num_blocks,
+        dim=-1,
+        largest=True,
+        sorted=False,
     )
     indices = top_k_vals.indices
 
     if approx_mode == "full":
         threshold = top_k_vals.values.min(dim=-1).values
-        high_resolution_mask = (low_resolution_logit >= threshold[:, None, None]).float()
+        high_resolution_mask = (
+            low_resolution_logit >= threshold[:, None, None]
+        ).float()
     elif approx_mode == "sparse":
         high_resolution_mask = None
     else:
@@ -392,19 +475,21 @@ def mra2_attention(
         value = value * mask[:, :, None]
 
     if approx_mode == "full":
-        low_resolution_logit, token_count, low_resolution_logit_row_max, value_hat = get_low_resolution_logit(
-            query, key, block_size, mask, value
+        low_resolution_logit, token_count, low_resolution_logit_row_max, value_hat = (
+            get_low_resolution_logit(query, key, block_size, mask, value)
         )
     elif approx_mode == "sparse":
         with torch.no_grad():
-            low_resolution_logit, token_count, low_resolution_logit_row_max, _ = get_low_resolution_logit(
-                query, key, block_size, mask
+            low_resolution_logit, token_count, low_resolution_logit_row_max, _ = (
+                get_low_resolution_logit(query, key, block_size, mask)
             )
     else:
         raise Exception('approx_mode must be "full" or "sparse"')
 
     with torch.no_grad():
-        low_resolution_logit_normalized = low_resolution_logit - low_resolution_logit_row_max
+        low_resolution_logit_normalized = (
+            low_resolution_logit - low_resolution_logit_row_max
+        )
         indices, high_resolution_mask = get_block_idxes(
             low_resolution_logit_normalized,
             num_blocks,
@@ -416,10 +501,14 @@ def mra2_attention(
     high_resolution_logit = MraSampledDenseMatMul.operator_call(
         query, key, indices, block_size=block_size
     ) / math.sqrt(head_dim)
-    max_vals, max_vals_scatter = sparse_max(high_resolution_logit, indices, num_block_per_row, num_block_per_row)
+    max_vals, max_vals_scatter = sparse_max(
+        high_resolution_logit, indices, num_block_per_row, num_block_per_row
+    )
     high_resolution_logit = high_resolution_logit - max_vals_scatter
     if mask is not None:
-        high_resolution_logit = high_resolution_logit - 1e4 * (1 - sparse_mask(mask, indices)[:, :, :, None])
+        high_resolution_logit = high_resolution_logit - 1e4 * (
+            1 - sparse_mask(mask, indices)[:, :, :, None]
+        )
     high_resolution_attn = torch.exp(high_resolution_logit)
     high_resolution_attn_out = MraSparseDenseMatMul.operator_call(
         high_resolution_attn, indices, value, num_block_per_row
@@ -430,7 +519,11 @@ def mra2_attention(
 
     if approx_mode == "full":
         low_resolution_attn = (
-            torch.exp(low_resolution_logit - low_resolution_logit_row_max - 1e4 * high_resolution_mask)
+            torch.exp(
+                low_resolution_logit
+                - low_resolution_logit_row_max
+                - 1e4 * high_resolution_mask
+            )
             * token_count[:, None, :]
         )
 
@@ -440,27 +533,42 @@ def mra2_attention(
             .reshape(meta_batch, seq_len, head_dim)
         )
         low_resolution_normalizer = (
-            low_resolution_attn.sum(dim=-1)[:, :, None].repeat(1, 1, block_size).reshape(meta_batch, seq_len)
+            low_resolution_attn.sum(dim=-1)[:, :, None]
+            .repeat(1, 1, block_size)
+            .reshape(meta_batch, seq_len)
         )
 
-        log_correction = low_resolution_logit_row_max.repeat(1, 1, block_size).reshape(meta_batch, seq_len) - max_vals
+        log_correction = (
+            low_resolution_logit_row_max.repeat(1, 1, block_size).reshape(
+                meta_batch, seq_len
+            )
+            - max_vals
+        )
         if mask is not None:
             log_correction = log_correction * mask
 
         low_resolution_corr = torch.exp(log_correction * (log_correction <= 0).float())
-        low_resolution_attn_out = low_resolution_attn_out * low_resolution_corr[:, :, None]
+        low_resolution_attn_out = (
+            low_resolution_attn_out * low_resolution_corr[:, :, None]
+        )
         low_resolution_normalizer = low_resolution_normalizer * low_resolution_corr
 
         high_resolution_corr = torch.exp(-log_correction * (log_correction > 0).float())
-        high_resolution_attn_out = high_resolution_attn_out * high_resolution_corr[:, :, None]
+        high_resolution_attn_out = (
+            high_resolution_attn_out * high_resolution_corr[:, :, None]
+        )
         high_resolution_normalizer = high_resolution_normalizer * high_resolution_corr
 
         context_layer = (high_resolution_attn_out + low_resolution_attn_out) / (
-            high_resolution_normalizer[:, :, None] + low_resolution_normalizer[:, :, None] + 1e-6
+            high_resolution_normalizer[:, :, None]
+            + low_resolution_normalizer[:, :, None]
+            + 1e-6
         )
 
     elif approx_mode == "sparse":
-        context_layer = high_resolution_attn_out / (high_resolution_normalizer[:, :, None] + 1e-6)
+        context_layer = high_resolution_attn_out / (
+            high_resolution_normalizer[:, :, None] + 1e-6
+        )
     else:
         raise Exception('config.approx_mode must be "full" or "sparse"')
 
@@ -477,9 +585,15 @@ class MraEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings + 2, config.hidden_size
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -487,15 +601,26 @@ class MraEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.register_buffer(
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)) + 2,
+        )
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
         self.register_buffer(
             "token_type_ids",
-            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
+            torch.zeros(
+                self.position_ids.size(),
+                dtype=torch.long,
+                device=self.position_ids.device,
+            ),
             persistent=False,
         )
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None
+    ):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -512,10 +637,14 @@ class MraEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(
+                    input_shape[0], seq_length
+                )
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+                token_type_ids = torch.zeros(
+                    input_shape, dtype=torch.long, device=self.position_ids.device
+                )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -533,7 +662,9 @@ class MraEmbeddings(nn.Module):
 class MraSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -544,7 +675,9 @@ class MraSelfAttention(nn.Module):
             try:
                 load_cuda_kernels()
             except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+                logger.warning(
+                    f"Could not load the custom kernel for multi-scale deformable attention: {e}"
+                )
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -556,18 +689,25 @@ class MraSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = (
-            position_embedding_type if position_embedding_type is not None else config.position_embedding_type
+            position_embedding_type
+            if position_embedding_type is not None
+            else config.position_embedding_type
         )
 
         self.num_block = (config.max_position_embeddings // 32) * config.block_per_row
-        self.num_block = min(self.num_block, int((config.max_position_embeddings // 32) ** 2))
+        self.num_block = min(
+            self.num_block, int((config.max_position_embeddings // 32) ** 2)
+        )
 
         self.approx_mode = config.approx_mode
         self.initial_prior_first_n_blocks = config.initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = config.initial_prior_diagonal_n_blocks
 
     def transpose_for_scores(self, layer):
-        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_layer_shape = layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         layer = layer.view(*new_layer_shape)
         return layer.permute(0, 2, 1, 3)
 
@@ -583,7 +723,10 @@ class MraSelfAttention(nn.Module):
         # revert changes made by get_extended_attention_mask
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = (
-            attention_mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len).int()
+            attention_mask.squeeze()
+            .repeat(1, num_heads, 1)
+            .reshape(batch_size * num_heads, seq_len)
+            .int()
         )
 
         # The CUDA kernels are most efficient with inputs whose size is a multiple of a GPU's warp size (32). Inputs
@@ -593,9 +736,15 @@ class MraSelfAttention(nn.Module):
         if head_dim < gpu_warp_size:
             pad_size = batch_size, num_heads, seq_len, gpu_warp_size - head_dim
 
-            query_layer = torch.cat([query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1)
-            key_layer = torch.cat([key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1)
-            value_layer = torch.cat([value_layer, torch.zeros(pad_size, device=value_layer.device)], dim=-1)
+            query_layer = torch.cat(
+                [query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1
+            )
+            key_layer = torch.cat(
+                [key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1
+            )
+            value_layer = torch.cat(
+                [value_layer, torch.zeros(pad_size, device=value_layer.device)], dim=-1
+            )
 
         context_layer = mra2_attention(
             query_layer.float(),
@@ -630,7 +779,9 @@ class MraSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -640,7 +791,9 @@ class MraSelfOutput(nn.Module):
 class MraAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = MraSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = MraSelfAttention(
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = MraSelfOutput(config)
         self.pruned_heads = set()
 
@@ -648,7 +801,10 @@ class MraAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -659,13 +815,17 @@ class MraAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, attention_mask=None):
         self_outputs = self.self(hidden_states, attention_mask)
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -693,7 +853,9 @@ class MraOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -714,10 +876,15 @@ class MraLayer(nn.Module):
         self_attention_outputs = self.attention(hidden_states, attention_mask)
         attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -733,7 +900,9 @@ class MraEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([MraLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [MraLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -940,7 +1109,9 @@ class MraModel(MraPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
@@ -958,12 +1129,18 @@ class MraModel(MraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -981,14 +1158,20 @@ class MraModel(MraPreTrainedModel):
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(
+                    batch_size, seq_length
+                )
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+                token_type_ids = torch.zeros(
+                    input_shape, dtype=torch.long, device=device
+                )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape
+        )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -1023,9 +1206,14 @@ class MraModel(MraPreTrainedModel):
         )
 
 
-@add_start_docstrings("""MRA Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
+@add_start_docstrings(
+    """MRA Model with a `language modeling` head on top.""", MRA_START_DOCSTRING
+)
 class MraForMaskedLM(MraPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = [
+        "cls.predictions.decoder.weight",
+        "cls.predictions.decoder.bias",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1043,7 +1231,9 @@ class MraForMaskedLM(MraPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -1067,7 +1257,9 @@ class MraForMaskedLM(MraPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.mra(
             input_ids,
@@ -1086,11 +1278,15 @@ class MraForMaskedLM(MraPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return (
+                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            )
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1137,7 +1333,9 @@ class MraForSequenceClassification(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -1161,7 +1359,9 @@ class MraForSequenceClassification(MraPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.mra(
             input_ids,
@@ -1182,7 +1382,9 @@ class MraForSequenceClassification(MraPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1227,7 +1429,9 @@ class MraForMultipleChoice(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
@@ -1251,13 +1455,31 @@ class MraForMultipleChoice(MraPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        num_choices = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        input_ids = (
+            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        )
+        attention_mask = (
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
+        )
+        token_type_ids = (
+            token_type_ids.view(-1, token_type_ids.size(-1))
+            if token_type_ids is not None
+            else None
+        )
+        position_ids = (
+            position_ids.view(-1, position_ids.size(-1))
+            if position_ids is not None
+            else None
+        )
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
@@ -1317,7 +1539,9 @@ class MraForTokenClassification(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
@@ -1339,7 +1563,9 @@ class MraForTokenClassification(MraPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.mra(
             input_ids,
@@ -1365,7 +1591,9 @@ class MraForTokenClassification(MraPreTrainedModel):
                 active_loss = attention_mask.view(-1) == 1
                 active_logits = logits.view(-1, self.num_labels)
                 active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                    active_loss,
+                    labels.view(-1),
+                    torch.tensor(loss_fct.ignore_index).type_as(labels),
                 )
                 loss = loss_fct(active_logits, active_labels)
             else:
@@ -1401,7 +1629,9 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
@@ -1430,7 +1660,9 @@ class MraForQuestionAnswering(MraPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.mra(
             input_ids,

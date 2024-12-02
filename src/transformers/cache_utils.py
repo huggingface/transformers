@@ -62,7 +62,9 @@ class Cache(torch.nn.Module):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
-        raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
+        raise NotImplementedError(
+            "Make sure to implement `get_seq_length` in a subclass."
+        )
 
     # Deprecate in favor of max-cache-shape because we want to be specifc by what we mean with "max_length"
     # Prev some cache objects didn't have "max_length" (SlidingWindowCache or SinkCache) because the cache object technically handles
@@ -77,9 +79,13 @@ class Cache(torch.nn.Module):
 
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
-        raise NotImplementedError("Make sure to implement `get_max_cache_shape` in a subclass.")
+        raise NotImplementedError(
+            "Make sure to implement `get_max_cache_shape` in a subclass."
+        )
 
-    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
+    def get_usable_length(
+        self, new_seq_length: int, layer_idx: Optional[int] = 0
+    ) -> int:
         """Given the sequence length of the new inputs, returns the usable length of the cache."""
         # Cache without size limit -> all cache is usable
         # Cache with size limit -> if the length cache plus the length of the new inputs is larger the maximum cache
@@ -95,10 +101,14 @@ class Cache(torch.nn.Module):
         for layer_idx in range(len(self.key_cache)):
             if self.key_cache[layer_idx] != []:
                 device = self.key_cache[layer_idx].device
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
+                    0, beam_idx.to(device)
+                )
             if self.value_cache[layer_idx] != []:
                 device = self.value_cache[layer_idx].device
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
+                    0, beam_idx.to(device)
+                )
 
     @property
     def seen_tokens(self):
@@ -205,7 +215,9 @@ class CacheConfig:
                 to_remove.append(key)
 
         # Remove all the attributes that were updated, without modifying the input dict
-        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        unused_kwargs = {
+            key: value for key, value in kwargs.items() if key not in to_remove
+        }
         return unused_kwargs
 
 
@@ -376,7 +388,9 @@ class DynamicCache(Cache):
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
     def __init__(self, num_hidden_layers: Optional[int] = None) -> None:
         super().__init__()
-        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self._seen_tokens = (
+            0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
 
@@ -388,7 +402,9 @@ class DynamicCache(Cache):
         if layer_idx < len(self):
             return (self.key_cache[layer_idx], self.value_cache[layer_idx])
         else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+            raise KeyError(
+                f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}"
+            )
 
     def __iter__(self):
         """
@@ -447,8 +463,12 @@ class DynamicCache(Cache):
                 self.key_cache[layer_idx] = key_states
                 self.value_cache[layer_idx] = value_states
             else:
-                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+                self.key_cache[layer_idx] = torch.cat(
+                    [self.key_cache[layer_idx], key_states], dim=-2
+                )
+                self.value_cache[layer_idx] = torch.cat(
+                    [self.value_cache[layer_idx], value_states], dim=-2
+                )
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
@@ -457,10 +477,13 @@ class DynamicCache(Cache):
         # TODO: deprecate this function in favor of `cache_position`
         is_empty_layer = (
             len(self.key_cache) == 0  # no cache in any layer
-            or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
+            or len(self.key_cache)
+            <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
             or len(self.key_cache[layer_idx]) == 0  # the layer has no cache
         )
-        layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
+        layer_seq_length = (
+            self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
+        )
         return layer_seq_length
 
     def get_max_cache_shape(self) -> Optional[int]:
@@ -478,7 +501,9 @@ class DynamicCache(Cache):
     @classmethod
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
     def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, num_hidden_layers: int = None
+        cls,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        num_hidden_layers: int = None,
     ) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
@@ -491,7 +516,8 @@ class DynamicCache(Cache):
 
     def crop(self, max_length: int):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
-        negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
+        negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search.
+        """
         # In case it is negative
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
@@ -515,20 +541,34 @@ class DynamicCache(Cache):
         for i in range(0, full_batch_size, split_size):
             current_split = DynamicCache()
             current_split._seen_tokens = self._seen_tokens
-            current_split.key_cache = [tensor[i : i + split_size] for tensor in self.key_cache]
-            current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
+            current_split.key_cache = [
+                tensor[i : i + split_size] for tensor in self.key_cache
+            ]
+            current_split.value_cache = [
+                tensor[i : i + split_size] for tensor in self.value_cache
+            ]
             out.append(current_split)
         return out
 
     @classmethod
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def from_batch_splits(cls, splits: List["DynamicCache"], num_hidden_layers: int = None) -> "DynamicCache":
+    def from_batch_splits(
+        cls, splits: List["DynamicCache"], num_hidden_layers: int = None
+    ) -> "DynamicCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         cache = cls()
         for idx in range(len(splits[0])):
-            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
-            value_cache = [current.value_cache[idx] for current in splits if current.value_cache[idx] != []]
+            key_cache = [
+                current.key_cache[idx]
+                for current in splits
+                if current.key_cache[idx] != []
+            ]
+            value_cache = [
+                current.value_cache[idx]
+                for current in splits
+                if current.value_cache[idx] != []
+            ]
             if key_cache != []:
                 layer_keys = torch.cat(key_cache, dim=0)
                 layer_values = torch.cat(value_cache, dim=0)
@@ -538,8 +578,12 @@ class DynamicCache(Cache):
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
         for layer_idx in range(len(self)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(
+                repeats, dim=0
+            )
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(
+                repeats, dim=0
+            )
 
     def batch_select_indices(self, indices: torch.Tensor):
         """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
@@ -575,16 +619,24 @@ class OffloadedCache(DynamicCache):
             with torch.cuda.stream(self.prefetch_stream):
                 # Prefetch next layer tensors to GPU
                 device = self.original_device[layer_idx]
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device, non_blocking=True)
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device, non_blocking=True)
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].to(
+                    device, non_blocking=True
+                )
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].to(
+                    device, non_blocking=True
+                )
 
     def evict_previous_layer(self, layer_idx: int):
         "Moves the previous layer cache to the CPU"
         if len(self) > 2:
             # We do it on the default stream so it occurs after all earlier computations on these tensors are done
             prev_layer_idx = (layer_idx - 1) % len(self)
-            self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to("cpu", non_blocking=True)
-            self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to("cpu", non_blocking=True)
+            self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to(
+                "cpu", non_blocking=True
+            )
+            self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to(
+                "cpu", non_blocking=True
+            )
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         "Gets the cache for this layer to the device. Prefetches the next and evicts the previous layer."
@@ -606,7 +658,9 @@ class OffloadedCache(DynamicCache):
             self.prefetch_layer((layer_idx + 1) % len(self))
             return (key_tensor, value_tensor)
         else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+            raise KeyError(
+                f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}"
+            )
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Saves the beam indices and reorders the cache when the tensor is back to its device."""
@@ -642,7 +696,9 @@ class OffloadedCache(DynamicCache):
 
         # Update the cache
         if len(self.key_cache) < layer_idx:
-            raise ValueError("OffloadedCache does not support model usage where layers are skipped. Use DynamicCache.")
+            raise ValueError(
+                "OffloadedCache does not support model usage where layers are skipped. Use DynamicCache."
+            )
         elif len(self.key_cache) == layer_idx:
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
@@ -651,7 +707,9 @@ class OffloadedCache(DynamicCache):
         else:
             key_tensor, value_tensor = self[layer_idx]
             self.key_cache[layer_idx] = torch.cat([key_tensor, key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([value_tensor, value_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat(
+                [value_tensor, value_states], dim=-2
+            )
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
@@ -703,18 +761,32 @@ class QuantizedCache(DynamicCache):
             self._seen_tokens += key_states.shape[-2]
 
         if len(self.key_cache) < layer_idx:
-            raise ValueError("QuantizedCache does not support model usage where layers are skipped. Use DynamicCache.")
+            raise ValueError(
+                "QuantizedCache does not support model usage where layers are skipped. Use DynamicCache."
+            )
         elif len(self.key_cache) == layer_idx:
-            self._quantized_key_cache.append(self._quantize(key_states.contiguous(), axis=self.axis_key))
-            self._quantized_value_cache.append(self._quantize(value_states.contiguous(), axis=self.axis_value))
-            self.key_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
-            self.value_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
+            self._quantized_key_cache.append(
+                self._quantize(key_states.contiguous(), axis=self.axis_key)
+            )
+            self._quantized_value_cache.append(
+                self._quantize(value_states.contiguous(), axis=self.axis_value)
+            )
+            self.key_cache.append(
+                torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
+            )
+            self.value_cache.append(
+                torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
+            )
             keys_to_return, values_to_return = key_states, value_states
         else:
             dequant_key = self._dequantize(self._quantized_key_cache[layer_idx])
             dequant_value = self._dequantize(self._quantized_value_cache[layer_idx])
             keys_to_return = [dequant_key, self.key_cache[layer_idx], key_states]
-            values_to_return = [dequant_value, self.value_cache[layer_idx], value_states]
+            values_to_return = [
+                dequant_value,
+                self.value_cache[layer_idx],
+                value_states,
+            ]
 
             keys_to_return = torch.cat(keys_to_return, dim=-2)
             values_to_return = torch.cat(values_to_return, dim=-2)
@@ -722,15 +794,25 @@ class QuantizedCache(DynamicCache):
                 self.key_cache[layer_idx].dim() == 4
                 and self.key_cache[layer_idx].shape[-2] + 1 >= self.residual_length
             ):
-                self._quantized_key_cache[layer_idx] = self._quantize(keys_to_return.contiguous(), axis=self.axis_key)
+                self._quantized_key_cache[layer_idx] = self._quantize(
+                    keys_to_return.contiguous(), axis=self.axis_key
+                )
                 self._quantized_value_cache[layer_idx] = self._quantize(
                     values_to_return.contiguous(), axis=self.axis_value
                 )
-                self.key_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
-                self.value_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
+                self.key_cache[layer_idx] = torch.zeros(
+                    0, dtype=key_states.dtype, device=key_states.device
+                )
+                self.value_cache[layer_idx] = torch.zeros(
+                    0, dtype=key_states.dtype, device=key_states.device
+                )
             else:
-                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+                self.key_cache[layer_idx] = torch.cat(
+                    [self.key_cache[layer_idx], key_states], dim=-2
+                )
+                self.value_cache[layer_idx] = torch.cat(
+                    [self.value_cache[layer_idx], value_states], dim=-2
+                )
 
         return keys_to_return, values_to_return
 
@@ -784,7 +866,9 @@ class QuantoQuantizedCache(QuantizedCache):
         super().__init__(cache_config)
 
         if is_optimum_quanto_available():
-            optimum_quanto_version = version.parse(importlib.metadata.version("optimum-quanto"))
+            optimum_quanto_version = version.parse(
+                importlib.metadata.version("optimum-quanto")
+            )
             if optimum_quanto_version <= version.parse("0.2.5"):
                 raise ImportError(
                     f"You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. Detected version {optimum_quanto_version}."
@@ -803,10 +887,14 @@ class QuantoQuantizedCache(QuantizedCache):
             from quanto import MaxOptimizer, qint2, qint4
 
         if self.nbits not in [2, 4]:
-            raise ValueError(f"`nbits` for `quanto` backend has to be one of [`2`, `4`] but got {self.nbits}")
+            raise ValueError(
+                f"`nbits` for `quanto` backend has to be one of [`2`, `4`] but got {self.nbits}"
+            )
 
         if self.axis_key not in [0, -1]:
-            raise ValueError(f"`axis_key` for `quanto` backend has to be one of [`0`, `-1`] but got {self.axis_key}")
+            raise ValueError(
+                f"`axis_key` for `quanto` backend has to be one of [`0`, `-1`] but got {self.axis_key}"
+            )
 
         if self.axis_value not in [0, -1]:
             raise ValueError(
@@ -814,15 +902,21 @@ class QuantoQuantizedCache(QuantizedCache):
             )
 
         self.qtype = qint4 if self.nbits == 4 else qint2
-        self.optimizer = MaxOptimizer()  # hardcode as it's the only one for per-channel quantization
+        self.optimizer = (
+            MaxOptimizer()
+        )  # hardcode as it's the only one for per-channel quantization
 
     def _quantize(self, tensor, axis):
         # We have two different API since in optimum-quanto, we don't use AffineQuantizer anymore
         if is_optimum_quanto_available():
             from optimum.quanto import quantize_weight
 
-            scale, zeropoint = self.optimizer(tensor, self.qtype, axis, self.q_group_size)
-            qtensor = quantize_weight(tensor, self.qtype, axis, scale, zeropoint, self.q_group_size)
+            scale, zeropoint = self.optimizer(
+                tensor, self.qtype, axis, self.q_group_size
+            )
+            qtensor = quantize_weight(
+                tensor, self.qtype, axis, scale, zeropoint, self.q_group_size
+            )
             return qtensor
         elif is_quanto_available():
             logger.warning_once(
@@ -830,8 +924,12 @@ class QuantoQuantizedCache(QuantizedCache):
             )
             from quanto import AffineQuantizer
 
-            scale, zeropoint = self.optimizer(tensor, self.qtype.bits, axis, self.q_group_size)
-            qtensor = AffineQuantizer.apply(tensor, self.qtype, axis, self.q_group_size, scale, zeropoint)
+            scale, zeropoint = self.optimizer(
+                tensor, self.qtype.bits, axis, self.q_group_size
+            )
+            qtensor = AffineQuantizer.apply(
+                tensor, self.qtype, axis, self.q_group_size, scale, zeropoint
+            )
 
         return qtensor
 
@@ -875,10 +973,14 @@ class HQQQuantizedCache(QuantizedCache):
             )
 
         if self.axis_key not in [0, 1]:
-            raise ValueError(f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}")
+            raise ValueError(
+                f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}"
+            )
 
         if self.axis_value not in [0, 1]:
-            raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
+            raise ValueError(
+                f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}"
+            )
 
         self.quantizer = HQQQuantizer
 
@@ -892,7 +994,9 @@ class HQQQuantizedCache(QuantizedCache):
             group_size=self.q_group_size,
         )
         meta["compute_dtype"] = self.compute_dtype
-        self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
+        self.quantizer.cuda(
+            qtensor, meta=meta, device=self.device
+        )  # Move to device and cast to dtype
         return qtensor, meta
 
     def _dequantize(self, qtensor):
@@ -945,7 +1049,9 @@ class SinkCache(Cache):
         self.cos_sin_rerotation_cache = {}
         self._cos_cache = None
         self._sin_cache = None
-        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self._seen_tokens = (
+            0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        )
 
     @staticmethod
     def _rotate_half(x):
@@ -1052,38 +1158,54 @@ class SinkCache(Cache):
 
         elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
             # Growing cache
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            self.key_cache[layer_idx] = torch.cat(
+                [self.key_cache[layer_idx], key_states], dim=-2
+            )
+            self.value_cache[layer_idx] = torch.cat(
+                [self.value_cache[layer_idx], value_states], dim=-2
+            )
 
         else:
             # Shifting cache
             keys_to_keep = self.key_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
+                :,
+                :,
+                -self.window_length + self.num_sink_tokens + key_states.shape[-2] :,
             ]
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
                 rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
-                    key_states, self._cos_cache[: self.window_length], self._sin_cache[: self.window_length]
+                    key_states,
+                    self._cos_cache[: self.window_length],
+                    self._sin_cache[: self.window_length],
                 )
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
                         keys_to_keep[..., :partial_rotation_size],
                         keys_to_keep[..., partial_rotation_size:],
                     )
-                keys_to_keep = self._apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
+                keys_to_keep = self._apply_key_rotary_pos_emb(
+                    keys_to_keep, rerotation_cos, rerotation_sin
+                )
                 if partial_rotation_size is not None:
                     keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
 
             # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
             sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
-            self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep, key_states], dim=-2)
+            self.key_cache[layer_idx] = torch.cat(
+                [sink_keys, keys_to_keep, key_states], dim=-2
+            )
 
             sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
             values_to_keep = self.value_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
+                :,
+                :,
+                -self.window_length + self.num_sink_tokens + value_states.shape[-2] :,
             ]
-            self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat(
+                [sink_values, values_to_keep, value_states], dim=-2
+            )
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
@@ -1147,11 +1269,15 @@ class StaticCache(Cache):
             )
 
         self.batch_size = batch_size or max_batch_size
-        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+        self.max_cache_len = (
+            config.max_position_embeddings if max_cache_len is None else max_cache_len
+        )
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+            config.head_dim
+            if hasattr(config, "head_dim")
+            else config.hidden_size // config.num_attention_heads
         )
 
         self.dtype = dtype
@@ -1164,22 +1290,37 @@ class StaticCache(Cache):
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
-        cache_shape = (self.batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
+        cache_shape = (
+            self.batch_size,
+            self.num_key_value_heads,
+            self.max_cache_len,
+            self.head_dim,
+        )
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[idx]
             else:
                 layer_device = device
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
+            new_layer_key_cache = torch.zeros(
+                cache_shape, dtype=self.dtype, device=layer_device
+            )
+            new_layer_value_cache = torch.zeros(
+                cache_shape, dtype=self.dtype, device=layer_device
+            )
             # Notes:
             # 1. `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             #     breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
             #     it is not needed anyway)
             # 2. `torch.export()` requires mutations to be registered as buffers.
             if not is_torchdynamo_compiling():
-                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
-                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
+                self.register_buffer(
+                    f"key_cache_{idx}",
+                    torch.zeros(cache_shape, dtype=dtype, device=layer_device),
+                )
+                self.register_buffer(
+                    f"value_cache_{idx}",
+                    torch.zeros(cache_shape, dtype=dtype, device=layer_device),
+                )
                 new_layer_key_cache = getattr(self, f"key_cache_{idx}")
                 new_layer_value_cache = getattr(self, f"value_cache_{idx}")
                 torch._dynamo.mark_static_address(new_layer_key_cache)
@@ -1358,7 +1499,9 @@ class SlidingWindowCache(StaticCache):
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
             return key_states, value_states
 
-        slicing = torch.ones(self.max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
+        slicing = torch.ones(
+            self.max_cache_len, dtype=torch.long, device=value_states.device
+        ).cumsum(0)
         cache_position = cache_position.clamp(0, self.max_cache_len - 1)
         to_shift = cache_position >= self.max_cache_len - 1
         indices = (slicing + to_shift[-1].int() - 1) % self.max_cache_len
@@ -1426,7 +1569,9 @@ class EncoderDecoderCache(Cache):
 
         self.is_updated = {}
         for layer_idx in range(len(cross_attention_cache.key_cache)):
-            self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
+            self.is_updated[layer_idx] = bool(
+                cross_attention_cache.get_seq_length(layer_idx) > 0
+            )
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -1441,7 +1586,9 @@ class EncoderDecoderCache(Cache):
                 self.cross_attention_cache.value_cache[layer_idx],
             )
         else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+            raise KeyError(
+                f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}"
+            )
 
     def __len__(self):
         """
@@ -1455,7 +1602,8 @@ class EncoderDecoderCache(Cache):
         legacy_cache = ()
         if len(self.cross_attention_cache) > 0:
             for self_attn, cross_attn in zip(
-                self.self_attention_cache.to_legacy_cache(), self.cross_attention_cache.to_legacy_cache()
+                self.self_attention_cache.to_legacy_cache(),
+                self.cross_attention_cache.to_legacy_cache(),
             ):
                 legacy_cache += (self_attn + cross_attn,)
         else:
@@ -1477,7 +1625,9 @@ class EncoderDecoderCache(Cache):
                 cache.self_attention_cache.update(key_states, value_states, layer_idx)
                 if len(past_key_values[layer_idx]) > 2:
                     key_states, value_states = past_key_values[layer_idx][2:]
-                    cache.cross_attention_cache.update(key_states, value_states, layer_idx)
+                    cache.cross_attention_cache.update(
+                        key_states, value_states, layer_idx
+                    )
                     cache.is_updated[layer_idx] = True
         return cache
 
@@ -1491,7 +1641,9 @@ class EncoderDecoderCache(Cache):
             self.self_attention_cache.reset()
         if hasattr(self.cross_attention_cache, "reset"):
             self.cross_attention_cache.reset()
-        elif not hasattr(self.self_attention_cache, "reset") and not hasattr(self.cross_attention_cache, "reset"):
+        elif not hasattr(self.self_attention_cache, "reset") and not hasattr(
+            self.cross_attention_cache, "reset"
+        ):
             raise ValueError(
                 "Neither self nor cross-attention cache have valid `.reset()` methods. `.reset()` should "
                 "only be called on compatible cache classes, such as `StaticCache` or `SlidingWindowCache`. "
@@ -1519,7 +1671,8 @@ class EncoderDecoderCache(Cache):
     # TODO(gante, sanchit-gandhi): move following functionality into `.generate`
     def crop(self, maximum_length: int):
         """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
+        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search.
+        """
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
 
@@ -1530,8 +1683,12 @@ class EncoderDecoderCache(Cache):
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         self.check_dynamic_cache(self.batch_split.__name__)
-        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
-        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
+        self_attention_cache = self.self_attention_cache.batch_split(
+            full_batch_size, split_size
+        )
+        cross_attention_cache = self.cross_attention_cache.batch_split(
+            full_batch_size, split_size
+        )
 
         out = []
         for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
@@ -1548,12 +1705,24 @@ class EncoderDecoderCache(Cache):
         self_attention_cache = DynamicCache()
         cross_attention_cache = DynamicCache()
         for idx in range(len(splits[0])):
-            layer_keys = torch.cat([current.self_attention_cache.key_cache[idx] for current in splits], dim=0)
-            layer_values = torch.cat([current.self_attention_cache.value_cache[idx] for current in splits], dim=0)
+            layer_keys = torch.cat(
+                [current.self_attention_cache.key_cache[idx] for current in splits],
+                dim=0,
+            )
+            layer_values = torch.cat(
+                [current.self_attention_cache.value_cache[idx] for current in splits],
+                dim=0,
+            )
             self_attention_cache.update(layer_keys, layer_values, idx)
 
-            layer_keys = torch.cat([current.cross_attention_cache.key_cache[idx] for current in splits], dim=0)
-            layer_values = torch.cat([current.cross_attention_cache.value_cache[idx] for current in splits], dim=0)
+            layer_keys = torch.cat(
+                [current.cross_attention_cache.key_cache[idx] for current in splits],
+                dim=0,
+            )
+            layer_values = torch.cat(
+                [current.cross_attention_cache.value_cache[idx] for current in splits],
+                dim=0,
+            )
             cross_attention_cache.update(layer_keys, layer_values, idx)
         return cls(self_attention_cache, cross_attention_cache)
 
@@ -1639,19 +1808,30 @@ class HybridCache(Cache):
         self.batch_size = batch_size or max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+            config.head_dim
+            if hasattr(config, "head_dim")
+            else config.hidden_size // config.num_attention_heads
         )
 
         self.dtype = dtype
         self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+            config.num_attention_heads
+            if config.num_key_value_heads is None
+            else config.num_key_value_heads
         )
         self.is_sliding = torch.tensor(
-            [not bool(i % 2) for i in range(config.num_hidden_layers)], dtype=torch.bool, device=device
+            [not bool(i % 2) for i in range(config.num_hidden_layers)],
+            dtype=torch.bool,
+            device=device,
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        global_cache_shape = (self.batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
+        global_cache_shape = (
+            self.batch_size,
+            self.num_key_value_heads,
+            max_cache_len,
+            self.head_dim,
+        )
         sliding_cache_shape = (
             self.batch_size,
             self.num_key_value_heads,
@@ -1665,15 +1845,30 @@ class HybridCache(Cache):
                 layer_device = device
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
-            cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
+            cache_shape = (
+                global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
+            )
+            new_layer_key_cache = torch.zeros(
+                cache_shape, dtype=self.dtype, device=layer_device
+            )
+            new_layer_value_cache = torch.zeros(
+                cache_shape, dtype=self.dtype, device=layer_device
+            )
             torch._dynamo.mark_static_address(new_layer_key_cache)
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
-    def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+    def _sliding_update(
+        self,
+        cache_position,
+        layer_idx,
+        key_states,
+        value_states,
+        k_out,
+        v_out,
+        max_cache_len,
+    ):
         if cache_position.shape[0] > max_cache_len:
             k_out = key_states[:, :, -max_cache_len:, :]
             v_out = value_states[:, :, -max_cache_len:, :]
@@ -1684,7 +1879,9 @@ class HybridCache(Cache):
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
             return key_states, value_states
 
-        slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
+        slicing = torch.ones(
+            max_cache_len, dtype=torch.long, device=value_states.device
+        ).cumsum(0)
         cache_position = cache_position.clamp(0, max_cache_len - 1)
         to_shift = cache_position >= max_cache_len - 1
         indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
@@ -1701,7 +1898,16 @@ class HybridCache(Cache):
         self.value_cache[layer_idx] += v_out
         return k_out, v_out
 
-    def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+    def _static_update(
+        self,
+        cache_position,
+        layer_idx,
+        key_states,
+        value_states,
+        k_out,
+        v_out,
+        max_cache_len,
+    ):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
 
@@ -1845,13 +2051,18 @@ class MambaCache:
         torch._dynamo.mark_static_address(self.ssm_states)
 
     def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
+        self,
+        layer_idx: int,
+        new_conv_state: torch.Tensor,
+        cache_position: torch.LongTensor,
     ) -> torch.Tensor:
         conv_state = self.conv_states[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
         conv_state = conv_state.roll(shifts=-1, dims=-1)
-        conv_state[:, :, cache_position] = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
+        conv_state[:, :, cache_position] = new_conv_state.to(
+            device=conv_state.device, dtype=conv_state.dtype
+        )
         self.conv_states[layer_idx].zero_()
         self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
@@ -1933,19 +2144,32 @@ class OffloadedStaticCache(StaticCache):
         offload_device: Union[str, torch.device] = torch.device("cpu"),
     ) -> None:
         self.max_batch_size = max_batch_size
-        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+        self.max_cache_len = (
+            config.max_position_embeddings if max_cache_len is None else max_cache_len
+        )
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
         self.dtype = dtype if dtype is not None else torch.float32
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-
-        num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        head_dim = (
+            config.head_dim
+            if hasattr(config, "head_dim")
+            else config.hidden_size // config.num_attention_heads
         )
 
-        cache_shape = (max_batch_size, num_key_value_heads, self.max_cache_len, head_dim)
+        num_key_value_heads = (
+            config.num_attention_heads
+            if config.num_key_value_heads is None
+            else config.num_key_value_heads
+        )
+
+        cache_shape = (
+            max_batch_size,
+            num_key_value_heads,
+            self.max_cache_len,
+            head_dim,
+        )
 
         # Create offloaded CPU tensors.
         self.key_cache: List[torch.Tensor] = []
@@ -1955,7 +2179,9 @@ class OffloadedStaticCache(StaticCache):
             # First layer is always on-device.
             device = self.device if i == 0 else self.offload_device
 
-            key_cache, value_cache = self._create_key_value_cache_tensors(cache_shape, device)
+            key_cache, value_cache = self._create_key_value_cache_tensors(
+                cache_shape, device
+            )
 
             self.key_cache.append(key_cache)
             self.value_cache.append(value_cache)
@@ -1965,7 +2191,9 @@ class OffloadedStaticCache(StaticCache):
         self._device_value_cache: List[torch.Tensor] = []
 
         for i in range(2):
-            key_cache, value_cache = self._create_key_value_cache_tensors(cache_shape, self.device)
+            key_cache, value_cache = self._create_key_value_cache_tensors(
+                cache_shape, self.device
+            )
 
             self._device_key_cache.append(key_cache)
             self._device_value_cache.append(value_cache)
@@ -1975,7 +2203,9 @@ class OffloadedStaticCache(StaticCache):
         self._seen_tokens = 0
 
         # Create new CUDA stream for parallel prefetching.
-        self._prefetch_stream = torch.cuda.Stream() if self.device.type == "cuda" else None
+        self._prefetch_stream = (
+            torch.cuda.Stream() if self.device.type == "cuda" else None
+        )
 
     def update(
         self,
@@ -2014,14 +2244,18 @@ class OffloadedStaticCache(StaticCache):
         else:
             # Wait for prefetch stream.
             if self._prefetch_stream is not None:
-                torch.cuda.default_stream(self.device).wait_stream(self._prefetch_stream)
+                torch.cuda.default_stream(self.device).wait_stream(
+                    self._prefetch_stream
+                )
 
             k_out = self._device_key_cache[layer_idx & 1]
             v_out = self._device_value_cache[layer_idx & 1]
 
         self._prefetch_layer(layer_idx + 1)
 
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
+        cache_position = (
+            cache_kwargs.get("cache_position") if cache_kwargs is not None else None
+        )
         if cache_position is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
@@ -2051,7 +2285,9 @@ class OffloadedStaticCache(StaticCache):
 
                 try:
                     self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
-                    self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
+                    self.value_cache[layer_idx].index_copy_(
+                        2, cache_position, value_states
+                    )
                 except NotImplementedError:
                     # The operator 'aten::index_copy.out' is not currently implemented for the MPS
                     # device.
@@ -2106,8 +2342,12 @@ class OffloadedStaticCache(StaticCache):
 
         is_cpu_device = device == torch.device("cpu")
 
-        key_cache = torch.zeros(shape, dtype=self.dtype, device=device, pin_memory=is_cpu_device)
-        value_cache = torch.zeros(shape, dtype=self.dtype, device=device, pin_memory=is_cpu_device)
+        key_cache = torch.zeros(
+            shape, dtype=self.dtype, device=device, pin_memory=is_cpu_device
+        )
+        value_cache = torch.zeros(
+            shape, dtype=self.dtype, device=device, pin_memory=is_cpu_device
+        )
 
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
         # preventing compiled graph breaks when updating the cache.
@@ -2133,5 +2373,9 @@ class OffloadedStaticCache(StaticCache):
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
 
-        self._device_key_cache[layer_idx & 1].copy_(self.key_cache[layer_idx], non_blocking=True)
-        self._device_value_cache[layer_idx & 1].copy_(self.value_cache[layer_idx], non_blocking=True)
+        self._device_key_cache[layer_idx & 1].copy_(
+            self.key_cache[layer_idx], non_blocking=True
+        )
+        self._device_value_cache[layer_idx & 1].copy_(
+            self.value_cache[layer_idx], non_blocking=True
+        )

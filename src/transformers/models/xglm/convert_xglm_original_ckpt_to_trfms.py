@@ -32,7 +32,9 @@ def convert_fairseq_xglm_checkpoint_from_disk(checkpoint_path):
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["decoder.embed_tokens.weight"].shape[0]
 
-    state_dict = {key.replace("decoder", "model"): val for key, val in state_dict.items()}
+    state_dict = {
+        key.replace("decoder", "model"): val for key, val in state_dict.items()
+    }
 
     config = XGLMConfig(
         vocab_size=vocab_size,
@@ -61,8 +63,15 @@ def convert_fairseq_xglm_checkpoint_from_disk(checkpoint_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("fairseq_path", type=str, help="path to a model.pt on local filesystem.")
-    parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "fairseq_path", type=str, help="path to a model.pt on local filesystem."
+    )
+    parser.add_argument(
+        "pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
     args = parser.parse_args()
     model = convert_fairseq_xglm_checkpoint_from_disk(args.fairseq_path)
     model.save_pretrained(args.pytorch_dump_folder_path)

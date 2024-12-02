@@ -24,7 +24,10 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_vision_encoder_decoder": ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]
+    "configuration_vision_encoder_decoder": [
+        "VisionEncoderDecoderConfig",
+        "VisionEncoderDecoderOnnxConfig",
+    ]
 }
 
 try:
@@ -41,7 +44,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_vision_encoder_decoder"] = ["TFVisionEncoderDecoderModel"]
+    _import_structure["modeling_tf_vision_encoder_decoder"] = [
+        "TFVisionEncoderDecoderModel"
+    ]
 
 try:
     if not is_flax_available():
@@ -49,10 +54,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_vision_encoder_decoder"] = ["FlaxVisionEncoderDecoderModel"]
+    _import_structure["modeling_flax_vision_encoder_decoder"] = [
+        "FlaxVisionEncoderDecoderModel"
+    ]
 
 if TYPE_CHECKING:
-    from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig, VisionEncoderDecoderOnnxConfig
+    from .configuration_vision_encoder_decoder import (
+        VisionEncoderDecoderConfig,
+        VisionEncoderDecoderOnnxConfig,
+    )
 
     try:
         if not is_torch_available():
@@ -81,4 +91,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

@@ -26,7 +26,13 @@ import regex
 
 from ....tokenization_utils import AddedToken, PreTrainedTokenizer
 from ....tokenization_utils_base import BatchEncoding
-from ....utils import TensorType, is_flax_available, is_tf_available, is_torch_available, logging
+from ....utils import (
+    TensorType,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from ....utils.generic import _is_jax, _is_numpy
 
 
@@ -108,7 +114,11 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         unk_token="<|endoftext|>",
         **kwargs,
     ):
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
         self.version = version
         self.max_n_lyric_tokens = max_n_lyric_tokens
         self.n_genres = n_genres
@@ -142,7 +152,11 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.artists_encoder) + len(self.genres_encoder) + len(self.lyrics_encoder)
+        return (
+            len(self.artists_encoder)
+            + len(self.genres_encoder)
+            + len(self.lyrics_encoder)
+        )
 
     def get_vocab(self):
         return {
@@ -158,10 +172,18 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         artists_id = [self.artists_encoder.get(artist, 0) for artist in list_artists]
         for genres in range(len(list_genres)):
-            list_genres[genres] = [self.genres_encoder.get(genre, 0) for genre in list_genres[genres]]
-            list_genres[genres] = list_genres[genres] + [-1] * (self.n_genres - len(list_genres[genres]))
+            list_genres[genres] = [
+                self.genres_encoder.get(genre, 0) for genre in list_genres[genres]
+            ]
+            list_genres[genres] = list_genres[genres] + [-1] * (
+                self.n_genres - len(list_genres[genres])
+            )
 
-        lyric_ids = [[self.lyrics_encoder.get(character, 0) for character in list_lyrics[0]], [], []]
+        lyric_ids = [
+            [self.lyrics_encoder.get(character, 0) for character in list_lyrics[0]],
+            [],
+            [],
+        ]
         return artists_id, list_genres, lyric_ids
 
     def _tokenize(self, lyrics):
@@ -263,7 +285,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         return " ".join(lyrics)
 
     def convert_to_tensors(
-        self, inputs, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
+        self,
+        inputs,
+        tensor_type: Optional[Union[str, TensorType]] = None,
+        prepend_batch_axis: bool = False,
     ):
         """
         Convert the inner content to tensors.
@@ -291,14 +316,18 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             is_tensor = tf.is_tensor
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
-                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+                raise ImportError(
+                    "Unable to convert output to PyTorch tensors format, PyTorch is not installed."
+                )
             import torch
 
             as_tensor = torch.tensor
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+                raise ImportError(
+                    "Unable to convert output to JAX tensors format, JAX is not installed."
+                )
             import jax.numpy as jnp  # noqa: F811
 
             as_tensor = jnp.array
@@ -338,19 +367,28 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         artist = [artist] * len(self.version)
         genres = [genres] * len(self.version)
 
-        artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genres, lyrics)
-        artists_id, genres_ids, full_tokens = self._convert_token_to_id(artists_tokens, genres_tokens, lyrics_tokens)
+        artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(
+            artist, genres, lyrics
+        )
+        artists_id, genres_ids, full_tokens = self._convert_token_to_id(
+            artists_tokens, genres_tokens, lyrics_tokens
+        )
 
         attention_masks = [-INFINITY] * len(full_tokens[-1])
         input_ids = [
             self.convert_to_tensors(
-                [input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]], tensor_type=return_tensors
+                [input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]],
+                tensor_type=return_tensors,
             )
             for i in range(len(self.version))
         ]
-        return BatchEncoding({"input_ids": input_ids, "attention_masks": attention_masks})
+        return BatchEncoding(
+            {"input_ids": input_ids, "attention_masks": attention_masks}
+        )
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         """
         Saves the tokenizer's vocabulary dictionary to the provided save_directory.
 
@@ -367,19 +405,25 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             return
 
         artists_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["artists_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["artists_file"],
         )
         with open(artists_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.artists_encoder, ensure_ascii=False))
 
         genres_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["genres_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["genres_file"],
         )
         with open(genres_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.genres_encoder, ensure_ascii=False))
 
         lyrics_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["lyrics_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["lyrics_file"],
         )
         with open(lyrics_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.lyrics_encoder, ensure_ascii=False))

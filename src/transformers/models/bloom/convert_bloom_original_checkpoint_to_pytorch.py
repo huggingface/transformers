@@ -78,7 +78,11 @@ def get_dtype_size(dtype):
 
 
 def convert_bloom_checkpoint_to_pytorch(
-    bloom_checkpoint_path, bloom_config_file, pytorch_dump_folder_path, shard_model, pretraining_tp
+    bloom_checkpoint_path,
+    bloom_config_file,
+    pytorch_dump_folder_path,
+    shard_model,
+    pretraining_tp,
 ):
     # Construct model
     if bloom_config_file == "":
@@ -88,7 +92,9 @@ def convert_bloom_checkpoint_to_pytorch(
 
     if shard_model:
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
+        file_names = sorted(
+            filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)
+        )
 
         index_dict = {"weight_map": {}, "metadata": {}}
         total_size = 0
@@ -104,7 +110,9 @@ def convert_bloom_checkpoint_to_pytorch(
             for i in range(pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
-                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
+                temp = torch.load(
+                    os.path.join(bloom_checkpoint_path, f_name), map_location="cpu"
+                )
 
                 # Rename keys in the transformers names
                 keys = list(temp.keys())
@@ -115,14 +123,25 @@ def convert_bloom_checkpoint_to_pytorch(
                     tensors = temp
                 else:
                     for key in tensors.keys():
-                        if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
+                        if any(
+                            key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH
+                        ):
                             # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
                             tensors[key] += temp[key]
                         else:
                             # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
-                            cat_dim = 1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
+                            cat_dim = (
+                                1
+                                if any(
+                                    text in key
+                                    for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN
+                                )
+                                else 0
+                            )
                             # We concatenate these weights accross TP ranks
-                            tensors[key] = torch.cat([tensors[key], temp[key]], dim=cat_dim)
+                            tensors[key] = torch.cat(
+                                [tensors[key], temp[key]], dim=cat_dim
+                            )
 
             # Divide by the number of TP the weights we want to average
             for key in tensors.keys():
@@ -132,7 +151,9 @@ def convert_bloom_checkpoint_to_pytorch(
                 tensors,
                 os.path.join(
                     pytorch_dump_folder_path,
-                    "pytorch_model_{}-of-{}.bin".format(str(j + 1).zfill(5), str(len(file_names)).zfill(5)),
+                    "pytorch_model_{}-of-{}.bin".format(
+                        str(j + 1).zfill(5), str(len(file_names)).zfill(5)
+                    ),
                 ),
             )
 
@@ -149,14 +170,20 @@ def convert_bloom_checkpoint_to_pytorch(
         index_dict["metadata"]["total_size"] = total_size
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
             f.write(config.to_json_string())
-        with open(os.path.join(pytorch_dump_folder_path, WEIGHTS_NAME + ".index.json"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(pytorch_dump_folder_path, WEIGHTS_NAME + ".index.json"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             json_config = json.dumps(index_dict, indent=2, sort_keys=True) + "\n"
             f.write(json_config)
     else:
         model = BloomModel(config)
 
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
+        file_names = sorted(
+            filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)
+        )
 
         missing_keys = None
         for i, file in enumerate(file_names):
@@ -164,7 +191,9 @@ def convert_bloom_checkpoint_to_pytorch(
             for i in range(pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
-                temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
+                temp = torch.load(
+                    os.path.join(bloom_checkpoint_path, f_name), map_location="cpu"
+                )
 
                 # Rename keys in the transformers names
                 keys = list(temp.keys())
@@ -176,13 +205,24 @@ def convert_bloom_checkpoint_to_pytorch(
                 else:
                     for key in tensors.keys():
                         # We average (sum and then divide) some weights accross TP ranks (see https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/olruwase/sync_layer_norms/megatron/training.py#L425)
-                        if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
+                        if any(
+                            key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH
+                        ):
                             tensors[key] += temp[key]
                         else:
                             # Some weights are RowParallelLinear in Megatron-Deepspeed, others are ColumnParallel
-                            cat_dim = 1 if any(text in key for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
+                            cat_dim = (
+                                1
+                                if any(
+                                    text in key
+                                    for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN
+                                )
+                                else 0
+                            )
                             # We concatenate these weights accross TP ranks
-                            tensors[key] = torch.cat([tensors[key], temp[key]], dim=cat_dim)
+                            tensors[key] = torch.cat(
+                                [tensors[key], temp[key]], dim=cat_dim
+                            )
 
             # Divide by the number of TP the weights we want to average
             for key in tensors.keys():
@@ -190,7 +230,9 @@ def convert_bloom_checkpoint_to_pytorch(
                     tensors[key] = tensors[key] / pretraining_tp
 
             other_keys = model.load_state_dict(tensors, strict=False)
-            assert not other_keys.unexpected_keys, f"The keys {other_keys.unexpected_keys} are unexpected"
+            assert (
+                not other_keys.unexpected_keys
+            ), f"The keys {other_keys.unexpected_keys} are unexpected"
             if missing_keys is None:
                 missing_keys = set(other_keys.missing_keys)
             else:
@@ -202,7 +244,9 @@ def convert_bloom_checkpoint_to_pytorch(
         os.makedirs(pytorch_dump_folder_path, exist_ok=True)
         pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
-        print(f"Save PyTorch model to {pytorch_weights_dump_path} with dtype {config.torch_dtype}")
+        print(
+            f"Save PyTorch model to {pytorch_weights_dump_path} with dtype {config.torch_dtype}"
+        )
         if config.torch_dtype is not None:
             model = model.to(config.torch_dtype)
         torch.save(model.state_dict(), pytorch_weights_dump_path)
@@ -222,7 +266,11 @@ if __name__ == "__main__":
         help="Path to the Megatron-LM checkpoint path.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
         "--bloom_config_file",

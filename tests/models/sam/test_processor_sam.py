@@ -73,11 +73,18 @@ class SamProcessorTest(unittest.TestCase):
         processor = SamProcessor(image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+        image_processor_add_kwargs = self.get_image_processor(
+            do_normalize=False, padding_value=1.0
+        )
 
-        processor = SamProcessor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
+        processor = SamProcessor.from_pretrained(
+            self.tmpdirname, do_normalize=False, padding_value=1.0
+        )
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, SamImageProcessor)
 
     def test_image_processor_no_masks(self):
@@ -91,7 +98,9 @@ class SamProcessorTest(unittest.TestCase):
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
         for image in input_feat_extract.pixel_values:
             self.assertEqual(image.shape, (3, 1024, 1024))
@@ -112,11 +121,17 @@ class SamProcessorTest(unittest.TestCase):
         image_input = self.prepare_image_inputs()
         mask_input = self.prepare_mask_inputs()
 
-        input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
-        input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
+        input_feat_extract = image_processor(
+            images=image_input, segmentation_maps=mask_input, return_tensors="np"
+        )
+        input_processor = processor(
+            images=image_input, segmentation_maps=mask_input, return_tensors="np"
+        )
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
         for label in input_feat_extract.labels:
             self.assertEqual(label.shape, (256, 256))
@@ -131,7 +146,9 @@ class SamProcessorTest(unittest.TestCase):
         original_sizes = [[1764, 2646]]
 
         reshaped_input_size = [[683, 1024]]
-        masks = processor.post_process_masks(dummy_masks, original_sizes, reshaped_input_size)
+        masks = processor.post_process_masks(
+            dummy_masks, original_sizes, reshaped_input_size
+        )
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         masks = processor.post_process_masks(
@@ -141,13 +158,17 @@ class SamProcessorTest(unittest.TestCase):
 
         # should also work with np
         dummy_masks = [np.ones((1, 3, 5, 5))]
-        masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
+        masks = processor.post_process_masks(
+            dummy_masks, np.array(original_sizes), np.array(reshaped_input_size)
+        )
 
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(ValueError):
-            masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
+            masks = processor.post_process_masks(
+                dummy_masks, np.array(original_sizes), np.array(reshaped_input_size)
+            )
 
 
 @require_vision
@@ -174,11 +195,18 @@ class TFSamProcessorTest(unittest.TestCase):
         processor = SamProcessor(image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+        image_processor_add_kwargs = self.get_image_processor(
+            do_normalize=False, padding_value=1.0
+        )
 
-        processor = SamProcessor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
+        processor = SamProcessor.from_pretrained(
+            self.tmpdirname, do_normalize=False, padding_value=1.0
+        )
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, SamImageProcessor)
 
     def test_image_processor(self):
@@ -191,11 +219,17 @@ class TFSamProcessorTest(unittest.TestCase):
         input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        input_feat_extract.pop("original_sizes")  # pop original_sizes as it is popped in the processor
-        input_feat_extract.pop("reshaped_input_sizes")  # pop reshaped_input_sizes as it is popped in the processor
+        input_feat_extract.pop(
+            "original_sizes"
+        )  # pop original_sizes as it is popped in the processor
+        input_feat_extract.pop(
+            "reshaped_input_sizes"
+        )  # pop reshaped_input_sizes as it is popped in the processor
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     @require_tf
     def test_post_process_masks(self):
@@ -207,7 +241,9 @@ class TFSamProcessorTest(unittest.TestCase):
         original_sizes = [[1764, 2646]]
 
         reshaped_input_size = [[683, 1024]]
-        masks = processor.post_process_masks(dummy_masks, original_sizes, reshaped_input_size, return_tensors="tf")
+        masks = processor.post_process_masks(
+            dummy_masks, original_sizes, reshaped_input_size, return_tensors="tf"
+        )
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         masks = processor.post_process_masks(
@@ -221,7 +257,10 @@ class TFSamProcessorTest(unittest.TestCase):
         # should also work with np
         dummy_masks = [np.ones((1, 3, 5, 5))]
         masks = processor.post_process_masks(
-            dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf"
+            dummy_masks,
+            np.array(original_sizes),
+            np.array(reshaped_input_size),
+            return_tensors="tf",
         )
 
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
@@ -229,7 +268,10 @@ class TFSamProcessorTest(unittest.TestCase):
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(tf.errors.InvalidArgumentError):
             masks = processor.post_process_masks(
-                dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf"
+                dummy_masks,
+                np.array(original_sizes),
+                np.array(reshaped_input_size),
+                return_tensors="tf",
             )
 
 
@@ -282,11 +324,19 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        pt_input_feat_extract = image_processor(image_input, return_tensors="pt")["pixel_values"].numpy()
-        pt_input_processor = processor(images=image_input, return_tensors="pt")["pixel_values"].numpy()
+        pt_input_feat_extract = image_processor(image_input, return_tensors="pt")[
+            "pixel_values"
+        ].numpy()
+        pt_input_processor = processor(images=image_input, return_tensors="pt")[
+            "pixel_values"
+        ].numpy()
 
-        tf_input_feat_extract = image_processor(image_input, return_tensors="tf")["pixel_values"].numpy()
-        tf_input_processor = processor(images=image_input, return_tensors="tf")["pixel_values"].numpy()
+        tf_input_feat_extract = image_processor(image_input, return_tensors="tf")[
+            "pixel_values"
+        ].numpy()
+        tf_input_processor = processor(images=image_input, return_tensors="tf")[
+            "pixel_values"
+        ].numpy()
 
         self.assertTrue(np.allclose(pt_input_feat_extract, pt_input_processor))
         self.assertTrue(np.allclose(pt_input_feat_extract, tf_input_feat_extract))

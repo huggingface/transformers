@@ -19,11 +19,20 @@ import unittest
 import numpy as np
 
 import transformers
-from transformers import GPT2Tokenizer, GPTNeoConfig, is_flax_available, is_torch_available
+from transformers import (
+    GPT2Tokenizer,
+    GPTNeoConfig,
+    is_flax_available,
+    is_torch_available,
+)
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
-from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import (
+    FlaxModelTesterMixin,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_flax_available():
@@ -34,7 +43,10 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-    from transformers.models.gpt_neo.modeling_flax_gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel
+    from transformers.models.gpt_neo.modeling_flax_gpt_neo import (
+        FlaxGPTNeoForCausalLM,
+        FlaxGPTNeoModel,
+    )
 
 if is_torch_available():
     import torch
@@ -116,7 +128,9 @@ class FlaxGPTNeoModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
@@ -124,7 +138,8 @@ class FlaxGPTNeoModelTester:
         attention_mask = jnp.ones((input_ids.shape[0], max_decoder_length), dtype="i4")
 
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
         outputs_cache = model(
             input_ids[:, :-1],
@@ -133,7 +148,9 @@ class FlaxGPTNeoModelTester:
             position_ids=position_ids,
         )
 
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             attention_mask=attention_mask,
@@ -143,21 +160,34 @@ class FlaxGPTNeoModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward_with_attn_mask(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
         attention_mask_cache = jnp.concatenate(
-            [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
+            [
+                attention_mask,
+                jnp.zeros(
+                    (
+                        attention_mask.shape[0],
+                        max_decoder_length - attention_mask.shape[1],
+                    )
+                ),
+            ],
             axis=-1,
         )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
 
         outputs_cache = model(
@@ -166,7 +196,9 @@ class FlaxGPTNeoModelTester:
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
@@ -176,26 +208,40 @@ class FlaxGPTNeoModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
-class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxGPTNeoModel, FlaxGPTNeoForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxGPTNeoForCausalLM,) if is_flax_available() else ()
+class FlaxGPTNeoModelTest(
+    FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (FlaxGPTNeoModel, FlaxGPTNeoForCausalLM) if is_flax_available() else ()
+    )
+    all_generative_model_classes = (
+        (FlaxGPTNeoForCausalLM,) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxGPTNeoModelTester(self)
 
     def test_use_cache_forward(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-            self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
+            self.model_tester.check_use_cache_forward(
+                model_class_name, config, input_ids, attention_mask
+            )
 
     def test_use_cache_forward_with_attn_mask(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
             self.model_tester.check_use_cache_forward_with_attn_mask(
                 model_class_name, config, input_ids, attention_mask
             )
@@ -205,7 +251,12 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
         tokenizer = GPT2Tokenizer.from_pretrained(
             "openai-community/gpt2", pad_token="<|endoftext|>", padding_side="left"
         )
-        inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
+        inputs = tokenizer(
+            ["Hello this is a long string", "Hey"],
+            return_tensors="np",
+            padding=True,
+            truncation=True,
+        )
 
         model = FlaxGPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")
         model.do_sample = False
@@ -214,10 +265,14 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
         jit_generate = jax.jit(model.generate)
 
         output_sequences = jit_generate(
-            inputs["input_ids"], attention_mask=inputs["attention_mask"], pad_token_id=tokenizer.pad_token_id
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            pad_token_id=tokenizer.pad_token_id,
         ).sequences
 
-        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        output_string = tokenizer.batch_decode(
+            output_sequences, skip_special_tokens=True
+        )
 
         expected_string = [
             "Hello this is a long string of text.\n\nI'm trying to get the text of the",
@@ -236,14 +291,20 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = {
+                    k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()
+                }
 
                 # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class_name = model_class.__name__[
+                    4:
+                ]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 batch_size, seq_length = pt_inputs["input_ids"].shape
-                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
+                rnd_start_indices = np.random.randint(
+                    0, seq_length - 1, size=(batch_size,)
+                )
                 for batch_idx, start_index in enumerate(rnd_start_indices):
                     pt_inputs["attention_mask"][batch_idx, :start_index] = 0
                     pt_inputs["attention_mask"][batch_idx, start_index:] = 1
@@ -252,27 +313,41 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
                 pt_model = pt_model_class(config).eval()
                 fx_model = model_class(config, dtype=jnp.float32)
 
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_state = convert_pytorch_state_dict_to_flax(
+                    pt_model.state_dict(), fx_model
+                )
                 fx_model.params = fx_state
 
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
+                )
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
+                    self.assert_almost_equals(
+                        fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2
+                    )
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
+                    fx_model_loaded = model_class.from_pretrained(
+                        tmpdirname, from_pt=True
+                    )
 
                 fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                    len(fx_outputs_loaded),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-                    self.assert_almost_equals(fx_output_loaded[:, -1], pt_output[:, -1].numpy(), 4e-2)
+                    self.assert_almost_equals(
+                        fx_output_loaded[:, -1], pt_output[:, -1].numpy(), 4e-2
+                    )
 
     # overwrite from common since `attention_mask` in combination
     # with `causal_mask` behaves slighly differently
@@ -283,10 +358,14 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = {
+                    k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()
+                }
 
                 # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class_name = model_class.__name__[
+                    4:
+                ]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
@@ -294,7 +373,9 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
                 batch_size, seq_length = pt_inputs["input_ids"].shape
-                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
+                rnd_start_indices = np.random.randint(
+                    0, seq_length - 1, size=(batch_size,)
+                )
                 for batch_idx, start_index in enumerate(rnd_start_indices):
                     pt_inputs["attention_mask"][batch_idx, :start_index] = 0
                     pt_inputs["attention_mask"][batch_idx, start_index:] = 1
@@ -308,22 +389,34 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
+                )
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
+                    self.assert_almost_equals(
+                        fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2
+                    )
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = pt_model_class.from_pretrained(
+                        tmpdirname, from_flax=True
+                    )
 
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
                 self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                    len(fx_outputs),
+                    len(pt_outputs_loaded),
+                    "Output lengths differ between Flax and PyTorch",
                 )
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
-                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
+                    self.assert_almost_equals(
+                        fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2
+                    )
 
     @slow
     def test_model_from_pretrained(self):

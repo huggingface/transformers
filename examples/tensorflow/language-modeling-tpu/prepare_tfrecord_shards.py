@@ -40,7 +40,10 @@ def parse_args():
         help="Name of the training. Explore datasets at: hf.co/datasets.",
     )
     parser.add_argument(
-        "--dataset_config", type=str, default="wikitext-103-raw-v1", help="Configuration name of the dataset."
+        "--dataset_config",
+        type=str,
+        default="wikitext-103-raw-v1",
+        help="Configuration name of the dataset.",
     )
     parser.add_argument(
         "--trust_remote_code",
@@ -63,7 +66,9 @@ def parse_args():
         default=1000,
         help="Number of entries to go in a single shard.",
     )
-    parser.add_argument("--split", type=str, default="train", choices=["train", "test", "validation"])
+    parser.add_argument(
+        "--split", type=str, default="train", choices=["train", "test", "validation"]
+    )
     parser.add_argument(
         "--limit",
         default=None,
@@ -101,7 +106,9 @@ def get_serialized_examples(tokenized_data):
     records = []
     for i in range(len(tokenized_data["input_ids"])):
         features = {
-            "input_ids": tf.train.Feature(int64_list=tf.train.Int64List(value=tokenized_data["input_ids"][i])),
+            "input_ids": tf.train.Feature(
+                int64_list=tf.train.Int64List(value=tokenized_data["input_ids"][i])
+            ),
             "attention_mask": tf.train.Feature(
                 int64_list=tf.train.Int64List(value=tokenized_data["attention_mask"][i])
             ),
@@ -115,7 +122,10 @@ def get_serialized_examples(tokenized_data):
 
 def main(args):
     dataset = datasets.load_dataset(
-        args.dataset_name, args.dataset_config, split=args.split, trust_remote_code=args.trust_remote_code
+        args.dataset_name,
+        args.dataset_config,
+        split=args.split,
+        trust_remote_code=args.trust_remote_code,
     )
 
     if args.limit is not None:
@@ -139,7 +149,9 @@ def main(args):
 
     # Tokenize the whole dataset at once.
     tokenize_fn = tokenize_function(tokenizer)
-    dataset_tokenized = dataset.map(tokenize_fn, batched=True, num_proc=4, remove_columns=["text"])
+    dataset_tokenized = dataset.map(
+        tokenize_fn, batched=True, num_proc=4, remove_columns=["text"]
+    )
 
     # We need to concatenate all our texts together, and then split the result
     # into chunks of a fixed size, which we will call block_size. To do this, we
@@ -159,26 +171,37 @@ def main(args):
         total_length = (total_length // args.max_length) * args.max_length
         # Split by chunks of max_len.
         result = {
-            k: [t[i : i + args.max_length] for i in range(0, total_length, args.max_length)]
+            k: [
+                t[i : i + args.max_length]
+                for i in range(0, total_length, args.max_length)
+            ]
             for k, t in concatenated_examples.items()
         }
         return result
 
-    grouped_dataset = dataset_tokenized.map(group_texts, batched=True, batch_size=1000, num_proc=4)
+    grouped_dataset = dataset_tokenized.map(
+        group_texts, batched=True, batch_size=1000, num_proc=4
+    )
 
     shard_count = 0
     total_records = 0
     for shard in range(0, len(grouped_dataset), args.shard_size):
         dataset_snapshot = grouped_dataset[shard : shard + args.shard_size]
         records_containing = len(dataset_snapshot["input_ids"])
-        filename = os.path.join(split_dir, f"dataset-{shard_count}-{records_containing}.tfrecord")
+        filename = os.path.join(
+            split_dir, f"dataset-{shard_count}-{records_containing}.tfrecord"
+        )
         serialized_examples = get_serialized_examples(dataset_snapshot)
 
         with tf.io.TFRecordWriter(filename) as out_file:
             for i in range(len(serialized_examples)):
                 example = serialized_examples[i]
                 out_file.write(example)
-            print("Wrote file {} containing {} records".format(filename, records_containing))
+            print(
+                "Wrote file {} containing {} records".format(
+                    filename, records_containing
+                )
+            )
 
         shard_count += 1
         total_records += records_containing

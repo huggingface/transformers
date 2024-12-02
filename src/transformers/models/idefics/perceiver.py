@@ -47,7 +47,13 @@ from .configuration_idefics import IdeficsConfig
 
 class IdeficsPerceiverResampler(nn.Module):
     def __init__(
-        self, config: IdeficsConfig, embed_dim: int, depth: int, n_heads: int, head_dim: int, n_latents: int
+        self,
+        config: IdeficsConfig,
+        embed_dim: int,
+        depth: int,
+        n_heads: int,
+        head_dim: int,
+        n_latents: int,
     ) -> None:
         """
         Instantiates a Perceiver Resampler that operates over a sequence of embeddings (say from a ResNet or ViT or
@@ -67,11 +73,18 @@ class IdeficsPerceiverResampler(nn.Module):
 
         """
         super().__init__()
-        self.embed_dim, self.n_heads, self.head_dim, self.n_latents = embed_dim, n_heads, head_dim, n_latents
+        self.embed_dim, self.n_heads, self.head_dim, self.n_latents = (
+            embed_dim,
+            n_heads,
+            head_dim,
+            n_latents,
+        )
         self.qk_layer_norms = config.perceiver_config.qk_layer_norms_perceiver
 
         # Create Latents for Perceiver
-        self.latents = nn.Parameter(torch.randn(self.n_latents, self.embed_dim), requires_grad=True)
+        self.latents = nn.Parameter(
+            torch.randn(self.n_latents, self.embed_dim), requires_grad=True
+        )
 
         self.intermediate_dim = (
             self.embed_dim * 4
@@ -83,7 +96,12 @@ class IdeficsPerceiverResampler(nn.Module):
             [
                 nn.ModuleList(
                     [
-                        IdeficsPerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms),
+                        IdeficsPerceiverAttention(
+                            self.embed_dim,
+                            self.n_heads,
+                            self.head_dim,
+                            self.qk_layer_norms,
+                        ),
                         IdeficsMLP(self.intermediate_dim, config),
                     ]
                 )
@@ -106,7 +124,9 @@ class IdeficsPerceiverResampler(nn.Module):
 
 
 class IdeficsPerceiverAttention(nn.Module):
-    def __init__(self, embed_dim: int, n_heads: int, head_dim: int, qk_layer_norms: bool) -> None:
+    def __init__(
+        self, embed_dim: int, n_heads: int, head_dim: int, qk_layer_norms: bool
+    ) -> None:
         """Perceiver Cross-Attention Module --> let long-form inputs be `context`, resampled embeddings be `latents`"""
         super().__init__()
         self.embed_dim, self.n_heads, self.head_dim = embed_dim, n_heads, head_dim
@@ -121,11 +141,19 @@ class IdeficsPerceiverAttention(nn.Module):
         self.qk_scale = self.head_dim**-0.5
 
         # Q, K, V Projection (no bias -- detail from Perceiver/Flamingo Papers).
-        self.q_proj = nn.Linear(self.embed_dim, self.n_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.embed_dim, self.n_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.embed_dim, self.n_heads * self.head_dim, bias=False)
+        self.q_proj = nn.Linear(
+            self.embed_dim, self.n_heads * self.head_dim, bias=False
+        )
+        self.k_proj = nn.Linear(
+            self.embed_dim, self.n_heads * self.head_dim, bias=False
+        )
+        self.v_proj = nn.Linear(
+            self.embed_dim, self.n_heads * self.head_dim, bias=False
+        )
 
-        self.output_proj = nn.Linear(self.n_heads * self.head_dim, embed_dim, bias=False)
+        self.output_proj = nn.Linear(
+            self.n_heads * self.head_dim, embed_dim, bias=False
+        )
 
     def forward(self, context: torch.Tensor, latents: torch.Tensor) -> torch.Tensor:
         """
@@ -154,7 +182,12 @@ class IdeficsPerceiverAttention(nn.Module):
         # Multiheaded Self-Attention w/ stable softmax (subtract per-row max -- `amax` -- before softmax call)
         #   =>> `attn` should be a 2D matrix of shape [n_latents x (context + n_latents)]
         # einsum.rearrange(x, "bsz seq (heads embed) -> bsz heads seq embed", heads=self.n_heads)
-        q, k, v = [x.reshape(batch_size, x.shape[1], self.n_heads, self.head_dim).transpose(1, 2) for x in (q, k, v)]
+        q, k, v = [
+            x.reshape(batch_size, x.shape[1], self.n_heads, self.head_dim).transpose(
+                1, 2
+            )
+            for x in (q, k, v)
+        ]
 
         if self.qk_layer_norms:
             q = self.q_layer_norm(q)
@@ -180,7 +213,9 @@ class IdeficsMLP(nn.Module):
         self.act = nn.ReLU()
         self.c_proj = nn.Linear(intermediate_size, self.embed_dim, bias=False)
 
-    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+    def forward(
+        self, hidden_states: Optional[Tuple[torch.FloatTensor]]
+    ) -> torch.FloatTensor:
         hidden_states = self.ln(hidden_states)
         hidden_states = self.fc(hidden_states)
         hidden_states = self.act(hidden_states)

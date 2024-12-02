@@ -200,7 +200,9 @@ class ReformerConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_hashes = num_hashes
         self.num_hidden_layers = len(attn_layers)
-        self.num_buckets = tuple(num_buckets) if isinstance(num_buckets, list) else num_buckets
+        self.num_buckets = (
+            tuple(num_buckets) if isinstance(num_buckets, list) else num_buckets
+        )
         self.lsh_attn_chunk_length = lsh_attn_chunk_length
         self.local_attn_chunk_length = local_attn_chunk_length
         self.lsh_num_chunks_after = lsh_num_chunks_after

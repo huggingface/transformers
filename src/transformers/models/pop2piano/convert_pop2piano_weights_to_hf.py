@@ -36,16 +36,24 @@ model = Pop2PianoForConditionalGeneration(cfg)
 
 
 # load relative attention bias
-state_dict["encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = official_weights["state_dict"][
-    "transformer.encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"
-]
-state_dict["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = official_weights["state_dict"][
-    "transformer.decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"
-]
+state_dict["encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = (
+    official_weights["state_dict"][
+        "transformer.encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"
+    ]
+)
+state_dict["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = (
+    official_weights["state_dict"][
+        "transformer.decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"
+    ]
+)
 
 # load embed tokens and final layer norm for both encoder and decoder
-state_dict["encoder.embed_tokens.weight"] = official_weights["state_dict"]["transformer.encoder.embed_tokens.weight"]
-state_dict["decoder.embed_tokens.weight"] = official_weights["state_dict"]["transformer.decoder.embed_tokens.weight"]
+state_dict["encoder.embed_tokens.weight"] = official_weights["state_dict"][
+    "transformer.encoder.embed_tokens.weight"
+]
+state_dict["decoder.embed_tokens.weight"] = official_weights["state_dict"][
+    "transformer.decoder.embed_tokens.weight"
+]
 
 state_dict["encoder.final_layer_norm.weight"] = official_weights["state_dict"][
     "transformer.encoder.final_layer_norm.weight"
@@ -55,92 +63,118 @@ state_dict["decoder.final_layer_norm.weight"] = official_weights["state_dict"][
 ]
 
 # load lm_head, mel_conditioner.emb and shared
-state_dict["lm_head.weight"] = official_weights["state_dict"]["transformer.lm_head.weight"]
-state_dict["mel_conditioner.embedding.weight"] = official_weights["state_dict"]["mel_conditioner.embedding.weight"]
-state_dict["shared.weight"] = official_weights["state_dict"]["transformer.shared.weight"]
+state_dict["lm_head.weight"] = official_weights["state_dict"][
+    "transformer.lm_head.weight"
+]
+state_dict["mel_conditioner.embedding.weight"] = official_weights["state_dict"][
+    "mel_conditioner.embedding.weight"
+]
+state_dict["shared.weight"] = official_weights["state_dict"][
+    "transformer.shared.weight"
+]
 
 # load each encoder blocks
 for i in range(cfg.num_layers):
     # layer 0
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.q.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.q.weight"
-    ]
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.k.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.k.weight"
-    ]
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.v.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.v.weight"
-    ]
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.o.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.o.weight"
-    ]
-    state_dict[f"encoder.block.{i}.layer.0.layer_norm.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.layer_norm.weight"
-    ]
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.q.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.encoder.block.{i}.layer.0.SelfAttention.q.weight"]
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.k.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.encoder.block.{i}.layer.0.SelfAttention.k.weight"]
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.v.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.encoder.block.{i}.layer.0.SelfAttention.v.weight"]
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.o.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.encoder.block.{i}.layer.0.SelfAttention.o.weight"]
+    state_dict[f"encoder.block.{i}.layer.0.layer_norm.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.encoder.block.{i}.layer.0.layer_norm.weight"]
 
     # layer 1
-    state_dict[f"encoder.block.{i}.layer.1.DenseReluDense.wi_0.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.1.DenseReluDense.wi_0.weight"
-    ]
-    state_dict[f"encoder.block.{i}.layer.1.DenseReluDense.wi_1.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.1.DenseReluDense.wi_1.weight"
-    ]
-    state_dict[f"encoder.block.{i}.layer.1.DenseReluDense.wo.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.1.DenseReluDense.wo.weight"
-    ]
-    state_dict[f"encoder.block.{i}.layer.1.layer_norm.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.1.layer_norm.weight"
-    ]
+    state_dict[f"encoder.block.{i}.layer.1.DenseReluDense.wi_0.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.encoder.block.{i}.layer.1.DenseReluDense.wi_0.weight"
+        ]
+    )
+    state_dict[f"encoder.block.{i}.layer.1.DenseReluDense.wi_1.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.encoder.block.{i}.layer.1.DenseReluDense.wi_1.weight"
+        ]
+    )
+    state_dict[f"encoder.block.{i}.layer.1.DenseReluDense.wo.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.encoder.block.{i}.layer.1.DenseReluDense.wo.weight"
+        ]
+    )
+    state_dict[f"encoder.block.{i}.layer.1.layer_norm.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.encoder.block.{i}.layer.1.layer_norm.weight"]
 
 # load each decoder blocks
 for i in range(6):
     # layer 0
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.q.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.q.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.k.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.k.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.v.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.v.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.o.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.o.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.0.layer_norm.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.layer_norm.weight"
-    ]
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.q.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.decoder.block.{i}.layer.0.SelfAttention.q.weight"]
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.k.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.decoder.block.{i}.layer.0.SelfAttention.k.weight"]
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.v.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.decoder.block.{i}.layer.0.SelfAttention.v.weight"]
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.o.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.decoder.block.{i}.layer.0.SelfAttention.o.weight"]
+    state_dict[f"decoder.block.{i}.layer.0.layer_norm.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.decoder.block.{i}.layer.0.layer_norm.weight"]
 
     # layer 1
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.q.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.q.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.k.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.k.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.v.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.v.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.o.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.o.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.1.layer_norm.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.layer_norm.weight"
-    ]
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.q.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.decoder.block.{i}.layer.1.EncDecAttention.q.weight"
+        ]
+    )
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.k.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.decoder.block.{i}.layer.1.EncDecAttention.k.weight"
+        ]
+    )
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.v.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.decoder.block.{i}.layer.1.EncDecAttention.v.weight"
+        ]
+    )
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.o.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.decoder.block.{i}.layer.1.EncDecAttention.o.weight"
+        ]
+    )
+    state_dict[f"decoder.block.{i}.layer.1.layer_norm.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.decoder.block.{i}.layer.1.layer_norm.weight"]
 
     # layer 2
-    state_dict[f"decoder.block.{i}.layer.2.DenseReluDense.wi_0.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.2.DenseReluDense.wi_0.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.2.DenseReluDense.wi_1.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.2.DenseReluDense.wi_1.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.2.DenseReluDense.wo.weight"
-    ]
-    state_dict[f"decoder.block.{i}.layer.2.layer_norm.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.2.layer_norm.weight"
-    ]
+    state_dict[f"decoder.block.{i}.layer.2.DenseReluDense.wi_0.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.decoder.block.{i}.layer.2.DenseReluDense.wi_0.weight"
+        ]
+    )
+    state_dict[f"decoder.block.{i}.layer.2.DenseReluDense.wi_1.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.decoder.block.{i}.layer.2.DenseReluDense.wi_1.weight"
+        ]
+    )
+    state_dict[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = (
+        official_weights["state_dict"][
+            f"transformer.decoder.block.{i}.layer.2.DenseReluDense.wo.weight"
+        ]
+    )
+    state_dict[f"decoder.block.{i}.layer.2.layer_norm.weight"] = official_weights[
+        "state_dict"
+    ][f"transformer.decoder.block.{i}.layer.2.layer_norm.weight"]
 
 model.load_state_dict(state_dict, strict=True)
 

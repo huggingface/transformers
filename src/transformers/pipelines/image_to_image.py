@@ -85,7 +85,9 @@ class ImageToImagePipeline(Pipeline):
         return preprocess_params, forward_params, postprocess_params
 
     def __call__(
-        self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs
+        self,
+        images: Union[str, List[str], "Image.Image", List["Image.Image"]],
+        **kwargs
     ) -> Union["Image.Image", List["Image.Image"]]:
         """
         Transform the image(s) passed as inputs.

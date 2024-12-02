@@ -47,7 +47,9 @@ class AltCLIPProcessor(ProcessorMixin):
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
-    @deprecate_kwarg(old_name="feature_extractor", version="5.0.0", new_name="image_processor")
+    @deprecate_kwarg(
+        old_name="feature_extractor", version="5.0.0", new_name="image_processor"
+    )
     def __init__(self, image_processor=None, tokenizer=None):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
@@ -59,7 +61,9 @@ class AltCLIPProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[AltClipProcessorKwargs],
@@ -110,7 +114,9 @@ class AltCLIPProcessor(ProcessorMixin):
         if text is not None:
             encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
         if images is not None:
-            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_features = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
 
         # BC for explicit return_tensors
         if "return_tensors" in output_kwargs["common_kwargs"]:
@@ -122,7 +128,9 @@ class AltCLIPProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchEncoding(
+                data=dict(**image_features), tensor_type=return_tensors
+            )
 
     def batch_decode(self, *args, **kwargs):
         """

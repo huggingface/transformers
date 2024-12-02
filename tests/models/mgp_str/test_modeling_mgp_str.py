@@ -78,7 +78,9 @@ class MgpstrModelTester:
         self.output_hidden_states = output_hidden_states
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]]
+        )
         config = self.get_config()
         return config, pixel_values
 
@@ -105,7 +107,8 @@ class MgpstrModelTester:
         with torch.no_grad():
             generated_ids = model(pixel_values)
         self.parent.assertEqual(
-            generated_ids[0][0].shape, (self.batch_size, self.max_token_length, self.num_character_labels)
+            generated_ids[0][0].shape,
+            (self.batch_size, self.max_token_length, self.num_character_labels),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -119,7 +122,10 @@ class MgpstrModelTester:
 class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MgpstrForSceneTextRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MgpstrForSceneTextRecognition, "image-feature-extraction": MgpstrModel}
+        {
+            "feature-extraction": MgpstrForSceneTextRecognition,
+            "image-feature-extraction": MgpstrModel,
+        }
         if is_torch_available()
         else {}
     )
@@ -132,7 +138,9 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = MgpstrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MgpstrConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=MgpstrConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -181,13 +189,18 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.patch_embeds_hidden_size, self.model_tester.hidden_size],
+                [
+                    self.model_tester.patch_embeds_hidden_size,
+                    self.model_tester.hidden_size,
+                ],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -236,11 +249,15 @@ class MgpstrModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "alibaba-damo/mgp-str-base"
-        model = MgpstrForSceneTextRecognition.from_pretrained(model_name).to(torch_device)
+        model = MgpstrForSceneTextRecognition.from_pretrained(model_name).to(
+            torch_device
+        )
         processor = MgpstrProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        inputs = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+        inputs = processor(images=image, return_tensors="pt").pixel_values.to(
+            torch_device
+        )
 
         # forward pass
         with torch.no_grad():
@@ -255,8 +272,16 @@ class MgpstrModelIntegrationTest(unittest.TestCase):
         self.assertEqual(out_strs["generated_text"][0], expected_text)
 
         expected_slice = torch.tensor(
-            [[[-39.5397, -44.4024, -36.1844], [-61.4709, -63.8639, -58.3454], [-74.0225, -68.5494, -71.2164]]],
+            [
+                [
+                    [-39.5397, -44.4024, -36.1844],
+                    [-61.4709, -63.8639, -58.3454],
+                    [-74.0225, -68.5494, -71.2164],
+                ]
+            ],
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(outputs.logits[0][:, 1:4, 1:4], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(outputs.logits[0][:, 1:4, 1:4], expected_slice, atol=1e-4)
+        )

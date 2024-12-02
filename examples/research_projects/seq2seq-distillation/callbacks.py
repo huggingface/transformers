@@ -21,16 +21,31 @@ logger = logging.getLogger(__name__)
 
 class Seq2SeqLoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
-        lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
+        lrs = {
+            f"lr_group_{i}": param["lr"]
+            for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)
+        }
         pl_module.logger.log_metrics(lrs)
 
     @rank_zero_only
     def _write_logs(
-        self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+        type_path: str,
+        save_generations=True,
     ) -> None:
-        logger.info(f"***** {type_path} results at step {trainer.global_step:05d} *****")
+        logger.info(
+            f"***** {type_path} results at step {trainer.global_step:05d} *****"
+        )
         metrics = trainer.callback_metrics
-        trainer.logger.log_metrics({k: v for k, v in metrics.items() if k not in ["log", "progress_bar", "preds"]})
+        trainer.logger.log_metrics(
+            {
+                k: v
+                for k, v in metrics.items()
+                if k not in ["log", "progress_bar", "preds"]
+            }
+        )
         # Log results
         od = Path(pl_module.hparams.output_dir)
         if type_path == "test":
@@ -40,7 +55,9 @@ class Seq2SeqLoggingCallback(pl.Callback):
             # this never gets hit. I prefer not to save intermediate generations, and results are in metrics.json
             # If people want this it will be easy enough to add back.
             results_file = od / f"{type_path}_results/{trainer.global_step:05d}.txt"
-            generations_file = od / f"{type_path}_generations/{trainer.global_step:05d}.txt"
+            generations_file = (
+                od / f"{type_path}_generations/{trainer.global_step:05d}.txt"
+            )
             results_file.parent.mkdir(exist_ok=True)
             generations_file.parent.mkdir(exist_ok=True)
         with open(results_file, "a+") as writer:
@@ -69,7 +86,9 @@ class Seq2SeqLoggingCallback(pl.Callback):
 
         n_trainable_pars = count_trainable_parameters(pl_module)
         # mp stands for million parameters
-        trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
+        trainer.logger.log_metrics(
+            {"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6}
+        )
 
     @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):

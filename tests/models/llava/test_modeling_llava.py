@@ -118,7 +118,9 @@ class LlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
+        self.num_image_tokens = (
+            self.vision_config["image_size"] // self.vision_config["patch_size"]
+        ) ** 2
         self.seq_length = seq_length + self.num_image_tokens
         self.encoder_seq_length = self.seq_length
 
@@ -150,7 +152,12 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length], config.text_config.vocab_size - 1
+            )
+            + 1
+        )
         attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
@@ -161,7 +168,9 @@ class LlavaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
+    def create_and_check_llava_model_fp16_forward(
+        self, config, input_ids, pixel_values, attention_mask
+    ):
         model = LlavaForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
@@ -176,15 +185,22 @@ class LlavaVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LlavaForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (
+        (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
+        {
+            "image-to-text": LlavaForConditionalGeneration,
+            "image-text-to-text": LlavaForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )
@@ -194,9 +210,16 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
     def setUp(self):
         self.model_tester = LlavaVisionText2TextModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
+        common_properties = [
+            "image_token_index",
+            "vision_feature_layer",
+            "image_seq_length",
+        ]
         self.config_tester = ConfigTester(
-            self, config_class=LlavaConfig, has_text_modality=False, common_properties=common_properties
+            self,
+            config_class=LlavaConfig,
+            has_text_modality=False,
+            common_properties=common_properties,
         )
 
     def test_config(self):
@@ -323,7 +346,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf", load_in_4bit=True
+        )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
@@ -347,13 +372,17 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area."  # fmt: skip
@@ -369,17 +398,29 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = Image.open(
+            requests.get(
+                "https://llava-vl.github.io/static/images/view.jpg", stream=True
+            ).raw
+        )
+        image2 = Image.open(
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
+        )
 
-        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
+        inputs = processor(
+            images=[image1, image2], text=prompts, return_tensors="pt", padding=True
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -394,16 +435,28 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf", load_in_4bit=True
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = Image.open(
+            requests.get(
+                "https://llava-vl.github.io/static/images/view.jpg", stream=True
+            ).raw
+        )
+        image2 = Image.open(
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
+        )
 
-        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
+        inputs = self.processor(
+            images=[image1, image2], text=prompts, return_tensors="pt", padding=True
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -432,10 +485,23 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = Image.open(
+            requests.get(
+                "https://llava-vl.github.io/static/images/view.jpg", stream=True
+            ).raw
+        )
+        image2 = Image.open(
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
+        )
 
-        inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True)
+        inputs = processor(
+            images=[image1, image2, image1],
+            text=prompts,
+            return_tensors="pt",
+            padding=True,
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -450,7 +516,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch
     @require_vision
     def test_batched_generation(self):
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True
+        )
 
         processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
@@ -478,7 +546,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
-        outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        outputs = processor.batch_decode(
+            generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     @slow
@@ -488,7 +558,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
 
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -498,7 +570,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
@@ -508,7 +582,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_llava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
 
         # Simulate some user inputs
         pixel_values = torch.randn(
@@ -539,7 +615,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         loss.backward()
 
     def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
+        slow_tokenizer = AutoTokenizer.from_pretrained(
+            "liuhaotian/llava-v1.6-34b", use_fast=False
+        )
         slow_tokenizer.add_tokens("<image>", True)
 
         fast_tokenizer = AutoTokenizer.from_pretrained(
@@ -560,7 +638,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # Prepare inputs with no images
@@ -573,7 +653,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_siglip_backbone(self):
         model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype="float16", device_map=torch_device
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # check processing with expansion of inputs (w/o expansion should work with any backbone)
@@ -592,13 +674,18 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat"
-        self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
+        self.assertTrue(
+            processor.batch_decode(output, skip_special_tokens=True)[0]
+            == EXPECTED_DECODED_TEXT
+        )
 
     @slow
     @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nDescribe the image:\nASSISTANT:"
@@ -609,22 +696,30 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.vision_feature_select_strategy = "default"
         processor.num_additional_image_tokens = 1
         processor.patch_size = 14
-        inputs_expanded = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        inputs_expanded = processor(
+            images=raw_image, text=prompt, return_tensors="pt"
+        ).to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 593)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
         processor.num_additional_image_tokens = None
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
         self.assertTrue(inputs.input_ids.shape[-1] == 18)
 
         # generate exactly 20 tokens
         output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(
+            **inputs_expanded, min_new_tokens=20, max_new_tokens=20
+        )
 
         # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
+        self.assertListEqual(
+            output_expanded[:, -20:].tolist(), output[:, -20:].tolist()
+        )
 
     @slow
     @require_bitsandbytes
@@ -634,17 +729,27 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
+            Image.open(
+                requests.get("https://picsum.photos/id/237/400/300", stream=True).raw
+            ),
+            Image.open(
+                requests.get("https://picsum.photos/id/231/200/300", stream=True).raw
+            ),
+            Image.open(
+                requests.get("https://picsum.photos/id/27/500/500", stream=True).raw
+            ),
+            Image.open(
+                requests.get("https://picsum.photos/id/17/150/600", stream=True).raw
+            ),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
         generate_ids = model.generate(**inputs, max_new_tokens=500)
-        ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        ouptut = processor.batch_decode(
+            generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
 
         # fmt: off
         EXPECTED_GENERATION = """

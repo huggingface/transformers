@@ -42,12 +42,18 @@ else:
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, image_processor, torch_dtype="float32"):
-        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self, model, tokenizer, processor, image_processor, torch_dtype="float32"
+    ):
+        pipe = ImageTextToTextPipeline(
+            model=model, processor=processor, torch_dtype=torch_dtype
+        )
         image_token = getattr(processor.tokenizer, "image_token", "")
         examples = [
             {
-                "images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                "images": Image.open(
+                    "./tests/fixtures/tests_samples/COCO/000000039769.png"
+                ),
                 "text": f"{image_token}This is a ",
             },
             {
@@ -68,7 +74,9 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt_token(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        pipe = pipeline(
+            "image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf"
+        )
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         text = "<image> What this is? Assistant: This is"
 
@@ -111,14 +119,21 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        pipe = pipeline(
+            "image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf"
+        )
         image_ny = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-        image_chicago = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
+        image_chicago = (
+            "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
+        )
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "What’s the difference between these two images?"},
+                    {
+                        "type": "text",
+                        "text": "What’s the difference between these two images?",
+                    },
                     {"type": "image"},
                     {"type": "image"},
                 ],
@@ -133,7 +148,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "What’s the difference between these two images?"},
+                                {
+                                    "type": "text",
+                                    "text": "What’s the difference between these two images?",
+                                },
                                 {"type": "image"},
                                 {"type": "image"},
                             ],
@@ -143,7 +161,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "What’s the difference between these two images?"},
+                                {
+                                    "type": "text",
+                                    "text": "What’s the difference between these two images?",
+                                },
                                 {"type": "image"},
                                 {"type": "image"},
                             ],
@@ -160,7 +181,9 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_continue_final_message(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        pipe = pipeline(
+            "image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf"
+        )
         messages = [
             {
                 "role": "user",
@@ -195,7 +218,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "Describe this image."},
                             ],
                         },
-                        {"role": "assistant", "content": [{"type": "text", "text": "There is a dog and"}]},
+                        {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "There is a dog and"}],
+                        },
                     ],
                     "generated_text": [
                         {
@@ -225,7 +251,9 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_new_text(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        pipe = pipeline(
+            "image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf"
+        )
         messages = [
             {
                 "role": "user",
@@ -263,7 +291,9 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        pipe = pipeline(
+            "image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+        )
         messages = [
             {
                 "role": "user",
@@ -278,16 +308,22 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
+        outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0][
+            "generated_text"
+        ]
         self.assertEqual(outputs, "The image captures the iconic Statue of Liberty, a")
 
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url_base64(self):
-        with open("./tests/fixtures/tests_samples/COCO/000000039769.png", "rb") as image_file:
+        with open(
+            "./tests/fixtures/tests_samples/COCO/000000039769.png", "rb"
+        ) as image_file:
             base64_image = base64.b64encode(image_file.read()).decode("utf-8")
 
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        pipe = pipeline(
+            "image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+        )
         messages = [
             {
                 "role": "user",
@@ -300,5 +336,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
+        outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0][
+            "generated_text"
+        ]
         self.assertEqual(outputs, "Two cats are sleeping on a pink blanket, with")

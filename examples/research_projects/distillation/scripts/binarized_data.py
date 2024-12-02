@@ -28,7 +28,9 @@ from transformers import BertTokenizer, GPT2Tokenizer, RobertaTokenizer
 
 
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
@@ -37,10 +39,24 @@ def main():
     parser = argparse.ArgumentParser(
         description="Preprocess the data to avoid re-doing it several times by (tokenization + token_to_ids)."
     )
-    parser.add_argument("--file_path", type=str, default="data/dump.txt", help="The path to the data.")
-    parser.add_argument("--tokenizer_type", type=str, default="bert", choices=["bert", "roberta", "gpt2"])
-    parser.add_argument("--tokenizer_name", type=str, default="bert-base-uncased", help="The tokenizer to use.")
-    parser.add_argument("--dump_file", type=str, default="data/dump", help="The dump file prefix.")
+    parser.add_argument(
+        "--file_path", type=str, default="data/dump.txt", help="The path to the data."
+    )
+    parser.add_argument(
+        "--tokenizer_type",
+        type=str,
+        default="bert",
+        choices=["bert", "roberta", "gpt2"],
+    )
+    parser.add_argument(
+        "--tokenizer_name",
+        type=str,
+        default="bert-base-uncased",
+        help="The tokenizer to use.",
+    )
+    parser.add_argument(
+        "--dump_file", type=str, default="data/dump", help="The dump file prefix."
+    )
     args = parser.parse_args()
 
     logger.info(f"Loading Tokenizer ({args.tokenizer_name})")
@@ -76,7 +92,9 @@ def main():
         iter += 1
         if iter % interval == 0:
             end = time.time()
-            logger.info(f"{iter} examples processed. - {(end-start):.2f}s/{interval}expl")
+            logger.info(
+                f"{iter} examples processed. - {(end-start):.2f}s/{interval}expl"
+            )
             start = time.time()
     logger.info("Finished binarization")
     logger.info(f"{len(data)} examples processed.")

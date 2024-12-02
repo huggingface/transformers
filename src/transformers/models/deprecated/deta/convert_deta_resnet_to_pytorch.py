@@ -48,7 +48,9 @@ def get_deta_config():
     config.num_labels = 91
     repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(
+        Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text()
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -191,17 +193,31 @@ def read_in_decoder_q_k_v(state_dict, config):
     hidden_size = config.d_model
     for i in range(config.decoder_layers):
         # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"transformer.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"transformer.decoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"transformer.decoder.layers.{i}.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"transformer.decoder.layers.{i}.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:hidden_size]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[
+            :hidden_size
         ]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = (
+            in_proj_weight[hidden_size : hidden_size * 2, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
+            hidden_size : hidden_size * 2
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[
+            -hidden_size:
+        ]
 
 
 # We will verify our results on an image of cute cats
@@ -228,7 +244,9 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         filename = "adet_2x_checkpoint0023.pth"
     else:
         raise ValueError(f"Model name {model_name} not supported")
-    checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename=filename)
+    checkpoint_path = hf_hub_download(
+        repo_id="nielsr/deta-checkpoints", filename=filename
+    )
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     # rename keys
@@ -239,13 +257,21 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # fix some prefixes
     for key in state_dict.copy().keys():
-        if "transformer.decoder.class_embed" in key or "transformer.decoder.bbox_embed" in key:
+        if (
+            "transformer.decoder.class_embed" in key
+            or "transformer.decoder.bbox_embed" in key
+        ):
             val = state_dict.pop(key)
             state_dict[key.replace("transformer.decoder", "model.decoder")] = val
         if "input_proj" in key:
             val = state_dict.pop(key)
             state_dict["model." + key] = val
-        if "level_embed" in key or "pos_trans" in key or "pix_trans" in key or "enc_output" in key:
+        if (
+            "level_embed" in key
+            or "pos_trans" in key
+            or "pix_trans" in key
+            or "enc_output" in key
+        ):
             val = state_dict.pop(key)
             state_dict[key.replace("transformer", "model")] = val
 
@@ -269,22 +295,48 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # verify logits
     if model_name == "deta-resnet-50":
         expected_logits = torch.tensor(
-            [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
+            [
+                [-7.3978, -2.5406, -4.1668],
+                [-8.2684, -3.9933, -3.8096],
+                [-7.0515, -3.7973, -5.8516],
+            ]
         )
-        expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
+        expected_boxes = torch.tensor(
+            [
+                [0.5043, 0.4973, 0.9998],
+                [0.2542, 0.5489, 0.4748],
+                [0.5490, 0.2765, 0.0570],
+            ]
+        )
     elif model_name == "deta-resnet-50-24-epochs":
         expected_logits = torch.tensor(
-            [[-7.1688, -2.4857, -4.8669], [-7.8630, -3.8154, -4.2674], [-7.2730, -4.1865, -5.5323]]
+            [
+                [-7.1688, -2.4857, -4.8669],
+                [-7.8630, -3.8154, -4.2674],
+                [-7.2730, -4.1865, -5.5323],
+            ]
         )
-        expected_boxes = torch.tensor([[0.5021, 0.4971, 0.9994], [0.2546, 0.5486, 0.4731], [0.1686, 0.1986, 0.2142]])
+        expected_boxes = torch.tensor(
+            [
+                [0.5021, 0.4971, 0.9994],
+                [0.2546, 0.5486, 0.4731],
+                [0.1686, 0.1986, 0.2142],
+            ]
+        )
 
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
+    assert torch.allclose(
+        outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4
+    )
+    assert torch.allclose(
+        outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4
+    )
     print("Everything ok!")
 
     if pytorch_dump_folder_path:
         # Save model and processor
-        logger.info(f"Saving PyTorch model and processor to {pytorch_dump_folder_path}...")
+        logger.info(
+            f"Saving PyTorch model and processor to {pytorch_dump_folder_path}..."
+        )
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
@@ -313,7 +365,11 @@ if __name__ == "__main__":
         help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     args = parser.parse_args()
-    convert_deta_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_deta_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

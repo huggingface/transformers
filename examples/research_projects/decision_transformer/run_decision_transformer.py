@@ -25,13 +25,22 @@ def get_action(model, states, actions, rewards, returns_to_go, timesteps):
 
         # pad all tokens to sequence length
         attention_mask = torch.cat(
-            [torch.zeros(model.config.max_length - states.shape[1]), torch.ones(states.shape[1])]
+            [
+                torch.zeros(model.config.max_length - states.shape[1]),
+                torch.ones(states.shape[1]),
+            ]
         )
-        attention_mask = attention_mask.to(dtype=torch.long, device=states.device).reshape(1, -1)
+        attention_mask = attention_mask.to(
+            dtype=torch.long, device=states.device
+        ).reshape(1, -1)
         states = torch.cat(
             [
                 torch.zeros(
-                    (states.shape[0], model.config.max_length - states.shape[1], model.config.state_dim),
+                    (
+                        states.shape[0],
+                        model.config.max_length - states.shape[1],
+                        model.config.state_dim,
+                    ),
                     device=states.device,
                 ),
                 states,
@@ -41,7 +50,11 @@ def get_action(model, states, actions, rewards, returns_to_go, timesteps):
         actions = torch.cat(
             [
                 torch.zeros(
-                    (actions.shape[0], model.config.max_length - actions.shape[1], model.config.act_dim),
+                    (
+                        actions.shape[0],
+                        model.config.max_length - actions.shape[1],
+                        model.config.act_dim,
+                    ),
                     device=actions.device,
                 ),
                 actions,
@@ -51,7 +64,11 @@ def get_action(model, states, actions, rewards, returns_to_go, timesteps):
         returns_to_go = torch.cat(
             [
                 torch.zeros(
-                    (returns_to_go.shape[0], model.config.max_length - returns_to_go.shape[1], 1),
+                    (
+                        returns_to_go.shape[0],
+                        model.config.max_length - returns_to_go.shape[1],
+                        1,
+                    ),
                     device=returns_to_go.device,
                 ),
                 returns_to_go,
@@ -61,7 +78,8 @@ def get_action(model, states, actions, rewards, returns_to_go, timesteps):
         timesteps = torch.cat(
             [
                 torch.zeros(
-                    (timesteps.shape[0], model.config.max_length - timesteps.shape[1]), device=timesteps.device
+                    (timesteps.shape[0], model.config.max_length - timesteps.shape[1]),
+                    device=timesteps.device,
                 ),
                 timesteps,
             ],
@@ -91,7 +109,9 @@ act_dim = env.action_space.shape[0]
 max_ep_len = 1000
 device = "cuda"
 scale = 1000.0  # normalization for rewards/returns
-TARGET_RETURN = 3600 / scale  # evaluation conditioning targets, 3600 is reasonable from the paper LINK
+TARGET_RETURN = (
+    3600 / scale
+)  # evaluation conditioning targets, 3600 is reasonable from the paper LINK
 state_mean = np.array(
     [
         1.311279,
@@ -126,15 +146,23 @@ state_mean = torch.from_numpy(state_mean).to(device=device)
 state_std = torch.from_numpy(state_std).to(device=device)
 
 # Create the decision transformer model
-model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-medium")
+model = DecisionTransformerModel.from_pretrained(
+    "edbeeching/decision-transformer-gym-hopper-medium"
+)
 model = model.to(device)
 model.eval()
 
 for ep in range(10):
     episode_return, episode_length = 0, 0
     state = env.reset()
-    target_return = torch.tensor(TARGET_RETURN, device=device, dtype=torch.float32).reshape(1, 1)
-    states = torch.from_numpy(state).reshape(1, state_dim).to(device=device, dtype=torch.float32)
+    target_return = torch.tensor(
+        TARGET_RETURN, device=device, dtype=torch.float32
+    ).reshape(1, 1)
+    states = (
+        torch.from_numpy(state)
+        .reshape(1, state_dim)
+        .to(device=device, dtype=torch.float32)
+    )
     actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
     rewards = torch.zeros(0, device=device, dtype=torch.float32)
 
@@ -164,7 +192,10 @@ for ep in range(10):
 
         pred_return = target_return[0, -1] - (reward / scale)
         target_return = torch.cat([target_return, pred_return.reshape(1, 1)], dim=1)
-        timesteps = torch.cat([timesteps, torch.ones((1, 1), device=device, dtype=torch.long) * (t + 1)], dim=1)
+        timesteps = torch.cat(
+            [timesteps, torch.ones((1, 1), device=device, dtype=torch.long) * (t + 1)],
+            dim=1,
+        )
 
         episode_return += reward
         episode_length += 1

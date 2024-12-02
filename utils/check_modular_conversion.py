@@ -17,7 +17,12 @@ logging.getLogger().setLevel(logging.ERROR)
 console = Console()
 
 
-def process_file(modular_file_path, generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
+def process_file(
+    modular_file_path,
+    generated_modeling_content,
+    file_type="modeling_",
+    fix_and_overwrite=False,
+):
     file_path = modular_file_path.replace("modular_", f"{file_type}_")
     # Read the actual modeling file
     with open(file_path, "r") as modeling_file:
@@ -38,9 +43,13 @@ def process_file(modular_file_path, generated_modeling_content, file_type="model
         if fix_and_overwrite:
             with open(file_path, "w") as modeling_file:
                 modeling_file.write(generated_modeling_content[file_type][0])
-            console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
+            console.print(
+                f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]"
+            )
         else:
-            console.print(f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n")
+            console.print(
+                f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n"
+            )
             diff_text = "\n".join(diff_list)
             syntax = Syntax(diff_text, "diff", theme="ansi_dark", line_numbers=True)
             console.print(syntax)
@@ -55,21 +64,33 @@ def compare_files(modular_file_path, fix_and_overwrite=False):
     generated_modeling_content = convert_modular_file(modular_file_path)
     diff = 0
     for file_type in generated_modeling_content.keys():
-        diff += process_file(modular_file_path, generated_modeling_content, file_type, fix_and_overwrite)
+        diff += process_file(
+            modular_file_path, generated_modeling_content, file_type, fix_and_overwrite
+        )
     return diff
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Compare modular_xxx.py files with modeling_xxx.py files.")
-    parser.add_argument(
-        "--files", default=["all"], type=list, nargs="+", help="List of modular_xxx.py files to compare."
+    parser = argparse.ArgumentParser(
+        description="Compare modular_xxx.py files with modeling_xxx.py files."
     )
     parser.add_argument(
-        "--fix_and_overwrite", action="store_true", help="Overwrite the modeling_xxx.py file if differences are found."
+        "--files",
+        default=["all"],
+        type=list,
+        nargs="+",
+        help="List of modular_xxx.py files to compare.",
+    )
+    parser.add_argument(
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Overwrite the modeling_xxx.py file if differences are found.",
     )
     args = parser.parse_args()
     if args.files == ["all"]:
-        args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
+        args.files = glob.glob(
+            "src/transformers/models/**/modular_*.py", recursive=True
+        )
     non_matching_files = 0
     for modular_file_path in find_priority_list(args.files):
         non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)

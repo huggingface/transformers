@@ -97,40 +97,67 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor_slow = FlavaProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+        processor_slow = FlavaProcessor(
+            tokenizer=tokenizer_slow, image_processor=image_processor
+        )
         processor_slow.save_pretrained(self.tmpdirname)
         processor_slow = FlavaProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = FlavaProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+        processor_fast = FlavaProcessor(
+            tokenizer=tokenizer_fast, image_processor=image_processor
+        )
         processor_fast.save_pretrained(self.tmpdirname)
         processor_fast = FlavaProcessor.from_pretrained(self.tmpdirname)
 
-        self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
-        self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
+        self.assertEqual(
+            processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab()
+        )
+        self.assertEqual(
+            processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab()
+        )
         self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
         self.assertIsInstance(processor_slow.tokenizer, BertTokenizer)
         self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
 
-        self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(
+            processor_slow.image_processor.to_json_string(),
+            image_processor.to_json_string(),
+        )
+        self.assertEqual(
+            processor_fast.image_processor.to_json_string(),
+            image_processor.to_json_string(),
+        )
         self.assertIsInstance(processor_slow.image_processor, FlavaImageProcessor)
         self.assertIsInstance(processor_fast.image_processor, FlavaImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = FlavaProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = FlavaProcessor(
+            tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-        processor = FlavaProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+        image_processor_add_kwargs = self.get_image_processor(
+            do_normalize=False, padding_value=1.0
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        processor = FlavaProcessor.from_pretrained(
+            self.tmpdirname,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_normalize=False,
+            padding_value=1.0,
+        )
+
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, FlavaImageProcessor)
 
     def test_image_processor(self):
@@ -145,20 +172,30 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
         # With rest of the args
         random.seed(1234)
         input_feat_extract = image_processor(
-            image_input, return_image_mask=True, return_codebook_pixels=True, return_tensors="np"
+            image_input,
+            return_image_mask=True,
+            return_codebook_pixels=True,
+            return_tensors="np",
         )
         random.seed(1234)
         input_processor = processor(
-            images=image_input, return_image_mask=True, return_codebook_pixels=True, return_tensors="np"
+            images=image_input,
+            return_image_mask=True,
+            return_codebook_pixels=True,
+            return_tensors="np",
         )
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
@@ -186,10 +223,18 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(
+            list(inputs.keys()),
+            ["input_ids", "token_type_ids", "attention_mask", "pixel_values"],
+        )
 
         # add extra args
-        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=True, return_image_mask=True)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_codebook_pixels=True,
+            return_image_mask=True,
+        )
 
         self.assertListEqual(
             list(inputs.keys()),

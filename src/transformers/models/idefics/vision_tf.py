@@ -85,7 +85,9 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         )
         # self.position_ids = tf.range(self.num_positions)[tf.newaxis, :]
 
-    def interpolate_pos_encoding(self, embeddings: tf.Tensor, height: int, width: int) -> tf.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: tf.Tensor, height: int, width: int
+    ) -> tf.Tensor:
         num_patches = shape_list(embeddings)[1] - 1
         pos_embed = self.position_embedding(self.position_ids)
         num_positions = shape_list(pos_embed)[1] - 1
@@ -99,7 +101,10 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         num_w_patches = width // self.config.patch_size
         num_h_patches, num_w_patches = num_h_patches + 0.1, num_w_patches + 0.1
         sqrt_num_positions = math.sqrt(float(num_positions))
-        patch_pos_embed = tf.reshape(patch_pos_embed, (1, int(sqrt_num_positions), int(sqrt_num_positions), embed_dim))
+        patch_pos_embed = tf.reshape(
+            patch_pos_embed,
+            (1, int(sqrt_num_positions), int(sqrt_num_positions), embed_dim),
+        )
 
         scale_height = num_h_patches / sqrt_num_positions
         scale_width = num_w_patches / sqrt_num_positions
@@ -110,7 +115,9 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         new_width = tf.cast(original_width * scale_width, tf.int32)
 
         patch_pos_embed = tf.image.resize(
-            patch_pos_embed, size=[new_height, new_width], method=tf.image.ResizeMethod.BICUBIC
+            patch_pos_embed,
+            size=[new_height, new_width],
+            method=tf.image.ResizeMethod.BICUBIC,
         )
 
         if (
@@ -124,7 +131,9 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         patch_pos_embed = tf.reshape(patch_pos_embed, (1, -1, embed_dim))
         return tf.concat((class_pos_embed[tf.newaxis, :], patch_pos_embed), axis=1)
 
-    def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False) -> tf.Tensor:
+    def call(
+        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False
+    ) -> tf.Tensor:
         # Input `pixel_values` is NCHW format which doesn't run on CPU so first thing we do is
         # transpose it to change it to NHWC. We don't care to transpose it back because
         # the Conv2D layer is only hit once for each query
@@ -141,19 +150,24 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
                     f" ({self.image_size}*{self.image_size}). You should try to set `interpolate_pos_encoding=True`"
                 )
 
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(
+            pixel_values
+        )  # shape = [*, width, grid, grid]
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
         patch_embeds = flatten(patch_embeds, 1, 2)
 
         class_embeds = tf.broadcast_to(
-            self.class_embedding[tf.newaxis, tf.newaxis, :], [batch_size, 1, self.embed_dim]
+            self.class_embedding[tf.newaxis, tf.newaxis, :],
+            [batch_size, 1, self.embed_dim],
         )
         embeddings = tf.concat([class_embeds, patch_embeds], axis=1)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(
+                embeddings, height, width
+            )
         else:
             embeddings = embeddings + self.position_embedding(self.position_ids)
 
@@ -163,8 +177,12 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         if self.built:
             return
         self.built = True
-        self.position_ids = tf.range(self.num_positions, name="self.position_ids")[tf.newaxis, :]
-        self.class_embedding = self.add_weight(shape=(self.embed_dim,), name="class_embedding")
+        self.position_ids = tf.range(self.num_positions, name="self.position_ids")[
+            tf.newaxis, :
+        ]
+        self.class_embedding = self.add_weight(
+            shape=(self.embed_dim,), name="class_embedding"
+        )
         if getattr(self, "patch_embedding", None) is not None:
             with tf.name_scope(self.patch_embedding.name):
                 self.patch_embedding.build([None, None, None, self.config.num_channels])
@@ -196,7 +214,10 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
         self.out_proj = tf.keras.layers.Dense(self.embed_dim, name="out_proj")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
-        return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), perm=[0, 2, 1, 3])
+        return tf.transpose(
+            tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)),
+            perm=[0, 2, 1, 3],
+        )
 
     def call(
         self,
@@ -235,16 +256,26 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
                     f" {shape_list(causal_attention_mask)}"
                 )
-            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + causal_attention_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights = (
+                tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+                + causal_attention_mask
+            )
+            attn_weights = tf.reshape(
+                attn_weights, (bsz * self.num_heads, tgt_len, src_len)
+            )
 
         if attention_mask is not None:
             if shape_list(attention_mask) != [bsz, 1, tgt_len, src_len]:
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}"
                 )
-            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights = (
+                tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+                + attention_mask
+            )
+            attn_weights = tf.reshape(
+                attn_weights, (bsz * self.num_heads, tgt_len, src_len)
+            )
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
@@ -253,8 +284,12 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-            attn_weights = tf.reshape(attn_weights_reshaped, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights_reshaped = tf.reshape(
+                attn_weights, (bsz, self.num_heads, tgt_len, src_len)
+            )
+            attn_weights = tf.reshape(
+                attn_weights_reshaped, (bsz * self.num_heads, tgt_len, src_len)
+            )
         else:
             attn_weights_reshaped = None
 
@@ -268,7 +303,9 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
             message=f"Attention weights should be of size {[bsz * self.num_heads, tgt_len, self.head_dim]}, but is {tf.shape(attn_output)}",
         )
 
-        attn_output = tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim))
+        attn_output = tf.reshape(
+            attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)
+        )
         attn_output = tf.transpose(attn_output, perm=[0, 2, 1, 3])
         attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
 
@@ -325,9 +362,13 @@ class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.embed_dim = config.hidden_size
         self.self_attn = TFIdeficsVisionAttention(config, name="self_attn")
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layer_norm1"
+        )
         self.mlp = TFIdeficsVisionMLP(config, name="mlp")
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layer_norm2"
+        )
 
     def call(
         self,
@@ -394,7 +435,8 @@ class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
         self.layers = [
-            TFIdeficsVisionEncoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)
+            TFIdeficsVisionEncoderLayer(config, name=f"layers.{i}")
+            for i in range(config.num_hidden_layers)
         ]
         self.gradient_checkpointing = False
 
@@ -437,11 +479,19 @@ class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -481,9 +531,15 @@ class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
             encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, encoder_states, all_attentions]
+                if v is not None
+            )
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
     def build(self, input_shape=None):
@@ -503,9 +559,13 @@ class TFIdeficsVisionTransformer(TFPreTrainedModel):
         self.embed_dim = config.hidden_size
 
         self.embeddings = TFIdeficsVisionEmbeddings(config, name="embeddings")
-        self.pre_layrnorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
+        self.pre_layrnorm = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="pre_layrnorm"
+        )
         self.encoder = TFIdeficsVisionEncoder(config, name="encoder")
-        self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
+        self.post_layernorm = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="post_layernorm"
+        )
 
     # Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer.forward
     def call(
@@ -521,16 +581,26 @@ class TFIdeficsVisionTransformer(TFPreTrainedModel):
         Returns:
 
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.embeddings(
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         hidden_states = self.pre_layrnorm(hidden_states)
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,

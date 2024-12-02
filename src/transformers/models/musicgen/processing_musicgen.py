@@ -48,7 +48,9 @@ class MusicgenProcessor(ProcessorMixin):
         self._in_target_context_manager = False
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
-        return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
+        return self.tokenizer.get_decoder_prompt_ids(
+            task=task, language=language, no_timestamps=no_timestamps
+        )
 
     def __call__(self, *args, **kwargs):
         """
@@ -68,13 +70,17 @@ class MusicgenProcessor(ProcessorMixin):
             args = args[1:]
 
         if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+            raise ValueError(
+                "You need to specify either an `audio` or `text` input to process."
+            )
 
         if text is not None:
             inputs = self.tokenizer(text, **kwargs)
 
         if audio is not None:
-            audio_inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            audio_inputs = self.feature_extractor(
+                audio, *args, sampling_rate=sampling_rate, **kwargs
+            )
 
         if audio is None:
             return inputs
@@ -113,7 +119,9 @@ class MusicgenProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def _decode_audio(self, audio_values, padding_mask: Optional = None) -> List[np.ndarray]:
+    def _decode_audio(
+        self, audio_values, padding_mask: Optional = None
+    ) -> List[np.ndarray]:
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """
@@ -129,7 +137,12 @@ class MusicgenProcessor(ProcessorMixin):
         # token (so that the generated audio values are **not** treated as padded tokens)
         difference = seq_len - padding_mask.shape[-1]
         padding_value = 1 - self.feature_extractor.padding_value
-        padding_mask = np.pad(padding_mask, ((0, 0), (0, difference)), "constant", constant_values=padding_value)
+        padding_mask = np.pad(
+            padding_mask,
+            ((0, 0), (0, difference)),
+            "constant",
+            constant_values=padding_value,
+        )
 
         audio_values = audio_values.tolist()
         for i in range(bsz):

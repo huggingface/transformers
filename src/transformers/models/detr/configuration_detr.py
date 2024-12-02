@@ -188,7 +188,9 @@ class DetrConfig(PretrainedConfig):
         # Backwards compatibility
         elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                logger.info(
+                    "`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone."
+                )
                 backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
             elif isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")
@@ -272,7 +274,10 @@ class DetrOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                (
+                    "pixel_values",
+                    {0: "batch", 1: "num_channels", 2: "height", 3: "width"},
+                ),
                 ("pixel_mask", {0: "batch"}),
             ]
         )

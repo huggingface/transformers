@@ -6,13 +6,20 @@ from pathlib import Path
 
 import torch
 
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multi_gpu
+from transformers.testing_utils import (
+    TestCasePlus,
+    execute_subprocess_async,
+    require_torch_multi_gpu,
+)
 from utils import load_json
 
 
 CUDA_AVAILABLE = torch.cuda.is_available()
 ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
-SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+SUMMARIES = [
+    "A very interesting story about what I ate for lunch.",
+    "Avocado, celery, turkey, coffee",
+]
 CHEAP_ARGS = {
     "max_tokens_per_batch": None,
     "supervise_forward": True,
@@ -159,5 +166,7 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
         self.assertGreaterEqual(last_step_stats["val_avg_gen_time"], 0.01)
         self.assertIsInstance(last_step_stats[f"val_avg_{val_metric}"], float)
         self.assertEqual(len(metrics["test"]), 1)
-        desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) / 2 + 1)
+        desired_n_evals = int(
+            args_d["max_epochs"] * (1 / args_d["val_check_interval"]) / 2 + 1
+        )
         self.assertEqual(len(metrics["val"]), desired_n_evals)

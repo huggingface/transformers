@@ -22,7 +22,11 @@ from transformers import is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (
+    TFModelTesterMixin,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -77,7 +81,9 @@ class TFXLMModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_mask = random_attention_mask([self.batch_size, self.seq_length], dtype=tf.float32)
+        input_mask = random_attention_mask(
+            [self.batch_size, self.seq_length], dtype=tf.float32
+        )
 
         input_lengths = None
         if self.use_input_lengths:
@@ -87,14 +93,20 @@ class TFXLMModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.n_langs)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.n_langs
+            )
 
         sequence_labels = None
         token_labels = None
         is_impossible_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
@@ -143,12 +155,19 @@ class TFXLMModelTester:
         input_mask,
     ):
         model = TFXLMModel(config=config)
-        inputs = {"input_ids": input_ids, "lengths": input_lengths, "langs": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "lengths": input_lengths,
+            "langs": token_type_ids,
+        }
         result = model(inputs)
 
         inputs = [input_ids, input_mask]
         result = model(inputs)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_xlm_lm_head(
         self,
@@ -164,12 +183,18 @@ class TFXLMModelTester:
     ):
         model = TFXLMWithLMHeadModel(config)
 
-        inputs = {"input_ids": input_ids, "lengths": input_lengths, "langs": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "lengths": input_lengths,
+            "langs": token_type_ids,
+        }
         outputs = model(inputs)
 
         result = outputs
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_xlm_qa(
         self,
@@ -189,8 +214,12 @@ class TFXLMModelTester:
 
         result = model(inputs)
 
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def create_and_check_xlm_sequence_classif(
         self,
@@ -210,7 +239,9 @@ class TFXLMModelTester:
 
         result = model(inputs)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def create_and_check_xlm_for_token_classification(
         self,
@@ -226,9 +257,15 @@ class TFXLMModelTester:
     ):
         config.num_labels = self.num_labels
         model = TFXLMForTokenClassification(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_xlm_for_multiple_choice(
         self,
@@ -244,16 +281,24 @@ class TFXLMModelTester:
     ):
         config.num_choices = self.num_choices
         model = TFXLMForMultipleChoice(config=config)
-        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
-        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_inputs_ids = tf.tile(
+            tf.expand_dims(input_ids, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_input_mask = tf.tile(
+            tf.expand_dims(input_mask, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_token_type_ids = tf.tile(
+            tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1)
+        )
         inputs = {
             "input_ids": multiple_choice_inputs_ids,
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -358,7 +403,9 @@ class TFXLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlm_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_xlm_for_token_classification(
+            *config_and_inputs
+        )
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

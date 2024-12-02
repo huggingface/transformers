@@ -20,9 +20,20 @@ from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
+from ...utils import (
+    is_torch_device,
+    is_torch_dtype,
+    is_torch_tensor,
+    logging,
+    requires_backends,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -82,13 +93,18 @@ class BatchMixFeature(BatchFeature):
                 device = arg
             else:
                 # it's something else
-                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+                raise ValueError(
+                    f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported."
+                )
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             # check if v is a floating point
             if isinstance(v, list):
                 new_data[k] = [
-                    element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
+                    element.to(*args, **kwargs)
+                    for sample in v
+                    for element in sample
+                    if is_torch_tensor(element)
                 ]
             elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
@@ -156,7 +172,9 @@ class PixtralProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[PixtralProcessorKwargs],
@@ -210,21 +228,29 @@ class PixtralProcessor(ProcessorMixin):
                     images = [[im] for im in images]
                 else:
                     images = [images]
-            elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
+            elif (
+                isinstance(images, list)
+                and isinstance(images[0], list)
+                and is_image_or_image_url(images[0][0])
+            ):
                 pass
             else:
                 raise ValueError(
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
             images = [[load_image(im) for im in sample] for sample in images]
-            image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(
+                images, patch_size=self.patch_size, **output_kwargs["images_kwargs"]
+            )
         else:
             image_inputs = {}
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise ValueError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
@@ -234,7 +260,9 @@ class PixtralProcessor(ProcessorMixin):
             image_sizes = image_inputs.pop("image_sizes")
             prompt_strings = []
 
-            for sample_images, sample_image_sizes, sample in zip(images, image_sizes, text):
+            for sample_images, sample_image_sizes, sample in zip(
+                images, image_sizes, text
+            ):
                 replace_strings = []
                 # First calculate the number of tokens needed for each image and put in a placeholder
                 for image, image_size in zip(sample_images, sample_image_sizes):
@@ -245,7 +273,9 @@ class PixtralProcessor(ProcessorMixin):
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens
                     # Flatten list
-                    replace_tokens = [item for sublist in replace_tokens for item in sublist]
+                    replace_tokens = [
+                        item for sublist in replace_tokens for item in sublist
+                    ]
                     replace_tokens[-1] = self.image_end_token
                     replace_str = "".join(replace_tokens)
                     replace_strings.append(replace_str)

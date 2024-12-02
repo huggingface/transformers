@@ -13,7 +13,9 @@ class FSNERModel(torch.nn.Module):
     def __init__(self, pretrained_model_name_or_path="sayef/fsner-bert-base-uncased"):
         super(FSNERModel, self).__init__()
 
-        self.bert = AutoModel.from_pretrained(pretrained_model_name_or_path, return_dict=True)
+        self.bert = AutoModel.from_pretrained(
+            pretrained_model_name_or_path, return_dict=True
+        )
         self.cos = torch.nn.CosineSimilarity(3, 1e-08)
         self.softmax = torch.nn.Softmax(dim=1)
 

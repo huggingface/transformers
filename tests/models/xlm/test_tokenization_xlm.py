@@ -60,7 +60,9 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
         with open(self.vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
         with open(self.merges_file, "w") as fp:
@@ -82,7 +84,9 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [14, 15, 20]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens
+        )
 
     @slow
     def test_sequence_builders(self):

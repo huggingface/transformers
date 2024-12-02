@@ -41,7 +41,12 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+)
 
 
 if is_torch_available():
@@ -67,7 +72,11 @@ def prepare_inputs_dict(
     else:
         encoder_dict = {"input_values": input_values}
 
-    decoder_dict = {"decoder_input_ids": decoder_input_ids} if decoder_input_ids is not None else {}
+    decoder_dict = (
+        {"decoder_input_ids": decoder_input_ids}
+        if decoder_input_ids is not None
+        else {}
+    )
 
     return {**encoder_dict, **decoder_dict}
 
@@ -115,7 +124,9 @@ class MimiModelTester:
         self.use_cache = use_cache
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        input_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.intermediate_size], scale=1.0
+        )
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
@@ -126,9 +137,9 @@ class MimiModelTester:
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
         config, inputs_dict = self.prepare_config_and_inputs()
-        inputs_dict["audio_codes"] = ids_tensor([self.batch_size, 1, self.num_channels], self.codebook_size).type(
-            torch.int32
-        )
+        inputs_dict["audio_codes"] = ids_tensor(
+            [self.batch_size, 1, self.num_channels], self.codebook_size
+        ).type(torch.int32)
 
         return config, inputs_dict
 
@@ -157,7 +168,8 @@ class MimiModelTester:
         input_values = inputs_dict["input_values"]
         result = model(input_values)
         self.parent.assertEqual(
-            result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
+            result.audio_values.shape,
+            (self.batch_size, self.num_channels, self.intermediate_size),
         )
 
 
@@ -172,7 +184,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
         if "output_attentions" in inputs_dict:
             inputs_dict.pop("output_attentions")
         if "output_hidden_states" in inputs_dict:
@@ -182,7 +196,11 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = MimiModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MimiConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self,
+            config_class=MimiConfig,
+            hidden_size=37,
+            common_properties=[],
+            has_text_modality=False,
         )
 
     def test_config(self):
@@ -202,7 +220,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["input_values", "padding_mask", "num_quantizers"]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     @unittest.skip(reason="The MimiModel does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
@@ -275,10 +295,14 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -360,8 +384,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                )
 
                 self.assertTrue(isinstance(tuple_output, tuple))
                 self.assertTrue(isinstance(dict_output, dict))
@@ -369,7 +397,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
                     self.assertTrue(
                         torch.allclose(
-                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
+                            set_nan_tensor_to_zero(tuple_value),
+                            set_nan_tensor_to_zero(dict_value),
+                            atol=1e-5,
                         ),
                         msg=(
                             "Tuple and dict output are not equal. Difference:"
@@ -399,7 +429,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
@@ -423,10 +455,16 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(
+            torch_device
+        ):
+            self.skipTest(
+                f"float16 not supported on {torch_device} (on the specific device currently used)"
+            )
 
-        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(
+            torch_device
+        ):
             self.skipTest(
                 f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
             )
@@ -468,19 +506,25 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
             # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
             # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
             # This means that the class needs to be instantiated much later, after `use_mask` is set, which means a significant refactor of the code.
             # However masking there is not done at any layers that matters (i.e self-attention), therefore we can safely deactivate it.
-            deactivate_mask = "use_mask_token" in inspect.signature(model_class).parameters
+            deactivate_mask = (
+                "use_mask_token" in inspect.signature(model_class).parameters
+            )
 
             is_encoder_decoder = model.config.is_encoder_decoder
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch_dtype
+                )
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -496,13 +540,21 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                    if (
+                        "SdpaAttention" in class_name
+                        or "SdpaSelfAttention" in class_name
+                    ):
+                        raise ValueError(
+                            "The eager model should not have SDPA attention layers"
+                        )
 
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        "SdpaAttention" in class_name
+                        or "SdpaSelfAttention" in class_name
+                    ):
                         has_sdpa = True
                         break
                 if not has_sdpa and model_sdpa.config.model_type != "falcon":
@@ -514,48 +566,77 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 for padding_side in ["left", "right"]:
                     for use_mask in [False, True]:
                         for output_attentions in [True, False]:
-                            can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                            if not (self.has_attentions and can_output_attn) and output_attentions:
+                            can_output_attn = (
+                                "output_attentions"
+                                in inspect.signature(model_sdpa.forward).parameters
+                            )
+                            if (
+                                not (self.has_attentions and can_output_attn)
+                                and output_attentions
+                            ):
                                 continue
                             for batch_size in [7]:
                                 dummy_input = inputs_dict[model.main_input_name]
 
-                                if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                                if dummy_input.dtype in [
+                                    torch.float32,
+                                    torch.bfloat16,
+                                    torch.float16,
+                                ]:
                                     dummy_input = dummy_input.to(torch_dtype)
 
                                 dummy_input = dummy_input[:batch_size]
                                 if dummy_input.shape[0] != batch_size:
-                                    if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                                    if dummy_input.dtype in [
+                                        torch.float32,
+                                        torch.bfloat16,
+                                        torch.float16,
+                                    ]:
                                         extension = torch.rand(
                                             batch_size - dummy_input.shape[0],
                                             *dummy_input.shape[1:],
                                             dtype=torch_dtype,
                                             device=torch_device,
                                         )
-                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
+                                        dummy_input = torch.cat(
+                                            (dummy_input, extension), dim=0
+                                        ).to(torch_device)
                                     else:
                                         extension = torch.randint(
                                             high=5,
-                                            size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
+                                            size=(
+                                                batch_size - dummy_input.shape[0],
+                                                *dummy_input.shape[1:],
+                                            ),
                                             dtype=dummy_input.dtype,
                                             device=torch_device,
                                         )
-                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
+                                        dummy_input = torch.cat(
+                                            (dummy_input, extension), dim=0
+                                        ).to(torch_device)
 
                                 if not use_mask:
                                     dummy_attention_mask = None
                                 else:
-                                    dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                                    dummy_attention_mask = inputs_dict.get(
+                                        "attention_mask", None
+                                    )
                                     if dummy_attention_mask is None:
                                         if is_encoder_decoder:
-                                            seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
+                                            seqlen = inputs_dict.get(
+                                                "decoder_input_ids", dummy_input
+                                            ).shape[-1]
                                         else:
                                             seqlen = dummy_input.shape[-1]
                                         dummy_attention_mask = (
-                                            torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
+                                            torch.ones(batch_size, seqlen)
+                                            .to(torch.int64)
+                                            .to(torch_device)
                                         )
 
-                                    dummy_attention_mask = dummy_attention_mask[:batch_size]
+                                    dummy_attention_mask = dummy_attention_mask[
+                                        :batch_size
+                                    ]
                                     if dummy_attention_mask.shape[0] != batch_size:
                                         extension = torch.ones(
                                             batch_size - dummy_attention_mask.shape[0],
@@ -563,8 +644,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                                             dtype=dummy_attention_mask.dtype,
                                             device=torch_device,
                                         )
-                                        dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-                                        dummy_attention_mask = dummy_attention_mask.to(torch_device)
+                                        dummy_attention_mask = torch.cat(
+                                            (dummy_attention_mask, extension), dim=0
+                                        )
+                                        dummy_attention_mask = dummy_attention_mask.to(
+                                            torch_device
+                                        )
 
                                     dummy_attention_mask[:] = 1
                                     if padding_side == "left":
@@ -577,9 +662,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                                 for enable_kernels in [False, True]:
                                     failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
                                     if is_encoder_decoder:
-                                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[
-                                            :batch_size
-                                        ]
+                                        decoder_input_ids = inputs_dict.get(
+                                            "decoder_input_ids", dummy_input
+                                        )[:batch_size]
                                         if decoder_input_ids.shape[0] != batch_size:
                                             extension = torch.ones(
                                                 batch_size - decoder_input_ids.shape[0],
@@ -587,8 +672,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                                                 dtype=decoder_input_ids.dtype,
                                                 device=torch_device,
                                             )
-                                            decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
-                                            decoder_input_ids = decoder_input_ids.to(torch_device)
+                                            decoder_input_ids = torch.cat(
+                                                (decoder_input_ids, extension), dim=0
+                                            )
+                                            decoder_input_ids = decoder_input_ids.to(
+                                                torch_device
+                                            )
 
                                         # TODO: never an `attention_mask` arg here?
                                         processed_inputs = {
@@ -604,35 +693,77 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                                         }
 
                                         # Otherwise fails for e.g. WhisperEncoderModel
-                                        if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                                            processed_inputs["attention_mask"] = dummy_attention_mask
+                                        if (
+                                            "attention_mask"
+                                            in inspect.signature(
+                                                model_eager.forward
+                                            ).parameters
+                                        ):
+                                            processed_inputs["attention_mask"] = (
+                                                dummy_attention_mask
+                                            )
 
                                         if (
                                             self.has_attentions
-                                            and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+                                            and "output_attentions"
+                                            in inspect.signature(
+                                                model_sdpa.forward
+                                            ).parameters
                                         ):
-                                            processed_inputs["output_attentions"] = output_attentions
+                                            processed_inputs["output_attentions"] = (
+                                                output_attentions
+                                            )
                                     if not deactivate_mask and (
-                                        "bool_masked_pos" in inspect.signature(model_eager.forward).parameters
+                                        "bool_masked_pos"
+                                        in inspect.signature(
+                                            model_eager.forward
+                                        ).parameters
                                     ):
-                                        dummy_mask = torch.ones((self.model_tester.num_masks,))
+                                        dummy_mask = torch.ones(
+                                            (self.model_tester.num_masks,)
+                                        )
 
                                         # In case of additional token (like class) we define a custom `mask_length`
                                         if hasattr(self.model_tester, "mask_length"):
-                                            mask_length = self.model_tester.mask_length - dummy_mask.size(0)
+                                            mask_length = (
+                                                self.model_tester.mask_length
+                                                - dummy_mask.size(0)
+                                            )
                                         else:
-                                            mask_length = self.model_tester.seq_length - dummy_mask.size(0)
-                                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
-                                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
-                                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
+                                            mask_length = (
+                                                self.model_tester.seq_length
+                                                - dummy_mask.size(0)
+                                            )
+                                        dummy_mask = torch.cat(
+                                            [dummy_mask, torch.zeros(mask_length)]
+                                        )
+                                        dummy_bool_masked_pos = dummy_mask.expand(
+                                            batch_size, -1
+                                        ).bool()
+                                        processed_inputs["bool_masked_pos"] = (
+                                            dummy_bool_masked_pos.to(torch_device)
+                                        )
 
-                                    if "noise" in inspect.signature(model_eager.forward).parameters:
+                                    if (
+                                        "noise"
+                                        in inspect.signature(
+                                            model_eager.forward
+                                        ).parameters
+                                    ):
                                         np.random.seed(2)
                                         num_patches = int(
-                                            (self.model_tester.image_size // self.model_tester.patch_size) ** 2
+                                            (
+                                                self.model_tester.image_size
+                                                // self.model_tester.patch_size
+                                            )
+                                            ** 2
                                         )
-                                        noise = np.random.uniform(size=(batch_size, num_patches))
-                                        processed_inputs["noise"] = torch.from_numpy(noise)
+                                        noise = np.random.uniform(
+                                            size=(batch_size, num_patches)
+                                        )
+                                        processed_inputs["noise"] = torch.from_numpy(
+                                            noise
+                                        )
 
                                     # TODO: test gradients as well (& for FA2 as well!)
                                     with torch.no_grad():
@@ -641,8 +772,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                                             enable_math=True,
                                             enable_mem_efficient=enable_kernels,
                                         ):
-                                            prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                                            outputs_eager = model_eager(**prepared_inputs)
+                                            prepared_inputs = self._prepare_for_class(
+                                                processed_inputs, model_class
+                                            )
+                                            outputs_eager = model_eager(
+                                                **prepared_inputs
+                                            )
                                             outputs_sdpa = model_sdpa(**prepared_inputs)
 
                                     # Ignore copy
@@ -651,39 +786,66 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                                     logits_sdpa = outputs_sdpa.audio_values
 
                                     if torch_device in ["cpu", "cuda"]:
-                                        atol = atols[torch_device, enable_kernels, torch_dtype]
-                                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                        atol = atols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
+                                        rtol = rtols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
                                     else:
                                         atol = 1e-7
                                         rtol = 1e-4
 
                                     # Masked tokens output slightly deviates - we don't mind that.
                                     if use_mask:
-                                        _logits_sdpa = torch.zeros_like(input=logits_sdpa)
-                                        _logits_eager = torch.zeros_like(input=logits_eager)
+                                        _logits_sdpa = torch.zeros_like(
+                                            input=logits_sdpa
+                                        )
+                                        _logits_eager = torch.zeros_like(
+                                            input=logits_eager
+                                        )
 
                                         _logits_sdpa[:-1] = logits_sdpa[:-1]
                                         _logits_eager[:-1] = logits_eager[:-1]
 
                                         if padding_side == "left":
                                             _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
-                                            _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
+                                            _logits_eager[-1:, 2:] = logits_eager[
+                                                -1:, 2:
+                                            ]
 
                                         elif padding_side == "right":
-                                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
-                                            _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
+                                            _logits_sdpa[-1:, 2:] = logits_sdpa[
+                                                -1:, :-2
+                                            ]
+                                            _logits_eager[-1:, 2:] = logits_eager[
+                                                -1:, :-2
+                                            ]
 
                                         logits_sdpa = _logits_sdpa
                                         logits_eager = _logits_eager
 
                                     results = [
-                                        torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
-                                        for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+                                        torch.allclose(
+                                            _logits_sdpa,
+                                            _logits_eager,
+                                            atol=atol,
+                                            rtol=rtol,
+                                        )
+                                        for (_logits_sdpa, _logits_eager) in zip(
+                                            logits_sdpa, logits_eager
+                                        )
                                     ]
                                     # If 80% batch elements have matched results, it's fine
                                     if np.mean(results) < 0.8:
                                         fail_cases.append(
-                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                            get_mean_reldiff(
+                                                failcase,
+                                                logits_sdpa,
+                                                logits_eager,
+                                                atol,
+                                                rtol,
+                                            )
                                         )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
@@ -695,17 +857,23 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation="flash_attention_2",
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -756,14 +924,18 @@ class MimiIntegrationTest(unittest.TestCase):
             "32": 0.0012330565,
         }
 
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_id = "kyutai/mimi"
 
         model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
         processor = AutoFeatureExtractor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
         inputs = processor(
@@ -775,11 +947,15 @@ class MimiIntegrationTest(unittest.TestCase):
         for num_codebooks, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
-                encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
+                encoder_outputs = model.encode(
+                    inputs["input_values"], num_quantizers=int(num_codebooks)
+                )
 
                 audio_codes = encoder_outputs[0]
 
-                decoder_outputs_first_part = model.decode(audio_codes[:, :, : audio_codes.shape[2] // 2])
+                decoder_outputs_first_part = model.decode(
+                    audio_codes[:, :, : audio_codes.shape[2] // 2]
+                )
                 decoder_outputs_second_part = model.decode(
                     audio_codes[:, :, audio_codes.shape[2] // 2 :],
                     decoder_past_key_values=decoder_outputs_first_part.decoder_past_key_values,
@@ -787,7 +963,8 @@ class MimiIntegrationTest(unittest.TestCase):
 
                 audio_output_entire_context = model.decode(audio_codes)[0]
                 audio_output_concat_context = torch.cat(
-                    [decoder_outputs_first_part[0], decoder_outputs_second_part[0]], dim=2
+                    [decoder_outputs_first_part[0], decoder_outputs_second_part[0]],
+                    dim=2,
                 )
 
             # make sure audios are more or less equal
@@ -807,13 +984,17 @@ class MimiIntegrationTest(unittest.TestCase):
             "8": 430423,
             "32": 1803071,
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_id = "kyutai/mimi"
 
         processor = AutoFeatureExtractor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
         inputs = processor(
@@ -823,11 +1004,15 @@ class MimiIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         for use_cache in [False, True]:
-            model = MimiModel.from_pretrained(model_id, use_cache=use_cache).to(torch_device)
+            model = MimiModel.from_pretrained(model_id, use_cache=use_cache).to(
+                torch_device
+            )
             for num_codebooks, expected_rmse in expected_rmses.items():
                 with torch.no_grad():
                     # use max bandwith for best possible reconstruction
-                    encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
+                    encoder_outputs = model.encode(
+                        inputs["input_values"], num_quantizers=int(num_codebooks)
+                    )
 
                     audio_code_sums = encoder_outputs[0].sum().cpu().item()
 
@@ -835,19 +1020,26 @@ class MimiIntegrationTest(unittest.TestCase):
                     # assert relative difference less than a threshold, because `audio_code_sums` varies a bit
                     # depending on torch version
                     self.assertTrue(
-                        np.abs(audio_code_sums - expected_codesums[num_codebooks]) <= (3e-3 * audio_code_sums)
+                        np.abs(audio_code_sums - expected_codesums[num_codebooks])
+                        <= (3e-3 * audio_code_sums)
                     )
 
-                    input_values_dec = model.decode(encoder_outputs[0], padding_mask=inputs["padding_mask"])[0]
+                    input_values_dec = model.decode(
+                        encoder_outputs[0], padding_mask=inputs["padding_mask"]
+                    )[0]
                     input_values_enc_dec = model(
-                        inputs["input_values"], inputs["padding_mask"], num_quantizers=int(num_codebooks)
+                        inputs["input_values"],
+                        inputs["padding_mask"],
+                        num_quantizers=int(num_codebooks),
                     )[1]
 
                 # make sure forward and decode gives same result
                 self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec))
 
                 # make sure shape matches
-                self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
+                self.assertTrue(
+                    inputs["input_values"].shape == input_values_enc_dec.shape
+                )
 
                 arr = inputs["input_values"][0].cpu().numpy()
                 arr_enc_dec = input_values_enc_dec[0].cpu().numpy()

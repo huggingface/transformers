@@ -42,7 +42,9 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         self.head_size = self.shortlist_size + self.n_clusters
 
         if self.n_clusters > 0:
-            self.cluster_weight = nn.Parameter(torch.zeros(self.n_clusters, self.d_embed))
+            self.cluster_weight = nn.Parameter(
+                torch.zeros(self.n_clusters, self.d_embed)
+            )
             self.cluster_bias = nn.Parameter(torch.zeros(self.n_clusters))
 
         self.out_layers = nn.ModuleList()
@@ -51,7 +53,9 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         if div_val == 1:
             for i in range(len(self.cutoffs)):
                 if d_proj != d_embed:
-                    self.out_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_embed)))
+                    self.out_projs.append(
+                        nn.Parameter(torch.FloatTensor(d_proj, d_embed))
+                    )
                 else:
                     self.out_projs.append(None)
 
@@ -101,17 +105,26 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             hidden = hidden.view(-1, hidden.size(-1))
             labels = labels.view(-1)
             if hidden.size(0) != labels.size(0):
-                raise RuntimeError("Input and labels should have the same size in the batch dimension.")
+                raise RuntimeError(
+                    "Input and labels should have the same size in the batch dimension."
+                )
         else:
             hidden = hidden.view(-1, hidden.size(-1))
 
         if self.n_clusters == 0:
-            logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])
+            logit = self._compute_logit(
+                hidden,
+                self.out_layers[0].weight,
+                self.out_layers[0].bias,
+                self.out_projs[0],
+            )
             if labels is not None:
                 mask = labels != -100
                 out = torch.zeros_like(labels, dtype=hidden.dtype, device=hidden.device)
                 out[mask] = (
-                    -nn.functional.log_softmax(logit, dim=-1)[mask].gather(1, labels[mask].unsqueeze(1)).squeeze(1)
+                    -nn.functional.log_softmax(logit, dim=-1)[mask]
+                    .gather(1, labels[mask].unsqueeze(1))
+                    .squeeze(1)
                 )
             else:
                 out = nn.functional.log_softmax(logit, dim=-1)
@@ -164,21 +177,29 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
                 if i == 0:
                     if labels is not None:
-                        logprob_i = head_logprob_i.gather(1, target_i[:, None]).squeeze(1)
+                        logprob_i = head_logprob_i.gather(1, target_i[:, None]).squeeze(
+                            1
+                        )
                     else:
                         out[:, : self.cutoffs[0]] = head_logprob[:, : self.cutoffs[0]]
                 else:
                     weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
 
-                    tail_logit_i = self._compute_logit(hidden_i, weight_i, bias_i, proj_i)
+                    tail_logit_i = self._compute_logit(
+                        hidden_i, weight_i, bias_i, proj_i
+                    )
                     tail_logprob_i = nn.functional.log_softmax(tail_logit_i, dim=1)
-                    cluster_prob_idx = self.cutoffs[0] + i - 1  # No probability for the head cluster
+                    cluster_prob_idx = (
+                        self.cutoffs[0] + i - 1
+                    )  # No probability for the head cluster
                     if labels is not None:
-                        logprob_i = head_logprob_i[:, cluster_prob_idx] + tail_logprob_i.gather(
-                            1, target_i[:, None]
-                        ).squeeze(1)
+                        logprob_i = head_logprob_i[
+                            :, cluster_prob_idx
+                        ] + tail_logprob_i.gather(1, target_i[:, None]).squeeze(1)
                     else:
-                        logprob_i = head_logprob[:, cluster_prob_idx, None] + tail_logprob_i
+                        logprob_i = (
+                            head_logprob[:, cluster_prob_idx, None] + tail_logprob_i
+                        )
                         out[:, l_idx:r_idx] = logprob_i
 
                 if labels is not None:
@@ -206,7 +227,12 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             - Output: \\((N, n\_classes)\\)
         """
         if self.n_clusters == 0:
-            logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])
+            logit = self._compute_logit(
+                hidden,
+                self.out_layers[0].weight,
+                self.out_layers[0].bias,
+                self.out_projs[0],
+            )
             return nn.functional.log_softmax(logit, dim=-1)
         else:
             # construct weights and biases

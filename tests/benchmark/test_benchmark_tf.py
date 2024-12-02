@@ -31,7 +31,9 @@ if is_tf_available():
 class TFBenchmarkTest(unittest.TestCase):
     def check_results_dict_not_empty(self, results):
         for model_result in results.values():
-            for batch_size, sequence_length in zip(model_result["bs"], model_result["ss"]):
+            for batch_size, sequence_length in zip(
+                model_result["bs"], model_result["ss"]
+            ):
                 result = model_result["result"][batch_size][sequence_length]
                 self.assertIsNotNone(result)
 
@@ -162,7 +164,10 @@ class TFBenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.time_inference_result)
         self.check_results_dict_not_empty(results.memory_inference_result)
 
-    @unittest.skipIf(is_tf_available() and len(tf.config.list_physical_devices("GPU")) == 0, "Cannot do xla on CPU.")
+    @unittest.skipIf(
+        is_tf_available() and len(tf.config.list_physical_devices("GPU")) == 0,
+        "Cannot do xla on CPU.",
+    )
     def test_inference_no_configs_xla(self):
         MODEL_ID = "sshleifer/tiny-gpt2"
         benchmark_args = TensorFlowBenchmarkArguments(

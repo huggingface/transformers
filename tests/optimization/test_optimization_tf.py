@@ -42,10 +42,14 @@ class OptimizationFTest(unittest.TestCase):
             accumulator([tf.constant([1.0, 1.0]), tf.constant([2.0, 2.0])])
         self.assertEqual(accumulator.step, 3)
         self.assertEqual(len(accumulator.gradients), 1)
-        self.assertListAlmostEqual(accumulator.gradients[0].numpy().tolist(), [-2.0, 5.0], tol=1e-2)
+        self.assertListAlmostEqual(
+            accumulator.gradients[0].numpy().tolist(), [-2.0, 5.0], tol=1e-2
+        )
         accumulator.reset()
         self.assertEqual(accumulator.step, 0)
-        self.assertListAlmostEqual(accumulator.gradients[0].numpy().tolist(), [0.0, 0.0], tol=1e-2)
+        self.assertListAlmostEqual(
+            accumulator.gradients[0].numpy().tolist(), [0.0, 0.0], tol=1e-2
+        )
 
     def testGradientAccumulatorDistributionStrategy(self):
         context._context = None
@@ -53,7 +57,11 @@ class OptimizationFTest(unittest.TestCase):
         physical_devices = tf.config.list_physical_devices("CPU")
         if len(physical_devices) == 1:
             tf.config.set_logical_device_configuration(
-                physical_devices[0], [tf.config.LogicalDeviceConfiguration(), tf.config.LogicalDeviceConfiguration()]
+                physical_devices[0],
+                [
+                    tf.config.LogicalDeviceConfiguration(),
+                    tf.config.LogicalDeviceConfiguration(),
+                ],
             )
         devices = tf.config.list_logical_devices(device_type="CPU")
         strategy = tf.distribute.MirroredStrategy(devices=devices[:2])
@@ -73,7 +81,9 @@ class OptimizationFTest(unittest.TestCase):
         @tf.function
         def accumulate(grad1, grad2):
             with strategy.scope():
-                local_variables = strategy.experimental_local_results(gradient_placeholder)
+                local_variables = strategy.experimental_local_results(
+                    gradient_placeholder
+                )
                 local_variables[0].assign(grad1)
                 local_variables[1].assign(grad2)
                 strategy.run(accumulate_on_replica, args=(gradient_placeholder,))

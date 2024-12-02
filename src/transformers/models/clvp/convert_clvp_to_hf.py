@@ -90,13 +90,16 @@ def convert_encoder_weights(original_weights):
             if int(present_index) % 2 == 0:
                 updated_key = updated_key.replace("0.0.g", "input_rmsnorm.weight")
             else:
-                updated_key = updated_key.replace("0.0.g", "post_attention_rmsnorm.weight")
+                updated_key = updated_key.replace(
+                    "0.0.g", "post_attention_rmsnorm.weight"
+                )
 
         if "transformer.attn_layers.layers" in updated_key:
             present_index = updated_key.split(".")[4]
             updated_index = update_index(int(present_index))
             updated_key = updated_key.replace(
-                f"transformer.attn_layers.layers.{present_index}", f"transformer.attn_layers.layers.{updated_index}"
+                f"transformer.attn_layers.layers.{present_index}",
+                f"transformer.attn_layers.layers.{updated_index}",
             )
 
         for k, v in CLVP_ENCODERS_MAPPING.items():
@@ -119,30 +122,52 @@ def convert_decoder_weights(original_weights):
         # for decoder attention
         if "attn.c_attn" in updated_key:
             if attr == "weight":
-                slice1, slice2, slice3 = original_weights[updated_key].squeeze(-1).T.split(split_size=dim, dim=0)
+                slice1, slice2, slice3 = (
+                    original_weights[updated_key]
+                    .squeeze(-1)
+                    .T.split(split_size=dim, dim=0)
+                )
             else:
-                slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
-            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.q_proj.{attr}"] = slice1
-            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.k_proj.{attr}"] = slice2
-            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.v_proj.{attr}"] = slice3
+                slice1, slice2, slice3 = original_weights[updated_key].split(
+                    split_size=dim, dim=0
+                )
+            converted_weights[
+                f"speech_decoder_model.model.decoder.layers.{index}.attn.q_proj.{attr}"
+            ] = slice1
+            converted_weights[
+                f"speech_decoder_model.model.decoder.layers.{index}.attn.k_proj.{attr}"
+            ] = slice2
+            converted_weights[
+                f"speech_decoder_model.model.decoder.layers.{index}.attn.v_proj.{attr}"
+            ] = slice3
             continue
 
         if "attn.c_proj" in updated_key:
-            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.out_proj.{attr}"] = (
-                original_weights[updated_key].squeeze(-1).T
-            )
+            converted_weights[
+                f"speech_decoder_model.model.decoder.layers.{index}.attn.out_proj.{attr}"
+            ] = (original_weights[updated_key].squeeze(-1).T)
             continue
 
-        if "attn.bias" in updated_key or "attn.masked_bias" in updated_key or "text_head" in updated_key:
+        if (
+            "attn.bias" in updated_key
+            or "attn.masked_bias" in updated_key
+            or "text_head" in updated_key
+        ):
             original_weights.pop(updated_key)
             continue
 
         # conditional encoder attention
         if "qkv" in updated_key:
             if attr == "weight":
-                slice1, slice2, slice3 = original_weights[updated_key].squeeze(-1).split(split_size=dim, dim=0)
+                slice1, slice2, slice3 = (
+                    original_weights[updated_key]
+                    .squeeze(-1)
+                    .split(split_size=dim, dim=0)
+                )
             else:
-                slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
+                slice1, slice2, slice3 = original_weights[updated_key].split(
+                    split_size=dim, dim=0
+                )
 
             indices = torch.arange(dim)
             index1, index2, index3 = (
@@ -151,24 +176,30 @@ def convert_decoder_weights(original_weights):
                 indices[2 * sub_dim :].unfold(0, sub_dim, sub_dim * 3).flatten(),
             )
 
-            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"] = torch.concatenate(
+            converted_weights[
+                f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"
+            ] = torch.concatenate(
                 [slice1[index1], slice2[index3], slice3[index2]],
                 axis=0,
             )
-            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.k_proj.{attr}"] = torch.concatenate(
+            converted_weights[
+                f"conditioning_encoder.mel_attn_blocks.{index}.k_proj.{attr}"
+            ] = torch.concatenate(
                 [slice1[index2], slice2[index1], slice3[index3]],
                 axis=0,
             )
-            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.v_proj.{attr}"] = torch.concatenate(
+            converted_weights[
+                f"conditioning_encoder.mel_attn_blocks.{index}.v_proj.{attr}"
+            ] = torch.concatenate(
                 [slice1[index3], slice2[index2], slice3[index1]],
                 axis=0,
             )
             continue
 
         if "proj_out" in updated_key:
-            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.out_proj.{attr}"] = original_weights[
-                updated_key
-            ].squeeze(-1)
+            converted_weights[
+                f"conditioning_encoder.mel_attn_blocks.{index}.out_proj.{attr}"
+            ] = original_weights[updated_key].squeeze(-1)
             continue
 
         for k, v in CLVP_DECODER_MAPPING.items():
@@ -197,7 +228,9 @@ def convert_clvp_weights(checkpoint_path, pytorch_dump_folder_path):
     for each_model_name, each_model_url in _MODELS.items():
         each_model_path = os.path.join(checkpoint_path, each_model_url.split("/")[-1])
         if not os.path.exists(each_model_path):
-            print(f"\n{each_model_name} was not found! Downloading it to {each_model_path}")
+            print(
+                f"\n{each_model_name} was not found! Downloading it to {each_model_path}"
+            )
             _download(url=each_model_url, root=each_model_path)
 
         if each_model_name == "clvp":
@@ -221,7 +254,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
     parser.add_argument(
-        "--checkpoint_path", type=str, help="Path to the folder of downloaded checkpoints. (Please enter full path)"
+        "--checkpoint_path",
+        type=str,
+        help="Path to the folder of downloaded checkpoints. (Please enter full path)",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

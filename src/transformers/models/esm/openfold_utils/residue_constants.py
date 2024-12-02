@@ -36,18 +36,40 @@ ca_ca = 3.80209737096
 chi_angles_atoms: Dict[str, List[List[str]]] = {
     "ALA": [],
     # Chi5 in arginine is always 0 +- 5 degrees, so ignore it.
-    "ARG": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "NE"], ["CG", "CD", "NE", "CZ"]],
+    "ARG": [
+        ["N", "CA", "CB", "CG"],
+        ["CA", "CB", "CG", "CD"],
+        ["CB", "CG", "CD", "NE"],
+        ["CG", "CD", "NE", "CZ"],
+    ],
     "ASN": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "OD1"]],
     "ASP": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "OD1"]],
     "CYS": [["N", "CA", "CB", "SG"]],
-    "GLN": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "OE1"]],
-    "GLU": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "OE1"]],
+    "GLN": [
+        ["N", "CA", "CB", "CG"],
+        ["CA", "CB", "CG", "CD"],
+        ["CB", "CG", "CD", "OE1"],
+    ],
+    "GLU": [
+        ["N", "CA", "CB", "CG"],
+        ["CA", "CB", "CG", "CD"],
+        ["CB", "CG", "CD", "OE1"],
+    ],
     "GLY": [],
     "HIS": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "ND1"]],
     "ILE": [["N", "CA", "CB", "CG1"], ["CA", "CB", "CG1", "CD1"]],
     "LEU": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD1"]],
-    "LYS": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "CE"], ["CG", "CD", "CE", "NZ"]],
-    "MET": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "SD"], ["CB", "CG", "SD", "CE"]],
+    "LYS": [
+        ["N", "CA", "CB", "CG"],
+        ["CA", "CB", "CG", "CD"],
+        ["CB", "CG", "CD", "CE"],
+        ["CG", "CD", "CE", "NZ"],
+    ],
+    "MET": [
+        ["N", "CA", "CB", "CG"],
+        ["CA", "CB", "CG", "SD"],
+        ["CB", "CG", "SD", "CE"],
+    ],
     "PHE": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD1"]],
     "PRO": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"]],
     "SER": [["N", "CA", "CB", "OG"]],
@@ -120,7 +142,9 @@ chi_pi_periodic: List[List[float]] = [
 # is defined such that the dihedral-angle-definiting atom (the last entry in
 # chi_angles_atoms above) is in the xy-plane (with a positive y-coordinate).
 # format: [atomname, group_idx, rel_position]
-rigid_group_atom_positions: Dict[str, List[Tuple[str, int, Tuple[float, float, float]]]] = {
+rigid_group_atom_positions: Dict[
+    str, List[Tuple[str, int, Tuple[float, float, float]]]
+] = {
     "ALA": [
         ("N", 0, (-0.525, 1.363, 0.000)),
         ("CA", 0, (0.000, 0.000, 0.000)),
@@ -350,7 +374,22 @@ residue_atoms: Dict[str, List[str]] = {
     "PRO": ["C", "CA", "CB", "CG", "CD", "N", "O"],
     "SER": ["C", "CA", "CB", "N", "O", "OG"],
     "THR": ["C", "CA", "CB", "CG2", "N", "O", "OG1"],
-    "TRP": ["C", "CA", "CB", "CG", "CD1", "CD2", "CE2", "CE3", "CZ2", "CZ3", "CH2", "N", "NE1", "O"],
+    "TRP": [
+        "C",
+        "CA",
+        "CB",
+        "CG",
+        "CD1",
+        "CD2",
+        "CE2",
+        "CE3",
+        "CZ2",
+        "CZ3",
+        "CH2",
+        "N",
+        "NE1",
+        "O",
+    ],
     "TYR": ["C", "CA", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "N", "O", "OH"],
     "VAL": ["C", "CA", "CB", "CG1", "CG2", "N", "O"],
 }
@@ -399,13 +438,11 @@ def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> lis
 
 
 @functools.lru_cache(maxsize=None)
-def load_stereo_chemical_props() -> (
-    Tuple[
-        Mapping[str, List[Bond]],
-        Mapping[str, List[Bond]],
-        Mapping[str, List[BondAngle]],
-    ]
-):
+def load_stereo_chemical_props() -> Tuple[
+    Mapping[str, List[Bond]],
+    Mapping[str, List[Bond]],
+    Mapping[str, List[BondAngle]],
+]:
     """Load stereo_chemical_props.txt into a nice structure.
 
     Load literature values for bond lengths and bond angles and translate bond angles into the length of the opposite
@@ -416,7 +453,9 @@ def load_stereo_chemical_props() -> (
       list of Bond tuples residue_bond_angles: dict that maps resname --> list of BondAngle tuples
     """
     # TODO: this file should be downloaded in a setup script
-    stereo_chemical_props = resources.read_text("openfold.resources", "stereo_chemical_props.txt")
+    stereo_chemical_props = resources.read_text(
+        "openfold.resources", "stereo_chemical_props.txt"
+    )
 
     lines_iter = iter(stereo_chemical_props.splitlines())
     # Load bond lengths.
@@ -429,7 +468,9 @@ def load_stereo_chemical_props() -> (
         atom1, atom2 = bond.split("-")
         if resname not in residue_bonds:
             residue_bonds[resname] = []
-        residue_bonds[resname].append(Bond(atom1, atom2, float(bond_length), float(stddev)))
+        residue_bonds[resname].append(
+            Bond(atom1, atom2, float(bond_length), float(stddev))
+        )
     residue_bonds["UNK"] = []
 
     # Load bond angles.
@@ -473,7 +514,11 @@ def load_stereo_chemical_props() -> (
             # Compute distance between atom1 and atom3 using the law of cosines
             # c^2 = a^2 + b^2 - 2ab*cos(gamma).
             gamma = ba.angle_rad
-            length = np.sqrt(bond1.length**2 + bond2.length**2 - 2 * bond1.length * bond2.length * np.cos(gamma))
+            length = np.sqrt(
+                bond1.length**2
+                + bond2.length**2
+                - 2 * bond1.length * bond2.length * np.cos(gamma)
+            )
 
             # Propagation of uncertainty assuming uncorrelated errors.
             dl_outer = 0.5 / length
@@ -481,9 +526,13 @@ def load_stereo_chemical_props() -> (
             dl_db1 = (2 * bond1.length - 2 * bond2.length * np.cos(gamma)) * dl_outer
             dl_db2 = (2 * bond2.length - 2 * bond1.length * np.cos(gamma)) * dl_outer
             stddev = np.sqrt(
-                (dl_dgamma * ba.stddev) ** 2 + (dl_db1 * bond1.stddev) ** 2 + (dl_db2 * bond2.stddev) ** 2
+                (dl_dgamma * ba.stddev) ** 2
+                + (dl_db1 * bond1.stddev) ** 2
+                + (dl_db2 * bond2.stddev) ** 2
             )
-            residue_virtual_bonds[resname].append(Bond(ba.atom1_name, ba.atom3name, length, stddev))
+            residue_virtual_bonds[resname].append(
+                Bond(ba.atom1_name, ba.atom3name, length, stddev)
+            )
 
     return (residue_bonds, residue_virtual_bonds, residue_bond_angles)
 
@@ -494,8 +543,14 @@ between_res_bond_length_c_n: Tuple[float, float] = (1.329, 1.341)
 between_res_bond_length_stddev_c_n: Tuple[float, float] = (0.014, 0.016)
 
 # Between-residue cos_angles.
-between_res_cos_angles_c_n_ca: Tuple[float, float] = (-0.5203, 0.0353)  # degrees: 121.352 +- 2.315
-between_res_cos_angles_ca_c_n: Tuple[float, float] = (-0.4473, 0.0311)  # degrees: 116.568 +- 1.995
+between_res_cos_angles_c_n_ca: Tuple[float, float] = (
+    -0.5203,
+    0.0353,
+)  # degrees: 121.352 +- 2.315
+between_res_cos_angles_ca_c_n: Tuple[float, float] = (
+    -0.4473,
+    0.0311,
+)  # degrees: 116.568 +- 1.995
 
 # This mapping is used when we need to store atom data in a format that requires
 # fixed atom data size for every residue (e.g. a numpy array).
@@ -546,24 +601,99 @@ atom_type_num = len(atom_types)  # := 37.
 # pylint: disable=bad-whitespace
 restype_name_to_atom14_names: Dict[str, List[str]] = {
     "ALA": ["N", "CA", "C", "O", "CB", "", "", "", "", "", "", "", "", ""],
-    "ARG": ["N", "CA", "C", "O", "CB", "CG", "CD", "NE", "CZ", "NH1", "NH2", "", "", ""],
+    "ARG": [
+        "N",
+        "CA",
+        "C",
+        "O",
+        "CB",
+        "CG",
+        "CD",
+        "NE",
+        "CZ",
+        "NH1",
+        "NH2",
+        "",
+        "",
+        "",
+    ],
     "ASN": ["N", "CA", "C", "O", "CB", "CG", "OD1", "ND2", "", "", "", "", "", ""],
     "ASP": ["N", "CA", "C", "O", "CB", "CG", "OD1", "OD2", "", "", "", "", "", ""],
     "CYS": ["N", "CA", "C", "O", "CB", "SG", "", "", "", "", "", "", "", ""],
     "GLN": ["N", "CA", "C", "O", "CB", "CG", "CD", "OE1", "NE2", "", "", "", "", ""],
     "GLU": ["N", "CA", "C", "O", "CB", "CG", "CD", "OE1", "OE2", "", "", "", "", ""],
     "GLY": ["N", "CA", "C", "O", "", "", "", "", "", "", "", "", "", ""],
-    "HIS": ["N", "CA", "C", "O", "CB", "CG", "ND1", "CD2", "CE1", "NE2", "", "", "", ""],
+    "HIS": [
+        "N",
+        "CA",
+        "C",
+        "O",
+        "CB",
+        "CG",
+        "ND1",
+        "CD2",
+        "CE1",
+        "NE2",
+        "",
+        "",
+        "",
+        "",
+    ],
     "ILE": ["N", "CA", "C", "O", "CB", "CG1", "CG2", "CD1", "", "", "", "", "", ""],
     "LEU": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "", "", "", "", "", ""],
     "LYS": ["N", "CA", "C", "O", "CB", "CG", "CD", "CE", "NZ", "", "", "", "", ""],
     "MET": ["N", "CA", "C", "O", "CB", "CG", "SD", "CE", "", "", "", "", "", ""],
-    "PHE": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "", "", ""],
+    "PHE": [
+        "N",
+        "CA",
+        "C",
+        "O",
+        "CB",
+        "CG",
+        "CD1",
+        "CD2",
+        "CE1",
+        "CE2",
+        "CZ",
+        "",
+        "",
+        "",
+    ],
     "PRO": ["N", "CA", "C", "O", "CB", "CG", "CD", "", "", "", "", "", "", ""],
     "SER": ["N", "CA", "C", "O", "CB", "OG", "", "", "", "", "", "", "", ""],
     "THR": ["N", "CA", "C", "O", "CB", "OG1", "CG2", "", "", "", "", "", "", ""],
-    "TRP": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"],
-    "TYR": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "OH", "", ""],
+    "TRP": [
+        "N",
+        "CA",
+        "C",
+        "O",
+        "CB",
+        "CG",
+        "CD1",
+        "CD2",
+        "NE1",
+        "CE2",
+        "CE3",
+        "CZ2",
+        "CZ3",
+        "CH2",
+    ],
+    "TYR": [
+        "N",
+        "CA",
+        "C",
+        "O",
+        "CB",
+        "CG",
+        "CD1",
+        "CD2",
+        "CE1",
+        "CE2",
+        "CZ",
+        "OH",
+        "",
+        "",
+    ],
     "VAL": ["N", "CA", "C", "O", "CB", "CG1", "CG2", "", "", "", "", "", "", ""],
     "UNK": ["", "", "", "", "", "", "", "", "", "", "", "", "", ""],
 }
@@ -600,10 +730,14 @@ restype_num = len(restypes)  # := 20.
 unk_restype_index = restype_num  # Catch-all index for unknown restypes.
 
 restypes_with_x: List[str] = restypes + ["X"]
-restype_order_with_x: Dict[str, int] = {restype: i for i, restype in enumerate(restypes_with_x)}
+restype_order_with_x: Dict[str, int] = {
+    restype: i for i, restype in enumerate(restypes_with_x)
+}
 
 
-def sequence_to_onehot(sequence: str, mapping: Mapping[str, int], map_unknown_to_x: bool = False) -> np.ndarray:
+def sequence_to_onehot(
+    sequence: str, mapping: Mapping[str, int], map_unknown_to_x: bool = False
+) -> np.ndarray:
     """Maps the given sequence into a one-hot encoded matrix.
 
     Args:
@@ -745,7 +879,8 @@ ID_TO_HHBLITS_AA: Dict[int, str] = {
 
 restypes_with_x_and_gap: List[str] = restypes + ["X", "-"]
 MAP_HHBLITS_AATYPE_TO_OUR_AATYPE: Tuple[int, ...] = tuple(
-    restypes_with_x_and_gap.index(ID_TO_HHBLITS_AA[i]) for i in range(len(restypes_with_x_and_gap))
+    restypes_with_x_and_gap.index(ID_TO_HHBLITS_AA[i])
+    for i in range(len(restypes_with_x_and_gap))
 )
 
 
@@ -793,15 +928,24 @@ chi_atom_1_one_hot = chi_angle_atom(1)
 chi_atom_2_one_hot = chi_angle_atom(2)
 
 # An array like chi_angles_atoms but using indices rather than names.
-chi_angles_atom_indices_list: List[List[List[str]]] = [chi_angles_atoms[restype_1to3[r]] for r in restypes]
-chi_angles_atom_indices_ours: list = map_structure_with_atom_order(chi_angles_atom_indices_list)
+chi_angles_atom_indices_list: List[List[List[str]]] = [
+    chi_angles_atoms[restype_1to3[r]] for r in restypes
+]
+chi_angles_atom_indices_ours: list = map_structure_with_atom_order(
+    chi_angles_atom_indices_list
+)
 chi_angles_atom_indices = np.array(
-    [chi_atoms + ([[0, 0, 0, 0]] * (4 - len(chi_atoms))) for chi_atoms in chi_angles_atom_indices_list]
+    [
+        chi_atoms + ([[0, 0, 0, 0]] * (4 - len(chi_atoms)))
+        for chi_atoms in chi_angles_atom_indices_list
+    ]
 )
 
 # Mapping from (res_name, atom_name) pairs to the atom's chi group index
 # and atom index within that group.
-chi_groups_for_atom: Dict[Tuple[str, str], List[Tuple[int, int]]] = collections.defaultdict(list)
+chi_groups_for_atom: Dict[Tuple[str, str], List[Tuple[int, int]]] = (
+    collections.defaultdict(list)
+)
 for res_name, chi_angle_atoms_for_res in chi_angles_atoms.items():
     for chi_group_i, chi_group in enumerate(chi_angle_atoms_for_res):
         for atom_i, atom in enumerate(chi_group):
@@ -809,7 +953,9 @@ for res_name, chi_angle_atoms_for_res in chi_angles_atoms.items():
 chi_groups_for_atom = dict(chi_groups_for_atom)
 
 
-def _make_rigid_transformation_4x4(ex: np.ndarray, ey: np.ndarray, translation: np.ndarray) -> np.ndarray:
+def _make_rigid_transformation_4x4(
+    ex: np.ndarray, ey: np.ndarray, translation: np.ndarray
+) -> np.ndarray:
     """Create a rigid 4x4 transformation matrix from two axes and transl."""
     # Normalize ex.
     ex_normalized = ex / np.linalg.norm(ex)
@@ -961,7 +1107,9 @@ def make_atom14_dists_bounds(
 
 
 restype_atom14_ambiguous_atoms = np.zeros((21, 14), dtype=np.float32)
-restype_atom14_ambiguous_atoms_swap_idx: np.ndarray = np.tile(np.arange(14, dtype=int), (21, 1))
+restype_atom14_ambiguous_atoms_swap_idx: np.ndarray = np.tile(
+    np.arange(14, dtype=int), (21, 1)
+)
 
 
 def _make_atom14_ambiguity_feats() -> None:

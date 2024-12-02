@@ -29,7 +29,13 @@ from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_transforms, get_mmimdb_labels
+from utils_mmimdb import (
+    ImageEncoder,
+    JsonlDataset,
+    collate_fn,
+    get_image_transforms,
+    get_mmimdb_labels,
+)
 
 import transformers
 from transformers import (
@@ -68,7 +74,11 @@ def train(args, train_dataset, model, tokenizer, criterion):
         tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
-    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_sampler = (
+        RandomSampler(train_dataset)
+        if args.local_rank == -1
+        else DistributedSampler(train_dataset)
+    )
     train_dataloader = DataLoader(
         train_dataset,
         sampler=train_sampler,
@@ -79,21 +89,42 @@ def train(args, train_dataset, model, tokenizer, criterion):
 
     if args.max_steps > 0:
         t_total = args.max_steps
-        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
+        args.num_train_epochs = (
+            args.max_steps
+            // (len(train_dataloader) // args.gradient_accumulation_steps)
+            + 1
+        )
     else:
-        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+        t_total = (
+            len(train_dataloader)
+            // args.gradient_accumulation_steps
+            * args.num_train_epochs
+        )
 
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)
+            ],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.0,
+        },
     ]
 
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    optimizer = AdamW(
+        optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon
+    )
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
@@ -101,8 +132,12 @@ def train(args, train_dataset, model, tokenizer, criterion):
         try:
             from apex import amp
         except ImportError:
-            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-        model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
+            raise ImportError(
+                "Please install apex from https://www.github.com/nvidia/apex to use fp16 training."
+            )
+        model, optimizer = amp.initialize(
+            model, optimizer, opt_level=args.fp16_opt_level
+        )
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
@@ -111,14 +146,19 @@ def train(args, train_dataset, model, tokenizer, criterion):
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
         model = nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
+            model,
+            device_ids=[args.local_rank],
+            output_device=args.local_rank,
+            find_unused_parameters=True,
         )
 
     # Train!
     logger.info("***** Running training *****")
     logger.info("  Num examples = %d", len(train_dataset))
     logger.info("  Num Epochs = %d", args.num_train_epochs)
-    logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
+    logger.info(
+        "  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size
+    )
     logger.info(
         "  Total train batch size (w. parallel, distributed & accumulation) = %d",
         args.train_batch_size
@@ -132,10 +172,14 @@ def train(args, train_dataset, model, tokenizer, criterion):
     tr_loss, logging_loss = 0.0, 0.0
     best_f1, n_no_improve = 0, 0
     model.zero_grad()
-    train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
+    train_iterator = trange(
+        int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
+    )
     set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
-        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        epoch_iterator = tqdm(
+            train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0]
+        )
         for step, batch in enumerate(epoch_iterator):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
@@ -148,7 +192,9 @@ def train(args, train_dataset, model, tokenizer, criterion):
                 "modal_end_tokens": batch[4],
             }
             outputs = model(**inputs)
-            logits = outputs[0]  # model outputs are always tuple in transformers (see doc)
+            logits = outputs[
+                0
+            ]  # model outputs are always tuple in transformers (see doc)
             loss = criterion(logits, labels)
 
             if args.n_gpu > 1:
@@ -165,7 +211,9 @@ def train(args, train_dataset, model, tokenizer, criterion):
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
-                    nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    nn.utils.clip_grad_norm_(
+                        amp.master_params(optimizer), args.max_grad_norm
+                    )
                 else:
                     nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
@@ -174,7 +222,11 @@ def train(args, train_dataset, model, tokenizer, criterion):
                 model.zero_grad()
                 global_step += 1
 
-                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                if (
+                    args.local_rank in [-1, 0]
+                    and args.logging_steps > 0
+                    and global_step % args.logging_steps == 0
+                ):
                     logs = {}
                     if (
                         args.local_rank == -1 and args.evaluate_during_training
@@ -194,15 +246,24 @@ def train(args, train_dataset, model, tokenizer, criterion):
                         tb_writer.add_scalar(key, value, global_step)
                     print(json.dumps({**logs, **{"step": global_step}}))
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                if (
+                    args.local_rank in [-1, 0]
+                    and args.save_steps > 0
+                    and global_step % args.save_steps == 0
+                ):
                     # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
+                    output_dir = os.path.join(
+                        args.output_dir, "checkpoint-{}".format(global_step)
+                    )
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
                     model_to_save = (
                         model.module if hasattr(model, "module") else model
                     )  # Take care of distributed/parallel training
-                    torch.save(model_to_save.state_dict(), os.path.join(output_dir, WEIGHTS_NAME))
+                    torch.save(
+                        model_to_save.state_dict(),
+                        os.path.join(output_dir, WEIGHTS_NAME),
+                    )
                     torch.save(args, os.path.join(output_dir, "training_args.bin"))
                     logger.info("Saving model checkpoint to %s", output_dir)
 
@@ -243,7 +304,10 @@ def evaluate(args, model, tokenizer, criterion, prefix=""):
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(
-        eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size, collate_fn=collate_fn
+        eval_dataset,
+        sampler=eval_sampler,
+        batch_size=args.eval_batch_size,
+        collate_fn=collate_fn,
     )
 
     # multi-gpu eval
@@ -273,7 +337,9 @@ def evaluate(args, model, tokenizer, criterion, prefix=""):
                 "modal_end_tokens": batch[4],
             }
             outputs = model(**inputs)
-            logits = outputs[0]  # model outputs are always tuple in transformers (see doc)
+            logits = outputs[
+                0
+            ]  # model outputs are always tuple in transformers (see doc)
             tmp_eval_loss = criterion(logits, labels)
             eval_loss += tmp_eval_loss.mean().item()
         nb_eval_steps += 1
@@ -281,8 +347,12 @@ def evaluate(args, model, tokenizer, criterion, prefix=""):
             preds = torch.sigmoid(logits).detach().cpu().numpy() > 0.5
             out_label_ids = labels.detach().cpu().numpy()
         else:
-            preds = np.append(preds, torch.sigmoid(logits).detach().cpu().numpy() > 0.5, axis=0)
-            out_label_ids = np.append(out_label_ids, labels.detach().cpu().numpy(), axis=0)
+            preds = np.append(
+                preds, torch.sigmoid(logits).detach().cpu().numpy() > 0.5, axis=0
+            )
+            out_label_ids = np.append(
+                out_label_ids, labels.detach().cpu().numpy(), axis=0
+            )
 
     eval_loss = eval_loss / nb_eval_steps
     result = {
@@ -305,7 +375,13 @@ def load_examples(args, tokenizer, evaluate=False):
     path = os.path.join(args.data_dir, "dev.jsonl" if evaluate else "train.jsonl")
     transforms = get_image_transforms()
     labels = get_mmimdb_labels()
-    dataset = JsonlDataset(path, tokenizer, transforms, labels, args.max_seq_length - args.num_image_embeds - 2)
+    dataset = JsonlDataset(
+        path,
+        tokenizer,
+        transforms,
+        labels,
+        args.max_seq_length - args.num_image_embeds - 2,
+    )
     return dataset
 
 
@@ -337,7 +413,10 @@ def main():
 
     # Other parameters
     parser.add_argument(
-        "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
+        "--config_name",
+        default="",
+        type=str,
+        help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -361,20 +440,39 @@ def main():
         ),
     )
     parser.add_argument(
-        "--num_image_embeds", default=1, type=int, help="Number of Image Embeddings from the Image Encoder"
-    )
-    parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
-    parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
-    parser.add_argument(
-        "--evaluate_during_training", action="store_true", help="Rul evaluation during training at each logging step."
+        "--num_image_embeds",
+        default=1,
+        type=int,
+        help="Number of Image Embeddings from the Image Encoder",
     )
     parser.add_argument(
-        "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
+        "--do_train", action="store_true", help="Whether to run training."
+    )
+    parser.add_argument(
+        "--do_eval", action="store_true", help="Whether to run eval on the dev set."
+    )
+    parser.add_argument(
+        "--evaluate_during_training",
+        action="store_true",
+        help="Rul evaluation during training at each logging step.",
+    )
+    parser.add_argument(
+        "--do_lower_case",
+        action="store_true",
+        help="Set this flag if you are using an uncased model.",
     )
 
-    parser.add_argument("--per_gpu_train_batch_size", default=8, type=int, help="Batch size per GPU/CPU for training.")
     parser.add_argument(
-        "--per_gpu_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation."
+        "--per_gpu_train_batch_size",
+        default=8,
+        type=int,
+        help="Batch size per GPU/CPU for training.",
+    )
+    parser.add_argument(
+        "--per_gpu_eval_batch_size",
+        default=8,
+        type=int,
+        help="Batch size per GPU/CPU for evaluation.",
     )
     parser.add_argument(
         "--gradient_accumulation_steps",
@@ -382,38 +480,76 @@ def main():
         default=1,
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
-    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
-    parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-    parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument(
-        "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform."
+        "--learning_rate",
+        default=5e-5,
+        type=float,
+        help="The initial learning rate for Adam.",
     )
-    parser.add_argument("--patience", default=5, type=int, help="Patience for Early Stopping.")
+    parser.add_argument(
+        "--weight_decay", default=0.0, type=float, help="Weight decay if we apply some."
+    )
+    parser.add_argument(
+        "--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer."
+    )
+    parser.add_argument(
+        "--max_grad_norm", default=1.0, type=float, help="Max gradient norm."
+    )
+    parser.add_argument(
+        "--num_train_epochs",
+        default=3.0,
+        type=float,
+        help="Total number of training epochs to perform.",
+    )
+    parser.add_argument(
+        "--patience", default=5, type=int, help="Patience for Early Stopping."
+    )
     parser.add_argument(
         "--max_steps",
         default=-1,
         type=int,
         help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
     )
-    parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
+    parser.add_argument(
+        "--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps."
+    )
 
-    parser.add_argument("--logging_steps", type=int, default=50, help="Log every X updates steps.")
-    parser.add_argument("--save_steps", type=int, default=50, help="Save checkpoint every X updates steps.")
+    parser.add_argument(
+        "--logging_steps", type=int, default=50, help="Log every X updates steps."
+    )
+    parser.add_argument(
+        "--save_steps",
+        type=int,
+        default=50,
+        help="Save checkpoint every X updates steps.",
+    )
     parser.add_argument(
         "--eval_all_checkpoints",
         action="store_true",
         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
-    parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
-    parser.add_argument("--num_workers", type=int, default=8, help="number of worker threads for dataloading")
     parser.add_argument(
-        "--overwrite_output_dir", action="store_true", help="Overwrite the content of the output directory"
+        "--no_cuda", action="store_true", help="Avoid using CUDA when available"
     )
     parser.add_argument(
-        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
+        "--num_workers",
+        type=int,
+        default=8,
+        help="number of worker threads for dataloading",
     )
-    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+    parser.add_argument(
+        "--overwrite_output_dir",
+        action="store_true",
+        help="Overwrite the content of the output directory",
+    )
+    parser.add_argument(
+        "--overwrite_cache",
+        action="store_true",
+        help="Overwrite the cached training and evaluation sets",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="random seed for initialization"
+    )
 
     parser.add_argument(
         "--fp16",
@@ -429,9 +565,18 @@ def main():
             "See details at https://nvidia.github.io/apex/amp.html"
         ),
     )
-    parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
-    parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
-    parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+    parser.add_argument(
+        "--local_rank",
+        type=int,
+        default=-1,
+        help="For distributed training: local_rank",
+    )
+    parser.add_argument(
+        "--server_ip", type=str, default="", help="For distant debugging."
+    )
+    parser.add_argument(
+        "--server_port", type=str, default="", help="For distant debugging."
+    )
     args = parser.parse_args()
 
     if (
@@ -452,12 +597,16 @@ def main():
         import ptvsd
 
         print("Waiting for debugger attach")
-        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
+        ptvsd.enable_attach(
+            address=(args.server_ip, args.server_port), redirect_output=True
+        )
         ptvsd.wait_for_attach()
 
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        device = torch.device(
+            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+        )
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
@@ -496,7 +645,9 @@ def main():
     # Setup model
     labels = get_mmimdb_labels()
     num_labels = len(labels)
-    transformer_config = AutoConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
+    transformer_config = AutoConfig.from_pretrained(
+        args.config_name if args.config_name else args.model_name_or_path
+    )
     tokenizer = AutoTokenizer.from_pretrained(
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
         do_lower_case=args.do_lower_case,
@@ -522,7 +673,8 @@ def main():
         label_frequences = train_dataset.get_label_frequencies()
         label_frequences = [label_frequences[l] for l in labels]
         label_weights = (
-            torch.tensor(label_frequences, device=args.device, dtype=torch.float) / len(train_dataset)
+            torch.tensor(label_frequences, device=args.device, dtype=torch.float)
+            / len(train_dataset)
         ) ** -1
         criterion = nn.BCEWithLogitsLoss(pos_weight=label_weights)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, criterion)
@@ -536,7 +688,9 @@ def main():
         model_to_save = (
             model.module if hasattr(model, "module") else model
         )  # Take care of distributed/parallel training
-        torch.save(model_to_save.state_dict(), os.path.join(args.output_dir, WEIGHTS_NAME))
+        torch.save(
+            model_to_save.state_dict(), os.path.join(args.output_dir, WEIGHTS_NAME)
+        )
         tokenizer.save_pretrained(args.output_dir)
 
         # Good practice: save your training arguments together with the trained model
@@ -554,13 +708,18 @@ def main():
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = [
-                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
+                os.path.dirname(c)
+                for c in sorted(
+                    glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True)
+                )
             ]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
+            prefix = (
+                checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
+            )
             model = MMBTForClassification(config, transformer, img_encoder)
             model.load_state_dict(torch.load(checkpoint))
             model.to(args.device)

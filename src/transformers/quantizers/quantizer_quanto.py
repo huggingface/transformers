@@ -84,11 +84,15 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            logger.info("You did not specify `torch_dtype` in `from_pretrained`. Setting it to `torch.float32`.")
+            logger.info(
+                "You did not specify `torch_dtype` in `from_pretrained`. Setting it to `torch.float32`."
+            )
             torch_dtype = torch.float32
         return torch_dtype
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(
+        self, model, missing_keys: List[str], prefix: str
+    ) -> List[str]:
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
         elif is_quanto_available():
@@ -134,7 +138,9 @@ class QuantoHfQuantizer(HfQuantizer):
         if device_map is not None and param_device is not None:
             device_map_values = set(device_map.values())
             if param_device == "cpu" and len(device_map_values) > 1:
-                if not (device_map_values == {"cpu"} or device_map_values == {"cpu", "disk"}):
+                if not (
+                    device_map_values == {"cpu"} or device_map_values == {"cpu", "disk"}
+                ):
                     return False
 
         module, tensor_name = get_module_from_name(model, param_name)
@@ -145,7 +151,9 @@ class QuantoHfQuantizer(HfQuantizer):
         else:
             return False
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(
+        self, max_memory: Dict[str, Union[int, str]]
+    ) -> Dict[str, Union[int, str]]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
@@ -169,7 +177,9 @@ class QuantoHfQuantizer(HfQuantizer):
         module.weight.requires_grad = False
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.27.0"):
+        if version.parse(importlib.metadata.version("accelerate")) > version.parse(
+            "0.27.0"
+        ):
             from accelerate.utils import CustomDtype
 
             mapping = {
@@ -196,7 +206,9 @@ class QuantoHfQuantizer(HfQuantizer):
         if self.quantization_config.modules_to_not_convert is None:
             self.modules_to_not_convert = get_keys_to_not_convert(model)
         else:
-            self.modules_to_not_convert = self.quantization_config.modules_to_not_convert
+            self.modules_to_not_convert = (
+                self.quantization_config.modules_to_not_convert
+            )
 
         if not isinstance(self.modules_to_not_convert, list):
             self.modules_to_not_convert = [self.modules_to_not_convert]
@@ -204,7 +216,9 @@ class QuantoHfQuantizer(HfQuantizer):
         self.modules_to_not_convert.extend(keep_in_fp32_modules)
 
         model, _ = replace_with_quanto_layers(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            quantization_config=self.quantization_config,
         )
         model.config.quantization_config = self.quantization_config
 

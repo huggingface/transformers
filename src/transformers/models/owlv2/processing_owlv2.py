@@ -46,7 +46,15 @@ class Owlv2Processor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.__call__ with OWLViT->OWLv2
-    def __call__(self, text=None, images=None, query_images=None, padding="max_length", return_tensors="np", **kwargs):
+    def __call__(
+        self,
+        text=None,
+        images=None,
+        query_images=None,
+        padding="max_length",
+        return_tensors="np",
+        **kwargs
+    ):
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
@@ -88,8 +96,14 @@ class Owlv2Processor(ProcessorMixin):
             )
 
         if text is not None:
-            if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
-                encodings = [self.tokenizer(text, padding=padding, return_tensors=return_tensors, **kwargs)]
+            if isinstance(text, str) or (
+                isinstance(text, List) and not isinstance(text[0], List)
+            ):
+                encodings = [
+                    self.tokenizer(
+                        text, padding=padding, return_tensors=return_tensors, **kwargs
+                    )
+                ]
 
             elif isinstance(text, List) and isinstance(text[0], List):
                 encodings = []
@@ -102,32 +116,52 @@ class Owlv2Processor(ProcessorMixin):
                     if len(t) != max_num_queries:
                         t = t + [" "] * (max_num_queries - len(t))
 
-                    encoding = self.tokenizer(t, padding=padding, return_tensors=return_tensors, **kwargs)
+                    encoding = self.tokenizer(
+                        t, padding=padding, return_tensors=return_tensors, **kwargs
+                    )
                     encodings.append(encoding)
             else:
-                raise TypeError("Input text should be a string, a list of strings or a nested list of strings")
+                raise TypeError(
+                    "Input text should be a string, a list of strings or a nested list of strings"
+                )
 
             if return_tensors == "np":
-                input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
+                input_ids = np.concatenate(
+                    [encoding["input_ids"] for encoding in encodings], axis=0
+                )
+                attention_mask = np.concatenate(
+                    [encoding["attention_mask"] for encoding in encodings], axis=0
+                )
 
             elif return_tensors == "jax" and is_flax_available():
                 import jax.numpy as jnp
 
-                input_ids = jnp.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = jnp.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
+                input_ids = jnp.concatenate(
+                    [encoding["input_ids"] for encoding in encodings], axis=0
+                )
+                attention_mask = jnp.concatenate(
+                    [encoding["attention_mask"] for encoding in encodings], axis=0
+                )
 
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
-                input_ids = torch.cat([encoding["input_ids"] for encoding in encodings], dim=0)
-                attention_mask = torch.cat([encoding["attention_mask"] for encoding in encodings], dim=0)
+                input_ids = torch.cat(
+                    [encoding["input_ids"] for encoding in encodings], dim=0
+                )
+                attention_mask = torch.cat(
+                    [encoding["attention_mask"] for encoding in encodings], dim=0
+                )
 
             elif return_tensors == "tf" and is_tf_available():
                 import tensorflow as tf
 
-                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings], axis=0)
+                input_ids = tf.stack(
+                    [encoding["input_ids"] for encoding in encodings], axis=0
+                )
+                attention_mask = tf.stack(
+                    [encoding["attention_mask"] for encoding in encodings], axis=0
+                )
 
             else:
                 raise ValueError("Target return tensor type could not be returned")
@@ -144,7 +178,9 @@ class Owlv2Processor(ProcessorMixin):
             encoding["query_pixel_values"] = query_pixel_values
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(
+                images, return_tensors=return_tensors, **kwargs
+            )
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
@@ -155,7 +191,9 @@ class Owlv2Processor(ProcessorMixin):
         elif text is not None or query_images is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchEncoding(
+                data=dict(**image_features), tensor_type=return_tensors
+            )
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_object_detection with OWLViT->OWLv2
     def post_process_object_detection(self, *args, **kwargs):

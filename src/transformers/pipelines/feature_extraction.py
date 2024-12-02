@@ -37,7 +37,9 @@ class FeatureExtractionPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models).
     """
 
-    def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):
+    def _sanitize_parameters(
+        self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs
+    ):
         if tokenize_kwargs is None:
             tokenize_kwargs = {}
 
@@ -57,7 +59,9 @@ class FeatureExtractionPipeline(Pipeline):
         return preprocess_params, {}, postprocess_params
 
     def preprocess(self, inputs, **tokenize_kwargs) -> Dict[str, GenericTensor]:
-        model_inputs = self.tokenizer(inputs, return_tensors=self.framework, **tokenize_kwargs)
+        model_inputs = self.tokenizer(
+            inputs, return_tensors=self.framework, **tokenize_kwargs
+        )
         return model_inputs
 
     def _forward(self, model_inputs):

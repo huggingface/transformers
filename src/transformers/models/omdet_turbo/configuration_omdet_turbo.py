@@ -206,7 +206,9 @@ class OmDetTurboConfig(PretrainedConfig):
                     "always_partition": True,
                 }
         elif backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `swin` vision config.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `swin` vision config."
+            )
             backbone_config = CONFIG_MAPPING["swin"](
                 window_size=7,
                 image_size=image_size,
@@ -248,7 +250,9 @@ class OmDetTurboConfig(PretrainedConfig):
         self.backbone = backbone
         self.backbone_kwargs = backbone_kwargs
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.apply_layernorm_after_vision_backbone = apply_layernorm_after_vision_backbone
+        self.apply_layernorm_after_vision_backbone = (
+            apply_layernorm_after_vision_backbone
+        )
         self.image_size = image_size
         self.disable_custom_kernels = disable_custom_kernels
         self.layer_norm_eps = layer_norm_eps

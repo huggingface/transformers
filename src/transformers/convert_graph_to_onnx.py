@@ -63,7 +63,11 @@ class OnnxConverterArgumentParser(ArgumentParser):
             required=True,
             help="Model's id or path (ex: google-bert/bert-base-cased)",
         )
-        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: google-bert/bert-base-cased)")
+        self.add_argument(
+            "--tokenizer",
+            type=str,
+            help="Tokenizer's id or path (ex: google-bert/bert-base-cased)",
+        )
         self.add_argument(
             "--framework",
             type=str,
@@ -99,7 +103,9 @@ def generate_identified_filename(filename: Path, identifier: str) -> Path:
 
     Returns: String with concatenated identifier at the end of the filename
     """
-    return filename.parent.joinpath(filename.stem + identifier).with_suffix(filename.suffix)
+    return filename.parent.joinpath(filename.stem + identifier).with_suffix(
+        filename.suffix
+    )
 
 
 def check_onnxruntime_requirements(minimum_version: Version):
@@ -159,7 +165,9 @@ def ensure_valid_input(model, tokens, input_names):
     return ordered_input_names, tuple(model_args)
 
 
-def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
+def infer_shapes(
+    nlp: Pipeline, framework: str
+) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
     """
     Attempt to infer the static vs dynamic axes for each input and output tensors for a specific model
 
@@ -181,14 +189,22 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
         else:
             # Let's assume batch is the first axis with only 1 element (~~ might not be always true ...)
-            axes = {[axis for axis, numel in enumerate(tensor.shape) if numel == 1][0]: "batch"}
+            axes = {
+                [axis for axis, numel in enumerate(tensor.shape) if numel == 1][
+                    0
+                ]: "batch"
+            }
             if is_input:
                 if len(tensor.shape) == 2:
                     axes[1] = "sequence"
                 else:
-                    raise ValueError(f"Unable to infer tensor axes ({len(tensor.shape)})")
+                    raise ValueError(
+                        f"Unable to infer tensor axes ({len(tensor.shape)})"
+                    )
             else:
-                seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
+                seq_axes = [
+                    dim for dim, shape in enumerate(tensor.shape) if shape == seq_len
+                ]
                 axes.update({dim: "sequence" for dim in seq_axes})
 
         print(f"Found {'input' if is_input else 'output'} {name} with shape: {axes}")
@@ -204,7 +220,9 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
     # Generate input names & axes
     input_vars = list(tokens.keys())
-    input_dynamic_axes = {k: build_shape_dict(k, v, True, seq_len) for k, v in tokens.items()}
+    input_dynamic_axes = {
+        k: build_shape_dict(k, v, True, seq_len) for k, v in tokens.items()
+    }
 
     # flatten potentially grouped outputs (past for gpt2, attentions)
     outputs_flat = []
@@ -216,7 +234,10 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
     # Generate output names & axes
     output_names = [f"output_{i}" for i in range(len(outputs_flat))]
-    output_dynamic_axes = {k: build_shape_dict(k, v, False, seq_len) for k, v in zip(output_names, outputs_flat)}
+    output_dynamic_axes = {
+        k: build_shape_dict(k, v, False, seq_len)
+        for k, v in zip(output_names, outputs_flat)
+    }
 
     # Create the aggregated axes representation
     dynamic_axes = dict(input_dynamic_axes, **output_dynamic_axes)
@@ -224,7 +245,11 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
 
 def load_graph_from_args(
-    pipeline_name: str, framework: str, model: str, tokenizer: Optional[str] = None, **models_kwargs
+    pipeline_name: str,
+    framework: str,
+    model: str,
+    tokenizer: Optional[str] = None,
+    **models_kwargs,
 ) -> Pipeline:
     """
     Convert the set of arguments provided through the CLI to an actual pipeline reference (tokenizer + model
@@ -244,14 +269,24 @@ def load_graph_from_args(
 
     # Check the wanted framework is available
     if framework == "pt" and not is_torch_available():
-        raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
+        raise Exception(
+            "Cannot convert because PyTorch is not installed. Please install torch first."
+        )
     if framework == "tf" and not is_tf_available():
-        raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
+        raise Exception(
+            "Cannot convert because TF is not installed. Please install tensorflow first."
+        )
 
     print(f"Loading pipeline (model: {model}, tokenizer: {tokenizer})")
 
     # Allocate tokenizer and model
-    return pipeline(pipeline_name, model=model, tokenizer=tokenizer, framework=framework, model_kwargs=models_kwargs)
+    return pipeline(
+        pipeline_name,
+        model=model,
+        tokenizer=tokenizer,
+        framework=framework,
+        model_kwargs=models_kwargs,
+    )
 
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool):
@@ -268,7 +303,9 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
     """
     if not is_torch_available():
-        raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
+        raise Exception(
+            "Cannot convert because PyTorch is not installed. Please install torch first."
+        )
 
     import torch
     from torch.onnx import export
@@ -277,7 +314,9 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
     with torch.no_grad():
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
-        ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
+        ordered_input_names, model_args = ensure_valid_input(
+            nlp.model, tokens, input_names
+        )
 
         export(
             nlp.model,
@@ -304,7 +343,9 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     """
     if not is_tf_available():
-        raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
+        raise Exception(
+            "Cannot convert because TF is not installed. Please install tensorflow first."
+        )
 
     print("/!\\ Please note TensorFlow doesn't support exporting model > 2Gb /!\\")
 
@@ -320,7 +361,10 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
         # Forward
         nlp.model.predict(tokens.data)
-        input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in tokens.items()]
+        input_signature = [
+            tf.TensorSpec.from_tensor(tensor, name=key)
+            for key, tensor in tokens.items()
+        ]
         model_proto, _ = tf2onnx.convert.from_keras(
             nlp.model, input_signature, opset=opset, output_path=output.as_posix()
         )
@@ -366,13 +410,17 @@ def convert(
     print(f"ONNX opset version set to: {opset}")
 
     # Load the pipeline
-    nlp = load_graph_from_args(pipeline_name, framework, model, tokenizer, **model_kwargs)
+    nlp = load_graph_from_args(
+        pipeline_name, framework, model, tokenizer, **model_kwargs
+    )
 
     if not output.parent.exists():
         print(f"Creating folder {output.parent}")
         makedirs(output.parent.as_posix())
     elif len(listdir(output.parent.as_posix())) > 0:
-        raise Exception(f"Folder {output.parent.as_posix()} is not empty, aborting conversion")
+        raise Exception(
+            f"Folder {output.parent.as_posix()} is not empty, aborting conversion"
+        )
 
     # Export the graph
     if framework == "pt":
@@ -401,7 +449,9 @@ def optimize(onnx_model_path: Path) -> Path:
     _ = InferenceSession(onnx_model_path.as_posix(), sess_option)
 
     print(f"Optimized model has been written at {opt_model_path}: \N{HEAVY CHECK MARK}")
-    print("/!\\ Optimized model contains hardware specific operators which might not be portable. /!\\")
+    print(
+        "/!\\ Optimized model contains hardware specific operators which might not be portable. /!\\"
+    )
 
     return opt_model_path
 
@@ -475,7 +525,9 @@ def quantize(onnx_model_path: Path) -> Path:
     quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
     # Save model
-    print(f"Quantized model has been written at {quantized_model_path}: \N{HEAVY CHECK MARK}")
+    print(
+        f"Quantized model has been written at {quantized_model_path}: \N{HEAVY CHECK MARK}"
+    )
     onnx.save_model(quantizer.model.model, quantized_model_path.as_posix())
 
     return quantized_model_path
@@ -488,7 +540,9 @@ def verify(path: Path):
     print(f"Checking ONNX model loading from: {path} ...")
     try:
         onnx_options = SessionOptions()
-        _ = InferenceSession(path.as_posix(), onnx_options, providers=["CPUExecutionProvider"])
+        _ = InferenceSession(
+            path.as_posix(), onnx_options, providers=["CPUExecutionProvider"]
+        )
         print(f"Model {path} correctly loaded: \N{HEAVY CHECK MARK}")
     except RuntimeException as re:
         print(f"Error while loading the model {re}: \N{HEAVY BALLOT X}")

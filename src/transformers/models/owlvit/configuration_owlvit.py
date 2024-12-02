@@ -111,7 +111,12 @@ class OwlViTTextConfig(PretrainedConfig):
         eos_token_id=49407,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -256,11 +261,15 @@ class OwlViTConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
+            logger.info(
+                "text_config is None. Initializing the OwlViTTextConfig with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
+            logger.info(
+                "vision_config is None. initializing the OwlViTVisionConfig with default values."
+            )
 
         self.text_config = OwlViTTextConfig(**text_config)
         self.vision_config = OwlViTVisionConfig(**vision_config)
@@ -292,7 +301,10 @@ class OwlViTOnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                (
+                    "pixel_values",
+                    {0: "batch", 1: "num_channels", 2: "height", 3: "width"},
+                ),
                 ("attention_mask", {0: "batch", 1: "sequence"}),
             ]
         )
@@ -320,7 +332,10 @@ class OwlViTOnnxConfig(OnnxConfig):
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+            processor.tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            framework=framework,
         )
         image_input_dict = super().generate_dummy_inputs(
             processor.image_processor, batch_size=batch_size, framework=framework

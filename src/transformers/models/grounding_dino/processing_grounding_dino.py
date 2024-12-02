@@ -111,7 +111,9 @@ class GroundingDinoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
@@ -133,7 +135,9 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         # Get only text
         if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+            encoding_image_processor = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
         else:
             encoding_image_processor = BatchFeature()
 
@@ -222,7 +226,9 @@ class GroundingDinoProcessor(ProcessorMixin):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                boxes.device
+            )
             boxes = boxes * scale_fct[:, None, :]
 
         results = []

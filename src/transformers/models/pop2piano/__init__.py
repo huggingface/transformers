@@ -40,7 +40,12 @@ else:
     ]
 
 try:
-    if not (is_librosa_available() and is_essentia_available() and is_scipy_available() and is_torch_available()):
+    if not (
+        is_librosa_available()
+        and is_essentia_available()
+        and is_scipy_available()
+        and is_torch_available()
+    ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -85,7 +90,12 @@ if TYPE_CHECKING:
         )
 
     try:
-        if not (is_librosa_available() and is_essentia_available() and is_scipy_available() and is_torch_available()):
+        if not (
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_torch_available()
+        ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
@@ -117,4 +127,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

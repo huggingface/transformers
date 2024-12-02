@@ -61,15 +61,21 @@ class FTModelArguments:
     """Arguments pertaining to which config/tokenizer/model we are going to fine-tune from."""
 
     model_name_or_path: str = dataclasses.field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models."}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models."
+        }
     )
     use_fast_tokenizer: Optional[bool] = dataclasses.field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     cache_dir: Optional[str] = dataclasses.field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co."},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co."
+        },
     )
 
 
@@ -78,16 +84,20 @@ class FTDataArguments:
     """Arguments pertaining to what data we are going to input our model for training and evaluation."""
 
     train_file: str = dataclasses.field(
-        default=None, metadata={"help": "A csv or a json file containing the training data."}
+        default=None,
+        metadata={"help": "A csv or a json file containing the training data."},
     )
     eval_file: Optional[str] = dataclasses.field(
-        default=None, metadata={"help": "A csv or a json file containing the validation data."}
+        default=None,
+        metadata={"help": "A csv or a json file containing the validation data."},
     )
     test_file: Optional[str] = dataclasses.field(
-        default=None, metadata={"help": "A csv or a json file containing the test data."}
+        default=None,
+        metadata={"help": "A csv or a json file containing the test data."},
     )
     infer_file: Optional[str] = dataclasses.field(
-        default=None, metadata={"help": "A csv or a json file containing the data to predict on."}
+        default=None,
+        metadata={"help": "A csv or a json file containing the data to predict on."},
     )
     task_name: Optional[str] = dataclasses.field(
         default=None,
@@ -122,7 +132,9 @@ class FTTrainingArguments:
     """Training arguments pertaining to the training loop itself."""
 
     output_dir: str = dataclasses.field(
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written."}
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written."
+        }
     )
     do_train: Optional[bool] = dataclasses.field(
         default=False,
@@ -198,10 +210,13 @@ class FTTrainingArguments:
     )
     eval_steps: Optional[int] = dataclasses.field(
         default=1,
-        metadata={"help": 'Number of update steps between two evaluations if `eval_strategy="steps"`.'},
+        metadata={
+            "help": 'Number of update steps between two evaluations if `eval_strategy="steps"`.'
+        },
     )
     eval_metric: Optional[str] = dataclasses.field(
-        default="accuracy", metadata={"help": "The evaluation metric used for the task."}
+        default="accuracy",
+        metadata={"help": "The evaluation metric used for the task."},
     )
     keep_checkpoint_max: Optional[int] = dataclasses.field(
         default=1,
@@ -209,7 +224,9 @@ class FTTrainingArguments:
     )
     early_stopping_patience: Optional[int] = dataclasses.field(
         default=10,
-        metadata={"help": "Number of evaluation calls with no improvement after which training will be stopped."},
+        metadata={
+            "help": "Number of evaluation calls with no improvement after which training will be stopped."
+        },
     )
     early_stopping_threshold: Optional[float] = dataclasses.field(
         default=0.0,
@@ -219,20 +236,40 @@ class FTTrainingArguments:
     )
 
 
-def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_scheduler, eval_dataloader=None):
+def train(
+    args,
+    accelerator,
+    model,
+    tokenizer,
+    train_dataloader,
+    optimizer,
+    lr_scheduler,
+    eval_dataloader=None,
+):
     """Train a model on the given training data."""
 
-    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+    total_batch_size = (
+        args.per_device_train_batch_size
+        * accelerator.num_processes
+        * args.gradient_accumulation_steps
+    )
 
     logger.info("***** Running training *****")
     logger.info("  Num examples = %d", args.num_examples[Split.TRAIN.value])
-    logger.info("  Instantaneous batch size per device = %d", args.per_device_train_batch_size)
-    logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_batch_size)
+    logger.info(
+        "  Instantaneous batch size per device = %d", args.per_device_train_batch_size
+    )
+    logger.info(
+        "  Total train batch size (w. parallel, distributed & accumulation) = %d",
+        total_batch_size,
+    )
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", args.max_steps)
 
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.max_steps), disable=not accelerator.is_local_main_process)
+    progress_bar = tqdm(
+        range(args.max_steps), disable=not accelerator.is_local_main_process
+    )
 
     checkpoints = None
     eval_results = None
@@ -255,7 +292,10 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
             accelerator.backward(loss)
             train_loss += loss.item()
 
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            if (
+                step % args.gradient_accumulation_steps == 0
+                or step == len(train_dataloader) - 1
+            ):
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -270,12 +310,22 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                     and completed_steps % args.eval_steps == 0
                 ):
                     accelerator.wait_for_everyone()
-                    new_checkpoint = f"checkpoint-{IntervalStrategy.STEPS.value}-{completed_steps}"
-                    new_eval_result = evaluate(args, accelerator, eval_dataloader, "eval", model, new_checkpoint)[
-                        args.eval_metric
-                    ]
+                    new_checkpoint = (
+                        f"checkpoint-{IntervalStrategy.STEPS.value}-{completed_steps}"
+                    )
+                    new_eval_result = evaluate(
+                        args,
+                        accelerator,
+                        eval_dataloader,
+                        "eval",
+                        model,
+                        new_checkpoint,
+                    )[args.eval_metric]
                     logger.info(
-                        "Evaluation result at step %d: %s = %f", completed_steps, args.eval_metric, new_eval_result
+                        "Evaluation result at step %d: %s = %f",
+                        completed_steps,
+                        args.eval_metric,
+                        new_eval_result,
                     )
                     if checkpoints is None:
                         checkpoints = np.array([new_checkpoint])
@@ -283,7 +333,10 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                         best_checkpoint = new_checkpoint
                         best_eval_result = new_eval_result
                     else:
-                        if new_eval_result - best_eval_result > args.early_stopping_threshold:
+                        if (
+                            new_eval_result - best_eval_result
+                            > args.early_stopping_threshold
+                        ):
                             best_checkpoint = new_checkpoint
                             best_eval_result = new_eval_result
                             early_stopping_patience_counter = 0
@@ -293,11 +346,16 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                                 best_eval_result = new_eval_result
                             early_stopping_patience_counter += 1
 
-                        if early_stopping_patience_counter >= args.early_stopping_patience:
+                        if (
+                            early_stopping_patience_counter
+                            >= args.early_stopping_patience
+                        ):
                             should_training_stop = True
 
                         checkpoints = np.append(checkpoints, [new_checkpoint], axis=0)
-                        eval_results = np.append(eval_results, [new_eval_result], axis=0)
+                        eval_results = np.append(
+                            eval_results, [new_eval_result], axis=0
+                        )
                         sorted_ids = np.argsort(eval_results)
                         eval_results = eval_results[sorted_ids]
                         checkpoints = checkpoints[sorted_ids]
@@ -308,21 +366,30 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                         eval_results = eval_results[1:]
                         if checkpoint_to_remove != new_checkpoint:
                             if accelerator.is_main_process:
-                                shutil.rmtree(os.path.join(args.output_dir, checkpoint_to_remove), ignore_errors=True)
+                                shutil.rmtree(
+                                    os.path.join(args.output_dir, checkpoint_to_remove),
+                                    ignore_errors=True,
+                                )
                             accelerator.wait_for_everyone()
 
                     if new_checkpoint in checkpoints:
                         # Save model checkpoint
-                        checkpoint_output_dir = os.path.join(args.output_dir, new_checkpoint)
+                        checkpoint_output_dir = os.path.join(
+                            args.output_dir, new_checkpoint
+                        )
                         if accelerator.is_main_process:
                             if not os.path.exists(checkpoint_output_dir):
                                 os.makedirs(checkpoint_output_dir)
                         accelerator.wait_for_everyone()
                         unwrapped_model = accelerator.unwrap_model(model)
-                        unwrapped_model.save_pretrained(checkpoint_output_dir, save_function=accelerator.save)
+                        unwrapped_model.save_pretrained(
+                            checkpoint_output_dir, save_function=accelerator.save
+                        )
                         if accelerator.is_main_process:
                             tokenizer.save_pretrained(checkpoint_output_dir)
-                            logger.info("Saving model checkpoint to %s", checkpoint_output_dir)
+                            logger.info(
+                                "Saving model checkpoint to %s", checkpoint_output_dir
+                            )
 
             if completed_steps >= args.max_steps:
                 break
@@ -331,13 +398,21 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                 break
 
         # Evaluate during training
-        if eval_dataloader is not None and args.eval_strategy == IntervalStrategy.EPOCH.value:
+        if (
+            eval_dataloader is not None
+            and args.eval_strategy == IntervalStrategy.EPOCH.value
+        ):
             accelerator.wait_for_everyone()
             new_checkpoint = f"checkpoint-{IntervalStrategy.EPOCH.value}-{epoch}"
-            new_eval_result = evaluate(args, accelerator, eval_dataloader, "eval", model, new_checkpoint)[
-                args.eval_metric
-            ]
-            logger.info("Evaluation result at epoch %d: %s = %f", epoch, args.eval_metric, new_eval_result)
+            new_eval_result = evaluate(
+                args, accelerator, eval_dataloader, "eval", model, new_checkpoint
+            )[args.eval_metric]
+            logger.info(
+                "Evaluation result at epoch %d: %s = %f",
+                epoch,
+                args.eval_metric,
+                new_eval_result,
+            )
 
             if checkpoints is None:
                 checkpoints = np.array([new_checkpoint])
@@ -370,7 +445,10 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                 eval_results = eval_results[1:]
                 if checkpoint_to_remove != new_checkpoint:
                     if accelerator.is_main_process:
-                        shutil.rmtree(os.path.join(args.output_dir, checkpoint_to_remove), ignore_errors=True)
+                        shutil.rmtree(
+                            os.path.join(args.output_dir, checkpoint_to_remove),
+                            ignore_errors=True,
+                        )
                     accelerator.wait_for_everyone()
 
             if new_checkpoint in checkpoints:
@@ -381,7 +459,9 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                         os.makedirs(checkpoint_output_dir)
                 accelerator.wait_for_everyone()
                 unwrapped_model = accelerator.unwrap_model(model)
-                unwrapped_model.save_pretrained(checkpoint_output_dir, save_function=accelerator.save)
+                unwrapped_model.save_pretrained(
+                    checkpoint_output_dir, save_function=accelerator.save
+                )
                 if accelerator.is_main_process:
                     tokenizer.save_pretrained(checkpoint_output_dir)
                     logger.info("Saving model checkpoint to %s", checkpoint_output_dir)
@@ -395,10 +475,15 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
     if best_checkpoint is not None:
         # Save the best checkpoint
         logger.info("Best checkpoint: %s", best_checkpoint)
-        logger.info("Best evaluation result: %s = %f", args.eval_metric, best_eval_result)
+        logger.info(
+            "Best evaluation result: %s = %f", args.eval_metric, best_eval_result
+        )
         best_checkpoint_output_dir = os.path.join(args.output_dir, best_checkpoint)
         if accelerator.is_main_process:
-            shutil.move(best_checkpoint_output_dir, os.path.join(args.output_dir, "best-checkpoint"))
+            shutil.move(
+                best_checkpoint_output_dir,
+                os.path.join(args.output_dir, "best-checkpoint"),
+            )
             shutil.rmtree(best_checkpoint_output_dir, ignore_errors=True)
         accelerator.wait_for_everyone()
 
@@ -410,14 +495,25 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
 
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(checkpoint_output_dir, save_function=accelerator.save)
+        unwrapped_model.save_pretrained(
+            checkpoint_output_dir, save_function=accelerator.save
+        )
         if accelerator.is_main_process:
             tokenizer.save_pretrained(checkpoint_output_dir)
             logger.info("Saving model checkpoint to %s", checkpoint_output_dir)
     return completed_steps, train_loss / completed_steps
 
 
-def evaluate(args, accelerator, dataloader, eval_set, model, checkpoint, has_labels=True, write_to_file=True):
+def evaluate(
+    args,
+    accelerator,
+    dataloader,
+    eval_set,
+    model,
+    checkpoint,
+    has_labels=True,
+    write_to_file=True,
+):
     """Evaluate a model checkpoint on the given evaluation data."""
 
     num_examples = args.num_examples[eval_set]
@@ -440,13 +536,17 @@ def evaluate(args, accelerator, dataloader, eval_set, model, checkpoint, has_lab
 
         eval_loss += outputs.loss.item()
         logits = outputs.logits
-        predictions = logits.argmax(dim=-1) if not args.is_regression else logits.squeeze()
+        predictions = (
+            logits.argmax(dim=-1) if not args.is_regression else logits.squeeze()
+        )
         predictions = accelerator.gather(predictions)
 
         if all_predictions is None:
             all_predictions = predictions.detach().cpu().numpy()
         else:
-            all_predictions = np.append(all_predictions, predictions.detach().cpu().numpy(), axis=0)
+            all_predictions = np.append(
+                all_predictions, predictions.detach().cpu().numpy(), axis=0
+            )
 
         if not args.is_regression:
             probabilities = logits.softmax(dim=-1).max(dim=-1).values
@@ -454,7 +554,9 @@ def evaluate(args, accelerator, dataloader, eval_set, model, checkpoint, has_lab
             if all_probabilities is None:
                 all_probabilities = probabilities.detach().cpu().numpy()
             else:
-                all_probabilities = np.append(all_probabilities, probabilities.detach().cpu().numpy(), axis=0)
+                all_probabilities = np.append(
+                    all_probabilities, probabilities.detach().cpu().numpy(), axis=0
+                )
 
         if has_labels:
             references = batch["labels"]
@@ -462,7 +564,9 @@ def evaluate(args, accelerator, dataloader, eval_set, model, checkpoint, has_lab
             if all_references is None:
                 all_references = references.detach().cpu().numpy()
             else:
-                all_references = np.append(all_references, references.detach().cpu().numpy(), axis=0)
+                all_references = np.append(
+                    all_references, references.detach().cpu().numpy(), axis=0
+                )
 
             eval_metric.add_batch(
                 predictions=predictions,
@@ -478,17 +582,24 @@ def evaluate(args, accelerator, dataloader, eval_set, model, checkpoint, has_lab
         if write_to_file:
             accelerator.wait_for_everyone()
             if accelerator.is_main_process:
-                results_file = os.path.join(args.output_dir, f"{eval_set}_results_{checkpoint}.json")
+                results_file = os.path.join(
+                    args.output_dir, f"{eval_set}_results_{checkpoint}.json"
+                )
                 with open(results_file, "w") as f:
                     json.dump(eval_results, f, indent=4, sort_keys=True)
 
     if write_to_file:
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
-            output_file = os.path.join(args.output_dir, f"{eval_set}_output_{checkpoint}.csv")
+            output_file = os.path.join(
+                args.output_dir, f"{eval_set}_output_{checkpoint}.csv"
+            )
             if not args.is_regression:
                 assert len(all_predictions) == len(all_probabilities)
-                df = pd.DataFrame(list(zip(all_predictions, all_probabilities)), columns=["prediction", "probability"])
+                df = pd.DataFrame(
+                    list(zip(all_predictions, all_probabilities)),
+                    columns=["prediction", "probability"],
+                )
             else:
                 df = pd.DataFrame(all_predictions, columns=["prediction"])
             df = df.head(num_examples)
@@ -509,7 +620,9 @@ def load_from_pretrained(args, pretrained_model_name_or_path):
         cache_dir=args.cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        pretrained_model_name_or_path, use_fast=args.use_fast_tokenizer, cache_dir=args.cache_dir
+        pretrained_model_name_or_path,
+        use_fast=args.use_fast_tokenizer,
+        cache_dir=args.cache_dir,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         pretrained_model_name_or_path,
@@ -547,7 +660,9 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     # Setup logging, we only want one process per machine to log things on the
     # screen. accelerator.is_local_main_process is only True for one process per
     # machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.setLevel(
+        logging.INFO if accelerator.is_local_main_process else logging.ERROR
+    )
 
     model_args = FTModelArguments(model_name_or_path=model_name_or_path)
     data_args = FTDataArguments(train_file=train_file)
@@ -584,11 +699,16 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
 
     for key in data_files:
         extension = data_files[key].split(".")[-1]
-        assert extension in ["csv", "json"], f"`{key}_file` should be a csv or a json file."
+        assert extension in [
+            "csv",
+            "json",
+        ], f"`{key}_file` should be a csv or a json file."
         if args.data_file_extension is None:
             args.data_file_extension = extension
         else:
-            assert extension == args.data_file_extension, f"`{key}_file` should be a {args.data_file_extension} file`."
+            assert (
+                extension == args.data_file_extension
+            ), f"`{key}_file` should be a {args.data_file_extension} file`."
 
     assert (
         args.eval_metric in datasets.list_metrics()
@@ -621,7 +741,10 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     raw_datasets = load_dataset(args.data_file_extension, data_files=data_files)
 
     # Labels
-    is_regression = raw_datasets[Split.TRAIN.value].features["label"].dtype in ["float32", "float64"]
+    is_regression = raw_datasets[Split.TRAIN.value].features["label"].dtype in [
+        "float32",
+        "float64",
+    ]
     args.is_regression = is_regression
 
     if args.is_regression:
@@ -638,7 +761,9 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     config, tokenizer, model = load_from_pretrained(args, args.model_name_or_path)
 
     # Preprocessing the datasets
-    non_label_column_names = [name for name in raw_datasets[Split.TRAIN.value].column_names if name != "label"]
+    non_label_column_names = [
+        name for name in raw_datasets[Split.TRAIN.value].column_names if name != "label"
+    ]
     if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
         sentence1_key, sentence2_key = "sentence1", "sentence2"
     else:
@@ -655,9 +780,13 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     def preprocess_function(examples):
         # Tokenize the texts
         texts = (
-            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+            (examples[sentence1_key],)
+            if sentence2_key is None
+            else (examples[sentence1_key], examples[sentence2_key])
         )
-        result = tokenizer(*texts, padding=padding, max_length=args.max_length, truncation=True)
+        result = tokenizer(
+            *texts, padding=padding, max_length=args.max_length, truncation=True
+        )
 
         if "label" in examples:
             if label_to_id is not None:
@@ -685,9 +814,21 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     args.num_examples = num_examples
 
     train_dataset = processed_datasets[Split.TRAIN.value]
-    eval_dataset = processed_datasets[Split.EVAL.value] if Split.EVAL.value in processed_datasets else None
-    test_dataset = processed_datasets[Split.TEST.value] if Split.TEST.value in processed_datasets else None
-    infer_dataset = processed_datasets[Split.INFER.value] if Split.INFER.value in processed_datasets else None
+    eval_dataset = (
+        processed_datasets[Split.EVAL.value]
+        if Split.EVAL.value in processed_datasets
+        else None
+    )
+    test_dataset = (
+        processed_datasets[Split.TEST.value]
+        if Split.TEST.value in processed_datasets
+        else None
+    )
+    infer_dataset = (
+        processed_datasets[Split.INFER.value]
+        if Split.INFER.value in processed_datasets
+        else None
+    )
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -711,7 +852,9 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
             pad_to_multiple_of = 8
         else:
             pad_to_multiple_of = None
-        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=pad_to_multiple_of)
+        data_collator = DataCollatorWithPadding(
+            tokenizer, pad_to_multiple_of=pad_to_multiple_of
+        )
 
     train_dataloader = DataLoader(
         train_dataset,
@@ -723,17 +866,23 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
 
     if eval_dataset is not None:
         eval_dataloader = DataLoader(
-            eval_dataset, batch_size=args.per_device_eval_batch_size, collate_fn=data_collator
+            eval_dataset,
+            batch_size=args.per_device_eval_batch_size,
+            collate_fn=data_collator,
         )
 
     if test_dataset is not None:
         test_dataloader = DataLoader(
-            test_dataset, batch_size=args.per_device_eval_batch_size, collate_fn=data_collator
+            test_dataset,
+            batch_size=args.per_device_eval_batch_size,
+            collate_fn=data_collator,
         )
 
     if infer_dataset is not None:
         infer_dataloader = DataLoader(
-            infer_dataset, batch_size=args.per_device_eval_batch_size, collate_fn=data_collator
+            infer_dataset,
+            batch_size=args.per_device_eval_batch_size,
+            collate_fn=data_collator,
         )
 
     # Optimizer
@@ -741,26 +890,48 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)
+            ],
             "weight_decay": args.weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
             "weight_decay": 0.0,
         },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader, test_dataloader, infer_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader, test_dataloader, infer_dataloader
+    (
+        model,
+        optimizer,
+        train_dataloader,
+        eval_dataloader,
+        test_dataloader,
+        infer_dataloader,
+    ) = accelerator.prepare(
+        model,
+        optimizer,
+        train_dataloader,
+        eval_dataloader,
+        test_dataloader,
+        infer_dataloader,
     )
 
     # Note -> the training dataloader needs to be prepared before we grab its
     # length below (cause its length will be shorter in multiprocess)
 
     # Scheduler and math around the number of training steps.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(
+        len(train_dataloader) / args.gradient_accumulation_steps
+    )
     if args.max_steps == -1:
         args.max_steps = args.num_train_epochs * num_update_steps_per_epoch
     else:
@@ -775,10 +946,21 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
 
     # Train
     completed_steps, avg_train_loss = train(
-        args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_scheduler, eval_dataloader
+        args,
+        accelerator,
+        model,
+        tokenizer,
+        train_dataloader,
+        optimizer,
+        lr_scheduler,
+        eval_dataloader,
     )
     accelerator.wait_for_everyone()
-    logger.info("Training job completed: completed_steps = %d, avg_train_loss = %f", completed_steps, avg_train_loss)
+    logger.info(
+        "Training job completed: completed_steps = %d, avg_train_loss = %f",
+        completed_steps,
+        avg_train_loss,
+    )
 
     args.model_name_or_path = os.path.join(args.output_dir, "best-checkpoint")
     logger.info("Loading the best checkpoint: %s", args.model_name_or_path)
@@ -788,27 +970,59 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     if args.do_eval:
         # Evaluate
         if eval_dataloader is not None:
-            logger.info("***** Running evaluation on the eval data using the best checkpoint *****")
-            eval_results = evaluate(args, accelerator, eval_dataloader, Split.EVAL.value, model, "best-checkpoint")
+            logger.info(
+                "***** Running evaluation on the eval data using the best checkpoint *****"
+            )
+            eval_results = evaluate(
+                args,
+                accelerator,
+                eval_dataloader,
+                Split.EVAL.value,
+                model,
+                "best-checkpoint",
+            )
             avg_eval_loss = eval_results["avg_eval_loss"]
             eval_metric = eval_results[args.eval_metric]
             logger.info("Evaluation job completed: avg_eval_loss = %f", avg_eval_loss)
-            logger.info("Evaluation result for the best checkpoint: %s = %f", args.eval_metric, eval_metric)
+            logger.info(
+                "Evaluation result for the best checkpoint: %s = %f",
+                args.eval_metric,
+                eval_metric,
+            )
 
         if test_dataloader is not None:
-            logger.info("***** Running evaluation on the test data using the best checkpoint *****")
-            eval_results = evaluate(args, accelerator, test_dataloader, Split.TEST.value, model, "best-checkpoint")
+            logger.info(
+                "***** Running evaluation on the test data using the best checkpoint *****"
+            )
+            eval_results = evaluate(
+                args,
+                accelerator,
+                test_dataloader,
+                Split.TEST.value,
+                model,
+                "best-checkpoint",
+            )
             avg_eval_loss = eval_results["avg_eval_loss"]
             eval_metric = eval_results[args.eval_metric]
             logger.info("Test job completed: avg_test_loss = %f", avg_eval_loss)
-            logger.info("Test result for the best checkpoint: %s = %f", args.eval_metric, eval_metric)
+            logger.info(
+                "Test result for the best checkpoint: %s = %f",
+                args.eval_metric,
+                eval_metric,
+            )
 
     if args.do_predict:
         # Predict
         if infer_dataloader is not None:
             logger.info("***** Running inference using the best checkpoint *****")
             evaluate(
-                args, accelerator, infer_dataloader, Split.INFER.value, model, "best-checkpoint", has_labels=False
+                args,
+                accelerator,
+                infer_dataloader,
+                Split.INFER.value,
+                model,
+                "best-checkpoint",
+                has_labels=False,
             )
             logger.info("Inference job completed.")
 

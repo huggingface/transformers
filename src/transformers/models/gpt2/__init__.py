@@ -85,7 +85,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"]
+    _import_structure["modeling_flax_gpt2"] = [
+        "FlaxGPT2LMHeadModel",
+        "FlaxGPT2Model",
+        "FlaxGPT2PreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
@@ -145,9 +149,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
+        from .modeling_flax_gpt2 import (
+            FlaxGPT2LMHeadModel,
+            FlaxGPT2Model,
+            FlaxGPT2PreTrainedModel,
+        )
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

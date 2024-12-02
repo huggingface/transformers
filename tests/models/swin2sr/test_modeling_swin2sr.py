@@ -21,7 +21,12 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -96,7 +101,9 @@ class Swin2SRModelTester:
         self.seq_length = (image_size // patch_size) ** 2
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -136,7 +143,8 @@ class Swin2SRModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.embed_dim, self.image_size, self.image_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.embed_dim, self.image_size, self.image_size),
         )
 
     def create_and_check_for_image_super_resolution(self, config, pixel_values, labels):
@@ -148,7 +156,12 @@ class Swin2SRModelTester:
         expected_image_size = self.image_size * self.upscale
         self.parent.assertEqual(
             result.reconstruction.shape,
-            (self.batch_size, self.num_channels_out, expected_image_size, expected_image_size),
+            (
+                self.batch_size,
+                self.num_channels_out,
+                expected_image_size,
+                expected_image_size,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -160,9 +173,14 @@ class Swin2SRModelTester:
 
 @require_torch
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
+    all_model_classes = (
+        (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
+        {
+            "image-feature-extraction": Swin2SRModel,
+            "image-to-image": Swin2SRForImageSuperResolution,
+        }
         if is_torch_available()
         else {}
     )
@@ -192,7 +210,9 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_model_for_image_super_resolution(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_super_resolution(*config_and_inputs)
+        self.model_tester.create_and_check_for_image_super_resolution(
+            *config_and_inputs
+        )
 
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
@@ -286,7 +306,11 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
+                [
+                    self.model_tester.num_heads[0],
+                    window_size_squared,
+                    window_size_squared,
+                ],
             )
             out_len = len(outputs)
 
@@ -307,7 +331,11 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
+                [
+                    self.model_tester.num_heads[0],
+                    window_size_squared,
+                    window_size_squared,
+                ],
             )
 
 
@@ -317,7 +345,9 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class Swin2SRModelIntegrationTest(unittest.TestCase):
     def test_inference_image_super_resolution_head(self):
         processor = Swin2SRImageProcessor()
-        model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64").to(torch_device)
+        model = Swin2SRForImageSuperResolution.from_pretrained(
+            "caidas/swin2SR-classical-sr-x2-64"
+        ).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
@@ -330,9 +360,17 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 3, 976, 1296])
         self.assertEqual(outputs.reconstruction.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
+            [
+                [0.5458, 0.5546, 0.5638],
+                [0.5526, 0.5565, 0.5651],
+                [0.5396, 0.5426, 0.5621],
+            ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4
+            )
+        )
 
     def test_inference_fp16(self):
         processor = Swin2SRImageProcessor()
@@ -341,7 +379,11 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = processor(images=image, return_tensors="pt").to(model.dtype).to(torch_device)
+        inputs = (
+            processor(images=image, return_tensors="pt")
+            .to(model.dtype)
+            .to(torch_device)
+        )
 
         # forward pass
         with torch.no_grad():
@@ -351,6 +393,15 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 3, 976, 1296])
         self.assertEqual(outputs.reconstruction.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]], dtype=model.dtype
+            [
+                [0.5454, 0.5542, 0.5640],
+                [0.5518, 0.5562, 0.5649],
+                [0.5391, 0.5425, 0.5620],
+            ],
+            dtype=model.dtype,
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4
+            )
+        )

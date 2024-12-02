@@ -16,7 +16,10 @@
 import os
 import unittest
 
-from transformers.models.phobert.tokenization_phobert import VOCAB_FILES_NAMES, PhobertTokenizer
+from transformers.models.phobert.tokenization_phobert import (
+    VOCAB_FILES_NAMES,
+    PhobertTokenizer,
+)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -36,7 +39,9 @@ class PhobertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
 
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             for token in vocab_tokens:
@@ -54,9 +59,13 @@ class PhobertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = PhobertTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer = PhobertTokenizer(
+            self.vocab_file, self.merges_file, **self.special_tokens_map
+        )
         text = "Tôi là VinAI Research"
-        bpe_tokens = "T@@ ô@@ i l@@ à V@@ i@@ n@@ A@@ I R@@ e@@ s@@ e@@ a@@ r@@ c@@ h".split()
+        bpe_tokens = (
+            "T@@ ô@@ i l@@ à V@@ i@@ n@@ A@@ I R@@ e@@ s@@ e@@ a@@ r@@ c@@ h".split()
+        )
         tokens = tokenizer.tokenize(text)
         print(tokens)
         self.assertListEqual(tokens, bpe_tokens)
@@ -64,4 +73,6 @@ class PhobertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens + [tokenizer.unk_token]
 
         input_bpe_tokens = [4, 3, 5, 3, 3, 3, 3, 3, 3, 6, 7, 9, 3, 9, 3, 3, 3, 3, 3]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens
+        )

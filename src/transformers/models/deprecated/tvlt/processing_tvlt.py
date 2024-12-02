@@ -38,7 +38,9 @@ class TvltProcessor(ProcessorMixin):
     feature_extractor_class = "TvltFeatureExtractor"
 
     def __init__(self, image_processor, feature_extractor):
-        super().__init__(image_processor=image_processor, feature_extractor=feature_extractor)
+        super().__init__(
+            image_processor=image_processor, feature_extractor=feature_extractor
+        )
 
         self.image_processor = image_processor
         self.feature_extractor = feature_extractor
@@ -61,16 +63,26 @@ class TvltProcessor(ProcessorMixin):
         """
 
         if images is None and audio is None:
-            raise ValueError("You need to specify either an `images` or `audio` input to process.")
+            raise ValueError(
+                "You need to specify either an `images` or `audio` input to process."
+            )
 
         images_mixed_dict = None
         if images is not None:
-            images_dict = self.image_processor(images, mask_pixel=mask_pixel, *args, **kwargs)
+            images_dict = self.image_processor(
+                images, mask_pixel=mask_pixel, *args, **kwargs
+            )
         if images_mixed is not None:
-            images_mixed_dict = self.image_processor(images_mixed, is_mixed=True, *args, **kwargs)
+            images_mixed_dict = self.image_processor(
+                images_mixed, is_mixed=True, *args, **kwargs
+            )
         if audio is not None:
             audio_dict = self.feature_extractor(
-                audio, *args, sampling_rate=sampling_rate, mask_audio=mask_audio, **kwargs
+                audio,
+                *args,
+                sampling_rate=sampling_rate,
+                mask_audio=mask_audio,
+                **kwargs,
             )
 
         output_dict = {}
@@ -86,4 +98,6 @@ class TvltProcessor(ProcessorMixin):
     def model_input_names(self):
         image_processor_input_names = self.image_processor.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + feature_extractor_input_names))
+        return list(
+            dict.fromkeys(image_processor_input_names + feature_extractor_input_names)
+        )

@@ -67,7 +67,9 @@ class Split(Enum):
 
 class TokenClassificationTask:
     @staticmethod
-    def read_examples_from_file(data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    def read_examples_from_file(
+        data_dir, mode: Union[Split, str]
+    ) -> List[InputExample]:
         raise NotImplementedError
 
     @staticmethod
@@ -116,7 +118,10 @@ class TokenClassificationTask:
                 if len(word_tokens) > 0:
                     tokens.extend(word_tokens)
                     # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                    label_ids.extend([label_map[label]] + [pad_token_label_id] * (len(word_tokens) - 1))
+                    label_ids.extend(
+                        [label_map[label]]
+                        + [pad_token_label_id] * (len(word_tokens) - 1)
+                    )
 
             # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
             special_tokens_count = tokenizer.num_special_tokens_to_add()
@@ -169,7 +174,9 @@ class TokenClassificationTask:
             padding_length = max_seq_length - len(input_ids)
             if pad_on_left:
                 input_ids = ([pad_token] * padding_length) + input_ids
-                input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
+                input_mask = (
+                    [0 if mask_padding_with_zero else 1] * padding_length
+                ) + input_mask
                 segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
                 label_ids = ([pad_token_label_id] * padding_length) + label_ids
             else:
@@ -197,7 +204,10 @@ class TokenClassificationTask:
 
             features.append(
                 InputFeatures(
-                    input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids, label_ids=label_ids
+                    input_ids=input_ids,
+                    attention_mask=input_mask,
+                    token_type_ids=segment_ids,
+                    label_ids=label_ids,
                 )
             )
         return features
@@ -233,7 +243,9 @@ if is_torch_available():
             # Load data features from cache or dataset file
             cached_features_file = os.path.join(
                 data_dir,
-                "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
+                "cached_{}_{}_{}".format(
+                    mode.value, tokenizer.__class__.__name__, str(max_seq_length)
+                ),
             )
 
             # Make sure only the first process in distributed training processes the dataset,
@@ -241,11 +253,15 @@ if is_torch_available():
             lock_path = cached_features_file + ".lock"
             with FileLock(lock_path):
                 if os.path.exists(cached_features_file) and not overwrite_cache:
-                    logger.info(f"Loading features from cached file {cached_features_file}")
+                    logger.info(
+                        f"Loading features from cached file {cached_features_file}"
+                    )
                     self.features = torch.load(cached_features_file)
                 else:
                     logger.info(f"Creating features from dataset file at {data_dir}")
-                    examples = token_classification_task.read_examples_from_file(data_dir, mode)
+                    examples = token_classification_task.read_examples_from_file(
+                        data_dir, mode
+                    )
                     # TODO clean up all this to leverage built-in features of tokenizers
                     self.features = token_classification_task.convert_examples_to_features(
                         examples,
@@ -264,7 +280,9 @@ if is_torch_available():
                         pad_token_segment_id=tokenizer.pad_token_type_id,
                         pad_token_label_id=self.pad_token_label_id,
                     )
-                    logger.info(f"Saving features into cached file {cached_features_file}")
+                    logger.info(
+                        f"Saving features into cached file {cached_features_file}"
+                    )
                     torch.save(self.features, cached_features_file)
 
         def __len__(self):
@@ -323,7 +341,10 @@ if is_tf_available():
                 for ex in self.features:
                     if ex.token_type_ids is None:
                         yield (
-                            {"input_ids": ex.input_ids, "attention_mask": ex.attention_mask},
+                            {
+                                "input_ids": ex.input_ids,
+                                "attention_mask": ex.attention_mask,
+                            },
                             ex.label_ids,
                         )
                     else:
@@ -341,14 +362,24 @@ if is_tf_available():
                     gen,
                     ({"input_ids": tf.int32, "attention_mask": tf.int32}, tf.int64),
                     (
-                        {"input_ids": tf.TensorShape([None]), "attention_mask": tf.TensorShape([None])},
+                        {
+                            "input_ids": tf.TensorShape([None]),
+                            "attention_mask": tf.TensorShape([None]),
+                        },
                         tf.TensorShape([None]),
                     ),
                 )
             else:
                 self.dataset = tf.data.Dataset.from_generator(
                     gen,
-                    ({"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32}, tf.int64),
+                    (
+                        {
+                            "input_ids": tf.int32,
+                            "attention_mask": tf.int32,
+                            "token_type_ids": tf.int32,
+                        },
+                        tf.int64,
+                    ),
                     (
                         {
                             "input_ids": tf.TensorShape([None]),
@@ -360,7 +391,9 @@ if is_tf_available():
                 )
 
         def get_dataset(self):
-            self.dataset = self.dataset.apply(tf.data.experimental.assert_cardinality(len(self.features)))
+            self.dataset = self.dataset.apply(
+                tf.data.experimental.assert_cardinality(len(self.features))
+            )
 
             return self.dataset
 

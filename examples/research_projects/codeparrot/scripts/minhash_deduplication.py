@@ -40,7 +40,9 @@ class DuplicationIndex:
     ):
         self._duplication_jaccard_threshold = duplication_jaccard_threshold
         self._num_perm = NUM_PERM
-        self._index = MinHashLSH(threshold=self._duplication_jaccard_threshold, num_perm=self._num_perm)
+        self._index = MinHashLSH(
+            threshold=self._duplication_jaccard_threshold, num_perm=self._num_perm
+        )
 
         self._duplicate_clusters = defaultdict(set)
 
@@ -82,7 +84,10 @@ class DuplicationIndex:
         for base, duplicates in self._duplicate_clusters.items():
             cluster = [base] + list(duplicates)
             # reformat the cluster to be a list of dict
-            cluster = [{"base_index": el[0], "repo_name": el[1], "path": el[2]} for el in cluster]
+            cluster = [
+                {"base_index": el[0], "repo_name": el[1], "path": el[2]}
+                for el in cluster
+            ]
             duplicate_clusters.append(cluster)
         return duplicate_clusters
 
@@ -94,7 +99,9 @@ class DuplicationIndex:
 
 def _compute_min_hash(element):
     index, data = element
-    min_hash = get_min_hash([t for t in NON_ALPHA.split(data["content"]) if len(t.strip()) > 0])
+    min_hash = get_min_hash(
+        [t for t in NON_ALPHA.split(data["content"]) if len(t.strip()) > 0]
+    )
     if min_hash is not None:
         return (index, data["repo_name"], data["path"]), min_hash
 
@@ -119,7 +126,9 @@ def make_duplicate_clusters(dataset_iterator: Type[Dataset], jaccard_threshold: 
     """
     di = DuplicationIndex(duplication_jaccard_threshold=jaccard_threshold)
 
-    for filename, min_hash in tqdm(ThreadedIterator(minhash_iter(enumerate(dataset_iterator)), max_queue_size=100)):
+    for filename, min_hash in tqdm(
+        ThreadedIterator(minhash_iter(enumerate(dataset_iterator)), max_queue_size=100)
+    ):
         di.add(filename, min_hash)
 
     # Returns a List[Cluster] where Cluster is List[str] with the filenames.
@@ -243,14 +252,18 @@ def deduplicate_dataset(
         >>> ds_dedup, duplicate_clusters = deduplicate_dataset(ds, jaccard_threshold=0.85)
     """
     duplicate_clusters = make_duplicate_clusters(dataset, jaccard_threshold)
-    duplicate_indices = {x["base_index"] for cluster in duplicate_clusters for x in cluster}
+    duplicate_indices = {
+        x["base_index"] for cluster in duplicate_clusters for x in cluster
+    }
     extreme_dict = {}
     extremes_clusters = find_extremes(duplicate_clusters, dataset, jaccard_threshold)
     for extremes in extremes_clusters:
         for element in extremes:
             extreme_dict[element["base_index"]] = element
     remove_indices = duplicate_indices - set(extreme_dict.keys())
-    ds_filter = dataset.filter(lambda x, idx: idx not in remove_indices, with_indices=True)
+    ds_filter = dataset.filter(
+        lambda x, idx: idx not in remove_indices, with_indices=True
+    )
 
     # update duplicate_clusters
     for cluster in duplicate_clusters:

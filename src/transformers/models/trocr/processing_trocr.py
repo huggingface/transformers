@@ -51,7 +51,9 @@ class TrOCRProcessor(ProcessorMixin):
             )
             feature_extractor = kwargs.pop("feature_extractor")
 
-        image_processor = image_processor if image_processor is not None else feature_extractor
+        image_processor = (
+            image_processor if image_processor is not None else feature_extractor
+        )
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -79,7 +81,9 @@ class TrOCRProcessor(ProcessorMixin):
             args = args[1:]
 
         if images is None and text is None:
-            raise ValueError("You need to specify either an `images` or `text` input to process.")
+            raise ValueError(
+                "You need to specify either an `images` or `text` input to process."
+            )
 
         if images is not None:
             inputs = self.image_processor(images, *args, **kwargs)

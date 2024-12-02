@@ -43,8 +43,12 @@ class ImageFeatureExtractionPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models).
     """
 
-    def _sanitize_parameters(self, image_processor_kwargs=None, return_tensors=None, pool=None, **kwargs):
-        preprocess_params = {} if image_processor_kwargs is None else image_processor_kwargs
+    def _sanitize_parameters(
+        self, image_processor_kwargs=None, return_tensors=None, pool=None, **kwargs
+    ):
+        preprocess_params = (
+            {} if image_processor_kwargs is None else image_processor_kwargs
+        )
 
         postprocess_params = {}
         if pool is not None:
@@ -57,9 +61,13 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
         return preprocess_params, {}, postprocess_params
 
-    def preprocess(self, image, timeout=None, **image_processor_kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(
+        self, image, timeout=None, **image_processor_kwargs
+    ) -> Dict[str, GenericTensor]:
         image = load_image(image, timeout=timeout)
-        model_inputs = self.image_processor(image, return_tensors=self.framework, **image_processor_kwargs)
+        model_inputs = self.image_processor(
+            image, return_tensors=self.framework, **image_processor_kwargs
+        )
         if self.framework == "pt":
             model_inputs = model_inputs.to(self.torch_dtype)
         return model_inputs

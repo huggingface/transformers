@@ -45,7 +45,18 @@ class EnglishNormalizer:
             ]
         ]
 
-        self.ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+        self.ones = [
+            "",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+        ]
         self.teens = [
             "ten",
             "eleven",
@@ -58,7 +69,18 @@ class EnglishNormalizer:
             "eighteen",
             "nineteen",
         ]
-        self.tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+        self.tens = [
+            "",
+            "",
+            "twenty",
+            "thirty",
+            "forty",
+            "fifty",
+            "sixty",
+            "seventy",
+            "eighty",
+            "ninety",
+        ]
 
     def number_to_words(self, num: int) -> str:
         """
@@ -77,10 +99,14 @@ class EnglishNormalizer:
         elif num < 20:
             return self.teens[num - 10]
         elif num < 100:
-            return self.tens[num // 10] + ("-" + self.number_to_words(num % 10) if num % 10 != 0 else "")
+            return self.tens[num // 10] + (
+                "-" + self.number_to_words(num % 10) if num % 10 != 0 else ""
+            )
         elif num < 1000:
             return (
-                self.ones[num // 100] + " hundred" + (" " + self.number_to_words(num % 100) if num % 100 != 0 else "")
+                self.ones[num // 100]
+                + " hundred"
+                + (" " + self.number_to_words(num % 100) if num % 100 != 0 else "")
             )
         elif num < 1_000_000:
             return (
@@ -92,19 +118,31 @@ class EnglishNormalizer:
             return (
                 self.number_to_words(num // 1_000_000)
                 + " million"
-                + (", " + self.number_to_words(num % 1_000_000) if num % 1_000_000 != 0 else "")
+                + (
+                    ", " + self.number_to_words(num % 1_000_000)
+                    if num % 1_000_000 != 0
+                    else ""
+                )
             )
         elif num < 1_000_000_000_000:
             return (
                 self.number_to_words(num // 1_000_000_000)
                 + " billion"
-                + (", " + self.number_to_words(num % 1_000_000_000) if num % 1_000_000_000 != 0 else "")
+                + (
+                    ", " + self.number_to_words(num % 1_000_000_000)
+                    if num % 1_000_000_000 != 0
+                    else ""
+                )
             )
         elif num < 1_000_000_000_000_000:
             return (
                 self.number_to_words(num // 1_000_000_000_000)
                 + " trillion"
-                + (", " + self.number_to_words(num % 1_000_000_000_000) if num % 1_000_000_000_000 != 0 else "")
+                + (
+                    ", " + self.number_to_words(num % 1_000_000_000_000)
+                    if num % 1_000_000_000_000 != 0
+                    else ""
+                )
             )
         elif num < 1_000_000_000_000_000_000:
             return (

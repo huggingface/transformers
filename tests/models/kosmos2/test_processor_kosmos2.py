@@ -95,35 +95,55 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
-        image_processor = CLIPImageProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
+        image_processor = CLIPImageProcessor.from_pretrained(
+            "microsoft/kosmos-2-patch14-224"
+        )
         with TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = CLIPImageProcessor.from_pretrained(tmp_dir)
             assert image_processor.to_dict() == reloaded_image_processor.to_dict()
-            assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
+            assert (
+                image_processor.to_json_string()
+                == reloaded_image_processor.to_json_string()
+            )
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Kosmos2Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = Kosmos2Processor(
+            tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-        processor = Kosmos2Processor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+        image_processor_add_kwargs = self.get_image_processor(
+            do_normalize=False, padding_value=1.0
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        processor = Kosmos2Processor.from_pretrained(
+            self.tmpdirname,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_normalize=False,
+            padding_value=1.0,
+        )
+
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Kosmos2Processor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         image_input = self.prepare_image_inputs()
 
@@ -131,13 +151,17 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_image_processor.keys():
-            self.assertAlmostEqual(input_image_processor[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_image_processor[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Kosmos2Processor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "This is a test"
 
@@ -152,7 +176,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Kosmos2Processor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "This is a test"
         image_input = self.prepare_image_inputs()
@@ -160,7 +186,13 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
+            list(inputs.keys()),
+            [
+                "pixel_values",
+                "input_ids",
+                "attention_mask",
+                "image_embeds_position_mask",
+            ],
         )
 
         # test if it raises when no input is passed
@@ -171,7 +203,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Kosmos2Processor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -184,7 +218,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Kosmos2Processor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "This is a test"
         image_input = self.prepare_image_inputs()
@@ -192,7 +228,13 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # both image and text
         inputs = processor(text=input_str, images=image_input)
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
+            list(inputs.keys()),
+            [
+                "pixel_values",
+                "input_ids",
+                "attention_mask",
+                "image_embeds_position_mask",
+            ],
         )
 
         # only text
@@ -298,7 +340,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         def check(texts, bboxes, expected_input_ids):
-            outputs = processor(images=None, text=texts, bboxes=bboxes, add_eos_token=True)
+            outputs = processor(
+                images=None, text=texts, bboxes=bboxes, add_eos_token=True
+            )
             self.assertListEqual(outputs.input_ids, expected_input_ids)
 
         # no phrase
@@ -324,7 +368,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # could not contain `[None]`
         with pytest.raises(ValueError):
-            _ = processor.preprocess_examples(images=None, texts=texts[1], bboxes=[[None]])
+            _ = processor.preprocess_examples(
+                images=None, texts=texts[1], bboxes=[[None]]
+            )
 
         # 2 phrase: 2 bboxes + no bbox
         check(texts[2], bboxes[2][0], expected_input_ids[4])
@@ -343,7 +389,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # could not contain `[None]`
         with pytest.raises(ValueError):
-            _ = processor.preprocess_examples(images=None, texts=texts[2], bboxes=[[(79, 1016), (135, 1008)], [None]])
+            _ = processor.preprocess_examples(
+                images=None, texts=texts[2], bboxes=[[(79, 1016), (135, 1008)], [None]]
+            )
 
         # test batch
         outputs = processor(
@@ -354,7 +402,12 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertListEqual(
             outputs.input_ids,
-            [expected_input_ids[0], expected_input_ids[1], expected_input_ids[2], expected_input_ids[5]],
+            [
+                expected_input_ids[0],
+                expected_input_ids[1],
+                expected_input_ids[2],
+                expected_input_ids[5],
+            ],
         )
 
         # test batch with padding (without `return_tensors`)
@@ -368,15 +421,19 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # padding on the right
         self.assertListEqual(
             outputs.input_ids[0],
-            expected_input_ids[0] + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
+            expected_input_ids[0]
+            + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
         self.assertListEqual(
             outputs.attention_mask[0],
-            [1] * len(expected_input_ids[0]) + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
+            [1] * len(expected_input_ids[0])
+            + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
         # no padding for the longest sequence
         self.assertListEqual(outputs.input_ids[-1], expected_input_ids[5])
-        self.assertListEqual(outputs.attention_mask[-1], [1] * len(expected_input_ids[5]))
+        self.assertListEqual(
+            outputs.attention_mask[-1], [1] * len(expected_input_ids[5])
+        )
 
         # test batch with padding (with `return_tensors`)
         outputs = processor(
@@ -390,31 +447,50 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # padding on the right
         self.assertListEqual(
             outputs.input_ids.numpy().tolist()[0],
-            expected_input_ids[0] + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
+            expected_input_ids[0]
+            + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
         self.assertListEqual(
             outputs.attention_mask.numpy().tolist()[0],
-            [1] * len(expected_input_ids[0]) + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
+            [1] * len(expected_input_ids[0])
+            + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
         # no padding for the longest sequence
-        self.assertListEqual(outputs.input_ids.numpy().tolist()[-1], expected_input_ids[5])
-        self.assertListEqual(outputs.attention_mask.numpy().tolist()[-1], [1] * len(expected_input_ids[5]))
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[-1], expected_input_ids[5]
+        )
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[-1],
+            [1] * len(expected_input_ids[5]),
+        )
 
         # test with image
         num_image_tokens = 64
 
-        outputs = processor(images=image, text=texts[0], bboxes=None, add_eos_token=True)
+        outputs = processor(
+            images=image, text=texts[0], bboxes=None, add_eos_token=True
+        )
         self.assertTupleEqual(outputs.pixel_values[0].shape, (3, 224, 224))
         self.assertListEqual(
             outputs.input_ids,
-            [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:],
+            [0, 64003]
+            + list(range(4, 4 + num_image_tokens))
+            + [64004]
+            + expected_input_ids[0][1:],
         )
         self.assertListEqual(
             outputs.image_embeds_position_mask,
-            [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1),
+            [0] * 2
+            + [1] * num_image_tokens
+            + [0]
+            + [0] * (len(expected_input_ids[0]) - 1),
         )
-        np.testing.assert_allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
-        np.testing.assert_allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
+        np.testing.assert_allclose(
+            outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9
+        )
+        np.testing.assert_allclose(
+            outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9
+        )
 
         # test with image in batch (right padding)
         outputs = processor(
@@ -427,10 +503,14 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTupleEqual(outputs.pixel_values.shape, (4, 3, 224, 224))
         np.testing.assert_allclose(
-            outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, :3, :3].numpy(),
+            [EXPECTED_PIXEL_VALUES_1] * len(batch_image),
+            atol=1e-9,
         )
         np.testing.assert_allclose(
-            outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, -3:, -3:].numpy(),
+            [EXPECTED_PIXEL_VALUES_2] * len(batch_image),
+            atol=1e-9,
         )
         # padding on the right: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
         # fmt: off
@@ -443,16 +523,34 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             [1] * (2 + num_image_tokens + len(expected_input_ids[5])),
         ]
         # fmt: on
-        self.assertListEqual(outputs.input_ids.numpy().tolist()[0], EXPECTED_IDS_BATCH_RIGHT_PADDING[0])
-        self.assertListEqual(outputs.attention_mask.numpy().tolist()[0], EXPECTED_MASK_BATCH_RIGHT_PADDING[0])
-        self.assertListEqual(outputs.input_ids.numpy().tolist()[-1], EXPECTED_IDS_BATCH_RIGHT_PADDING[-1])
-        self.assertListEqual(outputs.attention_mask.numpy().tolist()[-1], EXPECTED_MASK_BATCH_RIGHT_PADDING[-1])
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[0], EXPECTED_IDS_BATCH_RIGHT_PADDING[0]
+        )
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[0],
+            EXPECTED_MASK_BATCH_RIGHT_PADDING[0],
+        )
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[-1], EXPECTED_IDS_BATCH_RIGHT_PADDING[-1]
+        )
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[-1],
+            EXPECTED_MASK_BATCH_RIGHT_PADDING[-1],
+        )
         self.assertListEqual(
             outputs.image_embeds_position_mask.numpy().tolist(),
-            [[0, 0] + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[5]) - 1)] * len(batch_image),
+            [
+                [0, 0]
+                + [1] * num_image_tokens
+                + [0]
+                + [0] * (len(expected_input_ids[5]) - 1)
+            ]
+            * len(batch_image),
         )
 
-        processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224", padding_side="left")
+        processor = Kosmos2Processor.from_pretrained(
+            "microsoft/kosmos-2-patch14-224", padding_side="left"
+        )
 
         # test with image in batch (left padding)
         outputs = processor(
@@ -479,25 +577,43 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         # fmt: on
 
-        self.assertListEqual(outputs.input_ids.numpy().tolist()[0], EXPECTED_IDS_BATCH[0])
-        self.assertListEqual(outputs.attention_mask.numpy().tolist()[0], EXPECTED_MASK_BATCH[0])
-        self.assertListEqual(outputs.image_embeds_position_mask.numpy().tolist()[0], EXPECTED_IMG_POS_MASK_BATCH[0])
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[0], EXPECTED_IDS_BATCH[0]
+        )
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[0], EXPECTED_MASK_BATCH[0]
+        )
+        self.assertListEqual(
+            outputs.image_embeds_position_mask.numpy().tolist()[0],
+            EXPECTED_IMG_POS_MASK_BATCH[0],
+        )
 
         # no padding for the longest sequence
-        self.assertListEqual(outputs.input_ids.numpy().tolist()[-1], EXPECTED_IDS_BATCH[-1])
-        self.assertListEqual(outputs.attention_mask.numpy().tolist()[-1], EXPECTED_MASK_BATCH[-1])
-        self.assertListEqual(outputs.image_embeds_position_mask.numpy().tolist()[-1], EXPECTED_IMG_POS_MASK_BATCH[-1])
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[-1], EXPECTED_IDS_BATCH[-1]
+        )
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[-1], EXPECTED_MASK_BATCH[-1]
+        )
+        self.assertListEqual(
+            outputs.image_embeds_position_mask.numpy().tolist()[-1],
+            EXPECTED_IMG_POS_MASK_BATCH[-1],
+        )
 
     # Rewrite as Kosmos-2 supports custom padding only when image is None.
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117)
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         # set image input to None
@@ -518,11 +634,15 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_structured_kwargs_nested(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -544,12 +664,16 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
 
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
@@ -568,11 +692,17 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+        tokenizer = self.get_component(
+            "tokenizer", max_length=117, padding="max_length"
+        )
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         # set image input to None
@@ -586,11 +716,15 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -611,11 +745,15 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_unstructured_kwargs_batched(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2)

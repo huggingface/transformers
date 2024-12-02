@@ -66,7 +66,10 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "role": "assistant",
                 "content": [
-                    {"type": "text", "text": "The first image shows the statue of Liberty in New York."},
+                    {
+                        "type": "text",
+                        "text": "The first image shows the statue of Liberty in New York.",
+                    },
                 ],
             },
             {
@@ -77,7 +80,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
         ]
         processor = MllamaProcessor.from_pretrained(self.tmpdirname)
-        rendered = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        rendered = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False
+        )
 
         expected_rendered = (
             "<|begin_of_text|>"
@@ -108,7 +113,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             },
         ]
-        input_ids = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        input_ids = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True
+        )
         expected_ids = [
             128000,  # <|begin_of_text|>
             128006,  # <|start_header_id|>
@@ -154,7 +161,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             }
         ]
 
-        rendered = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        rendered = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False
+        )
         expected_rendered = (
             "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
             "Describe this image in two sentences<|image|> Test sentence   <|image|>ok\n<|eot_id|>"
@@ -162,7 +171,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-        input_ids = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        input_ids = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True
+        )
         # fmt: off
         expected_ids = [
             128000, 128006, 882, 128007, 271, 75885, 420, 2217, 304, 1403, 23719, 128256,
@@ -188,8 +199,12 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             }
         ]
 
-        rendered_list = processor.apply_chat_template(messages_list, add_generation_prompt=True, tokenize=False)
-        rendered_str = processor.apply_chat_template(messages_str, add_generation_prompt=True, tokenize=False)
+        rendered_list = processor.apply_chat_template(
+            messages_list, add_generation_prompt=True, tokenize=False
+        )
+        rendered_str = processor.apply_chat_template(
+            messages_str, add_generation_prompt=True, tokenize=False
+        )
         self.assertEqual(rendered_list, rendered_str)
 
     def test_process_interleaved_images_prompts_image_splitting(self):
@@ -215,7 +230,14 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             images=self.image1,
             size={"width": 128, "height": 128},
         )
-        expected_ids = [self.image_token_id, self.bos_token_id] + [2028, 374, 264, 1296, 11914, 13]
+        expected_ids = [self.image_token_id, self.bos_token_id] + [
+            2028,
+            374,
+            264,
+            1296,
+            11914,
+            13,
+        ]
 
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 4, 3, 128, 128))
         self.assertEqual(inputs["input_ids"][0], expected_ids)
@@ -223,7 +245,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cross_attention_mask = inputs["cross_attention_mask"]
         self.assertEqual(cross_attention_mask.shape, (1, 8, 1, 4))
         self.assertTrue(
-            np.all(cross_attention_mask == 1), f"Cross attention mask is not all ones: {cross_attention_mask}"
+            np.all(cross_attention_mask == 1),
+            f"Cross attention mask is not all ones: {cross_attention_mask}",
         )
 
         # Test batch
@@ -320,6 +343,6 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         if batch_size == 1:
             return ["lower newer <|image|>"]
-        return ["lower newer <|image|>", "<|image|> upper older longer string"] + ["<|image|> lower newer"] * (
-            batch_size - 2
-        )
+        return ["lower newer <|image|>", "<|image|> upper older longer string"] + [
+            "<|image|> lower newer"
+        ] * (batch_size - 2)

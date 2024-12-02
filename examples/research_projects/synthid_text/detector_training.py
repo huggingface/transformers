@@ -52,7 +52,8 @@ class TrainingArguments:
     """Training arguments pertaining to the training loop itself."""
 
     eval_metric: Optional[str] = dataclasses.field(
-        default=ValidationMetric.TPR_AT_FPR, metadata={"help": "The evaluation metric used."}
+        default=ValidationMetric.TPR_AT_FPR,
+        metadata={"help": "The evaluation metric used."},
     )
 
 
@@ -314,7 +315,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save_model_to_hf_hub",
         action="store_true",
-        help=("Whether to save the trained model HF hub. By default it will be a private repo."),
+        help=(
+            "Whether to save the trained model HF hub. By default it will be a private repo."
+        ),
     )
     parser.add_argument(
         "--load_from_hf_hub",
@@ -360,9 +363,14 @@ if __name__ == "__main__":
     # Pad trucated outputs to this length for equal shape across all batches.
     MAX_PADDED_LENGTH = 1000
 
-    DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+    DEVICE = (
+        torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+    )
     if DEVICE.type not in ("cuda", "tpu"):
-        raise ValueError("We have found the training stable on GPU and TPU, we are working on" " a fix for CPUs")
+        raise ValueError(
+            "We have found the training stable on GPU and TPU, we are working on"
+            " a fix for CPUs"
+        )
 
     model = None
     if not load_from_hf_hub:
@@ -412,7 +420,9 @@ if __name__ == "__main__":
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
 
-        logits_processor = SynthIDTextWatermarkLogitsProcessor(**DEFAULT_WATERMARKING_CONFIG, device=DEVICE)
+        logits_processor = SynthIDTextWatermarkLogitsProcessor(
+            **DEFAULT_WATERMARKING_CONFIG, device=DEVICE
+        )
         tokenized_wm_outputs = get_tokenized_wm_outputs(
             model,
             tokenizer,
@@ -425,7 +435,9 @@ if __name__ == "__main__":
             top_p,
             DEVICE,
         )
-        tokenized_uwm_outputs = get_tokenized_uwm_outputs(num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE)
+        tokenized_uwm_outputs = get_tokenized_uwm_outputs(
+            num_negatives, NEG_BATCH_SIZE, tokenizer, DEVICE
+        )
 
         best_detector, lowest_loss = train_best_detector(
             tokenized_wm_outputs=tokenized_wm_outputs,
@@ -447,7 +459,9 @@ if __name__ == "__main__":
         )
     else:
         if repo_name is None:
-            raise ValueError("When loading from pretrained detector model name cannot be None.")
+            raise ValueError(
+                "When loading from pretrained detector model name cannot be None."
+            )
         best_detector = BayesianDetectorModel.from_pretrained(repo_name).to(DEVICE)
 
     best_detector.config.set_detector_information(
@@ -460,10 +474,14 @@ if __name__ == "__main__":
     if eval_detector_on_prompts:
         model_name = best_detector.config.model_name
         watermark_config_dict = best_detector.config.watermarking_config
-        logits_processor = SynthIDTextWatermarkLogitsProcessor(**watermark_config_dict, device=DEVICE)
+        logits_processor = SynthIDTextWatermarkLogitsProcessor(
+            **watermark_config_dict, device=DEVICE
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
-        synthid_text_detector = SynthIDTextWatermarkDetector(best_detector, logits_processor, tokenizer)
+        synthid_text_detector = SynthIDTextWatermarkDetector(
+            best_detector, logits_processor, tokenizer
+        )
 
         if model is None:
             model = AutoModelForCausalLM.from_pretrained(model_name).to(DEVICE)

@@ -11,12 +11,25 @@ import pytorch_lightning as pl
 import torch
 from finetune import SummarizationModule, TranslationModule
 from finetune import main as ft_main
-from make_student import create_student_by_copying_alternating_layers, get_layers_to_supervise
+from make_student import (
+    create_student_by_copying_alternating_layers,
+    get_layers_to_supervise,
+)
 from torch import nn
 
-from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5ForConditionalGeneration
+from transformers import (
+    AutoModelForSeq2SeqLM,
+    MBartTokenizer,
+    T5ForConditionalGeneration,
+)
 from transformers.models.bart.modeling_bart import shift_tokens_right
-from utils import calculate_bleu, check_output_dir, freeze_params, label_smoothed_nll_loss, use_task_specific_params
+from utils import (
+    calculate_bleu,
+    check_output_dir,
+    freeze_params,
+    label_smoothed_nll_loss,
+    use_task_specific_params,
+)
 
 
 # need the parent dir module
@@ -36,16 +49,25 @@ class SummarizationDistiller(SummarizationModule):
 
         save_dir = self.output_dir.joinpath("student")
 
-        hparams.model_name_or_path = str(save_dir)  # Tell lightning we are training the student
+        hparams.model_name_or_path = str(
+            save_dir
+        )  # Tell lightning we are training the student
         teacher = AutoModelForSeq2SeqLM.from_pretrained(hparams.teacher).eval()
-        use_task_specific_params(teacher, hparams.task)  # We copy good generation parameters to student by default
+        use_task_specific_params(
+            teacher, hparams.task
+        )  # We copy good generation parameters to student by default
         if hparams.student is not None:
             student = AutoModelForSeq2SeqLM.from_pretrained(hparams.student)
             use_task_specific_params(student, hparams.task)
             e_layer_ids, d_layer_ids = None, None
         else:
-            student, e_layer_ids, d_layer_ids = create_student_by_copying_alternating_layers(
-                teacher, e=hparams.student_encoder_layers, d=hparams.student_decoder_layers, save_path=save_dir
+            student, e_layer_ids, d_layer_ids = (
+                create_student_by_copying_alternating_layers(
+                    teacher,
+                    e=hparams.student_encoder_layers,
+                    d=hparams.student_decoder_layers,
+                    save_path=save_dir,
+                )
             )
 
         if hparams.length_penalty != -1:
@@ -68,14 +90,22 @@ class SummarizationDistiller(SummarizationModule):
             teacher_encoder_layers = teacher.config.encoder_layers
             teacher_decoder_layers = teacher.config.decoder_layers
 
-        self.different_base_models = not (hparams.student is None or hparams.teacher == hparams.student)
-        self.do_calc_hidden_loss = (not self.different_base_models) and hparams.alpha_hid > 0
-        self.different_encoder = self.different_base_models or (student_encoder_layers != teacher_encoder_layers)
+        self.different_base_models = not (
+            hparams.student is None or hparams.teacher == hparams.student
+        )
+        self.do_calc_hidden_loss = (
+            not self.different_base_models
+        ) and hparams.alpha_hid > 0
+        self.different_encoder = self.different_base_models or (
+            student_encoder_layers != teacher_encoder_layers
+        )
         # self.different_encoder determines whether we need to run the teacher encoder
         self.teacher = teacher
         freeze_params(self.teacher)
 
-        if not self.different_encoder:  # To save RAM, delete teacher encoder and freeze student encoder.
+        if (
+            not self.different_encoder
+        ):  # To save RAM, delete teacher encoder and freeze student encoder.
             try:
                 del self.teacher.model.encoder
             except AttributeError:  # T5
@@ -86,9 +116,14 @@ class SummarizationDistiller(SummarizationModule):
         if d_layer_ids is None:
             d_layer_ids = list(range(student_decoder_layers))
 
-        self.e_layer_ids, self.d_layer_ids = e_layer_ids, d_layer_ids  # type: List[int], List[int]
+        self.e_layer_ids, self.d_layer_ids = (
+            e_layer_ids,
+            d_layer_ids,
+        )  # type: List[int], List[int]
 
-        if self.do_calc_hidden_loss:  # Intermediate supervision: Decide which layers to supervise
+        if (
+            self.do_calc_hidden_loss
+        ):  # Intermediate supervision: Decide which layers to supervise
             if hparams.supervise_forward:
                 self.e_matches = get_layers_to_supervise(
                     n_student=len(self.e_layer_ids), n_teacher=teacher_encoder_layers
@@ -116,10 +151,18 @@ class SummarizationDistiller(SummarizationModule):
         # mask has False at padding_idx
         sel_mask = mask[:, :, None].expand_as(s_logits)
         vocab_size = s_logits.size(-1)
-        s_logits_slct = torch.masked_select(s_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
-        t_logits_slct = torch.masked_select(t_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
-        s_logits_slct = s_logits_slct.view(-1, vocab_size)  # (bs * seq_length, voc_size) modulo the 1s in mask
-        t_logits_slct = t_logits_slct.view(-1, vocab_size)  # (bs * seq_length, voc_size) modulo the 1s in mask
+        s_logits_slct = torch.masked_select(
+            s_logits, sel_mask
+        )  # (bs * seq_length * voc_size) modulo the 1s in mask
+        t_logits_slct = torch.masked_select(
+            t_logits, sel_mask
+        )  # (bs * seq_length * voc_size) modulo the 1s in mask
+        s_logits_slct = s_logits_slct.view(
+            -1, vocab_size
+        )  # (bs * seq_length, voc_size) modulo the 1s in mask
+        t_logits_slct = t_logits_slct.view(
+            -1, vocab_size
+        )  # (bs * seq_length, voc_size) modulo the 1s in mask
         assert t_logits_slct.size() == s_logits_slct.size()
         loss_ce = (
             self.ce_loss_fct(
@@ -139,7 +182,11 @@ class SummarizationDistiller(SummarizationModule):
     def _step(self, batch: dict) -> tuple:
         """Compute the loss for a batch"""
         pad_token_id = self.tokenizer.pad_token_id
-        input_ids, src_mask, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
+        input_ids, src_mask, labels = (
+            batch["input_ids"],
+            batch["attention_mask"],
+            batch["labels"],
+        )
         if isinstance(self.model, T5ForConditionalGeneration):
             decoder_input_ids = self.model._shift_right(labels)
         else:
@@ -161,7 +208,9 @@ class SummarizationDistiller(SummarizationModule):
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             loss_fct = nn.CrossEntropyLoss(ignore_index=pad_token_id)
-            student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
+            student_lm_loss = loss_fct(
+                lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1)
+            )
         else:
             lprobs = nn.functional.log_softmax(lm_logits, dim=-1)
             student_lm_loss, _ = label_smoothed_nll_loss(
@@ -202,7 +251,9 @@ class SummarizationDistiller(SummarizationModule):
         )
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, teacher_outputs["logits"])
-        if self.do_calc_hidden_loss:  # Intermediate supervision of decoder hidden states
+        if (
+            self.do_calc_hidden_loss
+        ):  # Intermediate supervision of decoder hidden states
             hid_loss_dec = self.calc_hidden_loss(
                 dec_mask,
                 student_outputs["decoder_hidden_states"],
@@ -219,19 +270,31 @@ class SummarizationDistiller(SummarizationModule):
         return blended_loss, loss_ce, student_lm_loss, hid_loss_enc, hid_loss_dec
 
     @staticmethod
-    def calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden):
+    def calc_hidden_loss(
+        attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden
+    ):
         """MSE(student_hid, teacher_hid[matches]). Called "Intermediate supervision" in paper. Inspired by TinyBERT."""
         msg = "expected list or tuple for hidden_states, got tensor of shape: "
-        assert not isinstance(hidden_states, torch.Tensor), f"{msg}{hidden_states.shape}"
-        assert not isinstance(hidden_states_T, torch.Tensor), f"{msg}{hidden_states_T.shape}"
+        assert not isinstance(
+            hidden_states, torch.Tensor
+        ), f"{msg}{hidden_states.shape}"
+        assert not isinstance(
+            hidden_states_T, torch.Tensor
+        ), f"{msg}{hidden_states_T.shape}"
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
         student_states = torch.stack([hidden_states[i] for i in range(len(matches))])
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
-        assert student_states.shape == teacher_states.shape, f"{student_states.shape} != {teacher_states.shape}"
+        assert (
+            student_states.shape == teacher_states.shape
+        ), f"{student_states.shape} != {teacher_states.shape}"
         if normalize_hidden:
-            student_states = nn.functional.layer_norm(student_states, student_states.shape[1:])
-            teacher_states = nn.functional.layer_norm(teacher_states, teacher_states.shape[1:])
+            student_states = nn.functional.layer_norm(
+                student_states, student_states.shape[1:]
+            )
+            teacher_states = nn.functional.layer_norm(
+                teacher_states, teacher_states.shape[1:]
+            )
         mse = nn.functional.mse_loss(student_states, teacher_states, reduction="none")
         masked_mse = (mse * mask.unsqueeze(0).unsqueeze(-1)).sum() / valid_count
         return masked_mse
@@ -248,8 +311,12 @@ def add_distill_args(parser):
     parser.add_argument("--alpha_mlm", default=0.2, type=float)
     parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
     parser.add_argument("--student", type=str, required=False)
-    parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
-    parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
+    parser.add_argument(
+        "--student_decoder_layers", default=12, type=int, required=False
+    )
+    parser.add_argument(
+        "--student_encoder_layers", default=12, type=int, required=False
+    )
     parser.add_argument("--no_teacher", action="store_true", default=False)
     parser.add_argument("--length_penalty", type=float, default=-1)
     parser.add_argument("--supervise_forward", action="store_true", default=False)
@@ -269,8 +336,12 @@ class TranslationDistiller(SummarizationDistiller):
         assert hparams.tgt_lang is not None
         self.dataset_kwargs["src_lang"] = hparams.src_lang
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
-        if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
-            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
+        if self.model.config.decoder_start_token_id is None and isinstance(
+            self.tokenizer, MBartTokenizer
+        ):
+            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[
+                hparams.tgt_lang
+            ]
 
     def calc_generative_metrics(self, preds, target) -> dict:
         return calculate_bleu(preds, target)
@@ -284,9 +355,15 @@ class TranslationDistiller(SummarizationDistiller):
 
 def create_module(args):
     if args.no_teacher:
-        module_cls = TranslationModule if "translation" in args.task else SummarizationModule
+        module_cls = (
+            TranslationModule if "translation" in args.task else SummarizationModule
+        )
     else:  # DISTILL WITH TEACHER
-        module_cls = TranslationDistiller if "translation" in args.task else SummarizationDistiller
+        module_cls = (
+            TranslationDistiller
+            if "translation" in args.task
+            else SummarizationDistiller
+        )
     args.setup_cls: str = module_cls.__name__
     print(f"using module {args.setup_cls}")
     model = module_cls(args)

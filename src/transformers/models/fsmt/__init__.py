@@ -28,7 +28,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_fsmt"] = ["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"]
+    _import_structure["modeling_fsmt"] = [
+        "FSMTForConditionalGeneration",
+        "FSMTModel",
+        "PretrainedFSMTModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -41,9 +45,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
+        from .modeling_fsmt import (
+            FSMTForConditionalGeneration,
+            FSMTModel,
+            PretrainedFSMTModel,
+        )
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

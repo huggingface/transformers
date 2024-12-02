@@ -62,10 +62,14 @@ class MgpstrTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 special_token = "[SPECIAL_TOKEN]"
 
                 tokenizer.add_special_tokens({"cls_token": special_token})
-                encoded_special_token = tokenizer.encode([special_token], add_special_tokens=False)
+                encoded_special_token = tokenizer.encode(
+                    [special_token], add_special_tokens=False
+                )
                 self.assertEqual(len(encoded_special_token), 1)
 
-                decoded = tokenizer.decode(encoded_special_token, skip_special_tokens=True)
+                decoded = tokenizer.decode(
+                    encoded_special_token, skip_special_tokens=True
+                )
                 self.assertTrue(special_token not in decoded)
 
     def test_internal_consistency(self):

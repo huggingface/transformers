@@ -66,7 +66,9 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return super().get_tokenizers(**kwargs)
 
     def test_no_infilling_init(self):
-        tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, prefix_token=None, keep_accents=True)
+        tokenizer = CodeLlamaTokenizer(
+            SAMPLE_VOCAB, prefix_token=None, keep_accents=True
+        )
         with self.assertRaises(ValueError):
             tokenizer.tokenize("This is <FILL_ME> prefix")
 
@@ -111,7 +113,29 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
             ids,
-            [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
+            [
+                8,
+                21,
+                84,
+                55,
+                24,
+                19,
+                7,
+                0,
+                602,
+                347,
+                347,
+                347,
+                3,
+                12,
+                66,
+                46,
+                72,
+                80,
+                6,
+                0,
+                4,
+            ],
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
@@ -151,8 +175,12 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -161,7 +189,9 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Checks it save with the same files + the tokenizer.json file for the fast one
                 self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-                tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
+                tokenizer_r_files = tuple(
+                    f for f in tokenizer_r_files if "tokenizer.json" not in f
+                )
                 self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
 
                 # Checks everything loads correctly in the same way
@@ -177,7 +207,9 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Save tokenizer rust, legacy_format=True
                 tmpdirname2 = tempfile.mkdtemp()
 
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=True)
+                tokenizer_r_files = tokenizer_r.save_pretrained(
+                    tmpdirname2, legacy_format=True
+                )
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
 
                 # Checks it save with the same files
@@ -196,7 +228,9 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Save tokenizer rust, legacy_format=False
                 tmpdirname2 = tempfile.mkdtemp()
 
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=False)
+                tokenizer_r_files = tokenizer_r.save_pretrained(
+                    tmpdirname2, legacy_format=False
+                )
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
 
                 # Checks it saved the tokenizer.json file
@@ -235,18 +269,24 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         return_tensors="pt",
                     )
                 except NotImplementedError:
-                    self.skipTest(reason="Encountered NotImplementedError when calling tokenizer")
+                    self.skipTest(
+                        reason="Encountered NotImplementedError when calling tokenizer"
+                    )
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 # max_target_length will default to max_length if not specified
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch.input_ids.shape[1], 3)
 
-                batch_encoder_only = tokenizer(text=text, max_length=3, max_target_length=10, return_tensors="pt")
+                batch_encoder_only = tokenizer(
+                    text=text, max_length=3, max_target_length=10, return_tensors="pt"
+                )
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(
+        reason="Unfortunately way too slow to build a BPE with SentencePiece."
+    )
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -260,7 +300,9 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
 
-                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+                special_token_id = tokenizer_r.encode(
+                    "<special>", add_special_tokens=False
+                )[0]
 
                 self.assertTrue(special_token_id in r_output)
 
@@ -271,7 +313,9 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         **kwargs,  # , from_slow=True <- unfortunately too slow to convert
                     )
                     tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                        pretrained_name,
+                        additional_special_tokens=added_tokens,
+                        **kwargs,
                     )
 
                     p_output = tokenizer_p.encode("Hey this is a <special> token")
@@ -317,14 +361,19 @@ class LlamaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         checkpoint_name = "hf-internal-testing/llama-code-tokenizer"
-        cls.tokenizer: CodeLlamaTokenizer = CodeLlamaTokenizer.from_pretrained(checkpoint_name)
+        cls.tokenizer: CodeLlamaTokenizer = CodeLlamaTokenizer.from_pretrained(
+            checkpoint_name
+        )
         cls.rust_tokenizer = CodeLlamaTokenizerFast.from_pretrained(checkpoint_name)
         return cls
 
     @require_torch
     def integration_tests(self):
         inputs = self.tokenizer(
-            ["The following string should be properly encoded: Hello.", "But ird and ปี   ird   ด"],
+            [
+                "The following string should be properly encoded: Hello.",
+                "But ird and ปี   ird   ด",
+            ],
             return_tensors="pt",
         )
 
@@ -333,9 +382,25 @@ class LlamaIntegrationTest(unittest.TestCase):
             {
                 "input_ids": [
                     [1, 450, 1494, 1347, 881, 367, 6284, 18511, 29901, 15043, 29889],
-                    [1, 1205, 29871, 1823, 322, 29871, 31010, 30691, 1678, 1823, 1678, 30718],
+                    [
+                        1,
+                        1205,
+                        29871,
+                        1823,
+                        322,
+                        29871,
+                        31010,
+                        30691,
+                        1678,
+                        1823,
+                        1678,
+                        30718,
+                    ],
                 ],
-                "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+                "attention_mask": [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
             },
         )
 
@@ -358,13 +423,17 @@ class LlamaIntegrationTest(unittest.TestCase):
         assert slow == [1, 319, 4559, 1243, 2]
 
         fast_tokenizer = CodeLlamaTokenizerFast.from_pretrained(
-            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
+            "hf-internal-testing/llama-tokenizer",
+            add_eos_token=True,
+            add_bos_token=False,
         )
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
         assert fast == [319, 4559, 1243, 2]
 
         slow_tokenizer = CodeLlamaTokenizer.from_pretrained(
-            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
+            "hf-internal-testing/llama-tokenizer",
+            add_eos_token=True,
+            add_bos_token=False,
         )
         slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
         assert slow == [319, 4559, 1243, 2]
@@ -397,23 +466,35 @@ class LlamaIntegrationTest(unittest.TestCase):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        self.assertEqual(pyth_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243])
-        self.assertEqual(rust_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243])
-        self.assertEqual(pyth_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True), "This is a test")
-        self.assertEqual(rust_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True), "This is a test")
+        self.assertEqual(
+            pyth_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243]
+        )
+        self.assertEqual(
+            rust_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243]
+        )
+        self.assertEqual(
+            pyth_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True),
+            "This is a test",
+        )
+        self.assertEqual(
+            rust_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True),
+            "This is a test",
+        )
 
         # bytefallback showcase
         self.assertEqual(pyth_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])  # fmt: skip
         self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])  # fmt: skip
         self.assertEqual(
             pyth_tokenizer.decode(
-                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True
+                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392],
+                skip_special_tokens=True,
             ),
             "生活的真谛是",
         )
         self.assertEqual(
             rust_tokenizer.decode(
-                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True
+                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392],
+                skip_special_tokens=True,
             ),
             "生活的真谛是",
         )
@@ -421,13 +502,25 @@ class LlamaIntegrationTest(unittest.TestCase):
         # Inner spaces showcase
         self.assertEqual(pyth_tokenizer.encode("Hi  Hello"), [1, 6324, 29871, 15043])
         self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [1, 6324, 29871, 15043])
-        self.assertEqual(pyth_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True), "Hi  Hello")
-        self.assertEqual(rust_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(
+            pyth_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True),
+            "Hi  Hello",
+        )
+        self.assertEqual(
+            rust_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True),
+            "Hi  Hello",
+        )
 
         self.assertEqual(pyth_tokenizer.encode("Hi   Hello"), [1, 6324, 259, 15043])
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [1, 6324, 259, 15043])
-        self.assertEqual(pyth_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True), "Hi   Hello")
-        self.assertEqual(rust_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(
+            pyth_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True),
+            "Hi   Hello",
+        )
+        self.assertEqual(
+            rust_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True),
+            "Hi   Hello",
+        )
 
         self.assertEqual(pyth_tokenizer.encode(""), [1])
         self.assertEqual(rust_tokenizer.encode(""), [1])
@@ -517,22 +610,31 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
-        tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
+        tokenizer = CodeLlamaTokenizer.from_pretrained(
+            "codellama/CodeLlama-7b-hf", legacy=False
+        )
+        tokenizer.add_tokens(
+            [AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False
+        )
         out1 = tokenizer.decode(
-            tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
+            tokenizer.encode("<REPR_END>inform", add_special_tokens=False),
+            spaces_between_special_tokens=False,
         )
         self.assertEqual(out1, "<REPR_END>inform")
         out2 = tokenizer.decode(
-            tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
+            tokenizer.encode("<REPR_END>inform", add_special_tokens=False),
+            spaces_between_special_tokens=True,
         )
         # the added prefix token should not be decoded
         self.assertEqual(out2, "<REPR_END> inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [29871, 32016, 262, 689])  # 29871 is the spiece underline, '▁'
+        self.assertEqual(
+            input_ids, [29871, 32016, 262, 689]
+        )  # 29871 is the spiece underline, '▁'
 
         out2 = tokenizer.decode(
-            tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
+            tokenizer.encode(" <REPR_END> inform", add_special_tokens=False),
+            spaces_between_special_tokens=False,
         )
         # TODO @ArthurZ currently we strip left and right, so this will not keep the spaces
         self.assertEqual(out2, "<REPR_END>inform")
@@ -557,7 +659,11 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     def test_fill_token(self):
         tokenizer = CodeLlamaTokenizerFast.from_pretrained(
-            "codellama/CodeLlama-7b-hf", fill_token=None, prefix_token=None, suffix_token=None, middle_token=None
+            "codellama/CodeLlama-7b-hf",
+            fill_token=None,
+            prefix_token=None,
+            suffix_token=None,
+            middle_token=None,
         )
         tokenizer.encode_plus("Hey how are you").input_ids
         tokenizer.fill_token = "<FILL_ME>"
@@ -567,7 +673,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             tokenizer.tokenize("Hey how are you", "mne too")
 
         tokenizer = CodeLlamaTokenizerFast.from_pretrained(
-            "codellama/CodeLlama-7b-hf", revision="3773f63b4511b9e47a9a7ffc765eed7eb0169486"
+            "codellama/CodeLlama-7b-hf",
+            revision="3773f63b4511b9e47a9a7ffc765eed7eb0169486",
         )
         tokenizer.encode("Hey how <FILL_ME> are you")
         tokenizer.encode_plus("Hey how <FILL_ME> are you", "mne too")
@@ -575,14 +682,47 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     def test_spm_edge_cases(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
+        tokenizer = CodeLlamaTokenizer.from_pretrained(
+            "codellama/CodeLlama-7b-hf", legacy=False
+        )
         tokens = tokenizer.tokenize("[INST] How are you doing?<s>[/INST]")
         self.assertEqual(
-            tokens, ["▁[", "INST", "]", "▁How", "▁are", "▁you", "▁doing", "?", "<s>", "[", "/", "INST", "]"]
+            tokens,
+            [
+                "▁[",
+                "INST",
+                "]",
+                "▁How",
+                "▁are",
+                "▁you",
+                "▁doing",
+                "?",
+                "<s>",
+                "[",
+                "/",
+                "INST",
+                "]",
+            ],
         )
         inputs_ids = tokenizer.encode("[INST] How are you doing?<s>[/INST]")
         self.assertEqual(
-            inputs_ids, [1, 518, 25580, 29962, 1128, 526, 366, 2599, 29973, 1, 29961, 29914, 25580, 29962]
+            inputs_ids,
+            [
+                1,
+                518,
+                25580,
+                29962,
+                1128,
+                526,
+                366,
+                2599,
+                29973,
+                1,
+                29961,
+                29914,
+                25580,
+                29962,
+            ],
         )
 
     def test_infilling_tokenization(self):
@@ -623,8 +763,12 @@ split,
 end
 """,
         ]
-        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-Instruct-hf")
-        tokenizer_fast = CodeLlamaTokenizerFast.from_pretrained("codellama/CodeLlama-7b-Instruct-hf")
+        tokenizer = CodeLlamaTokenizer.from_pretrained(
+            "codellama/CodeLlama-7b-Instruct-hf"
+        )
+        tokenizer_fast = CodeLlamaTokenizerFast.from_pretrained(
+            "codellama/CodeLlama-7b-Instruct-hf"
+        )
 
         formatted_prompt = tokenizer.tokenize(PROMPTS[0])
         self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(PROMPTS[0]))
@@ -633,21 +777,43 @@ end
         self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(prefix, suffix))
 
         input_ids = tokenizer.encode(PROMPTS[0], add_special_tokens=False)
-        self.assertEqual(input_ids, tokenizer_fast.encode(PROMPTS[0], add_special_tokens=False))
+        self.assertEqual(
+            input_ids, tokenizer_fast.encode(PROMPTS[0], add_special_tokens=False)
+        )
 
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         input_ids = tokenizer.encode(PROMPTS[0])
         self.assertEqual(input_ids, tokenizer.encode(prefix, suffix=suffix))
-        self.assertEqual(tokenizer.encode(prefix, suffix=suffix), tokenizer_fast.encode(prefix, suffix=suffix))
+        self.assertEqual(
+            tokenizer.encode(prefix, suffix=suffix),
+            tokenizer_fast.encode(prefix, suffix=suffix),
+        )
 
         # Adding suffix_first check for infilling tasks
-        suffix_first_formatted_prompt = tokenizer.tokenize(PROMPTS[0], suffix_first=True)
-        self.assertEqual(suffix_first_formatted_prompt, tokenizer_fast.tokenize(PROMPTS[0], suffix_first=True))
+        suffix_first_formatted_prompt = tokenizer.tokenize(
+            PROMPTS[0], suffix_first=True
+        )
+        self.assertEqual(
+            suffix_first_formatted_prompt,
+            tokenizer_fast.tokenize(PROMPTS[0], suffix_first=True),
+        )
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
-        self.assertEqual(suffix_first_formatted_prompt, tokenizer.tokenize(prefix, suffix, suffix_first=True))
-        self.assertEqual(suffix_first_formatted_prompt, tokenizer_fast.tokenize(prefix, suffix, suffix_first=True))
+        self.assertEqual(
+            suffix_first_formatted_prompt,
+            tokenizer.tokenize(prefix, suffix, suffix_first=True),
+        )
+        self.assertEqual(
+            suffix_first_formatted_prompt,
+            tokenizer_fast.tokenize(prefix, suffix, suffix_first=True),
+        )
 
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         suffix_first_input_ids = tokenizer.encode(PROMPTS[0], suffix_first=True)
-        self.assertEqual(suffix_first_input_ids, tokenizer.encode(prefix, suffix=suffix, suffix_first=True))
-        self.assertEqual(suffix_first_input_ids, tokenizer_fast.encode(prefix, suffix=suffix, suffix_first=True))
+        self.assertEqual(
+            suffix_first_input_ids,
+            tokenizer.encode(prefix, suffix=suffix, suffix_first=True),
+        )
+        self.assertEqual(
+            suffix_first_input_ids,
+            tokenizer_fast.encode(prefix, suffix=suffix, suffix_first=True),
+        )

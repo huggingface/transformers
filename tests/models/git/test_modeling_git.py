@@ -18,13 +18,24 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 
-from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
+from transformers import (
+    GitConfig,
+    GitProcessor,
+    GitVisionConfig,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -32,7 +43,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, GitForCausalLM, GitModel, GitVisionModel
+    from transformers import (
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        GitForCausalLM,
+        GitModel,
+        GitVisionModel,
+    )
 
 
 if is_vision_available():
@@ -79,7 +95,9 @@ class GitVisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -108,8 +126,13 @@ class GitVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -133,7 +156,9 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = GitVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GitVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=GitVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -187,11 +212,15 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="GitVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="GitVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -257,7 +286,9 @@ class GitModelTester:
         self.pad_token_id = vocab_size - 1
 
         # for GIT, the sequence length is the sum of the text and patch tokens, + 1 due to the CLS token
-        self.seq_length = self.text_seq_length + int((self.image_size / self.patch_size) ** 2) + 1
+        self.seq_length = (
+            self.text_seq_length + int((self.image_size / self.patch_size) ** 2) + 1
+        )
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size)
@@ -266,7 +297,9 @@ class GitModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.text_seq_length])
 
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         config = self.get_config()
 
@@ -309,34 +342,54 @@ class GitModelTester:
         # inference with pixel values
         result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
         # inference without pixel values
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.text_seq_length, self.hidden_size),
         )
 
-    def create_and_check_for_causal_lm(self, config, input_ids, input_mask, pixel_values):
+    def create_and_check_for_causal_lm(
+        self, config, input_ids, input_mask, pixel_values
+    ):
         model = GitForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
         # inference with pixel values
         result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
         # inference without pixel values
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.text_seq_length, self.vocab_size),
+        )
 
         # training
-        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values, labels=input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            labels=input_ids,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertTrue(result.loss.item() > 0)
 
@@ -358,7 +411,9 @@ class GitModelTester:
 
         self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
 
-    def _test_batched_generate_captioning(self, config, input_ids, input_mask, pixel_values):
+    def _test_batched_generate_captioning(
+        self, config, input_ids, input_mask, pixel_values
+    ):
         model = GitForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
@@ -397,7 +452,9 @@ class GitModelTester:
 
 
 @require_torch
-class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GitModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -415,7 +472,9 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class in get_values(MODEL_FOR_CAUSAL_LM_MAPPING):
@@ -456,15 +515,25 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        attentions,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
+        num_beam_groups=1,
     ):
         # GIT attention shape depends on image inputs, overwrite
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions],
+            [True] * len(attentions),
         )
         self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-        image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+        image_length = int(
+            (config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1
+        )
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = min_length + idx + image_length if not use_cache else 1
@@ -478,27 +547,45 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             )
             # check attn size
             self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
+                [layer_attention.shape for layer_attention in iter_attentions],
+                [expected_shape] * len(iter_attentions),
             )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        hidden_states,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
+        num_beam_groups=1,
     ):
         # GIT attention shape depends on image inputs, overwrite
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [
+                isinstance(iter_hidden_states, tuple)
+                for iter_hidden_states in hidden_states
+            ],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-        image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+        self.assertEqual(
+            len(hidden_states), (max_length - min_length) * num_beam_groups
+        )
+        image_length = int(
+            (config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1
+        )
 
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = min_length + idx + image_length if not use_cache else 1
             expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
             # check hidden size
             self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
+                [
+                    layer_hidden_states.shape
+                    for layer_hidden_states in iter_hidden_states
+                ],
                 [expected_shape] * len(iter_hidden_states),
             )
 
@@ -544,7 +631,9 @@ class GitModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = processor(images=image, text="hello world", return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text="hello world", return_tensors="pt").to(
+            torch_device
+        )
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -552,10 +641,16 @@ class GitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 201, 30522))
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.9514, -0.9512, -0.9507], [-0.5454, -0.5453, -0.5453], [-0.8862, -0.8857, -0.8848]],
+            [
+                [-0.9514, -0.9512, -0.9507],
+                [-0.5454, -0.5453, -0.5453],
+                [-0.8862, -0.8857, -0.8848],
+            ],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+        )
 
     def test_inference_image_captioning(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base")
@@ -567,16 +662,25 @@ class GitModelIntegrationTest(unittest.TestCase):
         pixel_values = inputs.pixel_values.to(torch_device)
 
         outputs = model.generate(
-            pixel_values=pixel_values, max_length=20, output_scores=True, return_dict_in_generate=True
+            pixel_values=pixel_values,
+            max_length=20,
+            output_scores=True,
+            return_dict_in_generate=True,
         )
-        generated_caption = processor.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
+        generated_caption = processor.batch_decode(
+            outputs.sequences, skip_special_tokens=True
+        )[0]
 
         expected_shape = torch.Size((1, 9))
         self.assertEqual(outputs.sequences.shape, expected_shape)
         self.assertEqual(generated_caption, "two cats laying on a pink blanket")
         self.assertTrue(outputs.scores[-1].shape, expected_shape)
-        expected_slice = torch.tensor([[-0.8805, -0.8803, -0.8799]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.scores[-1][0, :3], expected_slice, atol=1e-4))
+        expected_slice = torch.tensor(
+            [[-0.8805, -0.8803, -0.8799]], device=torch_device
+        )
+        self.assertTrue(
+            torch.allclose(outputs.scores[-1][0, :3], expected_slice, atol=1e-4)
+        )
 
     def test_visual_question_answering(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base-textvqa")
@@ -584,7 +688,9 @@ class GitModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         # prepare image
-        file_path = hf_hub_download(repo_id="nielsr/textvqa-sample", filename="bus.png", repo_type="dataset")
+        file_path = hf_hub_download(
+            repo_id="nielsr/textvqa-sample", filename="bus.png", repo_type="dataset"
+        )
         image = Image.open(file_path).convert("RGB")
         inputs = processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -595,12 +701,18 @@ class GitModelIntegrationTest(unittest.TestCase):
         input_ids = [processor.tokenizer.cls_token_id] + input_ids
         input_ids = torch.tensor(input_ids).unsqueeze(0).to(torch_device)
 
-        generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=20)
-        generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        generated_ids = model.generate(
+            pixel_values=pixel_values, input_ids=input_ids, max_length=20
+        )
+        generated_caption = processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )[0]
 
         expected_shape = torch.Size((1, 15))
         self.assertEqual(generated_ids.shape, expected_shape)
-        self.assertEqual(generated_caption, "what does the front of the bus say at the top? special")
+        self.assertEqual(
+            generated_caption, "what does the front of the bus say at the top? special"
+        )
 
     def test_batched_generation(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
@@ -614,11 +726,20 @@ class GitModelIntegrationTest(unittest.TestCase):
 
         # we have to prepare `input_ids` with the same batch size as `pixel_values`
         start_token_id = model.config.bos_token_id
-        input_ids = torch.tensor([[start_token_id], [start_token_id]], device=torch_device)
-        generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
-        generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        input_ids = torch.tensor(
+            [[start_token_id], [start_token_id]], device=torch_device
+        )
+        generated_ids = model.generate(
+            pixel_values=pixel_values, input_ids=input_ids, max_length=50
+        )
+        generated_captions = processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
-        self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
+        self.assertEqual(
+            generated_captions,
+            ["two cats sleeping on a pink blanket next to remotes."] * 2,
+        )
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -629,11 +750,15 @@ class GitModelIntegrationTest(unittest.TestCase):
         model = GitModel.from_pretrained("microsoft/git-base").to(torch_device)
 
         processor = GitProcessor.from_pretrained(
-            "microsoft/git-base", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+            "microsoft/git-base",
+            size={"height": 180, "width": 180},
+            crop_size={"height": 180, "width": 180},
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            text="what's in the image", images=image, return_tensors="pt"
+        ).to(torch_device)
 
         # interpolate_pos_encodiung false should return value error
         with self.assertRaises(ValueError, msg="doesn't match model"):
@@ -650,7 +775,15 @@ class GitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-1.0296, 2.5960, 0.8703], [1.7027, 1.3302, -0.4543], [-1.4932, -0.1084, 0.0502]]
+            [
+                [-1.0296, 2.5960, 0.8703],
+                [1.7027, 1.3302, -0.4543],
+                [-1.4932, -0.1084, 0.0502],
+            ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4
+            )
+        )

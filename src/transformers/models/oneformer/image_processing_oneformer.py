@@ -22,7 +22,12 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
-from ...image_processing_utils import INIT_SERVICE_KWARGS, BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import (
+    INIT_SERVICE_KWARGS,
+    BaseImageProcessor,
+    BatchFeature,
+    get_size_dict,
+)
 from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
@@ -73,7 +78,8 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
 def get_max_height_width(
-    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: List[np.ndarray],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -92,7 +98,9 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray,
+    output_size: Tuple[int, int],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -184,7 +192,9 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
 
 
 # Copied from transformers.models.detr.image_processing_detr.check_segment_validity
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+def check_segment_validity(
+    mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8
+):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
     mask_k_area = mask_k.sum()
@@ -215,12 +225,17 @@ def compute_segments(
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
-    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+    segmentation = torch.zeros(
+        (height, width), dtype=torch.int32, device=mask_probs.device
+    )
     segments: List[Dict] = []
 
     if target_size is not None:
         mask_probs = nn.functional.interpolate(
-            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+            mask_probs.unsqueeze(0),
+            size=target_size,
+            mode="bilinear",
+            align_corners=False,
         )[0]
 
     current_segment_id = 0
@@ -271,10 +286,14 @@ def convert_segmentation_map_to_binary_masks(
     do_reduce_labels: bool = False,
 ):
     if do_reduce_labels and ignore_index is None:
-        raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
+        raise ValueError(
+            "If `do_reduce_labels` is True, `ignore_index` must be provided."
+        )
 
     if do_reduce_labels:
-        segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+        segmentation_map = np.where(
+            segmentation_map == 0, ignore_index, segmentation_map - 1
+        )
 
     # Get unique ids (class or instance ids based on input)
     all_labels = np.unique(segmentation_map)
@@ -297,7 +316,9 @@ def convert_segmentation_map_to_binary_masks(
         labels = np.zeros(all_labels.shape[0])
 
         for label in all_labels:
-            class_id = instance_id_to_semantic_id[label + 1 if do_reduce_labels else label]
+            class_id = instance_id_to_semantic_id[
+                label + 1 if do_reduce_labels else label
+            ]
             labels[all_labels == label] = class_id - 1 if do_reduce_labels else class_id
     else:
         labels = all_labels
@@ -359,7 +380,9 @@ def load_metadata(repo_id, class_info_file):
 
     if not os.path.exists(fname) or not os.path.isfile(fname):
         if repo_id is None:
-            raise ValueError(f"Could not file {fname} locally. repo_id must be defined if loading from the hub")
+            raise ValueError(
+                f"Could not file {fname} locally. repo_id must be defined if loading from the hub"
+            )
         # We try downloading from a dataset by default for backward compatibility
         try:
             fname = hf_hub_download(repo_id, class_info_file, repo_type="dataset")
@@ -425,8 +448,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
-    @filter_out_non_signature_kwargs(extra=["max_size", "metadata", *INIT_SERVICE_KWARGS])
+    @deprecate_kwarg(
+        "max_size", version="4.27.0", warn_if_greater_or_equal_version=True
+    )
+    @filter_out_non_signature_kwargs(
+        extra=["max_size", "metadata", *INIT_SERVICE_KWARGS]
+    )
     def __init__(
         self,
         do_resize: bool = True,
@@ -450,7 +477,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
         # Deprecated, backward compatibility
         self._max_size = kwargs.pop("max_size", 1333)
 
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
+        size = (
+            size
+            if size is not None
+            else {"shortest_edge": 800, "longest_edge": self._max_size}
+        )
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
 
         if class_info_file is None:
@@ -462,7 +493,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.do_reduce_labels = do_reduce_labels
@@ -479,7 +512,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         """
         image_processor_dict = image_processor_dict.copy()
         if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop(
+                "reduce_labels"
+            )
         return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.to_dict
@@ -492,7 +527,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_processor_dict.pop("_max_size", None)
         return image_processor_dict
 
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
+    @deprecate_kwarg(
+        "max_size", version="4.27.0", warn_if_greater_or_equal_version=True
+    )
     @filter_out_non_signature_kwargs(extra=["max_size"])
     def resize(
         self,
@@ -523,10 +560,18 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 f" {size.keys()}."
             )
         size = get_oneformer_resize_output_image_size(
-            image=image, size=size, max_size=max_size, default_to_square=False, input_data_format=input_data_format
+            image=image,
+            size=size,
+            max_size=max_size,
+            default_to_square=False,
+            input_data_format=input_data_format,
         )
         image = resize(
-            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format
+            image,
+            size=size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
         )
         return image
 
@@ -557,7 +602,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
+        return rescale(
+            image,
+            rescale_factor,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.convert_segmentation_map_to_binary_masks
     def convert_segmentation_map_to_binary_masks(
@@ -567,7 +617,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
     ):
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+        do_reduce_labels = (
+            do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+        )
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks(
             segmentation_map=segmentation_map,
@@ -576,8 +628,15 @@ class OneFormerImageProcessor(BaseImageProcessor):
             do_reduce_labels=do_reduce_labels,
         )
 
-    def __call__(self, images, task_inputs=None, segmentation_maps=None, **kwargs) -> BatchFeature:
-        return self.preprocess(images, task_inputs=task_inputs, segmentation_maps=segmentation_maps, **kwargs)
+    def __call__(
+        self, images, task_inputs=None, segmentation_maps=None, **kwargs
+    ) -> BatchFeature:
+        return self.preprocess(
+            images,
+            task_inputs=task_inputs,
+            segmentation_maps=segmentation_maps,
+            **kwargs,
+        )
 
     def _preprocess(
         self,
@@ -593,11 +652,22 @@ class OneFormerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_resize:
-            image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+            image = self.resize(
+                image, size=size, resample=resample, input_data_format=input_data_format
+            )
         if do_rescale:
-            image = self.rescale(image, rescale_factor=rescale_factor, input_data_format=input_data_format)
+            image = self.rescale(
+                image,
+                rescale_factor=rescale_factor,
+                input_data_format=input_data_format,
+            )
         if do_normalize:
-            image = self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            image = self.normalize(
+                image,
+                mean=image_mean,
+                std=image_std,
+                input_data_format=input_data_format,
+            )
         return image
 
     def _preprocess_image(
@@ -637,7 +707,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
         if data_format is not None:
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            image = to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
         return image
 
     def _preprocess_mask(
@@ -657,7 +729,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         else:
             added_channel_dim = False
             if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
+                input_data_format = infer_channel_dimension_format(
+                    segmentation_map, num_channels=1
+                )
         # TODO: (Amy)
         # Remork segmentation map processing to include reducing labels and resizing which doesn't
         # drop segment IDs > 255.
@@ -705,12 +779,16 @@ class OneFormerImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False, max_size=self._max_size)
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+        do_reduce_labels = (
+            do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+        )
 
         if not valid_images(images):
             raise ValueError(
@@ -761,7 +839,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         if segmentation_maps is not None:
             segmentation_maps = [
-                self._preprocess_mask(segmentation_map, do_resize, size, input_data_format=input_data_format)
+                self._preprocess_mask(
+                    segmentation_map,
+                    do_resize,
+                    size,
+                    input_data_format=input_data_format,
+                )
                 for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
@@ -853,7 +936,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(
+                    image=image,
+                    output_size=pad_size,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -962,7 +1049,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         pixel_values_list: List[ImageInput],
         task_inputs: List[str],
         segmentation_maps: ImageInput = None,
-        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
+        instance_id_to_semantic_id: Optional[
+            Union[List[Dict[int, int]], Dict[int, int]]
+        ] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1025,15 +1114,23 @@ class OneFormerImageProcessor(BaseImageProcessor):
               provided). They identify the binary masks present in the image.
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
-        pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
+        do_reduce_labels = (
+            self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
+        )
+        pixel_values_list = [
+            to_numpy_array(pixel_values) for pixel_values in pixel_values_list
+        ]
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(pixel_values_list[0])
 
-        pad_size = get_max_height_width(pixel_values_list, input_data_format=input_data_format)
+        pad_size = get_max_height_width(
+            pixel_values_list, input_data_format=input_data_format
+        )
         encoded_inputs = self.pad(
-            pixel_values_list, return_tensors=return_tensors, input_data_format=input_data_format
+            pixel_values_list,
+            return_tensors=return_tensors,
+            input_data_format=input_data_format,
         )
 
         annotations = None
@@ -1048,7 +1145,10 @@ class OneFormerImageProcessor(BaseImageProcessor):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
+                    segmentation_map,
+                    instance_id,
+                    ignore_index=ignore_index,
+                    do_reduce_labels=do_reduce_labels,
                 )
                 annotations.append({"masks": masks, "classes": classes})
 
@@ -1064,18 +1164,29 @@ class OneFormerImageProcessor(BaseImageProcessor):
             for i, label in enumerate(annotations):
                 task = task_inputs[i]
                 if task == "semantic":
-                    classes, masks, texts = self.get_semantic_annotations(label, num_class_obj)
+                    classes, masks, texts = self.get_semantic_annotations(
+                        label, num_class_obj
+                    )
                 elif task == "instance":
-                    classes, masks, texts = self.get_instance_annotations(label, num_class_obj)
+                    classes, masks, texts = self.get_instance_annotations(
+                        label, num_class_obj
+                    )
                 elif task == "panoptic":
-                    classes, masks, texts = self.get_panoptic_annotations(label, num_class_obj)
+                    classes, masks, texts = self.get_panoptic_annotations(
+                        label, num_class_obj
+                    )
                 else:
-                    raise ValueError(f"{task} was not expected, expected `semantic`, `instance` or `panoptic`")
+                    raise ValueError(
+                        f"{task} was not expected, expected `semantic`, `instance` or `panoptic`"
+                    )
 
                 # we cannot batch them since they don't share a common class size
                 masks = [mask[None, ...] for mask in masks]
                 masks = [
-                    self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks
+                    self._pad_image(
+                        image=mask, output_size=pad_size, constant_values=ignore_index
+                    )
+                    for mask in masks
                 ]
                 masks = np.concatenate(masks, axis=0)
                 mask_labels.append(torch.from_numpy(masks))
@@ -1087,7 +1198,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
             encoded_inputs["text_inputs"] = text_inputs
 
         # This needs to be tokenized before sending to the model.
-        encoded_inputs["task_inputs"] = [f"the task is {task_input}" for task_input in task_inputs]
+        encoded_inputs["task_inputs"] = [
+            f"the task is {task_input}" for task_input in task_inputs
+        ]
 
         return encoded_inputs
 
@@ -1111,12 +1224,18 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
         """
-        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        class_queries_logits = (
+            outputs.class_queries_logits
+        )  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = (
+            outputs.masks_queries_logits
+        )  # [batch_size, num_queries, height, width]
 
         # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+        masks_probs = (
+            masks_queries_logits.sigmoid()
+        )  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
@@ -1132,13 +1251,18 @@ class OneFormerImageProcessor(BaseImageProcessor):
             semantic_segmentation = []
             for idx in range(batch_size):
                 resized_logits = torch.nn.functional.interpolate(
-                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                    segmentation[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
         else:
             semantic_segmentation = segmentation.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
+            ]
 
         return semantic_segmentation
 
@@ -1191,8 +1315,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
                   Multiple instances of the same class / label were fused and assigned a single `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        class_queries_logits = (
+            outputs.class_queries_logits
+        )  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = (
+            outputs.masks_queries_logits
+        )  # [batch_size, num_queries, height, width]
 
         device = masks_queries_logits.device
         batch_size = class_queries_logits.shape[0]
@@ -1204,11 +1332,20 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         for i in range(batch_size):
             # [Q, K]
-            scores = torch.nn.functional.softmax(class_queries_logits[i], dim=-1)[:, :-1]
-            labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
+            scores = torch.nn.functional.softmax(class_queries_logits[i], dim=-1)[
+                :, :-1
+            ]
+            labels = (
+                torch.arange(num_classes, device=device)
+                .unsqueeze(0)
+                .repeat(num_queries, 1)
+                .flatten(0, 1)
+            )
 
             # scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.num_queries, sorted=False)
-            scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(
+                num_queries, sorted=False
+            )
             labels_per_image = labels[topk_indices]
 
             topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
@@ -1233,14 +1370,22 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 mask_pred = mask_pred[keep]
 
             if mask_pred.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_pred.shape[1:]
+                height, width = (
+                    target_sizes[i] if target_sizes is not None else mask_pred.shape[1:]
+                )
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
-            if "ade20k" in self.class_info_file and not is_demo and "instance" in task_type:
+            if (
+                "ade20k" in self.class_info_file
+                and not is_demo
+                and "instance" in task_type
+            ):
                 for j in range(labels_per_image.shape[0]):
-                    labels_per_image[j] = self.metadata["thing_ids"].index(labels_per_image[j].item())
+                    labels_per_image[j] = self.metadata["thing_ids"].index(
+                        labels_per_image[j].item()
+                    )
 
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
@@ -1311,28 +1456,42 @@ class OneFormerImageProcessor(BaseImageProcessor):
             logger.warning("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()
 
-        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        class_queries_logits = (
+            outputs.class_queries_logits
+        )  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = (
+            outputs.masks_queries_logits
+        )  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
 
-        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+        mask_probs = (
+            masks_queries_logits.sigmoid()
+        )  # [batch_size, num_queries, height, width]
 
         # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        pred_scores, pred_labels = nn.functional.softmax(
+            class_queries_logits, dim=-1
+        ).max(-1)
 
         # Loop over items in batch size
         results: List[Dict[str, TensorType]] = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            mask_probs_item, pred_scores_item, pred_labels_item = (
+                remove_low_and_no_objects(
+                    mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+                )
             )
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                height, width = (
+                    target_sizes[i]
+                    if target_sizes is not None
+                    else mask_probs_item.shape[1:]
+                )
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue

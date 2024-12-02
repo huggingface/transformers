@@ -101,7 +101,11 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
         _ = in_queue.get(timeout=timeout)
 
         ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+            "mozilla-foundation/common_voice_11_0",
+            "es",
+            split="test",
+            streaming=True,
+            trust_remote_code=True,
         )
         sample = next(iter(ds))
 
@@ -109,10 +113,12 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             torch.tensor(sample["audio"]["array"]), 48_000, 16_000
         ).numpy()
 
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        ).to(torch_device)
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
         )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
 
         input_values = processor(resampled_audio, return_tensors="pt").input_values
 
@@ -120,11 +126,15 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             logits = model(input_values.to(torch_device)).logits
 
         # use a spawn pool, which should trigger a warning if different than fork
-        with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
+        with CaptureLogger(
+            pyctcdecode.decoder.logger
+        ) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
             transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
+        unittest.TestCase().assertEqual(
+            transcription[0], "habitan aguas poco profundas y rocosas"
+        )
 
         # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
         multiprocessing.set_start_method("spawn", force=True)
@@ -132,7 +142,9 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             transcription = processor.batch_decode(logits.cpu().numpy()).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
+        unittest.TestCase().assertEqual(
+            transcription[0], "habitan aguas poco profundas y rocosas"
+        )
     except Exception:
         error = f"{traceback.format_exc()}"
 
@@ -216,7 +228,9 @@ class Wav2Vec2ModelTester:
         self.output_seq_length = int(math.ceil(output_seq_length))
         self.encoder_seq_length = self.output_seq_length
 
-        self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
+        self.adapter_output_seq_length = (
+            self.output_seq_length - 1
+        ) // adapter_stride + 1
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
@@ -263,7 +277,8 @@ class Wav2Vec2ModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.hidden_size),
         )
 
     def create_and_check_model_with_adapter(self, config, input_values, attention_mask):
@@ -273,10 +288,13 @@ class Wav2Vec2ModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, self.hidden_size),
         )
 
-    def create_and_check_model_with_adapter_for_ctc(self, config, input_values, attention_mask):
+    def create_and_check_model_with_adapter_for_ctc(
+        self, config, input_values, attention_mask
+    ):
         config.add_adapter = True
         config.output_hidden_size = 2 * config.hidden_size
         model = Wav2Vec2ForCTC(config=config)
@@ -284,10 +302,13 @@ class Wav2Vec2ModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
+            result.logits.shape,
+            (self.batch_size, self.adapter_output_seq_length, self.vocab_size),
         )
 
-    def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
+    def create_and_check_model_with_adapter_proj_dim(
+        self, config, input_values, attention_mask
+    ):
         config.add_adapter = True
         config.output_hidden_size = 8
         model = Wav2Vec2Model(config=config)
@@ -296,10 +317,16 @@ class Wav2Vec2ModelTester:
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
+            (
+                self.batch_size,
+                self.adapter_output_seq_length,
+                config.output_hidden_size,
+            ),
         )
 
-    def create_and_check_model_with_attn_adapter(self, config, input_values, attention_mask):
+    def create_and_check_model_with_attn_adapter(
+        self, config, input_values, attention_mask
+    ):
         config.adapter_attn_dim = 16
         model = Wav2Vec2ForCTC(config=config)
 
@@ -308,7 +335,10 @@ class Wav2Vec2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.output_seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.output_seq_length, self.vocab_size),
+        )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
         # test does not pass for models making use of `group_norm`
@@ -318,7 +348,9 @@ class Wav2Vec2ModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.bool
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
 
@@ -327,7 +359,9 @@ class Wav2Vec2ModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0.0
 
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
+        batch_outputs = model(
+            input_values, attention_mask=attention_mask
+        ).last_hidden_state
 
         for i in range(input_values.shape[0]):
             input_slice = input_values[i : i + 1, : input_lengths[i]]
@@ -344,11 +378,17 @@ class Wav2Vec2ModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.long
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size
+        )
 
         # pad input
         for i in range(len(input_lengths)):
@@ -356,10 +396,14 @@ class Wav2Vec2ModelTester:
             attention_mask[i, input_lengths[i] :] = 0
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        sum_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        mean_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
 
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
@@ -372,7 +416,9 @@ class Wav2Vec2ModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.long
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
         labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
@@ -382,7 +428,9 @@ class Wav2Vec2ModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0
 
-        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        masked_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
         unmasked_loss = model(input_values, labels=labels).loss.item()
 
         self.parent.assertTrue(isinstance(masked_loss, float))
@@ -401,8 +449,12 @@ class Wav2Vec2ModelTester:
         input_values = input_values[:3]
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size
+        )
 
         # pad input
         for i in range(len(input_lengths)):
@@ -472,8 +524,13 @@ class Wav2Vec2ModelTester:
         input_values = input_values[:3]
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2),
+            model.config.vocab_size + 100,
+        )
 
         with self.parent.assertRaises(ValueError):
             model(input_values, labels=labels)
@@ -487,7 +544,13 @@ class Wav2Vec2ModelTester:
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
+        (
+            Wav2Vec2ForCTC,
+            Wav2Vec2Model,
+            Wav2Vec2ForMaskedLM,
+            Wav2Vec2ForSequenceClassification,
+            Wav2Vec2ForPreTraining,
+        )
         if is_torch_available()
         else ()
     )
@@ -507,7 +570,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Wav2Vec2Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -522,11 +587,15 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_model_with_adapter_for_ctc(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_for_ctc(*config_and_inputs)
+        self.model_tester.create_and_check_model_with_adapter_for_ctc(
+            *config_and_inputs
+        )
 
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
+        self.model_tester.create_and_check_model_with_adapter_proj_dim(
+            *config_and_inputs
+        )
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -594,11 +663,15 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         input_values = inputs_dict["input_values"]
 
         input_lengths = torch.tensor(
-            [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
+            [input_values.shape[1] for _ in range(input_values.shape[0])],
+            dtype=torch.long,
+            device=torch_device,
         )
         output_lengths = model._get_feat_extract_output_lengths(input_lengths)
 
-        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        labels = ids_tensor(
+            (input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size
+        )
         inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
         inputs_dict["labels"] = labels
 
@@ -642,7 +715,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -664,12 +739,17 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             module.bias.data.fill_(3)
         if hasattr(module, "codevectors") and module.codevectors is not None:
             module.codevectors.data.fill_(3)
-        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+        if (
+            hasattr(module, "masked_spec_embed")
+            and module.masked_spec_embed is not None
+        ):
             module.masked_spec_embed.data.fill_(3)
 
     def test_mask_feature_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
+            "hf-internal-testing/tiny-random-wav2vec2",
+            mask_feature_prob=0.2,
+            mask_feature_length=2,
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -677,10 +757,15 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -692,7 +777,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_mask_time_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-wav2vec2", mask_time_prob=0.2, mask_time_length=2
+            "hf-internal-testing/tiny-random-wav2vec2",
+            mask_time_prob=0.2,
+            mask_time_length=2,
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -700,10 +787,15 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -723,12 +815,16 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.assertIsNotNone(model)
 
     # Wav2Vec2 cannot be torchscripted because of group norm.
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+    def _create_and_check_torch_fx_tracing(
+        self, config, inputs_dict, output_loss=False
+    ):
         # TODO: fix it
         self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
         if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch fx not available or not compatible with this model")
+            self.skipTest(
+                reason="torch fx not available or not compatible with this model"
+            )
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -737,7 +833,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=output_loss
+            )
 
             try:
                 input_names = [
@@ -762,7 +860,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 if end_positions is not None:
                     input_names.append("end_positions")
 
-                filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                filtered_inputs = {
+                    k: v for (k, v) in inputs.items() if k in input_names
+                }
                 input_names = list(filtered_inputs.keys())
 
                 model_output = model(**filtered_inputs)
@@ -852,9 +952,14 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(
-            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
+            self,
+            conv_stride=(3, 3, 3),
+            feat_extract_norm="layer",
+            do_stable_layer_norm=True,
         )
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Wav2Vec2Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -869,7 +974,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
+        self.model_tester.create_and_check_model_with_adapter_proj_dim(
+            *config_and_inputs
+        )
 
     def test_model_with_attn_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -935,11 +1042,15 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         input_values = inputs_dict["input_values"]
 
         input_lengths = torch.tensor(
-            [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
+            [input_values.shape[1] for _ in range(input_values.shape[0])],
+            dtype=torch.long,
+            device=torch_device,
         )
         output_lengths = model._get_feat_extract_output_lengths(input_lengths)
 
-        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        labels = ids_tensor(
+            (input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size
+        )
         inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
         inputs_dict["labels"] = labels
 
@@ -983,7 +1094,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -1005,7 +1118,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             module.bias.data.fill_(3)
         if hasattr(module, "codevectors") and module.codevectors is not None:
             module.codevectors.data.fill_(3)
-        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+        if (
+            hasattr(module, "masked_spec_embed")
+            and module.masked_spec_embed is not None
+        ):
             module.masked_spec_embed.data.fill_(3)
 
     def test_model_for_pretraining(self):
@@ -1013,7 +1129,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         model = Wav2Vec2ForPreTraining(config).to(torch_device)
 
         batch_size = inputs_dict["input_values"].shape[0]
-        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+        feature_seq_length = int(
+            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1])
+        )
 
         features_shape = (batch_size, feature_seq_length)
 
@@ -1023,10 +1141,14 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             model.config.mask_time_length,
             min_masks=2,
         )
-        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices)
+        sampled_negative_indices = _sample_negative_indices(
+            features_shape, 10, mask_time_indices
+        )
 
         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(
+            torch_device
+        )
 
         loss = model(
             inputs_dict["input_values"],
@@ -1038,8 +1160,12 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         # more losses
         mask_time_indices[:, : mask_time_indices.shape[-1] // 2] = True
 
-        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices.cpu().numpy())
-        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
+        sampled_negative_indices = _sample_negative_indices(
+            features_shape, 10, mask_time_indices.cpu().numpy()
+        )
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(
+            torch_device
+        )
         loss_more_masked = model(
             inputs_dict["input_values"],
             attention_mask=inputs_dict["attention_mask"],
@@ -1052,7 +1178,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_mask_feature_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
+            "hf-internal-testing/tiny-random-wav2vec2",
+            mask_feature_prob=0.2,
+            mask_feature_length=2,
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -1060,10 +1188,15 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -1075,7 +1208,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_mask_time_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-wav2vec2", mask_time_prob=0.2, mask_time_length=2
+            "hf-internal-testing/tiny-random-wav2vec2",
+            mask_time_prob=0.2,
+            mask_time_length=2,
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -1083,10 +1218,15 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -1110,10 +1250,15 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
         batch_duration_in_seconds = [6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -1150,11 +1295,15 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
 
-        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter", target_lang="it")
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2-adapter", target_lang="it"
+        )
 
         logits = get_logits(model, input_features)
 
-        model_2 = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
+        model_2 = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2-adapter"
+        )
         model_2.load_adapter("it")
 
         logits_2 = get_logits(model_2, input_features)
@@ -1186,12 +1335,16 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
 
         model = Wav2Vec2ForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-wav2vec2-adapter", target_lang="fr", ignore_mismatched_sizes=True
+            "hf-internal-testing/tiny-random-wav2vec2-adapter",
+            target_lang="fr",
+            ignore_mismatched_sizes=True,
         )
 
         logits = get_logits(model, input_features)
 
-        model_2 = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
+        model_2 = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2-adapter"
+        )
         model_2.load_adapter("fr")
 
         logits_2 = get_logits(model_2, input_features)
@@ -1221,7 +1374,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
 
-        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", adapter_attn_dim=16)
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", adapter_attn_dim=16
+        )
 
         with tempfile.TemporaryDirectory() as tempdir:
             model.save_pretrained(tempdir)
@@ -1231,7 +1386,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             adapter_weights = model._get_adapters()
 
             # save safe weights
-            safe_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_SAFE_FILE.format("eng"))
+            safe_filepath = os.path.join(
+                tempdir, WAV2VEC2_ADAPTER_SAFE_FILE.format("eng")
+            )
             safe_save_file(adapter_weights, safe_filepath, metadata={"format": "pt"})
 
             model.load_adapter("eng")
@@ -1266,7 +1423,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
 
-        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2-adapter"
+        )
         logits = get_logits(model, input_features)
 
         model.load_adapter("eng")
@@ -1291,10 +1450,15 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
         mask = torch.from_numpy(mask).to(torch_device)
 
-        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
+        self.assertListEqual(
+            mask.sum(axis=-1).tolist(),
+            [mask_prob * sequence_length for _ in range(batch_size)],
+        )
 
     def test_compute_mask_indices_low_prob(self):
         # with these settings num_masked_spans=0.5, which means probabilistic rounding
@@ -1310,7 +1474,9 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         count_dimensions_not_masked = 0
 
         for _ in range(n_trials):
-            mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+            mask = _compute_mask_indices(
+                (batch_size, sequence_length), mask_prob, mask_length
+            )
             mask = torch.from_numpy(mask).to(torch_device)
 
             num_masks = torch.sum(mask).item()
@@ -1332,7 +1498,9 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
         mask = torch.from_numpy(mask).to(torch_device)
 
         # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
@@ -1345,11 +1513,16 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(
+            (batch_size, sequence_length), dtype=torch.long, device=torch_device
+        )
         attention_mask[:2, sequence_length // 2 :] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
+            (batch_size, sequence_length),
+            mask_prob,
+            mask_length,
+            attention_mask=attention_mask,
         )
         mask = torch.from_numpy(mask).to(torch_device)
 
@@ -1364,12 +1537,18 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.05
         mask_length = 10
 
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(
+            (batch_size, sequence_length), dtype=torch.long, device=torch_device
+        )
         # force one example to be heavily padded
         attention_mask[0, 5:] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, min_masks=2
+            (batch_size, sequence_length),
+            mask_prob,
+            mask_length,
+            attention_mask=attention_mask,
+            min_masks=2,
         )
 
         # make sure that non-padded examples cannot be padded
@@ -1394,24 +1573,45 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         hidden_size = 4
         num_negatives = 3
         sequence = torch.div(
-            torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
+            torch.arange(sequence_length * hidden_size, device=torch_device),
+            hidden_size,
+            rounding_mode="floor",
         )
-        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
-        features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
+        features = sequence.view(
+            sequence_length, hidden_size
+        )  # each value in vector consits of same value
+        features = (
+            features[None, :]
+            .expand(batch_size, sequence_length, hidden_size)
+            .contiguous()
+        )
 
         # sample negative indices
-        sampled_negative_indices = _sample_negative_indices((batch_size, sequence_length), num_negatives, None)
-        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
-        negatives = features.view(-1, hidden_size)[sampled_negative_indices.long().view(-1)]
-        negatives = negatives.view(batch_size, sequence_length, -1, hidden_size).permute(2, 0, 1, 3)
-        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
+        sampled_negative_indices = _sample_negative_indices(
+            (batch_size, sequence_length), num_negatives, None
+        )
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(
+            torch_device
+        )
+        negatives = features.view(-1, hidden_size)[
+            sampled_negative_indices.long().view(-1)
+        ]
+        negatives = negatives.view(
+            batch_size, sequence_length, -1, hidden_size
+        ).permute(2, 0, 1, 3)
+        self.assertTrue(
+            negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size)
+        )
 
         # make sure no negatively sampled vector is actually a positive one
         for negative in negatives:
             self.assertTrue(((negative - features) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertEqual(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(
+            negatives.unique(dim=-1).shape,
+            (num_negatives, batch_size, sequence_length, 1),
+        )
 
     def test_sample_negatives_with_mask(self):
         batch_size = 2
@@ -1420,36 +1620,59 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         num_negatives = 3
 
         # second half of last input tensor is padded
-        mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        mask = torch.ones(
+            (batch_size, sequence_length), dtype=torch.long, device=torch_device
+        )
         mask[-1, sequence_length // 2 :] = 0
 
         sequence = torch.div(
-            torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
+            torch.arange(sequence_length * hidden_size, device=torch_device),
+            hidden_size,
+            rounding_mode="floor",
         )
-        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
-        features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
+        features = sequence.view(
+            sequence_length, hidden_size
+        )  # each value in vector consits of same value
+        features = (
+            features[None, :]
+            .expand(batch_size, sequence_length, hidden_size)
+            .contiguous()
+        )
 
         # replace masked feature vectors with -100 to test that those are not sampled
-        features = torch.where(mask[:, :, None].expand(features.shape).bool(), features, -100)
+        features = torch.where(
+            mask[:, :, None].expand(features.shape).bool(), features, -100
+        )
 
         # sample negative indices
         sampled_negative_indices = _sample_negative_indices(
             (batch_size, sequence_length), num_negatives, mask.cpu().numpy()
         )
-        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
-        negatives = features.view(-1, hidden_size)[sampled_negative_indices.long().view(-1)]
-        negatives = negatives.view(batch_size, sequence_length, -1, hidden_size).permute(2, 0, 1, 3)
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(
+            torch_device
+        )
+        negatives = features.view(-1, hidden_size)[
+            sampled_negative_indices.long().view(-1)
+        ]
+        negatives = negatives.view(
+            batch_size, sequence_length, -1, hidden_size
+        ).permute(2, 0, 1, 3)
 
         self.assertTrue((negatives >= 0).all().item())
 
-        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
+        self.assertTrue(
+            negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size)
+        )
 
         # make sure no negatively sampled vector is actually a positive one
         for negative in negatives:
             self.assertTrue(((negative - features) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertEqual(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+        self.assertEqual(
+            negatives.unique(dim=-1).shape,
+            (num_negatives, batch_size, sequence_length, 1),
+        )
 
 
 @require_torch
@@ -1462,7 +1685,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -1471,17 +1696,23 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset(
+            "anton-l/superb_dummy", task, split="test", trust_remote_code=True
+        )
 
         return ds[:num_samples]
 
     def test_inference_ctc_normal(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-base-960h", do_lower_case=True
+        )
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(input_speech, return_tensors="pt").input_values.to(
+            torch_device
+        )
 
         with torch.no_grad():
             logits = model(input_values).logits
@@ -1495,7 +1726,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def test_inference_ctc_normal_batched(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-base-960h", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(2)
 
@@ -1516,8 +1749,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_robust_batched(self):
-        model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60-self").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", do_lower_case=True)
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "facebook/wav2vec2-large-960h-lv60-self"
+        ).to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-large-960h-lv60-self", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(4)
 
@@ -1545,13 +1782,17 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def test_inference_integration(self):
         model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
         model.to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-base")
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-base"
+        )
         input_speech = self._load_datasamples(2)
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
         batch_size = inputs_dict["input_values"].shape[0]
-        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+        feature_seq_length = int(
+            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1])
+        )
 
         features_shape = (batch_size, feature_seq_length)
 
@@ -1571,7 +1812,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             )
 
         # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
+        cosine_sim = torch.cosine_similarity(
+            outputs.projected_states, outputs.projected_quantized_states, dim=-1
+        )
 
         # retrieve cosine sim of masked features
         cosine_sim_masked = cosine_sim[mask_time_indices]
@@ -1588,7 +1831,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         ], device=torch_device)
         # fmt: on
 
-        self.assertTrue(torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3)
+        )
 
     def test_inference_pretrained(self):
         model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
@@ -1601,7 +1846,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
         batch_size = inputs_dict["input_values"].shape[0]
-        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+        feature_seq_length = int(
+            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1])
+        )
 
         features_shape = (batch_size, feature_seq_length)
 
@@ -1622,7 +1869,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             )
 
         # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
+        cosine_sim = torch.cosine_similarity(
+            outputs.projected_states, outputs.projected_quantized_states, dim=-1
+        )
 
         # retrieve cosine sim of masked features
         cosine_sim_masked = cosine_sim[mask_time_indices]
@@ -1641,7 +1890,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         # compute cosine similarity
         cosine_sim_rand = torch.cosine_similarity(
-            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
+            outputs_rand.projected_states,
+            outputs_rand.projected_quantized_states,
+            dim=-1,
         )
 
         # retrieve cosine sim of masked features
@@ -1651,7 +1902,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # => the cosine similarity between quantized states and predicted states > 0.5
         # a random wav2vec2 model has not learned to predict the quantized latent states
         # => the cosine similarity between quantized states and predicted states is very likely < 0.1
-        self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
+        self.assertTrue(
+            cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item()
+            > 0
+        )
 
     @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
     def test_loss_pretraining(self):
@@ -1672,7 +1926,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
         batch_size = inputs_dict["input_values"].shape[0]
-        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+        feature_seq_length = int(
+            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1])
+        )
 
         features_shape = (batch_size, feature_seq_length)
 
@@ -1690,7 +1946,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
 
         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(
+            torch_device
+        )
 
         with torch.no_grad():
             outputs = model(
@@ -1701,8 +1959,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             )
 
         # check diversity loss
-        num_codevectors = model.config.num_codevectors_per_group * model.config.num_codevector_groups
-        diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
+        num_codevectors = (
+            model.config.num_codevectors_per_group * model.config.num_codevector_groups
+        )
+        diversity_loss = (
+            num_codevectors - outputs.codevector_perplexity
+        ) / num_codevectors
         self.assertTrue(abs(diversity_loss.item() - 0.9538) < 1e-3)
 
         # check overall loss (contrastive loss + diversity loss)
@@ -1711,8 +1973,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(abs(outputs.loss.item() - expected_loss) < 1e-3)
 
     def test_inference_keyword_spotting(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-ks"
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-ks"
+        )
         input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1724,14 +1990,20 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         expected_labels = [7, 6, 10, 9]
         # s3prl logits for the same batch
-        expected_logits = torch.tensor([6.1186, 11.8961, 10.2931, 6.0898], device=torch_device)
+        expected_logits = torch.tensor(
+            [6.1186, 11.8961, 10.2931, 6.0898], device=torch_device
+        )
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ic").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ic")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-ic"
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-ic"
+        )
         input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1740,28 +2012,52 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
 
-        predicted_logits_action, predicted_ids_action = torch.max(outputs.logits[:, :6], dim=-1)
-        predicted_logits_object, predicted_ids_object = torch.max(outputs.logits[:, 6:20], dim=-1)
-        predicted_logits_location, predicted_ids_location = torch.max(outputs.logits[:, 20:24], dim=-1)
+        predicted_logits_action, predicted_ids_action = torch.max(
+            outputs.logits[:, :6], dim=-1
+        )
+        predicted_logits_object, predicted_ids_object = torch.max(
+            outputs.logits[:, 6:20], dim=-1
+        )
+        predicted_logits_location, predicted_ids_location = torch.max(
+            outputs.logits[:, 20:24], dim=-1
+        )
 
         expected_labels_action = [0, 0, 2, 3]
-        expected_logits_action = torch.tensor([0.4568, 11.0848, 1.6621, 9.3841], device=torch_device)
+        expected_logits_action = torch.tensor(
+            [0.4568, 11.0848, 1.6621, 9.3841], device=torch_device
+        )
         expected_labels_object = [3, 10, 3, 4]
-        expected_logits_object = torch.tensor([1.5322, 10.7094, 5.2469, 22.1318], device=torch_device)
+        expected_logits_object = torch.tensor(
+            [1.5322, 10.7094, 5.2469, 22.1318], device=torch_device
+        )
         expected_labels_location = [0, 0, 0, 1]
-        expected_logits_location = torch.tensor([1.5335, 6.5096, 10.5704, 11.0569], device=torch_device)
+        expected_logits_location = torch.tensor(
+            [1.5335, 6.5096, 10.5704, 11.0569], device=torch_device
+        )
 
         self.assertListEqual(predicted_ids_action.tolist(), expected_labels_action)
         self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
         self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
 
-        self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=1e-2))
-        self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=1e-2))
-        self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=1e-2))
+        self.assertTrue(
+            torch.allclose(predicted_logits_action, expected_logits_action, atol=1e-2)
+        )
+        self.assertTrue(
+            torch.allclose(predicted_logits_object, expected_logits_object, atol=1e-2)
+        )
+        self.assertTrue(
+            torch.allclose(
+                predicted_logits_location, expected_logits_location, atol=1e-2
+            )
+        )
 
     def test_inference_speaker_identification(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-sid").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-sid")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-sid"
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-sid"
+        )
         input_data = self._load_superb("si", 4)
 
         output_logits = []
@@ -1775,14 +2071,20 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         expected_labels = [251, 1, 1, 3]
         # s3prl logits for the same batch
-        expected_logits = torch.tensor([37.5627, 71.6362, 64.2419, 31.7778], device=torch_device)
+        expected_logits = torch.tensor(
+            [37.5627, 71.6362, 64.2419, 31.7778], device=torch_device
+        )
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_emotion_recognition(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-er").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-er")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-er"
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-er"
+        )
         input_data = self._load_superb("er", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1794,14 +2096,20 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         expected_labels = [1, 1, 2, 2]
         # s3prl logits for the same batch
-        expected_logits = torch.tensor([2.1722, 3.0779, 8.0287, 6.6797], device=torch_device)
+        expected_logits = torch.tensor(
+            [2.1722, 3.0779, 8.0287, 6.6797], device=torch_device
+        )
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_phoneme_recognition(self):
-        model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "facebook/wav2vec2-lv-60-espeak-cv-ft"
+        ).to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-lv-60-espeak-cv-ft"
+        )
 
         input_speech = self._load_datasamples(4)
 
@@ -1838,7 +2146,11 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_torchaudio
     def test_wav2vec2_with_lm(self):
         ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+            "mozilla-foundation/common_voice_11_0",
+            "es",
+            split="test",
+            streaming=True,
+            trust_remote_code=True,
         )
         sample = next(iter(ds))
 
@@ -1846,10 +2158,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(sample["audio"]["array"]), 48_000, 16_000
         ).numpy()
 
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        ).to(torch_device)
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
         )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
 
         input_values = processor(resampled_audio, return_tensors="pt").input_values
 
@@ -1864,7 +2178,11 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_torchaudio
     def test_wav2vec2_with_lm_pool(self):
         ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+            "mozilla-foundation/common_voice_11_0",
+            "es",
+            split="test",
+            streaming=True,
+            trust_remote_code=True,
         )
         sample = next(iter(ds))
 
@@ -1872,10 +2190,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(sample["audio"]["array"]), 48_000, 16_000
         ).numpy()
 
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        ).to(torch_device)
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
         )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
 
         input_values = processor(resampled_audio, return_tensors="pt").input_values
 
@@ -1889,10 +2209,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
-            2
-        ) as pool:
-            transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
+        with CaptureLogger(
+            processing_wav2vec2_with_lm.logger
+        ) as cl, multiprocessing.get_context("fork").Pool(2) as pool:
+            transcription = processor.batch_decode(
+                logits.cpu().numpy(), pool, num_processes=2
+            ).text
 
         self.assertIn("num_process", cl.out)
         self.assertIn("it will be ignored", cl.out)
@@ -1902,13 +2224,24 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_invalid_pool(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None
+        )
 
     def test_inference_diarization(self):
-        model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sd")
+        model = Wav2Vec2ForAudioFrameClassification.from_pretrained(
+            "anton-l/wav2vec2-base-superb-sd"
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "anton-l/wav2vec2-base-superb-sd"
+        )
         input_data = self._load_superb("sd", 4)
-        inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
+        inputs = processor(
+            input_data["speech"],
+            return_tensors="pt",
+            padding=True,
+            sampling_rate=16_000,
+        )
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
@@ -1920,23 +2253,54 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # s3prl logits for the same batch
         expected_logits = torch.tensor(
             [
-                [[-5.2807, -5.1272], [-5.4059, -4.7757], [-5.2764, -4.9621], [-5.0117, -4.5851]],
-                [[-1.7643, -0.5462], [-1.7369, -0.2649], [-1.5066, -0.6200], [-4.5703, -2.4863]],
-                [[-0.8656, -0.4783], [-0.8899, -0.3289], [-0.9267, -0.5781], [-0.7817, -0.4619]],
-                [[-4.8625, -2.5316], [-5.2339, -2.2155], [-4.9835, -2.0344], [-4.4727, -1.8421]],
+                [
+                    [-5.2807, -5.1272],
+                    [-5.4059, -4.7757],
+                    [-5.2764, -4.9621],
+                    [-5.0117, -4.5851],
+                ],
+                [
+                    [-1.7643, -0.5462],
+                    [-1.7369, -0.2649],
+                    [-1.5066, -0.6200],
+                    [-4.5703, -2.4863],
+                ],
+                [
+                    [-0.8656, -0.4783],
+                    [-0.8899, -0.3289],
+                    [-0.9267, -0.5781],
+                    [-0.7817, -0.4619],
+                ],
+                [
+                    [-4.8625, -2.5316],
+                    [-5.2339, -2.2155],
+                    [-4.9835, -2.0344],
+                    [-4.4727, -1.8421],
+                ],
             ],
             device=torch_device,
         )
         self.assertEqual(labels[0, :, 0].sum(), 555)
         self.assertEqual(labels[0, :, 1].sum(), 299)
-        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
+        self.assertTrue(
+            torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2)
+        )
 
     def test_inference_speaker_verification(self):
-        model = Wav2Vec2ForXVector.from_pretrained("anton-l/wav2vec2-base-superb-sv").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sv")
+        model = Wav2Vec2ForXVector.from_pretrained(
+            "anton-l/wav2vec2-base-superb-sv"
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "anton-l/wav2vec2-base-superb-sv"
+        )
         input_data = self._load_superb("si", 4)
 
-        inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
+        inputs = processor(
+            input_data["speech"],
+            return_tensors="pt",
+            padding=True,
+            sampling_rate=16_000,
+        )
         labels = torch.tensor([5, 1, 1, 3], device=torch_device).T
 
         with torch.no_grad():
@@ -1947,11 +2311,17 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         cosine_sim = torch.nn.CosineSimilarity(dim=-1)
         # id10002 vs id10002
-        self.assertAlmostEqual(cosine_sim(embeddings[1], embeddings[2]).numpy(), 0.9758, 3)
+        self.assertAlmostEqual(
+            cosine_sim(embeddings[1], embeddings[2]).numpy(), 0.9758, 3
+        )
         # id10006 vs id10002
-        self.assertAlmostEqual(cosine_sim(embeddings[0], embeddings[1]).numpy(), 0.7579, 3)
+        self.assertAlmostEqual(
+            cosine_sim(embeddings[0], embeddings[1]).numpy(), 0.7579, 3
+        )
         # id10002 vs id10004
-        self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).numpy(), 0.7594, 3)
+        self.assertAlmostEqual(
+            cosine_sim(embeddings[2], embeddings[3]).numpy(), 0.7594, 3
+        )
 
         self.assertAlmostEqual(outputs.loss.item(), 17.7963, 2)
 
@@ -1964,7 +2334,11 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         def run_model(lang):
             ds = load_dataset(
-                "mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True, trust_remote_code=True
+                "mozilla-foundation/common_voice_11_0",
+                lang,
+                split="test",
+                streaming=True,
+                trust_remote_code=True,
             )
             sample = next(iter(ds))
 
@@ -1977,7 +2351,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
                 torch.tensor(sample["audio"]["array"]), 48_000, 16_000
             ).numpy()
 
-            inputs = processor(resampled_audio, sampling_rate=16_000, return_tensors="pt")
+            inputs = processor(
+                resampled_audio, sampling_rate=16_000, return_tensors="pt"
+            )
             input_values = inputs.input_values.to(torch_device)
             attention_mask = inputs.attention_mask.to(torch_device)
 
@@ -2004,13 +2380,19 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @mark.flash_attn_test
     def test_inference_ctc_fa2(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+            "facebook/wav2vec2-base-960h",
+            attn_implementation="flash_attention_2",
+            torch_dtype=torch.bfloat16,
         )
         model_fa.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-base-960h", do_lower_case=True
+        )
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(input_speech, return_tensors="pt").input_values.to(
+            torch_device
+        )
 
         with torch.no_grad():
             logits = model_fa(input_values.to(torch.bfloat16)).logits
@@ -2026,18 +2408,27 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @mark.flash_attn_test
     def test_inference_ctc_fa2_batched(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+            "facebook/wav2vec2-base-960h",
+            attn_implementation="flash_attention_2",
+            torch_dtype=torch.bfloat16,
         )
         model_fa.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-base-960h", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True, return_attention_mask=True)
+        inputs = processor(
+            input_speech, return_tensors="pt", padding=True, return_attention_mask=True
+        )
         inputs = inputs.to(torch_device)
 
         with torch.no_grad():
-            logits = model_fa(inputs.input_values.to(torch.bfloat16), attention_mask=inputs.attention_mask).logits
+            logits = model_fa(
+                inputs.input_values.to(torch.bfloat16),
+                attention_mask=inputs.attention_mask,
+            ).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)

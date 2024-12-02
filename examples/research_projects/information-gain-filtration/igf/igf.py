@@ -50,7 +50,9 @@ def compute_perplexity(model, test_data, context_len):
     model.eval()
     device = next(model.parameters()).device
     eval_batch_size = 1
-    context = torch.zeros((eval_batch_size, context_len), dtype=torch.long, device=device)
+    context = torch.zeros(
+        (eval_batch_size, context_len), dtype=torch.long, device=device
+    )
     eval_dataloader = DataLoader(test_data, shuffle=False, batch_size=eval_batch_size)
     eval_loss = torch.zeros(1, device=device)
     nb_eval_examples = 0
@@ -107,10 +109,21 @@ def recopy_gpt2(orig_model, device, max_steps):
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)
+            ],
             "weight_decay": 0.0,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.0,
+        },
     ]
     lm_optimizer = AdamW(optimizer_grouped_parameters, lr=5e-5, eps=1e-8)
     lm_scheduler = get_linear_schedule_with_warmup(lm_optimizer, 0, max_steps)
@@ -220,7 +233,11 @@ def collect_objective_set(
 
 
 def generate_datasets(
-    context_len, file="data/tokenized_stories_train_wikitext103.jbl", number=100, min_len=1026, trim=True
+    context_len,
+    file="data/tokenized_stories_train_wikitext103.jbl",
+    number=100,
+    min_len=1026,
+    trim=True,
 ):
     """
     Generate objective set and training set
@@ -267,7 +284,12 @@ def generate_datasets(
 
 
 def train_secondary_learner(
-    secondary_learner, train_dataset, max_epochs, batch_size, eval_freq=50, igf_model_path="secondary_learner.pt"
+    secondary_learner,
+    train_dataset,
+    max_epochs,
+    batch_size,
+    eval_freq=50,
+    igf_model_path="secondary_learner.pt",
 ):
     """
     Train the secondary learner (igf_model)
@@ -319,7 +341,9 @@ def train_secondary_learner(
 
             # model trains fairly quickly so we won't wait for a full epoch
             # eval is triggered at eval_freq and end of epochs
-            if (step % eval_freq == 0 and step > 0) or ((step + 1) == len(train_dataloader)):
+            if (step % eval_freq == 0 and step > 0) or (
+                (step + 1) == len(train_dataloader)
+            ):
                 tr_loss = tr_q_loss / (step + 1)
 
                 secondary_learner.eval()
@@ -378,7 +402,9 @@ class SecondaryLearner(nn.Module):
         self.embeddings = model.transformer.wte
         self.embeddings.weight = copy.deepcopy(model.transformer.wte.weight)
         self.conv = nn.Conv1d(self.embeddings.weight.size(1), 256, 3, padding=1)
-        self.fc = nn.Sequential(nn.Linear(256, 32), nn.Dropout(p=0.1), nn.Linear(32, 32), nn.Linear(32, 1))
+        self.fc = nn.Sequential(
+            nn.Linear(256, 32), nn.Dropout(p=0.1), nn.Linear(32, 32), nn.Linear(32, 1)
+        )
 
     def forward(self, context):
         """
@@ -391,7 +417,9 @@ class SecondaryLearner(nn.Module):
             tensor after squeeze operation
 
         """
-        pooled = torch.max(self.conv(self.embeddings(context).squeeze(1).transpose(1, 2)), 2)[0]
+        pooled = torch.max(
+            self.conv(self.embeddings(context).squeeze(1).transpose(1, 2)), 2
+        )[0]
         qs = self.fc(pooled)
         return qs.squeeze(1)
 
@@ -412,5 +440,7 @@ class SecondaryLearner(nn.Module):
         state_dict = torch.load(state_path)
         secondary_learner.load_state_dict(state_dict)
         secondary_learner.embeddings = model.transformer.wte
-        secondary_learner.embeddings.weight = copy.deepcopy(model.transformer.wte.weight)
+        secondary_learner.embeddings.weight = copy.deepcopy(
+            model.transformer.wte.weight
+        )
         return secondary_learner

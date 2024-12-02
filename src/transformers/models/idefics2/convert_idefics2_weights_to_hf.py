@@ -78,7 +78,9 @@ def merge_weights(state_dict):
                 new_state_dict[new_weight_name] = [state_dict[weight]]
             else:
                 new_state_dict[new_weight_name].append(state_dict[weight])
-        new_state_dict[new_weight_name] = torch.cat(new_state_dict[new_weight_name], dim=0)
+        new_state_dict[new_weight_name] = torch.cat(
+            new_state_dict[new_weight_name], dim=0
+        )
 
     # Remove the weights that were merged
     for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
@@ -128,7 +130,9 @@ def get_config(checkpoint):
 
 def convert_idefics2_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     # The original model maps to AutoModelForCausalLM, converted we map to Idefics2ForConditionalGeneration
-    original_model = AutoModelForCausalLM.from_pretrained(original_model_id, trust_remote_code=True)
+    original_model = AutoModelForCausalLM.from_pretrained(
+        original_model_id, trust_remote_code=True
+    )
     # The original model doesn't use the idefics2 processing objects
     image_seq_len = original_model.config.perceiver_config.resampler_n_latents
     image_processor = Idefics2ImageProcessor()
@@ -178,7 +182,9 @@ def main():
         help="If set, the model will be pushed to the hub after conversion.",
     )
     args = parser.parse_args()
-    convert_idefics2_hub_to_hf(args.original_model_id, args.output_hub_path, args.push_to_hub)
+    convert_idefics2_hub_to_hf(
+        args.original_model_id, args.output_hub_path, args.push_to_hub
+    )
 
 
 if __name__ == "__main__":

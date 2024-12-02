@@ -106,7 +106,11 @@ def sort_all_auto_mappings(overwrite: bool = False):
     Args:
         overwrite (`bool`, *optional*, defaults to `False`): Whether or not to fix and overwrite the file.
     """
-    fnames = [os.path.join(PATH_TO_AUTO_MODULE, f) for f in os.listdir(PATH_TO_AUTO_MODULE) if f.endswith(".py")]
+    fnames = [
+        os.path.join(PATH_TO_AUTO_MODULE, f)
+        for f in os.listdir(PATH_TO_AUTO_MODULE)
+        if f.endswith(".py")
+    ]
     diffs = [sort_auto_mapping(fname, overwrite=overwrite) for fname in fnames]
 
     if not overwrite and any(diffs):
@@ -119,7 +123,9 @@ def sort_all_auto_mappings(overwrite: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check_only", action="store_true", help="Whether to only check or fix style.")
+    parser.add_argument(
+        "--check_only", action="store_true", help="Whether to only check or fix style."
+    )
     args = parser.parse_args()
 
     sort_all_auto_mappings(not args.check_only)

@@ -36,7 +36,9 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", patch_size=4)
+        processor = Qwen2VLProcessor.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct", patch_size=4
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -52,12 +54,16 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(), image_processor.to_json_string()
+        )
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
         self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
 
@@ -65,27 +71,38 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         image_input = self.prepare_image_inputs()
 
         input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="np")
+        input_processor = processor(
+            images=image_input, text="dummy", return_tensors="np"
+        )
 
         for key in input_image_proc.keys():
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"])
+        self.assertListEqual(
+            list(inputs.keys()),
+            ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"],
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -99,7 +116,9 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

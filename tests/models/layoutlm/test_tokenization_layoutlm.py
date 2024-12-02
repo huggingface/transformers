@@ -67,7 +67,9 @@ class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9]
+        )
 
     @unittest.skip
     def test_special_tokens_as_you_expect(self):

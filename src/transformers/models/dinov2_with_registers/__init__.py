@@ -20,7 +20,9 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_dinov2_with_registers": ["Dinov2WithRegistersConfig"]}
+_import_structure = {
+    "configuration_dinov2_with_registers": ["Dinov2WithRegistersConfig"]
+}
 
 try:
     if not is_torch_available():
@@ -54,4 +56,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

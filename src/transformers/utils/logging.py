@@ -98,7 +98,9 @@ def _configure_library_root_logger() -> None:
         library_root_logger.setLevel(_get_default_logging_level())
         # if logging level is debug, we add pathname and lineno to formatter for easy debugging
         if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
-            formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
+            formatter = logging.Formatter(
+                "[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s"
+            )
             _default_handler.setFormatter(formatter)
 
         library_root_logger.propagate = False
@@ -286,7 +288,9 @@ def enable_explicit_format() -> None:
     handlers = _get_library_root_logger().handlers
 
     for handler in handlers:
-        formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+        formatter = logging.Formatter(
+            "[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s"
+        )
         handler.setFormatter(formatter)
 
 

@@ -51,7 +51,9 @@ class TQAPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_tf(self):
         model_id = "lysandre/tiny-tapas-random-wtq"
-        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
+        model = TFAutoModelForTableQuestionAnswering.from_pretrained(
+            model_id, from_pt=True
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.assertIsInstance(model.config.aggregation_labels, dict)
         self.assertIsInstance(model.config.no_aggregation_label_index, int)
@@ -62,29 +64,61 @@ class TQAPipelineTests(unittest.TestCase):
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
             outputs,
-            {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            {
+                "answer": "AVERAGE > ",
+                "coordinates": [],
+                "cells": [],
+                "aggregator": "AVERAGE",
+            },
         )
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
-            query=["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+            query=[
+                "how many movies has george clooney played in?",
+                "how old is he?",
+                "what's his date of birth?",
+            ],
         )
         self.assertEqual(
             outputs,
             [
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
             ],
         )
         outputs = table_querier(
@@ -106,11 +140,36 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
             ],
         )
 
@@ -126,7 +185,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 }
             )
         with self.assertRaises(ValueError):
@@ -136,7 +199,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
         with self.assertRaises(ValueError):
@@ -146,15 +213,24 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @require_torch
     def test_small_model_pt(self, torch_dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-wtq"
-        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
+        model = AutoModelForTableQuestionAnswering.from_pretrained(
+            model_id, torch_dtype=torch_dtype
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.assertIsInstance(model.config.aggregation_labels, dict)
         self.assertIsInstance(model.config.no_aggregation_label_index, int)
@@ -165,29 +241,61 @@ class TQAPipelineTests(unittest.TestCase):
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
             outputs,
-            {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            {
+                "answer": "AVERAGE > ",
+                "coordinates": [],
+                "cells": [],
+                "aggregator": "AVERAGE",
+            },
         )
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
-            query=["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+            query=[
+                "how many movies has george clooney played in?",
+                "how old is he?",
+                "what's his date of birth?",
+            ],
         )
         self.assertEqual(
             outputs,
             [
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
             ],
         )
         outputs = table_querier(
@@ -209,11 +317,36 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
-                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
+                {
+                    "answer": "AVERAGE > ",
+                    "coordinates": [],
+                    "cells": [],
+                    "aggregator": "AVERAGE",
+                },
             ],
         )
 
@@ -229,7 +362,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 }
             )
         with self.assertRaises(ValueError):
@@ -239,7 +376,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
         with self.assertRaises(ValueError):
@@ -249,20 +390,32 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @require_torch
     def test_small_model_pt_fp16(self):
         self.test_small_model_pt(torch_dtype="float16")
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @require_torch
     def test_slow_tokenizer_sqa_pt(self, torch_dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-sqa"
-        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
+        model = AutoModelForTableQuestionAnswering.from_pretrained(
+            model_id, torch_dtype=torch_dtype
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
 
@@ -271,9 +424,17 @@ class TQAPipelineTests(unittest.TestCase):
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
-            "query": ["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+            "query": [
+                "how many movies has george clooney played in?",
+                "how old is he?",
+                "what's his date of birth?",
+            ],
         }
         sequential_outputs = table_querier(**inputs, sequential=True)
         batch_outputs = table_querier(**inputs, sequential=False)
@@ -290,29 +451,57 @@ class TQAPipelineTests(unittest.TestCase):
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
             outputs,
-            {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+            {
+                "answer": "7 february 1967",
+                "coordinates": [(0, 3)],
+                "cells": ["7 february 1967"],
+            },
         )
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
-            query=["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+            query=[
+                "how many movies has george clooney played in?",
+                "how old is he?",
+                "what's his date of birth?",
+            ],
         )
         self.assertEqual(
             outputs,
             [
-                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
-                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
-                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+                {
+                    "answer": "7 february 1967",
+                    "coordinates": [(0, 3)],
+                    "cells": ["7 february 1967"],
+                },
+                {
+                    "answer": "7 february 1967",
+                    "coordinates": [(0, 3)],
+                    "cells": ["7 february 1967"],
+                },
+                {
+                    "answer": "7 february 1967",
+                    "coordinates": [(0, 3)],
+                    "cells": ["7 february 1967"],
+                },
             ],
         )
         outputs = table_querier(
@@ -334,11 +523,31 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
             ],
         )
 
@@ -354,7 +563,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 }
             )
         with self.assertRaises(ValueError):
@@ -364,7 +577,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
         with self.assertRaises(ValueError):
@@ -374,11 +591,18 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @require_torch
     def test_slow_tokenizer_sqa_pt_fp16(self):
         self.test_slow_tokenizer_sqa_pt(torch_dtype="float16")
@@ -389,7 +613,9 @@ class TQAPipelineTests(unittest.TestCase):
     @require_torch
     def test_slow_tokenizer_sqa_tf(self):
         model_id = "lysandre/tiny-tapas-random-sqa"
-        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
+        model = TFAutoModelForTableQuestionAnswering.from_pretrained(
+            model_id, from_pt=True
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
 
@@ -398,9 +624,17 @@ class TQAPipelineTests(unittest.TestCase):
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
-            "query": ["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+            "query": [
+                "how many movies has george clooney played in?",
+                "how old is he?",
+                "what's his date of birth?",
+            ],
         }
         sequential_outputs = table_querier(**inputs, sequential=True)
         batch_outputs = table_querier(**inputs, sequential=False)
@@ -417,29 +651,57 @@ class TQAPipelineTests(unittest.TestCase):
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
             outputs,
-            {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+            {
+                "answer": "7 february 1967",
+                "coordinates": [(0, 3)],
+                "cells": ["7 february 1967"],
+            },
         )
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
-                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+                "date of birth": [
+                    "7 february 1967",
+                    "10 june 1996",
+                    "28 november 1967",
+                ],
             },
-            query=["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+            query=[
+                "how many movies has george clooney played in?",
+                "how old is he?",
+                "what's his date of birth?",
+            ],
         )
         self.assertEqual(
             outputs,
             [
-                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
-                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
-                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+                {
+                    "answer": "7 february 1967",
+                    "coordinates": [(0, 3)],
+                    "cells": ["7 february 1967"],
+                },
+                {
+                    "answer": "7 february 1967",
+                    "coordinates": [(0, 3)],
+                    "cells": ["7 february 1967"],
+                },
+                {
+                    "answer": "7 february 1967",
+                    "coordinates": [(0, 3)],
+                    "cells": ["7 february 1967"],
+                },
             ],
         )
         outputs = table_querier(
@@ -461,11 +723,31 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
-                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
+                {
+                    "answer": "Python, Python",
+                    "coordinates": [(0, 3), (1, 3)],
+                    "cells": ["Python", "Python"],
+                },
             ],
         )
 
@@ -481,7 +763,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 }
             )
         with self.assertRaises(ValueError):
@@ -491,7 +777,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
         with self.assertRaises(ValueError):
@@ -501,11 +791,18 @@ class TQAPipelineTests(unittest.TestCase):
                     "Repository": ["Transformers", "Datasets", "Tokenizers"],
                     "Stars": ["36542", "4512", "3934"],
                     "Contributors": ["651", "77", "34"],
-                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                    "Programming language": [
+                        "Python",
+                        "Python",
+                        "Rust, Python and NodeJS",
+                    ],
                 },
             )
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @slow
     @require_torch
     def test_integration_wtq_pt(self, torch_dtype="float32"):
@@ -528,8 +825,18 @@ class TQAPipelineTests(unittest.TestCase):
         results = table_querier(data, queries)
 
         expected_results = [
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
+            {
+                "answer": "Transformers",
+                "coordinates": [(0, 0)],
+                "cells": ["Transformers"],
+                "aggregator": "NONE",
+            },
+            {
+                "answer": "Transformers",
+                "coordinates": [(0, 0)],
+                "cells": ["Transformers"],
+                "aggregator": "NONE",
+            },
             {
                 "answer": "COUNT > Transformers, Datasets, Tokenizers",
                 "coordinates": [(0, 0), (1, 0), (2, 0)],
@@ -551,7 +858,10 @@ class TQAPipelineTests(unittest.TestCase):
         ]
         self.assertListEqual(results, expected_results)
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @slow
     @require_torch
     def test_integration_wtq_pt_fp16(self):
@@ -564,7 +874,9 @@ class TQAPipelineTests(unittest.TestCase):
         model_id = "google/tapas-base-finetuned-wtq"
         model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        table_querier = pipeline("table-question-answering", model=model, tokenizer=tokenizer)
+        table_querier = pipeline(
+            "table-question-answering", model=model, tokenizer=tokenizer
+        )
 
         data = {
             "Repository": ["Transformers", "Datasets", "Tokenizers"],
@@ -583,8 +895,18 @@ class TQAPipelineTests(unittest.TestCase):
         results = table_querier(data, queries)
 
         expected_results = [
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
+            {
+                "answer": "Transformers",
+                "coordinates": [(0, 0)],
+                "cells": ["Transformers"],
+                "aggregator": "NONE",
+            },
+            {
+                "answer": "Transformers",
+                "coordinates": [(0, 0)],
+                "cells": ["Transformers"],
+                "aggregator": "NONE",
+            },
             {
                 "answer": "COUNT > Transformers, Datasets, Tokenizers",
                 "coordinates": [(0, 0), (1, 0), (2, 0)],
@@ -606,7 +928,10 @@ class TQAPipelineTests(unittest.TestCase):
         ]
         self.assertListEqual(results, expected_results)
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @slow
     @require_torch
     def test_integration_sqa_pt(self, torch_dtype="float32"):
@@ -622,17 +947,28 @@ class TQAPipelineTests(unittest.TestCase):
             "Number of movies": ["87", "53", "69"],
             "Date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
         }
-        queries = ["How many movies has George Clooney played in?", "How old is he?", "What's his date of birth?"]
+        queries = [
+            "How many movies has George Clooney played in?",
+            "How old is he?",
+            "What's his date of birth?",
+        ]
         results = table_querier(data, queries, sequential=True)
 
         expected_results = [
             {"answer": "69", "coordinates": [(2, 2)], "cells": ["69"]},
             {"answer": "59", "coordinates": [(2, 1)], "cells": ["59"]},
-            {"answer": "28 november 1967", "coordinates": [(2, 3)], "cells": ["28 november 1967"]},
+            {
+                "answer": "28 november 1967",
+                "coordinates": [(2, 3)],
+                "cells": ["28 november 1967"],
+            },
         ]
         self.assertListEqual(results, expected_results)
 
-    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12,
+        reason="Tapas is only available in torch v1.12+",
+    )
     @slow
     @require_torch
     def test_integration_sqa_pt_fp16(self):
@@ -656,13 +992,21 @@ class TQAPipelineTests(unittest.TestCase):
             "Number of movies": ["87", "53", "69"],
             "Date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
         }
-        queries = ["How many movies has George Clooney played in?", "How old is he?", "What's his date of birth?"]
+        queries = [
+            "How many movies has George Clooney played in?",
+            "How old is he?",
+            "What's his date of birth?",
+        ]
         results = table_querier(data, queries, sequential=True)
 
         expected_results = [
             {"answer": "69", "coordinates": [(2, 2)], "cells": ["69"]},
             {"answer": "59", "coordinates": [(2, 1)], "cells": ["59"]},
-            {"answer": "28 november 1967", "coordinates": [(2, 3)], "cells": ["28 november 1967"]},
+            {
+                "answer": "28 november 1967",
+                "coordinates": [(2, 3)],
+                "cells": ["28 november 1967"],
+            },
         ]
         self.assertListEqual(results, expected_results)
 

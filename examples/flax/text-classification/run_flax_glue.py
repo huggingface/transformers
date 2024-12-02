@@ -83,25 +83,39 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     use_slow_tokenizer: Optional[bool] = field(
         default=False,
-        metadata={"help": "If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library)."},
+        metadata={
+            "help": "If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library)."
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -137,30 +151,48 @@ class DataTrainingArguments:
     """
 
     task_name: Optional[str] = field(
-        default=None, metadata={"help": f"The name of the glue task to train on. choices {list(task_to_keys.keys())}"}
+        default=None,
+        metadata={
+            "help": f"The name of the glue task to train on. choices {list(task_to_keys.keys())}"
+        },
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
+        default=None,
+        metadata={"help": "The input training data file (a csv or JSON file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."
+        },
     )
     test_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+        metadata={
+            "help": "An optional input test data file to predict on (a csv or JSON file)."
+        },
     )
     text_column_name: Optional[str] = field(
-        default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
+        default=None,
+        metadata={
+            "help": "The column name of text to input in the file (a csv or JSON file)."
+        },
     )
     label_column_name: Optional[str] = field(
-        default=None, metadata={"help": "The column name of label to input in the file (a csv or JSON file)."}
+        default=None,
+        metadata={
+            "help": "The column name of label to input in the file (a csv or JSON file)."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -204,16 +236,32 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.task_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.task_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-        self.task_name = self.task_name.lower() if isinstance(self.task_name, str) else self.task_name
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
+        self.task_name = (
+            self.task_name.lower()
+            if isinstance(self.task_name, str)
+            else self.task_name
+        )
 
 
 def create_train_state(
@@ -253,11 +301,19 @@ def create_train_state(
             for layer in flat_params.keys()
             if layer_norm_name in "".join(layer).lower()
         }
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
+        flat_mask = {
+            path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params)
+            for path in flat_params
+        }
         return traverse_util.unflatten_dict(flat_mask)
 
     tx = optax.adamw(
-        learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=weight_decay, mask=decay_mask_fn
+        learning_rate=learning_rate_fn,
+        b1=0.9,
+        b2=0.999,
+        eps=1e-6,
+        weight_decay=weight_decay,
+        mask=decay_mask_fn,
     )
 
     if is_regression:
@@ -275,7 +331,9 @@ def create_train_state(
     else:  # Classification.
 
         def cross_entropy_loss(logits, labels):
-            xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=num_labels))
+            xentropy = optax.softmax_cross_entropy(
+                logits, onehot(labels, num_classes=num_labels)
+            )
             return jnp.mean(xentropy)
 
         return TrainState.create(
@@ -288,16 +346,26 @@ def create_train_state(
 
 
 def create_learning_rate_fn(
-    train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
+    train_ds_size: int,
+    train_batch_size: int,
+    num_train_epochs: int,
+    num_warmup_steps: int,
+    learning_rate: float,
 ) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
-    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
-    decay_fn = optax.linear_schedule(
-        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
+    warmup_fn = optax.linear_schedule(
+        init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps
     )
-    schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
+    decay_fn = optax.linear_schedule(
+        init_value=learning_rate,
+        end_value=0,
+        transition_steps=num_train_steps - num_warmup_steps,
+    )
+    schedule_fn = optax.join_schedules(
+        schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps]
+    )
     return schedule_fn
 
 
@@ -331,11 +399,15 @@ def glue_eval_data_collator(dataset: Dataset, batch_size: int):
 
 
 def main():
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -345,7 +417,9 @@ def main():
             FutureWarning,
         )
         if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
         model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
@@ -375,7 +449,9 @@ def main():
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
         api = HfApi()
-        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        repo_id = api.create_repo(
+            repo_name, exist_ok=True, token=training_args.hub_token
+        ).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or specify a GLUE benchmark task (the dataset will be downloaded automatically from the datasets Hub).
@@ -403,7 +479,11 @@ def main():
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-        extension = (data_args.train_file if data_args.train_file is not None else data_args.valid_file).split(".")[-1]
+        extension = (
+            data_args.train_file
+            if data_args.train_file is not None
+            else data_args.valid_file
+        ).split(".")[-1]
         raw_datasets = load_dataset(
             extension,
             data_files=data_files,
@@ -422,7 +502,10 @@ def main():
             num_labels = 1
     else:
         # Trying to have good defaults here, don't hesitate to tweak to your needs.
-        is_regression = raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
+        is_regression = raw_datasets["train"].features["label"].dtype in [
+            "float32",
+            "float64",
+        ]
         if is_regression:
             num_labels = 1
         else:
@@ -458,8 +541,13 @@ def main():
         sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
     else:
         # Again, we try to have some nice defaults but don't hesitate to tweak to your use case.
-        non_label_column_names = [name for name in raw_datasets["train"].column_names if name != "label"]
-        if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
+        non_label_column_names = [
+            name for name in raw_datasets["train"].column_names if name != "label"
+        ]
+        if (
+            "sentence1" in non_label_column_names
+            and "sentence2" in non_label_column_names
+        ):
             sentence1_key, sentence2_key = "sentence1", "sentence2"
         else:
             if len(non_label_column_names) >= 2:
@@ -481,7 +569,9 @@ def main():
                 f"The configuration of the model provided the following label correspondence: {label_name_to_id}. "
                 "Using it!"
             )
-            label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
+            label_to_id = {
+                i: label_name_to_id[label_list[i]] for i in range(num_labels)
+            }
         else:
             logger.warning(
                 "Your model seems to have been trained with labels, but they don't match the dataset: "
@@ -494,9 +584,16 @@ def main():
     def preprocess_function(examples):
         # Tokenize the texts
         texts = (
-            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+            (examples[sentence1_key],)
+            if sentence2_key is None
+            else (examples[sentence1_key], examples[sentence2_key])
         )
-        result = tokenizer(*texts, padding="max_length", max_length=data_args.max_seq_length, truncation=True)
+        result = tokenizer(
+            *texts,
+            padding="max_length",
+            max_length=data_args.max_seq_length,
+            truncation=True,
+        )
 
         if "label" in examples:
             if label_to_id is not None:
@@ -508,11 +605,15 @@ def main():
         return result
 
     processed_datasets = raw_datasets.map(
-        preprocess_function, batched=True, remove_columns=raw_datasets["train"].column_names
+        preprocess_function,
+        batched=True,
+        remove_columns=raw_datasets["train"].column_names,
     )
 
     train_dataset = processed_datasets["train"]
-    eval_dataset = processed_datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
+    eval_dataset = processed_datasets[
+        "validation_matched" if data_args.task_name == "mnli" else "validation"
+    ]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -525,7 +626,9 @@ def main():
             from flax.metrics.tensorboard import SummaryWriter
 
             summary_writer = SummaryWriter(training_args.output_dir)
-            summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
+            summary_writer.hparams(
+                {**training_args.to_dict(), **vars(model_args), **vars(data_args)}
+            )
         except ImportError as ie:
             has_tensorboard = False
             logger.warning(
@@ -554,7 +657,9 @@ def main():
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    train_batch_size = int(training_args.per_device_train_batch_size) * jax.local_device_count()
+    train_batch_size = (
+        int(training_args.per_device_train_batch_size) * jax.local_device_count()
+    )
     per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
     eval_batch_size = per_device_eval_batch_size * jax.device_count()
 
@@ -567,7 +672,11 @@ def main():
     )
 
     state = create_train_state(
-        model, learning_rate_fn, is_regression, num_labels=num_labels, weight_decay=training_args.weight_decay
+        model,
+        learning_rate_fn,
+        is_regression,
+        num_labels=num_labels,
+        weight_decay=training_args.weight_decay,
     )
 
     # define step functions
@@ -579,7 +688,9 @@ def main():
         targets = batch.pop("labels")
 
         def loss_fn(params):
-            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+            logits = state.apply_fn(
+                **batch, params=params, dropout_rng=dropout_rng, train=True
+            )[0]
             loss = state.loss_fn(logits, targets)
             return loss
 
@@ -587,7 +698,10 @@ def main():
         loss, grad = grad_fn(state.params)
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
-        metrics = jax.lax.pmean({"loss": loss, "learning_rate": learning_rate_fn(state.step)}, axis_name="batch")
+        metrics = jax.lax.pmean(
+            {"loss": loss, "learning_rate": learning_rate_fn(state.step)},
+            axis_name="batch",
+        )
         return new_state, metrics, new_dropout_rng
 
     p_train_step = jax.pmap(train_step, axis_name="batch", donate_argnums=(0,))
@@ -599,7 +713,9 @@ def main():
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
     if data_args.task_name is not None:
-        metric = evaluate.load("glue", data_args.task_name, cache_dir=model_args.cache_dir)
+        metric = evaluate.load(
+            "glue", data_args.task_name, cache_dir=model_args.cache_dir
+        )
     else:
         metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
 
@@ -620,7 +736,9 @@ def main():
         rng, input_rng = jax.random.split(rng)
 
         # train
-        train_loader = glue_train_data_collator(input_rng, train_dataset, train_batch_size)
+        train_loader = glue_train_data_collator(
+            input_rng, train_dataset, train_batch_size
+        )
         for step, batch in enumerate(
             tqdm(
                 train_loader,
@@ -639,7 +757,9 @@ def main():
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
                 if has_tensorboard and jax.process_index() == 0:
-                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+                    write_train_metric(
+                        summary_writer, train_metrics, train_time, cur_step
+                    )
 
                 epochs.write(
                     f"Step... ({cur_step}/{total_steps} | Training Loss: {train_metric['loss']}, Learning Rate:"
@@ -648,7 +768,10 @@ def main():
 
                 train_metrics = []
 
-            if (cur_step % training_args.eval_steps == 0 or cur_step % steps_per_epoch == 0) and cur_step > 0:
+            if (
+                cur_step % training_args.eval_steps == 0
+                or cur_step % steps_per_epoch == 0
+            ) and cur_step > 0:
                 # evaluate
                 eval_loader = glue_eval_data_collator(eval_dataset, eval_batch_size)
                 for batch in tqdm(
@@ -661,16 +784,22 @@ def main():
                     predictions = pad_shard_unpad(p_eval_step)(
                         state, batch, min_device_batch=per_device_eval_batch_size
                     )
-                    metric.add_batch(predictions=np.array(predictions), references=labels)
+                    metric.add_batch(
+                        predictions=np.array(predictions), references=labels
+                    )
 
                 eval_metric = metric.compute()
 
-                logger.info(f"Step... ({cur_step}/{total_steps} | Eval metrics: {eval_metric})")
+                logger.info(
+                    f"Step... ({cur_step}/{total_steps} | Eval metrics: {eval_metric})"
+                )
 
                 if has_tensorboard and jax.process_index() == 0:
                     write_eval_metric(summary_writer, eval_metric, cur_step)
 
-            if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
+            if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (
+                cur_step == total_steps
+            ):
                 # save checkpoint after each epoch and push checkpoint to the hub
                 if jax.process_index() == 0:
                     params = jax.device_get(unreplicate(state.params))
@@ -688,7 +817,9 @@ def main():
 
     # save the eval metrics in json
     if jax.process_index() == 0:
-        eval_metric = {f"eval_{metric_name}": value for metric_name, value in eval_metric.items()}
+        eval_metric = {
+            f"eval_{metric_name}": value for metric_name, value in eval_metric.items()
+        }
         path = os.path.join(training_args.output_dir, "eval_results.json")
         with open(path, "w") as f:
             json.dump(eval_metric, f, indent=4, sort_keys=True)

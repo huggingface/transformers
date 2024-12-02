@@ -30,7 +30,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_efficientformer"] = ["EfficientFormerImageProcessor"]
+    _import_structure["image_processing_efficientformer"] = [
+        "EfficientFormerImageProcessor"
+    ]
 
 try:
     if not is_torch_available():
@@ -97,4 +99,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

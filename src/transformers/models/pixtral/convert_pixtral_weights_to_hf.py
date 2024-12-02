@@ -123,14 +123,25 @@ class MistralConverter:
                 local = []
                 for index in range(1, len(token)):
                     piece_l, piece_r = token[:index], token[index:]
-                    if piece_l in bpe_ranks and piece_r in bpe_ranks and (piece_l + piece_r) in bpe_ranks:
+                    if (
+                        piece_l in bpe_ranks
+                        and piece_r in bpe_ranks
+                        and (piece_l + piece_r) in bpe_ranks
+                    ):
                         local.append((piece_l, piece_r, rank))
-                local = sorted(local, key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]), reverse=False)
+                local = sorted(
+                    local,
+                    key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]),
+                    reverse=False,
+                )
                 merges.extend(local)
             else:
                 vocab[token] = idx
         merges = sorted(merges, key=lambda val: val[2], reverse=False)
-        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
+        merges = [
+            (token_bytes_to_string(val[0]), token_bytes_to_string(val[1]))
+            for val in merges
+        ]
         return vocab, merges
 
     def tokenizer(self):
@@ -144,8 +155,12 @@ class MistralConverter:
         tokenizer = self.tokenizer()
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
-                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
-                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
+                pre_tokenizers.Split(
+                    Regex(self.pattern), behavior="isolated", invert=False
+                ),
+                pre_tokenizers.ByteLevel(
+                    add_prefix_space=self.add_prefix_space, use_regex=False
+                ),
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
@@ -171,7 +186,9 @@ def convert_mistral_tokenizer():
     vocab = specials_tokens
 
     tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
+        tokenizer_object=MistralConverter(
+            vocab=vocab, additional_special_tokens=all_special
+        ).converted(),
         bos_token="<s>",
         unk_token="<unk>",
         eos_token="</s>",
@@ -184,7 +201,11 @@ def convert_mistral_tokenizer():
 def permute_for_rope(value, n_heads, config):
     dim1 = value.shape[0]
     dim2 = config.hidden_size
-    return value.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+    return (
+        value.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+        .transpose(1, 2)
+        .reshape(dim1, dim2)
+    )
 
 
 def convert_dictionnary(original_state_dict, vision_config, text_config):
@@ -262,7 +283,9 @@ def convert_mistral_model(input_dir, output_dir):
 
     tokenizer = convert_mistral_tokenizer()
     image_processor = PixtralImageProcessor()
-    processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
+    processor = PixtralProcessor(
+        tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]"
+    )
     processor.save_pretrained(output_dir)
 
 

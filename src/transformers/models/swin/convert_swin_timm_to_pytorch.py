@@ -41,7 +41,9 @@ def get_swin_config(swin_name):
         num_classes = 1000
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -58,7 +60,9 @@ def get_swin_config(swin_name):
 
 def rename_key(name):
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "embeddings.norm")
     if "layers" in name:
@@ -99,28 +103,32 @@ def convert_state_dict(orig_state_dict, model):
             key_split = key.split(".")
             layer_num = int(key_split[1])
             block_num = int(key_split[3])
-            dim = model.swin.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
+            dim = (
+                model.swin.encoder.layers[layer_num]
+                .blocks[block_num]
+                .attention.self.all_head_size
+            )
 
             if "weight" in key:
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"] = (
-                    val[:dim, :]
-                )
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
-                    dim : dim * 2, :
-                ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"] = (
-                    val[-dim:, :]
-                )
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
+                ] = val[:dim, :]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
+                ] = val[dim : dim * 2, :]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
+                ] = val[-dim:, :]
             else:
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
-                    :dim
-                ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
-                    dim : dim * 2
-                ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = val[
-                    -dim:
-                ]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
+                ] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -140,7 +148,9 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
+    image_processor = AutoImageProcessor.from_pretrained(
+        "microsoft/{}".format(swin_name.replace("_", "-"))
+    )
     image = Image.open(requests.get(url, stream=True).raw)
     inputs = image_processor(images=image, return_tensors="pt")
 
@@ -166,7 +176,10 @@ if __name__ == "__main__":
         help="Name of the Swin timm model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()

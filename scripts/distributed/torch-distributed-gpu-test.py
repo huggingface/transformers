@@ -85,7 +85,9 @@ try:
 
     dist.barrier()
     if rank == 0:
-        printflock(f"pt={torch.__version__}, cuda={torch.version.cuda}, nccl={torch.cuda.nccl.version()}")
+        printflock(
+            f"pt={torch.__version__}, cuda={torch.version.cuda}, nccl={torch.cuda.nccl.version()}"
+        )
 
 except Exception:
     printflock(f"{gpu} is broken")

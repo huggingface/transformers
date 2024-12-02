@@ -33,7 +33,9 @@ def rename_key(orig_key):
         orig_key = orig_key.replace("norm", "LayerNorm")
     if "transformer" in orig_key:
         layer_num = orig_key.split(".")[0].split("_")[-1]
-        orig_key = orig_key.replace(f"transformer_{layer_num}", f"encoder.layer.{layer_num}")
+        orig_key = orig_key.replace(
+            f"transformer_{layer_num}", f"encoder.layer.{layer_num}"
+        )
     if "mha.attn" in orig_key:
         orig_key = orig_key.replace("mha.attn", "attention.self")
     if "mha" in orig_key:
@@ -69,7 +71,9 @@ def convert_checkpoint_helper(config, orig_state_dict):
         else:
             orig_state_dict[rename_key(key)] = val
 
-    orig_state_dict["cls.predictions.bias"] = orig_state_dict["cls.predictions.decoder.bias"]
+    orig_state_dict["cls.predictions.bias"] = orig_state_dict[
+        "cls.predictions.decoder.bias"
+    ]
     orig_state_dict["nystromformer.embeddings.position_ids"] = (
         torch.arange(config.max_position_embeddings).expand((1, -1)) + 2
     )
@@ -77,8 +81,12 @@ def convert_checkpoint_helper(config, orig_state_dict):
     return orig_state_dict
 
 
-def convert_nystromformer_checkpoint(checkpoint_path, nystromformer_config_file, pytorch_dump_path):
-    orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
+def convert_nystromformer_checkpoint(
+    checkpoint_path, nystromformer_config_file, pytorch_dump_path
+):
+    orig_state_dict = torch.load(checkpoint_path, map_location="cpu")[
+        "model_state_dict"
+    ]
     config = NystromformerConfig.from_json_file(nystromformer_config_file)
     model = NystromformerForMaskedLM(config)
 
@@ -95,7 +103,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--pytorch_model_path", default=None, type=str, required=True, help="Path to Nystromformer pytorch checkpoint."
+        "--pytorch_model_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to Nystromformer pytorch checkpoint.",
     )
     parser.add_argument(
         "--config_file",
@@ -105,7 +117,13 @@ if __name__ == "__main__":
         help="The json file for Nystromformer model config.",
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_nystromformer_checkpoint(args.pytorch_model_path, args.config_file, args.pytorch_dump_path)
+    convert_nystromformer_checkpoint(
+        args.pytorch_model_path, args.config_file, args.pytorch_dump_path
+    )

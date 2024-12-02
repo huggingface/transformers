@@ -33,7 +33,12 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -120,13 +125,24 @@ class ZambaModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return ZambaConfig(
@@ -172,13 +188,24 @@ class ZambaModelTester:
             choice_labels,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
         model = ZambaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -196,7 +223,9 @@ class ZambaModelTester:
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids, labels=token_labels)
         result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -245,22 +274,34 @@ class ZambaModelTester:
             past_key_values=past_key_values,
             output_hidden_states=True,
             cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
+                input_ids.shape[1],
+                input_ids.shape[1] + next_tokens.shape[1],
+                device=model.device,
             ),
         )["hidden_states"][0]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = ZambaForSequenceClassification(config)
@@ -284,7 +325,9 @@ class ZambaModelTester:
 
 
 @require_torch
-class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ZambaModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             ZambaModel,
@@ -310,7 +353,9 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = ZambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=ZambaConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -325,11 +370,15 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_initialization(self):
         r"""
@@ -343,11 +392,24 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     if "A_log" in name:
-                        A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
-                        self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                        A = torch.arange(
+                            1, config.mamba_d_state + 1, dtype=torch.float32
+                        )[None, :]
+                        self.assertTrue(
+                            torch.allclose(
+                                param.data, torch.log(A), atol=1e-5, rtol=1e-5
+                            )
+                        )
                     elif "D" in name:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        self.assertTrue(
+                            torch.allclose(
+                                param.data,
+                                torch.ones_like(param.data),
+                                atol=1e-5,
+                                rtol=1e-5,
+                            )
+                        )
                     elif "x_proj" in name or "dt_proj_weight" in name:
                         self.assertIn(
                             ((param.data.mean() * 1e2).round() / 1e2).item(),
@@ -356,7 +418,11 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                         )
                     elif "dt_proj_bias" in name:
                         dt = torch.exp(
-                            torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                            torch.tensor([0, 1])
+                            * (
+                                math.log(config.time_step_max)
+                                - math.log(config.time_step_min)
+                            )
                             + math.log(config.time_step_min)
                         ).clamp(min=config.time_step_floor)
                         inv_dt = dt + torch.log(-torch.expm1(-dt))
@@ -386,11 +452,16 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
 
         expected_num_attentions = (
             math.ceil(
-                (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
+                (
+                    self.model_tester.num_hidden_layers
+                    - self.model_tester.attn_layer_offset
+                )
                 / self.model_tester.attn_layer_period
             )
             + 1
@@ -422,7 +493,11 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -443,7 +518,11 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self.assertEqual(len(self_attentions), expected_num_attentions)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
 
     def _get_input_ids_and_config(self):
@@ -464,6 +543,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         effect of the left padding discussed in the issue in the note. Using a more permissive tolerance value.
         """
         import inspect
+
         # NOTE: left-padding results in small numerical differences. This is expected.
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
 
@@ -494,14 +574,25 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             # With left-padding (length 32)
             pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
+            padding = (
+                torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device)
+                * config.pad_token_id
+            )
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            padded_attention_mask = torch.cat(
+                (torch.zeros_like(padding), attention_mask), dim=1
+            )
+            model_kwargs = _prepare_model_kwargs(
+                padded_input_ids, padded_attention_mask, signature
+            )
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=3e-3))
+            self.assertTrue(
+                torch.allclose(
+                    next_logits_wo_padding, next_logits_with_padding, atol=3e-3
+                )
+            )
 
     @require_flash_attn
     @require_torch_gpu
@@ -514,14 +605,18 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         right padding + use cache with FA2
         """
         for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
                 dummy_input = inputs_dict[model.main_input_name]
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                dummy_attention_mask = inputs_dict.get(
+                    "attention_mask", torch.ones_like(dummy_input)
+                )
                 # NOTE: Zamba does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
@@ -535,7 +630,9 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
                 for _, param in model.named_parameters():
                     # upcast only layer norms
-                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                    if (param.dtype == torch.float16) or (
+                        param.dtype == torch.bfloat16
+                    ):
                         param.data = param.data.to(torch.float32)
 
                 _ = model(dummy_input)
@@ -569,7 +666,10 @@ class ZambaModelIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         model_id = "Zyphra/Zamba-7B-v1"
         cls.model = ZambaForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_mamba_kernels=False
+            model_id,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            use_mamba_kernels=False,
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
@@ -577,9 +677,9 @@ class ZambaModelIntegrationTest(unittest.TestCase):
     def test_simple_generate(self):
         self.model.to(torch_device)
 
-        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
-            "input_ids"
-        ].to(torch_device)
+        input_ids = self.tokenizer(
+            "Hey how are you doing on this lovely evening?", return_tensors="pt"
+        )["input_ids"].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(
@@ -600,7 +700,9 @@ class ZambaModelIntegrationTest(unittest.TestCase):
             ]
             , dtype=torch.float32)  # fmt: skip
 
-        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3
+        )
 
     @slow
     def test_simple_batched_generate_with_padding(self):
@@ -609,7 +711,9 @@ class ZambaModelIntegrationTest(unittest.TestCase):
         self.model.resize_token_embeddings(len(self.tokenizer))
 
         inputs = self.tokenizer(
-            ["Hey how are you doing on this lovely evening?", "Tell me a story"], padding=True, return_tensors="pt"
+            ["Hey how are you doing on this lovely evening?", "Tell me a story"],
+            padding=True,
+            return_tensors="pt",
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
@@ -623,7 +727,9 @@ class ZambaModelIntegrationTest(unittest.TestCase):
         )
 
         with torch.no_grad():
-            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits
+            logits = self.model(
+                input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
+            ).logits
 
         EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
             [
@@ -645,5 +751,9 @@ class ZambaModelIntegrationTest(unittest.TestCase):
             ]
             , dtype=torch.float32)  # fmt: skip
 
-        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3
+        )

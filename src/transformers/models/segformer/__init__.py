@@ -22,7 +22,9 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_segformer": ["SegformerConfig", "SegformerOnnxConfig"]}
+_import_structure = {
+    "configuration_segformer": ["SegformerConfig", "SegformerOnnxConfig"]
+}
 
 try:
     if not is_vision_available():
@@ -106,4 +108,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

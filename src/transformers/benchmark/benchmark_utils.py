@@ -33,7 +33,13 @@ from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from .. import AutoConfig, PretrainedConfig
 from .. import __version__ as version
-from ..utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available, logging
+from ..utils import (
+    is_psutil_available,
+    is_py3nvml_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -73,7 +79,9 @@ BenchmarkOutput = namedtuple(
 )
 
 
-def separate_process_wrapper_fn(func: Callable[[], None], do_multi_processing: bool) -> Callable[[], None]:
+def separate_process_wrapper_fn(
+    func: Callable[[], None], do_multi_processing: bool
+) -> Callable[[], None]:
     """
     This function wraps another function into its own separated process. In order to ensure accurate memory
     measurements it is important that the function is executed in a separate process
@@ -201,7 +209,9 @@ class MemorySummary(NamedTuple):
 MemoryTrace = List[UsedMemoryState]
 
 
-def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_idx=None) -> int:
+def measure_peak_memory_cpu(
+    function: Callable[[], None], interval=0.5, device_idx=None
+) -> int:
     """
     measures peak cpu memory consumption of a given `function` running the function for at least interval seconds and
     at most 20 * interval seconds. This function is heavily inspired by: `memory_usage` of the package
@@ -234,7 +244,9 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
         """
         process = psutil.Process(process_id)
         try:
-            meminfo_attr = "memory_info" if hasattr(process, "memory_info") else "get_memory_info"
+            meminfo_attr = (
+                "memory_info" if hasattr(process, "memory_info") else "get_memory_info"
+            )
             memory = getattr(process, meminfo_attr)()[0]
         except psutil.AccessDenied:
             raise ValueError("Error with Psutil.")
@@ -254,7 +266,9 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
             memory usage of a process
             """
 
-            def __init__(self, process_id: int, child_connection: Connection, interval: float):
+            def __init__(
+                self, process_id: int, child_connection: Connection, interval: float
+            ):
                 super().__init__()
                 self.process_id = process_id
                 self.interval = interval
@@ -266,7 +280,9 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
                 self.connection.send(0)
                 stop = False
                 while True:
-                    self.mem_usage = max(self.mem_usage, get_cpu_memory(self.process_id))
+                    self.mem_usage = max(
+                        self.mem_usage, get_cpu_memory(self.process_id)
+                    )
                     self.num_measurements += 1
 
                     if stop:
@@ -371,10 +387,16 @@ def start_memory_tracing(
     if is_py3nvml_available():
         try:
             nvml.nvmlInit()
-            devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
+            devices = (
+                list(range(nvml.nvmlDeviceGetCount()))
+                if gpus_to_trace is None
+                else gpus_to_trace
+            )
             nvml.nvmlShutdown()
         except (OSError, nvml.NVMLError):
-            logger.warning("Error while initializing communication with GPU. We won't perform GPU memory tracing.")
+            logger.warning(
+                "Error while initializing communication with GPU. We won't perform GPU memory tracing."
+            )
             log_gpu = False
         else:
             log_gpu = is_torch_available() or is_tf_available()
@@ -401,7 +423,10 @@ def start_memory_tracing(
         if events_to_trace is not None:
             if isinstance(events_to_trace, str) and event != events_to_trace:
                 return traceit
-            elif isinstance(events_to_trace, (list, tuple)) and event not in events_to_trace:
+            elif (
+                isinstance(events_to_trace, (list, tuple))
+                and event not in events_to_trace
+            ):
                 return traceit
 
         if "__name__" not in frame.f_globals:
@@ -416,14 +441,21 @@ def start_memory_tracing(
             if modules_to_trace is not None:
                 if isinstance(modules_to_trace, str) and modules_to_trace not in name:
                     return traceit
-                elif isinstance(modules_to_trace, (list, tuple)) and all(m not in name for m in modules_to_trace):
+                elif isinstance(modules_to_trace, (list, tuple)) and all(
+                    m not in name for m in modules_to_trace
+                ):
                     return traceit
 
             # Filter blacklist of modules not to trace
             if modules_not_to_trace is not None:
-                if isinstance(modules_not_to_trace, str) and modules_not_to_trace in name:
+                if (
+                    isinstance(modules_not_to_trace, str)
+                    and modules_not_to_trace in name
+                ):
                     return traceit
-                elif isinstance(modules_not_to_trace, (list, tuple)) and any(m in name for m in modules_not_to_trace):
+                elif isinstance(modules_not_to_trace, (list, tuple)) and any(
+                    m in name for m in modules_not_to_trace
+                ):
                     return traceit
 
         # Record current tracing state (file, location in file...)
@@ -568,12 +600,18 @@ def stop_memory_tracing(
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         ]
 
-        memory_curr_trace = sorted(memory_curr_trace, key=lambda x: x.cpu_gpu.bytes, reverse=True)
+        memory_curr_trace = sorted(
+            memory_curr_trace, key=lambda x: x.cpu_gpu.bytes, reverse=True
+        )
 
         if ignore_released_memory:
-            total_memory = sum(max(0, step_trace.cpu_gpu.bytes) for step_trace in memory_diff_trace)
+            total_memory = sum(
+                max(0, step_trace.cpu_gpu.bytes) for step_trace in memory_diff_trace
+            )
         else:
-            total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
+            total_memory = sum(
+                step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace
+            )
 
         total_memory = Memory(total_memory)
 
@@ -602,11 +640,14 @@ class Benchmark(ABC):
     configs: PretrainedConfig
     framework: str
 
-    def __init__(self, args: BenchmarkArguments = None, configs: PretrainedConfig = None):
+    def __init__(
+        self, args: BenchmarkArguments = None, configs: PretrainedConfig = None
+    ):
         self.args = args
         if configs is None:
             self.config_dict = {
-                model_name: AutoConfig.from_pretrained(model_name) for model_name in self.args.model_names
+                model_name: AutoConfig.from_pretrained(model_name)
+                for model_name in self.args.model_names
             }
         else:
             self.config_dict = dict(zip(self.args.model_names, configs))
@@ -649,11 +690,15 @@ class Benchmark(ABC):
         pass
 
     @abstractmethod
-    def _inference_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
+    def _inference_speed(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> float:
         pass
 
     @abstractmethod
-    def _train_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
+    def _train_speed(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> float:
         pass
 
     @abstractmethod
@@ -669,16 +714,24 @@ class Benchmark(ABC):
         pass
 
     def inference_speed(self, *args, **kwargs) -> float:
-        return separate_process_wrapper_fn(self._inference_speed, self.args.do_multi_processing)(*args, **kwargs)
+        return separate_process_wrapper_fn(
+            self._inference_speed, self.args.do_multi_processing
+        )(*args, **kwargs)
 
     def train_speed(self, *args, **kwargs) -> float:
-        return separate_process_wrapper_fn(self._train_speed, self.args.do_multi_processing)(*args, **kwargs)
+        return separate_process_wrapper_fn(
+            self._train_speed, self.args.do_multi_processing
+        )(*args, **kwargs)
 
     def inference_memory(self, *args, **kwargs) -> [Memory, Optional[MemorySummary]]:
-        return separate_process_wrapper_fn(self._inference_memory, self.args.do_multi_processing)(*args, **kwargs)
+        return separate_process_wrapper_fn(
+            self._inference_memory, self.args.do_multi_processing
+        )(*args, **kwargs)
 
     def train_memory(self, *args, **kwargs) -> [Memory, Optional[MemorySummary]]:
-        return separate_process_wrapper_fn(self._train_memory, self.args.do_multi_processing)(*args, **kwargs)
+        return separate_process_wrapper_fn(
+            self._train_memory, self.args.do_multi_processing
+        )(*args, **kwargs)
 
     def run(self):
         result_dict = {model_name: {} for model_name in self.args.model_names}
@@ -706,25 +759,48 @@ class Benchmark(ABC):
                 for sequence_length in self.args.sequence_lengths:
                     if self.args.inference:
                         if self.args.memory:
-                            memory, inference_summary = self.inference_memory(model_name, batch_size, sequence_length)
-                            inference_result_memory[model_name]["result"][batch_size][sequence_length] = memory
+                            memory, inference_summary = self.inference_memory(
+                                model_name, batch_size, sequence_length
+                            )
+                            inference_result_memory[model_name]["result"][batch_size][
+                                sequence_length
+                            ] = memory
                         if self.args.speed:
-                            time = self.inference_speed(model_name, batch_size, sequence_length)
-                            inference_result_time[model_name]["result"][batch_size][sequence_length] = time
+                            time = self.inference_speed(
+                                model_name, batch_size, sequence_length
+                            )
+                            inference_result_time[model_name]["result"][batch_size][
+                                sequence_length
+                            ] = time
 
                     if self.args.training:
                         if self.args.memory:
-                            memory, train_summary = self.train_memory(model_name, batch_size, sequence_length)
-                            train_result_memory[model_name]["result"][batch_size][sequence_length] = memory
+                            memory, train_summary = self.train_memory(
+                                model_name, batch_size, sequence_length
+                            )
+                            train_result_memory[model_name]["result"][batch_size][
+                                sequence_length
+                            ] = memory
                         if self.args.speed:
-                            time = self.train_speed(model_name, batch_size, sequence_length)
-                            train_result_time[model_name]["result"][batch_size][sequence_length] = time
+                            time = self.train_speed(
+                                model_name, batch_size, sequence_length
+                            )
+                            train_result_time[model_name]["result"][batch_size][
+                                sequence_length
+                            ] = time
 
         if self.args.inference:
             if self.args.speed:
-                self.print_fn("\n" + 20 * "=" + ("INFERENCE - SPEED - RESULT").center(40) + 20 * "=")
+                self.print_fn(
+                    "\n"
+                    + 20 * "="
+                    + ("INFERENCE - SPEED - RESULT").center(40)
+                    + 20 * "="
+                )
                 self.print_results(inference_result_time, type_label="Time in s")
-                self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
+                self.save_to_csv(
+                    inference_result_time, self.args.inference_time_csv_file
+                )
                 if self.args.is_tpu:
                     self.print_fn(
                         "TPU was used for inference. Note that the time after compilation stabilized (after ~10"
@@ -732,17 +808,31 @@ class Benchmark(ABC):
                     )
 
             if self.args.memory:
-                self.print_fn("\n" + 20 * "=" + ("INFERENCE - MEMORY - RESULT").center(40) + 20 * "=")
+                self.print_fn(
+                    "\n"
+                    + 20 * "="
+                    + ("INFERENCE - MEMORY - RESULT").center(40)
+                    + 20 * "="
+                )
                 self.print_results(inference_result_memory, type_label="Memory in MB")
-                self.save_to_csv(inference_result_memory, self.args.inference_memory_csv_file)
+                self.save_to_csv(
+                    inference_result_memory, self.args.inference_memory_csv_file
+                )
 
             if self.args.trace_memory_line_by_line:
-                self.print_fn("\n" + 20 * "=" + ("INFERENCE - MEMOMRY - LINE BY LINE - SUMMARY").center(40) + 20 * "=")
+                self.print_fn(
+                    "\n"
+                    + 20 * "="
+                    + ("INFERENCE - MEMOMRY - LINE BY LINE - SUMMARY").center(40)
+                    + 20 * "="
+                )
                 self.print_memory_trace_statistics(inference_summary)
 
         if self.args.training:
             if self.args.speed:
-                self.print_fn("\n" + 20 * "=" + ("TRAIN - SPEED - RESULTS").center(40) + 20 * "=")
+                self.print_fn(
+                    "\n" + 20 * "=" + ("TRAIN - SPEED - RESULTS").center(40) + 20 * "="
+                )
                 self.print_results(train_result_time, "Time in s")
                 self.save_to_csv(train_result_time, self.args.train_time_csv_file)
                 if self.args.is_tpu:
@@ -752,17 +842,31 @@ class Benchmark(ABC):
                     )
 
             if self.args.memory:
-                self.print_fn("\n" + 20 * "=" + ("TRAIN - MEMORY - RESULTS").center(40) + 20 * "=")
+                self.print_fn(
+                    "\n" + 20 * "=" + ("TRAIN - MEMORY - RESULTS").center(40) + 20 * "="
+                )
                 self.print_results(train_result_memory, type_label="Memory in MB")
                 self.save_to_csv(train_result_memory, self.args.train_memory_csv_file)
 
             if self.args.trace_memory_line_by_line:
-                self.print_fn("\n" + 20 * "=" + ("TRAIN - MEMOMRY - LINE BY LINE - SUMMARY").center(40) + 20 * "=")
+                self.print_fn(
+                    "\n"
+                    + 20 * "="
+                    + ("TRAIN - MEMOMRY - LINE BY LINE - SUMMARY").center(40)
+                    + 20 * "="
+                )
                 self.print_memory_trace_statistics(train_summary)
 
         if self.args.env_print:
-            self.print_fn("\n" + 20 * "=" + ("ENVIRONMENT INFORMATION").center(40) + 20 * "=")
-            self.print_fn("\n".join([f"- {prop}: {val}" for prop, val in self.environment_info.items()]) + "\n")
+            self.print_fn(
+                "\n" + 20 * "=" + ("ENVIRONMENT INFORMATION").center(40) + 20 * "="
+            )
+            self.print_fn(
+                "\n".join(
+                    [f"- {prop}: {val}" for prop, val in self.environment_info.items()]
+                )
+                + "\n"
+            )
 
         if self.args.save_to_csv:
             with open(self.args.env_info_csv_file, mode="w", newline="") as csv_file:
@@ -817,9 +921,15 @@ class Benchmark(ABC):
                     nvml.nvmlInit()
                     handle = nvml.nvmlDeviceGetHandleByIndex(self.args.device_idx)
                     info["gpu"] = nvml.nvmlDeviceGetName(handle)
-                    info["gpu_ram_mb"] = bytes_to_mega_bytes(nvml.nvmlDeviceGetMemoryInfo(handle).total)
-                    info["gpu_power_watts"] = nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
-                    info["gpu_performance_state"] = nvml.nvmlDeviceGetPerformanceState(handle)
+                    info["gpu_ram_mb"] = bytes_to_mega_bytes(
+                        nvml.nvmlDeviceGetMemoryInfo(handle).total
+                    )
+                    info["gpu_power_watts"] = (
+                        nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
+                    )
+                    info["gpu_performance_state"] = nvml.nvmlDeviceGetPerformanceState(
+                        handle
+                    )
                     nvml.nvmlShutdown()
                 else:
                     logger.warning(
@@ -841,13 +951,18 @@ class Benchmark(ABC):
     def print_results(self, result_dict, type_label):
         self.print_fn(80 * "-")
         self.print_fn(
-            "Model Name".center(30) + "Batch Size".center(15) + "Seq Length".center(15) + type_label.center(15)
+            "Model Name".center(30)
+            + "Batch Size".center(15)
+            + "Seq Length".center(15)
+            + type_label.center(15)
         )
         self.print_fn(80 * "-")
         for model_name in self.args.model_names:
             for batch_size in result_dict[model_name]["bs"]:
                 for sequence_length in result_dict[model_name]["ss"]:
-                    result = result_dict[model_name]["result"][batch_size][sequence_length]
+                    result = result_dict[model_name]["result"][batch_size][
+                        sequence_length
+                    ]
                     if isinstance(result, float):
                         result = round(1000 * result) / 1000
                         result = "< 0.001" if result == 0.0 else str(result)
@@ -890,7 +1005,9 @@ class Benchmark(ABC):
         self.print_fn("Saving results to csv.")
         with open(filename, mode="w") as csv_file:
             if len(self.args.model_names) <= 0:
-                raise ValueError(f"At least 1 model should be defined, but got {self.model_names}")
+                raise ValueError(
+                    f"At least 1 model should be defined, but got {self.model_names}"
+                )
 
             fieldnames = ["model", "batch_size", "sequence_length"]
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames + ["result"])
@@ -906,8 +1023,10 @@ class Benchmark(ABC):
                                 "model": model_name,
                                 "batch_size": bs,
                                 "sequence_length": ss,
-                                "result": ("{}" if not isinstance(result_model, float) else "{:.4f}").format(
-                                    result_model
-                                ),
+                                "result": (
+                                    "{}"
+                                    if not isinstance(result_model, float)
+                                    else "{:.4f}"
+                                ).format(result_model),
                             }
                         )

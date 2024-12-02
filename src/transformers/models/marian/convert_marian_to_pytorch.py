@@ -54,7 +54,9 @@ def convert_encoder_layer(opus_dict, layer_prefix: str, converter: dict):
     return sd
 
 
-def load_layers_(layer_lst: nn.ModuleList, opus_state: dict, converter, is_decoder=False):
+def load_layers_(
+    layer_lst: nn.ModuleList, opus_state: dict, converter, is_decoder=False
+):
     for i, layer in enumerate(layer_lst):
         layer_tag = f"decoder_l{i + 1}_" if is_decoder else f"encoder_l{i + 1}_"
         sd = convert_encoder_layer(opus_state, layer_tag, converter)
@@ -69,7 +71,9 @@ def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
     ]  # + cant be loaded.
-    matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
+    matching = [
+        f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b
+    ]
     return matching
 
 
@@ -130,7 +134,10 @@ GROUPS = [
     ("da+fo+is+no+nb+nn+sv", "SCANDINAVIA"),
     ("se+sma+smj+smn+sms", "SAMI"),
     ("nb_NO+nb+nn_NO+nn+nog+no_nb+no", "NORWAY"),
-    ("ga+cy+br+gd+kw+gv", "CELTIC"),  # https://en.wikipedia.org/wiki/Insular_Celtic_languages
+    (
+        "ga+cy+br+gd+kw+gv",
+        "CELTIC",
+    ),  # https://en.wikipedia.org/wiki/Insular_Celtic_languages
 ]
 GROUP_TO_OPUS_NAME = {
     "opus-mt-ZH-de": "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-de",
@@ -186,8 +193,12 @@ def get_system_metadata(repo_root):
     import git
 
     return {
-        "helsinki_git_sha": git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
-        "transformers_git_sha": git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
+        "helsinki_git_sha": git.Repo(
+            path=repo_root, search_parent_directories=True
+        ).head.object.hexsha,
+        "transformers_git_sha": git.Repo(
+            path=".", search_parent_directories=True
+        ).head.object.hexsha,
         "port_machine": socket.gethostname(),
         "port_time": time.strftime("%Y-%m-%d-%H:%M"),
     }
@@ -223,7 +234,9 @@ def write_model_card(
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     opus_name: str = convert_hf_name_to_opus_name(hf_model_name)
     if repo_root not in ("OPUS-MT-train", "Tatoeba-Challenge"):
-        raise ValueError(f"Repos root is {repo_root}. Expected either OPUS-MT-train or Tatoeba-Challenge")
+        raise ValueError(
+            f"Repos root is {repo_root}. Expected either OPUS-MT-train or Tatoeba-Challenge"
+        )
     opus_readme_path = Path(repo_root).joinpath("models", opus_name, "README.md")
     if not (opus_readme_path.exists()):
         raise ValueError(f"Readme file {opus_readme_path} not found")
@@ -252,7 +265,9 @@ def write_model_card(
     )
 
     content = opus_readme_path.open().read()
-    content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
+    content = content.split("\n# ")[
+        -1
+    ]  # Get the lowest level 1 header in the README -- the most recent model.
     splat = content.split("*")[2:]
     print(splat[3])
     content = "*".join(splat)
@@ -292,10 +307,15 @@ def make_registry(repo_path="Opus-MT-train/models"):
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
-    return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
+    return [
+        (k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt")
+        for k, v in results.items()
+    ]
 
 
-def convert_all_sentencepiece_models(model_list=None, repo_path=None, dest_dir=Path("marian_converted")):
+def convert_all_sentencepiece_models(
+    model_list=None, repo_path=None, dest_dir=Path("marian_converted")
+):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
     dest_dir = Path(dest_dir)
@@ -328,7 +348,9 @@ def fetch_test_set(test_set_url):
     gold = lmap(str.strip, lns[1::4])
     mar_model = lmap(str.strip, lns[2::4])
     if not (len(gold) == len(mar_model) == len(src)):
-        raise ValueError(f"Gold, marian and source lengths {len(gold)}, {len(mar_model)}, {len(src)} mismatched")
+        raise ValueError(
+            f"Gold, marian and source lengths {len(gold)}, {len(mar_model)}, {len(src)} mismatched"
+        )
     os.remove(fname)
     return src, mar_model, gold
 
@@ -366,7 +388,11 @@ def _parse_readme(lns):
 
 def save_tokenizer_config(dest_dir: Path, separate_vocabs=False):
     dname = dest_dir.name.split("-")
-    dct = {"target_lang": dname[-1], "source_lang": "-".join(dname[:-1]), "separate_vocabs": separate_vocabs}
+    dct = {
+        "target_lang": dname[-1],
+        "source_lang": "-".join(dname[:-1]),
+        "separate_vocabs": separate_vocabs,
+    }
     save_json(dct, dest_dir / "tokenizer_config.json")
 
 
@@ -439,7 +465,9 @@ def check_marian_cfg_assumptions(marian_cfg):
     for k, v in assumed_settings.items():
         actual = marian_cfg[k]
         if actual != v:
-            raise ValueError(f"Unexpected config value for {k} expected {v} got {actual}")
+            raise ValueError(
+                f"Unexpected config value for {k} expected {v} got {actual}"
+            )
 
 
 BIAS_KEY = "decoder_ff_logit_out_b"
@@ -494,16 +522,21 @@ class OpusState:
         self.tokenizer = self.load_tokenizer()
         # retrieve EOS token and set correctly
         tokenizer_has_eos_token_id = (
-            hasattr(self.tokenizer, "eos_token_id") and self.tokenizer.eos_token_id is not None
+            hasattr(self.tokenizer, "eos_token_id")
+            and self.tokenizer.eos_token_id is not None
         )
         eos_token_id = self.tokenizer.eos_token_id if tokenizer_has_eos_token_id else 0
 
         if cfg["tied-embeddings-src"]:
-            self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
+            self.wemb, self.final_bias = add_emb_entries(
+                self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1
+            )
             self.pad_token_id = self.wemb.shape[0] - 1
             cfg["vocab_size"] = self.pad_token_id + 1
         else:
-            self.wemb, _ = add_emb_entries(self.state_dict["encoder_Wemb"], self.state_dict[BIAS_KEY], 1)
+            self.wemb, _ = add_emb_entries(
+                self.state_dict["encoder_Wemb"], self.state_dict[BIAS_KEY], 1
+            )
             self.dec_wemb, self.final_bias = add_emb_entries(
                 self.state_dict["decoder_Wemb"], self.state_dict[BIAS_KEY], 1
             )
@@ -525,7 +558,9 @@ class OpusState:
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
         if hidden_size != cfg["dim-emb"]:
-            raise ValueError(f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched")
+            raise ValueError(
+                f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched"
+            )
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
@@ -564,11 +599,17 @@ class OpusState:
         self.decoder_l1 = self.sub_keys("decoder_l1")
         self.decoder_l2 = self.sub_keys("decoder_l2")
         if len(self.encoder_l1) != 16:
-            warnings.warn(f"Expected 16 keys for each encoder layer, got {len(self.encoder_l1)}")
+            warnings.warn(
+                f"Expected 16 keys for each encoder layer, got {len(self.encoder_l1)}"
+            )
         if len(self.decoder_l1) != 26:
-            warnings.warn(f"Expected 26 keys for each decoder layer, got {len(self.decoder_l1)}")
+            warnings.warn(
+                f"Expected 26 keys for each decoder layer, got {len(self.decoder_l1)}"
+            )
         if len(self.decoder_l2) != 26:
-            warnings.warn(f"Expected 26 keys for each decoder layer, got {len(self.decoder_l1)}")
+            warnings.warn(
+                f"Expected 26 keys for each decoder layer, got {len(self.decoder_l1)}"
+            )
 
     @property
     def extra_keys(self):
@@ -577,7 +618,15 @@ class OpusState:
             if (
                 k.startswith("encoder_l")
                 or k.startswith("decoder_l")
-                or k in [CONFIG_KEY, "Wemb", "encoder_Wemb", "decoder_Wemb", "Wpos", "decoder_ff_logit_out_b"]
+                or k
+                in [
+                    CONFIG_KEY,
+                    "Wemb",
+                    "encoder_Wemb",
+                    "decoder_Wemb",
+                    "Wpos",
+                    "decoder_ff_logit_out_b",
+                ]
             ):
                 continue
             else:
@@ -585,11 +634,17 @@ class OpusState:
         return extra
 
     def sub_keys(self, layer_prefix):
-        return [remove_prefix(k, layer_prefix) for k in self.state_dict if k.startswith(layer_prefix)]
+        return [
+            remove_prefix(k, layer_prefix)
+            for k in self.state_dict
+            if k.startswith(layer_prefix)
+        ]
 
     def load_tokenizer(self):
         # save tokenizer
-        add_special_tokens_to_vocab(self.source_dir, not self.share_encoder_decoder_embeddings)
+        add_special_tokens_to_vocab(
+            self.source_dir, not self.share_encoder_decoder_embeddings
+        )
         return MarianTokenizer.from_pretrained(str(self.source_dir))
 
     def load_marian_model(self) -> MarianMTModel:
@@ -606,14 +661,18 @@ class OpusState:
             state_dict,
             BART_CONVERTER,
         )
-        load_layers_(model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True)
+        load_layers_(
+            model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True
+        )
 
         # handle tensors not associated with layers
         if self.cfg["tied-embeddings-src"]:
             wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
             bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
             model.model.shared.weight = wemb_tensor
-            model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
+            model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = (
+                model.model.shared
+            )
         else:
             wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
             model.model.encoder.embed_tokens.weight = wemb_tensor
@@ -624,7 +683,9 @@ class OpusState:
 
         # handle tied embeddings, otherwise "from_pretrained" loads them incorrectly
         if self.cfg["tied-embeddings"]:
-            model.lm_head.weight.data = model.model.decoder.embed_tokens.weight.data.clone()
+            model.lm_head.weight.data = (
+                model.model.decoder.embed_tokens.weight.data.clone()
+            )
 
         model.final_logits_bias = bias_tensor
 
@@ -707,7 +768,9 @@ if __name__ == "__main__":
         help="path to marian model sub dir. yaml.load will be used to load the configuration file, please be wary of which file you're loading.",
         default="en-de",
     )
-    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--dest", type=str, default=None, help="Path to the output PyTorch model."
+    )
     args = parser.parse_args()
 
     source_dir = Path(args.src)

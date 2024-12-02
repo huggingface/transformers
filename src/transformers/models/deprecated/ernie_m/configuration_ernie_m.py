@@ -75,7 +75,10 @@ class ErnieMConfig(PretrainedConfig):
     """
 
     model_type = "ernie_m"
-    attribute_map: Dict[str, str] = {"dropout": "classifier_dropout", "num_classes": "num_labels"}
+    attribute_map: Dict[str, str] = {
+        "dropout": "classifier_dropout",
+        "num_classes": "num_labels",
+    }
 
     def __init__(
         self,

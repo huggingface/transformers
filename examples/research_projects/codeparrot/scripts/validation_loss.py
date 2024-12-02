@@ -11,7 +11,14 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, 
 
 
 class ConstantLengthDataset(IterableDataset):
-    def __init__(self, tokenizer, dataset, seq_length=1024, num_of_sequences=1024, chars_per_token=3.6):
+    def __init__(
+        self,
+        tokenizer,
+        dataset,
+        seq_length=1024,
+        num_of_sequences=1024,
+        chars_per_token=3.6,
+    ):
         self.tokenizer = tokenizer
         self.concat_token_id = tokenizer.bos_token_id
         self.dataset = dataset
@@ -45,7 +52,9 @@ class ConstantLengthDataset(IterableDataset):
 def create_dataloader(args):
     ds_kwargs = {"streaming": True}
     valid_data = load_dataset(args.dataset_name, split="train", **ds_kwargs)
-    valid_dataset = ConstantLengthDataset(tokenizer, valid_data, seq_length=args.seq_length)
+    valid_dataset = ConstantLengthDataset(
+        tokenizer, valid_data, seq_length=args.seq_length
+    )
     eval_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size)
     return eval_dataloader
 
@@ -80,7 +89,9 @@ set_seed(args.seed)
 # Logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
 )
 
 # Load model and tokenizer

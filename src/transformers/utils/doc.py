@@ -130,7 +130,11 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
-    intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
+    intro = (
+        TF_RETURN_INTRODUCTION
+        if output_type.__name__.startswith("TF")
+        else PT_RETURN_INTRODUCTION
+    )
     intro = intro.format(full_output_type=full_output_type, config_class=config_class)
     result = intro + params_docstring
 
@@ -1105,7 +1109,10 @@ def add_code_sample_docstrings(
             "true": "{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
         }
 
-        if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
+        if (
+            "SequenceClassification" in model_class
+            or "AudioClassification" in model_class
+        ) and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
         elif "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]
@@ -1115,7 +1122,10 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["TokenClassification"]
         elif "MultipleChoice" in model_class:
             code_sample = sample_docstrings["MultipleChoice"]
-        elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
+        elif "MaskedLM" in model_class or model_class in [
+            "FlaubertWithLMHeadModel",
+            "XLMWithLMHeadModel",
+        ]:
             code_sample = sample_docstrings["MaskedLM"]
         elif "LMHead" in model_class or "CausalLM" in model_class:
             code_sample = sample_docstrings["LMHead"]
@@ -1142,7 +1152,11 @@ def add_code_sample_docstrings(
         if real_checkpoint is not None:
             code_sample = FAKE_MODEL_DISCLAIMER + code_sample
         func_doc = (fn.__doc__ or "") + "".join(docstr)
-        output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
+        output_doc = (
+            ""
+            if output_type is None
+            else _prepare_output_docstrings(output_type, config_class)
+        )
         built_doc = code_sample.format(**doc_kwargs)
         if revision is not None:
             if re.match(r"^refs/pr/\\d+", revision):
@@ -1151,7 +1165,8 @@ def add_code_sample_docstrings(
                     " a pull request reference on the hub like 'refs/pr/6'"
                 )
             built_doc = built_doc.replace(
-                f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
+                f'from_pretrained("{checkpoint}")',
+                f'from_pretrained("{checkpoint}", revision="{revision}")',
             )
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
@@ -1168,7 +1183,9 @@ def replace_return_docstrings(output_type=None, config_class=None):
             i += 1
         if i < len(lines):
             indent = len(_get_indent(lines[i]))
-            lines[i] = _prepare_output_docstrings(output_type, config_class, min_indent=indent)
+            lines[i] = _prepare_output_docstrings(
+                output_type, config_class, min_indent=indent
+            )
             func_doc = "\n".join(lines)
         else:
             raise ValueError(
@@ -1184,7 +1201,13 @@ def replace_return_docstrings(output_type=None, config_class=None):
 def copy_func(f):
     """Returns a copy of a function f."""
     # Based on http://stackoverflow.com/a/6528148/190597 (Glenn Maynard)
-    g = types.FunctionType(f.__code__, f.__globals__, name=f.__name__, argdefs=f.__defaults__, closure=f.__closure__)
+    g = types.FunctionType(
+        f.__code__,
+        f.__globals__,
+        name=f.__name__,
+        argdefs=f.__defaults__,
+        closure=f.__closure__,
+    )
     g = functools.update_wrapper(g, f)
     g.__kwdefaults__ = f.__kwdefaults__
     return g

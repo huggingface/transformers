@@ -48,7 +48,9 @@ class ClvpProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         processor.save_pretrained(self.tmpdirname)
         processor = ClvpProcessor.from_pretrained(self.tmpdirname)
@@ -56,7 +58,10 @@ class ClvpProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, ClvpTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
 
     # Copied from transformers.tests.models.whisper.test_processor_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->Clvp,processor(raw_speech->processor(raw_speech=raw_speech
@@ -64,7 +69,9 @@ class ClvpProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         raw_speech = floats_list((3, 1000))
 
@@ -72,14 +79,18 @@ class ClvpProcessorTest(unittest.TestCase):
         input_processor = processor(raw_speech=raw_speech, return_tensors="np")
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     # Copied from transformers.tests.models.whisper.test_processor_whisper.WhisperProcessorTest.test_tokenizer with Whisper->Clvp
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         input_str = "This is a test string"
 
@@ -95,7 +106,9 @@ class ClvpProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -105,7 +118,10 @@ class ClvpProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = ClvpProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = ClvpProcessor(
+            tokenizer=self.get_tokenizer(),
+            feature_extractor=self.get_feature_extractor(),
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(pad_token="(PAD)")
@@ -117,20 +133,29 @@ class ClvpProcessorTest(unittest.TestCase):
             sampling_rate=16000,
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, ClvpTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
 
     def test_model_input_names(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         self.assertListEqual(
             sorted(processor.model_input_names),
-            sorted(set(feature_extractor.model_input_names + tokenizer.model_input_names)),
+            sorted(
+                set(feature_extractor.model_input_names + tokenizer.model_input_names)
+            ),
             msg="`processor` and `feature_extractor` model input names do not match",
         )

@@ -20,7 +20,11 @@ from pathlib import Path
 import torch
 import yaml
 
-from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerHifiGanConfig, logging
+from transformers import (
+    FastSpeech2ConformerHifiGan,
+    FastSpeech2ConformerHifiGanConfig,
+    logging,
+)
 
 
 logging.set_verbosity_info()
@@ -29,7 +33,11 @@ logger = logging.get_logger("transformers.models.FastSpeech2Conformer")
 
 def load_weights(checkpoint, hf_model, config):
     vocoder_key_prefix = "tts.generator.vocoder."
-    checkpoint = {k.replace(vocoder_key_prefix, ""): v for k, v in checkpoint.items() if vocoder_key_prefix in k}
+    checkpoint = {
+        k.replace(vocoder_key_prefix, ""): v
+        for k, v in checkpoint.items()
+        if vocoder_key_prefix in k
+    }
 
     hf_model.apply_weight_norm()
 
@@ -44,13 +52,25 @@ def load_weights(checkpoint, hf_model, config):
 
     for i in range(len(config.upsample_rates) * len(config.resblock_kernel_sizes)):
         for j in range(len(config.resblock_dilation_sizes)):
-            hf_model.resblocks[i].convs1[j].weight_g.data = checkpoint[f"blocks.{i}.convs1.{j}.1.weight_g"]
-            hf_model.resblocks[i].convs1[j].weight_v.data = checkpoint[f"blocks.{i}.convs1.{j}.1.weight_v"]
-            hf_model.resblocks[i].convs1[j].bias.data = checkpoint[f"blocks.{i}.convs1.{j}.1.bias"]
+            hf_model.resblocks[i].convs1[j].weight_g.data = checkpoint[
+                f"blocks.{i}.convs1.{j}.1.weight_g"
+            ]
+            hf_model.resblocks[i].convs1[j].weight_v.data = checkpoint[
+                f"blocks.{i}.convs1.{j}.1.weight_v"
+            ]
+            hf_model.resblocks[i].convs1[j].bias.data = checkpoint[
+                f"blocks.{i}.convs1.{j}.1.bias"
+            ]
 
-            hf_model.resblocks[i].convs2[j].weight_g.data = checkpoint[f"blocks.{i}.convs2.{j}.1.weight_g"]
-            hf_model.resblocks[i].convs2[j].weight_v.data = checkpoint[f"blocks.{i}.convs2.{j}.1.weight_v"]
-            hf_model.resblocks[i].convs2[j].bias.data = checkpoint[f"blocks.{i}.convs2.{j}.1.bias"]
+            hf_model.resblocks[i].convs2[j].weight_g.data = checkpoint[
+                f"blocks.{i}.convs2.{j}.1.weight_g"
+            ]
+            hf_model.resblocks[i].convs2[j].weight_v.data = checkpoint[
+                f"blocks.{i}.convs2.{j}.1.weight_v"
+            ]
+            hf_model.resblocks[i].convs2[j].bias.data = checkpoint[
+                f"blocks.{i}.convs2.{j}.1.bias"
+            ]
 
     hf_model.conv_post.weight_g.data = checkpoint["output_conv.1.weight_g"]
     hf_model.conv_post.weight_v.data = checkpoint["output_conv.1.weight_v"]
@@ -66,7 +86,9 @@ def remap_hifigan_yaml_config(yaml_config_path):
 
     vocoder_type = args.tts_conf["vocoder_type"]
     if vocoder_type != "hifigan_generator":
-        raise TypeError(f"Vocoder config must be for `hifigan_generator`, but got {vocoder_type}")
+        raise TypeError(
+            f"Vocoder config must be for `hifigan_generator`, but got {vocoder_type}"
+        )
 
     remapped_dict = {}
     vocoder_params = args.tts_conf["vocoder_params"]
@@ -84,7 +106,9 @@ def remap_hifigan_yaml_config(yaml_config_path):
         remapped_dict[hf_config_key] = vocoder_params[espnet_config_key]
     remapped_dict["sampling_rate"] = args.tts_conf["sampling_rate"]
     remapped_dict["normalize_before"] = False
-    remapped_dict["leaky_relu_slope"] = vocoder_params["nonlinear_activation_params"]["negative_slope"]
+    remapped_dict["leaky_relu_slope"] = vocoder_params["nonlinear_activation_params"][
+        "negative_slope"
+    ]
 
     return remapped_dict
 
@@ -116,13 +140,31 @@ def convert_hifigan_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--yaml_config_path", default=None, type=str, help="Path to config.yaml of model to convert")
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to original checkpoint",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--yaml_config_path",
+        default=None,
+        type=str,
+        help="Path to config.yaml of model to convert",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()

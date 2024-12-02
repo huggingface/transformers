@@ -34,8 +34,12 @@ class FSNERTokenizerUtils:
                 else:
                     d = t
 
-            d["start_token_id"] = torch.tensor(self.tokenizer.convert_tokens_to_ids("[E]"))
-            d["end_token_id"] = torch.tensor(self.tokenizer.convert_tokens_to_ids("[/E]"))
+            d["start_token_id"] = torch.tensor(
+                self.tokenizer.convert_tokens_to_ids("[E]")
+            )
+            d["end_token_id"] = torch.tensor(
+                self.tokenizer.convert_tokens_to_ids("[/E]")
+            )
 
         elif isinstance(x, list) and all(isinstance(_x, str) for _x in x):
             d = self.tokenizer(
@@ -94,7 +98,9 @@ class FSNERTokenizerUtils:
             for k in range(len(output)):
                 if output[k][2] * output[k][3] >= thresh:
                     c_start_pos, c_end_pos = output[k][0], output[k][1]
-                    decoded = self.tokenizer.decode(W_query["input_ids"][idx][c_start_pos:c_end_pos])
+                    decoded = self.tokenizer.decode(
+                        W_query["input_ids"][idx][c_start_pos:c_end_pos]
+                    )
                     temp.append((decoded, output[k][2] * output[k][3]))
 
             final_outputs.append(temp)

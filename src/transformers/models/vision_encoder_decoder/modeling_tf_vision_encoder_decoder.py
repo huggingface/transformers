@@ -25,7 +25,13 @@ import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, keras, unpack_inputs
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFPreTrainedModel,
+    get_initializer,
+    keras,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list
 from ...utils import (
     ModelOutput,
@@ -145,24 +151,34 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.encoder_decoder.modeling_tf_encoder_decoder.shift_tokens_right
-def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
+def shift_tokens_right(
+    input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int
+):
     if pad_token_id is None:
-        raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
+        raise ValueError(
+            "Make sure to set the pad_token_id attribute of the model's configuration."
+        )
     pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
 
     if decoder_start_token_id is None:
-        raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
+        raise ValueError(
+            "Make sure to set the decoder_start_token_id attribute of the model's configuration."
+        )
     decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
 
     start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
     shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
-        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+        shifted_input_ids == -100,
+        tf.fill(shape_list(shifted_input_ids), pad_token_id),
+        shifted_input_ids,
     )
 
     # "Verify that `labels` has only positive values and -100"
-    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
+    assert_gte0 = tf.debugging.assert_greater_equal(
+        shifted_input_ids, tf.constant(0, dtype=input_ids.dtype)
+    )
 
     # Make sure the assertion op is called by wrapping the result in an identity no-op
     with tf.control_dependencies([assert_gte0]):
@@ -192,12 +208,18 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         decoder: Optional[TFPreTrainedModel] = None,
     ):
         if config is None and (encoder is None or decoder is None):
-            raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
+            raise ValueError(
+                "Either a configuration or an encoder and a decoder has to be provided."
+            )
         if config is None:
-            config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
+            config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+                encoder.config, decoder.config
+            )
         else:
             if not isinstance(config, self.config_class):
-                raise ValueError(f"config: {config} has to be of type {self.config_class}")
+                raise ValueError(
+                    f"config: {config} has to be of type {self.config_class}"
+                )
 
         if config.decoder.cross_attention_hidden_size is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
@@ -271,7 +293,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 ),
                 dtype=tf.float32,
             ),
-            "decoder_input_ids": tf.TensorSpec(shape=(None, None), dtype=tf.int32, name="decoder_input_ids"),
+            "decoder_input_ids": tf.TensorSpec(
+                shape=(None, None), dtype=tf.int32, name="decoder_input_ids"
+            ),
         }
 
     def get_encoder(self):
@@ -368,11 +392,15 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         ```"""
 
         kwargs_encoder = {
-            argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
+            argument[len("encoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("encoder_")
         }
 
         kwargs_decoder = {
-            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+            argument[len("decoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("decoder_")
         }
 
         # remove encoder, decoder kwargs from kwargs
@@ -393,8 +421,13 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 )
 
             if "config" not in kwargs_encoder:
-                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
-                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                encoder_config = AutoConfig.from_pretrained(
+                    encoder_pretrained_model_name_or_path
+                )
+                if (
+                    encoder_config.is_decoder is True
+                    or encoder_config.add_cross_attention is True
+                ):
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and casual mask are disabled."
@@ -406,7 +439,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
             kwargs_encoder["name"] = "encoder"
             kwargs_encoder["load_weight_prefix"] = cls.load_weight_prefix
-            encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+            encoder = TFAutoModel.from_pretrained(
+                encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder
+            )
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
@@ -417,8 +452,13 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 )
 
             if "config" not in kwargs_decoder:
-                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
-                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
+                decoder_config = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path
+                )
+                if (
+                    decoder_config.is_decoder is False
+                    or decoder_config.add_cross_attention is False
+                ):
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
                         f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
@@ -429,7 +469,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
                 kwargs_decoder["config"] = decoder_config
 
-            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
+            if (
+                kwargs_decoder["config"].is_decoder is False
+                or kwargs_decoder["config"].add_cross_attention is False
+            ):
                 logger.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
@@ -440,7 +483,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
             kwargs_decoder["name"] = "decoder"
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
-            decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = TFAutoModelForCausalLM.from_pretrained(
+                decoder_pretrained_model_name_or_path, **kwargs_decoder
+            )
 
         # Make sure these 2 `keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         if encoder.name != "encoder":
@@ -449,14 +494,18 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             raise ValueError("decoder model must be created with the name `decoder`.")
 
         # instantiate config with corresponding kwargs
-        config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder.config, decoder.config, **kwargs
+        )
         return cls(encoder=encoder, decoder=decoder, config=config)
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
         VISION_ENCODER_DECODER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
     )
-    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         pixel_values: np.ndarray | tf.Tensor | None = None,
@@ -510,12 +559,20 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         >>> # generation
         >>> generated = model.generate(pixel_values, decoder_start_token_id=model.config.decoder.bos_token_id)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
+        kwargs_encoder = {
+            argument: value
+            for argument, value in kwargs.items()
+            if not argument.startswith("decoder_")
+        }
 
         kwargs_decoder = {
-            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+            argument[len("decoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("decoder_")
         }
 
         # Let the user be responsible for the expected format.
@@ -568,13 +625,17 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
-        if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+        if (labels is not None) and (
+            decoder_input_ids is None and decoder_inputs_embeds is None
+        ):
             decoder_input_ids = shift_tokens_right(
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
         batch_size, sequence_length = shape_list(encoder_hidden_states)[:2]
-        encoder_attention_mask = tf.ones(shape=(batch_size, sequence_length), dtype=tf.int32)
+        encoder_attention_mask = tf.ones(
+            shape=(batch_size, sequence_length), dtype=tf.int32
+        )
 
         decoder_inputs = {
             "input_ids": decoder_input_ids,
@@ -608,11 +669,17 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             if use_cache:
                 past_key_values = decoder_outputs[1]
             # The starting index of the remaining elements in `decoder_outputs`
-            start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
+            start_index = sum(
+                [1 if x is not None else 0 for x in (loss, logits, past_key_values)]
+            )
 
             if not isinstance(encoder_outputs, tuple):
                 encoder_outputs = encoder_outputs.to_tuple()
-            output = (loss, logits, past_key_values) + decoder_outputs[start_index:] + encoder_outputs
+            output = (
+                (loss, logits, past_key_values)
+                + decoder_outputs[start_index:]
+                + encoder_outputs
+            )
             output = tuple([x for x in output if x is not None])
             return output
 
@@ -629,18 +696,35 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         )
 
     def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.decoder.use_cache else None
+        pkv = (
+            tf.tuple(output.past_key_values)[1]
+            if self.config.decoder.use_cache
+            else None
+        )
         dec_hs = (
-            tf.convert_to_tensor(output.decoder_hidden_states) if self.config.decoder.output_hidden_states else None
+            tf.convert_to_tensor(output.decoder_hidden_states)
+            if self.config.decoder.output_hidden_states
+            else None
         )
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.decoder.output_attentions else None
+        dec_attns = (
+            tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.decoder.output_attentions
+            else None
+        )
         enc_hs = (
-            tf.convert_to_tensor(output.encoder_hidden_states) if self.config.encoder.output_hidden_states else None
+            tf.convert_to_tensor(output.encoder_hidden_states)
+            if self.config.encoder.output_hidden_states
+            else None
         )
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.encoder.output_attentions else None
+        enc_attns = (
+            tf.convert_to_tensor(output.encoder_attentions)
+            if self.config.encoder.output_attentions
+            else None
+        )
         cross_attns = (
             tf.convert_to_tensor(output.cross_attentions)
-            if self.config.decoder.output_attentions and output.cross_attentions is not None
+            if self.config.decoder.output_attentions
+            and output.cross_attentions is not None
             else None
         )
 
@@ -656,10 +740,22 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
     ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        decoder_inputs = self.decoder.prepare_inputs_for_generation(
+            input_ids, past_key_values=past_key_values
+        )
+        decoder_attention_mask = (
+            decoder_inputs["attention_mask"]
+            if "attention_mask" in decoder_inputs
+            else None
+        )
         past_key_values = decoder_inputs.get("past_key_values")
         input_dict = {
             "pixel_values": None,  # needs to be passed to make Keras.layer.__call__ happy
@@ -674,7 +770,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         return input_dict
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+        return shift_tokens_right(
+            labels, self.config.pad_token_id, self.config.decoder_start_token_id
+        )
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
@@ -688,7 +786,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         self.built = True
         if getattr(self, "enc_to_dec_proj", None) is not None:
             with tf.name_scope(self.enc_to_dec_proj.name):
-                self.enc_to_dec_proj.build([None, None, self.encoder.config.hidden_size])
+                self.enc_to_dec_proj.build(
+                    [None, None, self.encoder.config.hidden_size]
+                )
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)

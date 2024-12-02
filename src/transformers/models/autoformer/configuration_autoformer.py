@@ -175,7 +175,9 @@ class AutoformerConfig(PretrainedConfig):
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
-        self.context_length = context_length if context_length is not None else prediction_length
+        self.context_length = (
+            context_length if context_length is not None else prediction_length
+        )
         self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
@@ -200,11 +202,15 @@ class AutoformerConfig(PretrainedConfig):
                 )
             self.embedding_dimension = embedding_dimension
         else:
-            self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]
+            self.embedding_dimension = [
+                min(50, (cat + 1) // 2) for cat in self.cardinality
+            ]
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.feature_size = input_size * len(self.lags_sequence) + self._number_of_features
+        self.feature_size = (
+            input_size * len(self.lags_sequence) + self._number_of_features
+        )
         self.d_model = d_model
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads

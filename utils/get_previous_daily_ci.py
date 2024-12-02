@@ -12,7 +12,10 @@ def get_daily_ci_runs(token, num_runs=7):
     """
     headers = None
     if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+        }
 
     # The id of a workflow (not of a workflow run).
     # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
@@ -57,12 +60,17 @@ def get_last_daily_ci_artifacts(artifact_names, output_dir, token):
     """Get the artifacts of last completed workflow run id of the scheduled (daily) CI."""
     workflow_run_id = get_last_daily_ci_runs(token)
     if workflow_run_id is not None:
-        artifacts_links = get_artifacts_links(worflow_run_id=workflow_run_id, token=token)
+        artifacts_links = get_artifacts_links(
+            worflow_run_id=workflow_run_id, token=token
+        )
         for artifact_name in artifact_names:
             if artifact_name in artifacts_links:
                 artifact_url = artifacts_links[artifact_name]
                 download_artifact(
-                    artifact_name=artifact_name, artifact_url=artifact_url, output_dir=output_dir, token=token
+                    artifact_name=artifact_name,
+                    artifact_url=artifact_url,
+                    output_dir=output_dir,
+                    token=token,
                 )
 
 

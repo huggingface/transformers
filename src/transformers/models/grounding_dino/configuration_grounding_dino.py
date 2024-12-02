@@ -200,7 +200,9 @@ class GroundingDinoConfig(PretrainedConfig):
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `Swin` backbone."
+            )
             backbone_config = CONFIG_MAPPING["swin"](
                 window_size=7,
                 image_size=224,
@@ -224,7 +226,9 @@ class GroundingDinoConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
+            logger.info(
+                "text_config is None. Initializing the text config with default values (`BertConfig`)."
+            )
 
         self.backbone_config = backbone_config
         self.backbone = backbone
@@ -261,7 +265,9 @@ class GroundingDinoConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bert"
+            text_config["model_type"] = (
+                text_config["model_type"] if "model_type" in text_config else "bert"
+            )
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["bert"]()
@@ -280,7 +286,9 @@ class GroundingDinoConfig(PretrainedConfig):
         self.decoder_bbox_embed_share = decoder_bbox_embed_share
         self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
         if two_stage_bbox_embed_share and not decoder_bbox_embed_share:
-            raise ValueError("If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True.")
+            raise ValueError(
+                "If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True."
+            )
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps

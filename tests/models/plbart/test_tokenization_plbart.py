@@ -15,7 +15,12 @@
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, is_torch_available
+from transformers import (
+    SPIECE_UNDERLINE,
+    BatchEncoding,
+    PLBartTokenizer,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -49,11 +54,15 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
+        tokenizer = PLBartTokenizer(
+            SAMPLE_VOCAB, language_codes="base", keep_accents=True
+        )
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_base_tokenizer(self):
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
+        tokenizer = PLBartTokenizer(
+            SAMPLE_VOCAB, language_codes="base", keep_accents=True
+        )
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -95,7 +104,29 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ids,
             [
                 value + tokenizer.fairseq_offset
-                for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
+                for value in [
+                    8,
+                    21,
+                    84,
+                    55,
+                    24,
+                    19,
+                    7,
+                    2,
+                    602,
+                    347,
+                    347,
+                    347,
+                    3,
+                    12,
+                    66,
+                    46,
+                    72,
+                    80,
+                    6,
+                    2,
+                    4,
+                ]
             ],
         )
 
@@ -128,19 +159,27 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         end = tokenizer.vocab_size
-        language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 4, end)]
+        language_tokens = [
+            tokenizer.convert_ids_to_tokens(x) for x in range(end - 4, end)
+        ]
 
-        self.assertListEqual(language_tokens, ["__java__", "__python__", "__en_XX__", "<mask>"])
+        self.assertListEqual(
+            language_tokens, ["__java__", "__python__", "__en_XX__", "<mask>"]
+        )
 
         code = "java.lang.Exception, python.lang.Exception, javascript, php, ruby, go"
         input_ids = tokenizer(code).input_ids
         self.assertEqual(
-            tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False),
+            tokenizer.decode(
+                input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            ),
             code,
         )
 
     def test_full_multi_tokenizer(self):
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="multi", keep_accents=True)
+        tokenizer = PLBartTokenizer(
+            SAMPLE_VOCAB, language_codes="multi", keep_accents=True
+        )
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -182,7 +221,29 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ids,
             [
                 value + tokenizer.fairseq_offset
-                for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
+                for value in [
+                    8,
+                    21,
+                    84,
+                    55,
+                    24,
+                    19,
+                    7,
+                    2,
+                    602,
+                    347,
+                    347,
+                    347,
+                    3,
+                    12,
+                    66,
+                    46,
+                    72,
+                    80,
+                    6,
+                    2,
+                    4,
+                ]
             ],
         )
 
@@ -214,15 +275,28 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
         )
         end = tokenizer.vocab_size
-        language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 7, end)]
+        language_tokens = [
+            tokenizer.convert_ids_to_tokens(x) for x in range(end - 7, end)
+        ]
 
         self.assertListEqual(
-            language_tokens, ["__java__", "__python__", "__en_XX__", "__javascript__", "__php__", "__ruby__", "__go__"]
+            language_tokens,
+            [
+                "__java__",
+                "__python__",
+                "__en_XX__",
+                "__javascript__",
+                "__php__",
+                "__ruby__",
+                "__go__",
+            ],
         )
         code = "java.lang.Exception, python.lang.Exception, javascript, php, ruby, go"
         input_ids = tokenizer(code).input_ids
         self.assertEqual(
-            tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False),
+            tokenizer.decode(
+                input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            ),
             code,
         )
 
@@ -272,7 +346,10 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: PLBartTokenizer = PLBartTokenizer.from_pretrained(
-            cls.checkpoint_name, language_codes="base", src_lang="python", tgt_lang="en_XX"
+            cls.checkpoint_name,
+            language_codes="base",
+            src_lang="python",
+            tgt_lang="en_XX",
         )
         cls.pad_token_id = 1
         return cls
@@ -290,7 +367,9 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertIn(PYTHON_CODE, self.tokenizer.all_special_ids)
         generated_ids = [EN_CODE, 9037, 33442, 57, 752, 153, 14, 56, 18, 9, 2]
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_english = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        expected_english = self.tokenizer.decode(
+            generated_ids[1:], skip_special_tokens=True
+        )
         self.assertEqual(result, expected_english)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
@@ -298,13 +377,17 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         src_text = ["def sum(a,b,c):NEW_LINE_INDENTreturn sum([a,b,c])" * 20]
         self.assertIsInstance(src_text[0], str)
         desired_max_length = 10
-        ids = self.tokenizer(src_text, max_length=desired_max_length, truncation=True).input_ids[0]
+        ids = self.tokenizer(
+            src_text, max_length=desired_max_length, truncation=True
+        ).input_ids[0]
         self.assertEqual(ids[-2], 2)
         self.assertEqual(ids[-1], PYTHON_CODE)
         self.assertEqual(len(ids), desired_max_length)
 
     def test_mask_token(self):
-        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "__java__"]), [50004, 50001])
+        self.assertListEqual(
+            self.tokenizer.convert_tokens_to_ids(["<mask>", "__java__"]), [50004, 50001]
+        )
 
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
@@ -315,8 +398,12 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_batch_fairseq_parity(self):
-        batch = self.tokenizer(self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt")
-        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
+        batch = self.tokenizer(
+            self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt"
+        )
+        batch["decoder_input_ids"] = shift_tokens_right(
+            batch["labels"], self.tokenizer.pad_token_id
+        )
 
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
         self.assertEqual(batch.input_ids[1][-2:].tolist(), [2, PYTHON_CODE])
@@ -334,7 +421,9 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
             max_length=len(self.expected_src_tokens),
             return_tensors="pt",
         )
-        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
+        batch["decoder_input_ids"] = shift_tokens_right(
+            batch["labels"], self.tokenizer.pad_token_id
+        )
 
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -345,15 +434,29 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(2, batch.decoder_input_ids[0, -1])  # EOS
         # Test that special tokens are reset
         self.assertEqual(self.tokenizer.prefix_tokens, [])
-        self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, PYTHON_CODE])
+        self.assertEqual(
+            self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, PYTHON_CODE]
+        )
 
     def test_seq2seq_max_length(self):
-        batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
+        batch = self.tokenizer(
+            self.src_text,
+            padding=True,
+            truncation=True,
+            max_length=3,
+            return_tensors="pt",
+        )
         targets = self.tokenizer(
-            text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
+            text_target=self.tgt_text,
+            padding=True,
+            truncation=True,
+            max_length=10,
+            return_tensors="pt",
         )
         labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
+        batch["decoder_input_ids"] = shift_tokens_right(
+            labels, self.tokenizer.pad_token_id
+        )
 
         self.assertEqual(batch.input_ids.shape[1], 3)
         self.assertEqual(batch.decoder_input_ids.shape[1], 10)

@@ -181,7 +181,9 @@ class FalconConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.num_kv_heads = num_attention_heads if num_kv_heads is None else num_kv_heads
+        self.num_kv_heads = (
+            num_attention_heads if num_kv_heads is None else num_kv_heads
+        )
         self.alibi = alibi
         self.new_decoder_architecture = new_decoder_architecture
         self.multi_query = multi_query  # Ignored when new_decoder_architecture is True

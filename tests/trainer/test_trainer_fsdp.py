@@ -50,7 +50,12 @@ if is_torch_available():
                 "The quick brown fox jumps over the lazy dog.",
             ]
             self.data = [
-                {k: v.squeeze(0) for k, v in tokenizer(item, return_tensors="pt", return_attention_mask=True).items()}
+                {
+                    k: v.squeeze(0)
+                    for k, v in tokenizer(
+                        item, return_tensors="pt", return_attention_mask=True
+                    ).items()
+                }
                 for item in data
             ]
             for item in self.data:

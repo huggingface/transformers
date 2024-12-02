@@ -65,12 +65,18 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
                 )
 
         self.torchscript = kwargs.pop("torchscript", self.torchscript)
-        self.torch_xla_tpu_print_metrics = kwargs.pop("torch_xla_tpu_print_metrics", self.torch_xla_tpu_print_metrics)
+        self.torch_xla_tpu_print_metrics = kwargs.pop(
+            "torch_xla_tpu_print_metrics", self.torch_xla_tpu_print_metrics
+        )
         self.fp16_opt_level = kwargs.pop("fp16_opt_level", self.fp16_opt_level)
         super().__init__(**kwargs)
 
-    torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
-    torch_xla_tpu_print_metrics: bool = field(default=False, metadata={"help": "Print Xla/PyTorch tpu metrics"})
+    torchscript: bool = field(
+        default=False, metadata={"help": "Trace the models using torchscript"}
+    )
+    torch_xla_tpu_print_metrics: bool = field(
+        default=False, metadata={"help": "Print Xla/PyTorch tpu metrics"}
+    )
     fp16_opt_level: str = field(
         default="O1",
         metadata={

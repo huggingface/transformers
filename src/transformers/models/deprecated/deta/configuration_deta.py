@@ -199,16 +199,26 @@ class DetaConfig(PretrainedConfig):
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage2", "stage3", "stage4"])
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone."
+            )
+            backbone_config = CONFIG_MAPPING["resnet"](
+                out_features=["stage2", "stage3", "stage4"]
+            )
         else:
             if isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.pop("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        if (
+            backbone_kwargs is not None
+            and backbone_kwargs
+            and backbone_config is not None
+        ):
+            raise ValueError(
+                "You can't specify both `backbone_kwargs` and `backbone_config`."
+            )
 
         self.backbone_config = backbone_config
         self.backbone = backbone

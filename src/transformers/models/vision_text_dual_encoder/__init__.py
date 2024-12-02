@@ -34,7 +34,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_vision_text_dual_encoder"] = ["VisionTextDualEncoderModel"]
+    _import_structure["modeling_vision_text_dual_encoder"] = [
+        "VisionTextDualEncoderModel"
+    ]
 
 
 try:
@@ -43,7 +45,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_vision_text_dual_encoder"] = ["FlaxVisionTextDualEncoderModel"]
+    _import_structure["modeling_flax_vision_text_dual_encoder"] = [
+        "FlaxVisionTextDualEncoderModel"
+    ]
 
 try:
     if not is_tf_available():
@@ -51,7 +55,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_vision_text_dual_encoder"] = ["TFVisionTextDualEncoderModel"]
+    _import_structure["modeling_tf_vision_text_dual_encoder"] = [
+        "TFVisionTextDualEncoderModel"
+    ]
 
 
 if TYPE_CHECKING:
@@ -72,7 +78,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
+        from .modeling_flax_vision_text_dual_encoder import (
+            FlaxVisionTextDualEncoderModel,
+        )
 
     try:
         if not is_tf_available():
@@ -86,4 +94,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure
+    )

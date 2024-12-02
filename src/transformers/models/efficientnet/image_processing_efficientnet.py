@@ -33,7 +33,12 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_vision_available,
+    logging,
+)
 
 
 if is_vision_available():
@@ -103,7 +108,9 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 346, "width": 346}
         size = get_size_dict(size)
-        crop_size = crop_size if crop_size is not None else {"height": 289, "width": 289}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 289, "width": 289}
+        )
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         self.do_resize = do_resize
@@ -115,7 +122,9 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.rescale_offset = rescale_offset
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.include_top = include_top
 
@@ -157,7 +166,9 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+            )
         output_size = (size["height"], size["width"])
         return resize(
             image,
@@ -200,7 +211,11 @@ class EfficientNetImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         rescaled_image = rescale(
-            image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs
+            image,
+            scale=scale,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
 
         if offset:
@@ -281,10 +296,16 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        rescale_offset = rescale_offset if rescale_offset is not None else self.rescale_offset
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
+        rescale_offset = (
+            rescale_offset if rescale_offset is not None else self.rescale_offset
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -329,37 +350,61 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_center_crop:
             images = [
-                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
+                self.center_crop(
+                    image=image, size=crop_size, input_data_format=input_data_format
+                )
+                for image in images
             ]
 
         if do_rescale:
             images = [
                 self.rescale(
-                    image=image, scale=rescale_factor, offset=rescale_offset, input_data_format=input_data_format
+                    image=image,
+                    scale=rescale_factor,
+                    offset=rescale_offset,
+                    input_data_format=input_data_format,
                 )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if include_top:
             images = [
-                self.normalize(image=image, mean=0, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=0,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}

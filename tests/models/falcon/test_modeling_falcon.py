@@ -118,13 +118,25 @@ class FalconModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return FalconConfig(
@@ -145,14 +157,24 @@ class FalconModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = FalconModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -182,7 +204,10 @@ class FalconModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -200,7 +225,9 @@ class FalconModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -256,13 +283,17 @@ class FalconModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -280,7 +311,9 @@ class FalconModelTester:
 
 
 @require_torch
-class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class FalconModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             FalconModel,
@@ -323,7 +356,9 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = FalconModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FalconConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=FalconConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -343,12 +378,17 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = FalconForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_falcon_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -356,12 +396,17 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = FalconForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_falcon_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -370,13 +415,17 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+            [self.model_tester.batch_size, config.num_labels],
+            self.model_tester.type_sequence_label_size,
         ).to(torch.float)
         model = FalconForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_past_key_values_format(self):
         # Falcon can have different numbers of KV-heads than the number of query heads, so we need
@@ -402,7 +451,9 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 or getattr(config, "num_decoder_layers", None)
                 or config.num_hidden_layers
             )
-            num_attention_heads = getattr(config, "num_kv_heads", config.num_attention_heads)
+            num_attention_heads = getattr(
+                config, "num_kv_heads", config.num_attention_heads
+            )
             embed_dim = getattr(config, "d_model", config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
@@ -417,10 +468,12 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     num_attention_heads = 1
                 self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
                 self.assertEqual(
-                    past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    past_kv[i][0].shape,
+                    (batch_size, num_attention_heads, seq_length, per_head_embed_dim),
                 )
                 self.assertEqual(
-                    past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    past_kv[i][1].shape,
+                    (batch_size, num_attention_heads, seq_length, per_head_embed_dim),
                 )
 
     @parameterized.expand([("linear",), ("dynamic",)])
@@ -428,16 +481,22 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = FalconModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = FalconModel(config)
         scaled_model.to(torch_device)
@@ -448,12 +507,18 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertTrue(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -465,10 +530,16 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(
+            short_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = torch.arange(
+            long_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
@@ -479,8 +550,12 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         ).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            original_cos_short, original_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            original_sin_short, original_sin_long[:, :short_input_length, :]
+        )
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
@@ -492,12 +567,22 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         ).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            linear_cos_short, linear_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            linear_sin_short, linear_sin_long[:, :short_input_length, :]
+        )
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+            torch.testing.assert_close(
+                linear_cos_long[:, new_position, :],
+                original_cos_long[:, original_position, :],
+            )
+            torch.testing.assert_close(
+                linear_sin_long[:, new_position, :],
+                original_sin_long[:, original_position, :],
+            )
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
@@ -529,9 +614,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         model.to(torch_device)
         inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
 
-        EXPECTED_OUTPUT = (
-            "My favorite food is pizza. I love it so much that I have a pizza party every year for my birthday."
-        )
+        EXPECTED_OUTPUT = "My favorite food is pizza. I love it so much that I have a pizza party every year for my birthday."
 
         output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=19)
         output_str = tokenizer.batch_decode(output_ids)[0]
@@ -541,16 +624,22 @@ class FalconLanguageGenerationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_lm_generate_falcon_11b(self):
-        tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "tiiuae/falcon-11B", padding_side="left"
+        )
         model = FalconForCausalLM.from_pretrained(
             "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
         )
         model.eval()
         inputs = tokenizer(
-            "Two roads diverged in a yellow wood,", return_tensors="pt", return_token_type_ids=False
+            "Two roads diverged in a yellow wood,",
+            return_tensors="pt",
+            return_token_type_ids=False,
         ).to(torch_device)
 
-        EXPECTED_OUTPUT = "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\n"
+        EXPECTED_OUTPUT = (
+            "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\n"
+        )
 
         output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=9)
         output_str = tokenizer.batch_decode(output_ids)[0]
@@ -561,12 +650,17 @@ class FalconLanguageGenerationTest(unittest.TestCase):
     def test_lm_generation_big_models(self):
         # The big models are way too big for the CI, so we use tiny random models that resemble their
         # architectures but with much smaller and fewer layers
-        for repo in ["Rocketknight1/tiny-random-falcon-7b", "Rocketknight1/tiny-random-falcon-40b"]:
+        for repo in [
+            "Rocketknight1/tiny-random-falcon-7b",
+            "Rocketknight1/tiny-random-falcon-40b",
+        ]:
             tokenizer = AutoTokenizer.from_pretrained(repo)
             model = FalconForCausalLM.from_pretrained(repo)
             model.eval()
             model.to(torch_device)
-            inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+            inputs = tokenizer("My favorite food is", return_tensors="pt").to(
+                torch_device
+            )
 
             # We just test that these run without errors - the models are randomly initialized
             # and so the actual text outputs will be garbage
@@ -588,17 +682,25 @@ class FalconLanguageGenerationTest(unittest.TestCase):
                 model = FalconForCausalLM.from_pretrained(repo)
                 model.eval()
                 model.to(device=torch_device)
-                inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+                inputs = tokenizer("My favorite food is", return_tensors="pt").to(
+                    torch_device
+                )
 
                 # Test results are the same with and without cache
-                outputs_no_cache = model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
-                outputs_cache = model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=True)
+                outputs_no_cache = model.generate(
+                    **inputs, do_sample=False, max_new_tokens=20, use_cache=False
+                )
+                outputs_cache = model.generate(
+                    **inputs, do_sample=False, max_new_tokens=20, use_cache=True
+                )
                 self.assertTrue((outputs_cache - outputs_no_cache).sum().item() == 0)
 
     @require_bitsandbytes
     @slow
     def test_batched_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "tiiuae/falcon-7b", padding_side="left"
+        )
         tokenizer.pad_token = tokenizer.eos_token
         model = AutoModelForCausalLM.from_pretrained(
             "tiiuae/falcon-7b",
@@ -610,15 +712,23 @@ class FalconLanguageGenerationTest(unittest.TestCase):
 
         unpadded_inputs = tokenizer([test_text], return_tensors="pt").to("cuda:0")
         unpadded_gen_out = model.generate(**unpadded_inputs, max_new_tokens=20)
-        unpadded_gen_text = tokenizer.batch_decode(unpadded_gen_out, skip_special_tokens=True)
+        unpadded_gen_text = tokenizer.batch_decode(
+            unpadded_gen_out, skip_special_tokens=True
+        )
 
         dummy_text = "This is a longer text " * 2  # forces left-padding on `test_text`
-        padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to("cuda:0")
+        padded_inputs = tokenizer(
+            [test_text, dummy_text], return_tensors="pt", padding=True
+        ).to("cuda:0")
         padded_gen_out = model.generate(**padded_inputs, max_new_tokens=20)
-        padded_gen_text = tokenizer.batch_decode(padded_gen_out, skip_special_tokens=True)
+        padded_gen_text = tokenizer.batch_decode(
+            padded_gen_out, skip_special_tokens=True
+        )
 
         expected_output = "A sequence: 1, 2, 3, 4, 5, 6, 7, 8, "
-        self.assertLess(unpadded_inputs.input_ids.shape[-1], padded_inputs.input_ids.shape[-1])  # left-padding exists
+        self.assertLess(
+            unpadded_inputs.input_ids.shape[-1], padded_inputs.input_ids.shape[-1]
+        )  # left-padding exists
         self.assertEqual(unpadded_gen_text[0], expected_output)
         self.assertEqual(padded_gen_text[0], expected_output)
 
@@ -644,4 +754,6 @@ class FalconLanguageGenerationTest(unittest.TestCase):
             falcon_output_eager = falcon(input_ids, output_attentions=True)[0]
             falcon_output_sdpa = falcon(input_ids)[0]
 
-        self.assertTrue(torch.allclose(falcon_output_eager, falcon_output_sdpa, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(falcon_output_eager, falcon_output_sdpa, atol=1e-3)
+        )

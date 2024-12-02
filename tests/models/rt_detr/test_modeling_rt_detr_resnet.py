@@ -62,7 +62,9 @@ class RTDetrResNetModelTester:
         self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -92,7 +94,10 @@ class RTDetrResNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[1], 4, 4],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
@@ -107,7 +112,10 @@ class RTDetrResNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[-1], 1, 1],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)

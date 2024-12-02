@@ -87,7 +87,11 @@ class TFVisionEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
 
         enc_dec_model = TFVisionEncoderDecoderModel(encoder_decoder_config)
@@ -102,10 +106,17 @@ class TFVisionEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[0],
+            pixel_values.shape[0],
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1],
+            config.hidden_size,
+        )
 
     def check_encoder_decoder_model(
         self,
@@ -117,8 +128,12 @@ class TFVisionEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFVisionEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         self.assertTrue(enc_dec_model.config.decoder.is_decoder)
         self.assertTrue(enc_dec_model.config.decoder.add_cross_attention)
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
@@ -130,10 +145,17 @@ class TFVisionEncoderDecoderMixin:
             kwargs=kwargs,
         )
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[0],
+            pixel_values.shape[0],
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1],
+            config.hidden_size,
+        )
 
         encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_hidden_states)
         outputs_encoder_decoder = enc_dec_model(
@@ -145,10 +167,17 @@ class TFVisionEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[0],
+            pixel_values.shape[0],
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1],
+            config.hidden_size,
+        )
 
     def check_encoder_decoder_model_from_pretrained(
         self,
@@ -161,9 +190,17 @@ class TFVisionEncoderDecoderMixin:
         return_dict,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
-        enc_dec_model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        kwargs = {
+            "encoder_model": encoder_model,
+            "decoder_model": decoder_model,
+            "return_dict": return_dict,
+        }
+        enc_dec_model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
@@ -173,10 +210,17 @@ class TFVisionEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[0],
+            pixel_values.shape[0],
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1],
+            config.hidden_size,
+        )
 
     def check_save_and_load(
         self,
@@ -188,8 +232,12 @@ class TFVisionEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFVisionEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
 
         outputs = enc_dec_model(
             pixel_values=pixel_values,
@@ -226,8 +274,12 @@ class TFVisionEncoderDecoderMixin:
         labels,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFVisionEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
 
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
@@ -243,8 +295,14 @@ class TFVisionEncoderDecoderMixin:
         batch_size, seq_len = decoder_input_ids.shape
         expected_shape = (batch_size, seq_len, decoder_config.vocab_size)
         self.assertEqual(outputs_encoder_decoder["logits"].shape, expected_shape)
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[0],
+            pixel_values.shape[0],
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1],
+            config.hidden_size,
+        )
 
     def check_encoder_decoder_model_output_attentions(
         self,
@@ -259,8 +317,12 @@ class TFVisionEncoderDecoderMixin:
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFVisionEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
@@ -272,7 +334,9 @@ class TFVisionEncoderDecoderMixin:
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
-        self.assertEqual(encoder_attentions[0].shape[-3:-2], (config.num_attention_heads,))
+        self.assertEqual(
+            encoder_attentions[0].shape[-3:-2], (config.num_attention_heads,)
+        )
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
         num_decoder_layers = (
@@ -284,7 +348,11 @@ class TFVisionEncoderDecoderMixin:
 
         self.assertEqual(
             decoder_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, decoder_input_ids.shape[-1], decoder_input_ids.shape[-1]),
+            (
+                decoder_config.num_attention_heads,
+                decoder_input_ids.shape[-1],
+                decoder_input_ids.shape[-1],
+            ),
         )
 
         cross_attentions = outputs_encoder_decoder["cross_attentions"]
@@ -298,27 +366,45 @@ class TFVisionEncoderDecoderMixin:
             (decoder_config.num_attention_heads, cross_attention_input_seq_len),
         )
 
-    def check_encoder_decoder_model_generate(self, pixel_values, config, decoder_config, **kwargs):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+    def check_encoder_decoder_model_generate(
+        self, pixel_values, config, decoder_config, **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFVisionEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
 
         # Generate until max length
         if hasattr(enc_dec_model.config, "eos_token_id"):
             enc_dec_model.config.eos_token_id = None
-        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(
+            enc_dec_model.config.decoder, "eos_token_id"
+        ):
             enc_dec_model.config.decoder.eos_token_id = None
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
-            pixel_values, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
+            pixel_values,
+            decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
         )
         self.assertEqual(
-            tuple(generated_output.shape.as_list()), (pixel_values.shape[0],) + (decoder_config.max_length,)
+            tuple(generated_output.shape.as_list()),
+            (pixel_values.shape[0],) + (decoder_config.max_length,),
         )
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
+    def check_pt_tf_outputs(
+        self,
+        tf_outputs,
+        pt_outputs,
+        model_class,
+        tol=1e-5,
+        name="outputs",
+        attributes=None,
+    ):
         """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
 
         Args:
@@ -332,7 +418,11 @@ class TFVisionEncoderDecoderMixin:
 
         self.assertEqual(type(name), str)
         if attributes is not None:
-            self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
+            self.assertEqual(
+                type(attributes),
+                tuple,
+                f"{name}: The argument `attributes` should be a `tuple`",
+            )
 
         # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
         if isinstance(tf_outputs, ModelOutput):
@@ -344,19 +434,34 @@ class TFVisionEncoderDecoderMixin:
             tf_keys = [k for k, v in tf_outputs.items() if v is not None]
             pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
-            self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
+            self.assertEqual(
+                tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch"
+            )
 
             # convert to the case of `tuple`
             # appending each key to the current (string) `names`
             attributes = tuple([f"{name}.{k}" for k in tf_keys])
             self.check_pt_tf_outputs(
-                tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
+                tf_outputs.to_tuple(),
+                pt_outputs.to_tuple(),
+                model_class,
+                tol=tol,
+                name=name,
+                attributes=attributes,
             )
 
         # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
         elif type(tf_outputs) in [tuple, list]:
-            self.assertEqual(type(tf_outputs), type(pt_outputs), f"{name}: Output types differ between TF and PyTorch")
-            self.assertEqual(len(tf_outputs), len(pt_outputs), f"{name}: Output lengths differ between TF and PyTorch")
+            self.assertEqual(
+                type(tf_outputs),
+                type(pt_outputs),
+                f"{name}: Output types differ between TF and PyTorch",
+            )
+            self.assertEqual(
+                len(tf_outputs),
+                len(pt_outputs),
+                f"{name}: Output lengths differ between TF and PyTorch",
+            )
 
             if attributes is not None:
                 # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
@@ -370,18 +475,23 @@ class TFVisionEncoderDecoderMixin:
                 attributes = tuple([f"{name}_{idx}" for idx in range(len(tf_outputs))])
 
             for tf_output, pt_output, attr in zip(tf_outputs, pt_outputs, attributes):
-                self.check_pt_tf_outputs(tf_output, pt_output, model_class, tol=tol, name=attr)
+                self.check_pt_tf_outputs(
+                    tf_output, pt_output, model_class, tol=tol, name=attr
+                )
 
         elif isinstance(tf_outputs, tf.Tensor):
             self.assertTrue(
-                isinstance(pt_outputs, torch.Tensor), f"{name}: `pt_outputs` should a tensor when `tf_outputs` is"
+                isinstance(pt_outputs, torch.Tensor),
+                f"{name}: `pt_outputs` should a tensor when `tf_outputs` is",
             )
 
             tf_outputs = tf_outputs.numpy()
             pt_outputs = pt_outputs.detach().to("cpu").numpy()
 
             self.assertEqual(
-                tf_outputs.shape, pt_outputs.shape, f"{name}: Output shapes differ between TF and PyTorch"
+                tf_outputs.shape,
+                pt_outputs.shape,
+                f"{name}: Output shapes differ between TF and PyTorch",
             )
 
             # deal with NumPy's scalars to make replacing nan values by 0 work.
@@ -398,7 +508,11 @@ class TFVisionEncoderDecoderMixin:
             tf_outputs[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
+            self.assertLessEqual(
+                max_diff,
+                tol,
+                f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).",
+            )
         else:
             raise ValueError(
                 "`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got"
@@ -429,7 +543,8 @@ class TFVisionEncoderDecoderMixin:
 
         # send pytorch inputs to the correct device
         pt_inputs_dict = {
-            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
+            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v
+            for k, v in pt_inputs_dict.items()
         }
 
         # send pytorch model to the correct device
@@ -464,7 +579,11 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
     def check_pt_to_tf_equivalence(self, config, decoder_config, tf_inputs_dict):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
         # Output all for aggressive testing
         encoder_decoder_config.output_hidden_states = True
         # All models tested in this file have attentions
@@ -479,7 +598,11 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 
     def check_tf_to_pt_equivalence(self, config, decoder_config, tf_inputs_dict):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
         # Output all for aggressive testing
         encoder_decoder_config.output_hidden_states = True
         # TODO: A generalizable way to determine this attribute
@@ -492,7 +615,9 @@ class TFVisionEncoderDecoderMixin:
         with tempfile.TemporaryDirectory() as tmpdirname:
             tf_model.save_pretrained(tmpdirname, safe_serialization=False)
             pt_model = VisionEncoderDecoderModel.from_pretrained(
-                tmpdirname, from_tf=True, attn_implementation=tf_model.config._attn_implementation
+                tmpdirname,
+                from_tf=True,
+                attn_implementation=tf_model.config._attn_implementation,
             )
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
@@ -507,11 +632,15 @@ class TFVisionEncoderDecoderMixin:
 
     def test_encoder_decoder_model_from_pretrained(self):
         config_inputs_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**config_inputs_dict, return_dict=False)
+        self.check_encoder_decoder_model_from_pretrained(
+            **config_inputs_dict, return_dict=False
+        )
 
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         config_inputs_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**config_inputs_dict, return_dict=True)
+        self.check_encoder_decoder_model_from_pretrained(
+            **config_inputs_dict, return_dict=True
+        )
 
     def test_save_and_load_from_pretrained(self):
         config_inputs_dict = self.prepare_config_and_inputs()
@@ -531,7 +660,9 @@ class TFVisionEncoderDecoderMixin:
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between torch and tf is {diff} (>= {tol}).")
+        self.assertLessEqual(
+            diff, tol, f"Difference between torch and tf is {diff} (>= {tol})."
+        )
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
@@ -547,7 +678,9 @@ class TFVisionEncoderDecoderMixin:
             "decoder_attention_mask",
             "encoder_hidden_states",
         ]
-        config_inputs_dict = {k: v for k, v in config_inputs_dict.items() if k in arg_names}
+        config_inputs_dict = {
+            k: v for k, v in config_inputs_dict.items() if k in arg_names
+        }
 
         config = config_inputs_dict.pop("config")
         decoder_config = config_inputs_dict.pop("decoder_config")
@@ -572,7 +705,11 @@ class TFVisionEncoderDecoderMixin:
             # Put `1` at the beginning of sequences to make it still work when combining causal attention masks.
             # TODO: remove this line once a fix regarding large negative values for attention mask is done.
             attention_mask = tf.concat(
-                [tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], axis=-1
+                [
+                    tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype),
+                    attention_mask[:, 1:],
+                ],
+                axis=-1,
             )
             tf_inputs_dict[k] = attention_mask
 
@@ -587,8 +724,12 @@ class TFVisionEncoderDecoderMixin:
         self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
 
         # check with `labels`
-        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
-        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
+        self.check_pt_to_tf_equivalence(
+            config, decoder_config, tf_inputs_dict_with_labels
+        )
+        self.check_tf_to_pt_equivalence(
+            config, decoder_config, tf_inputs_dict_with_labels
+        )
 
         # check `enc_to_dec_proj` work as expected
         decoder_config.hidden_size = decoder_config.hidden_size * 2
@@ -620,7 +761,9 @@ class TFVisionEncoderDecoderMixin:
             model_2.save_pretrained(tmp_dirname)
             model_1 = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-            after_outputs = model_1(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+            after_outputs = model_1(
+                pixel_values=pixel_values, decoder_input_ids=decoder_input_ids
+            )
             out_1 = np.array(after_outputs[0])
             out_1[np.isnan(out_1)] = 0
             max_diff = np.amax(np.abs(out_1 - out_2))
@@ -643,7 +786,9 @@ class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.Te
         model_tester_encoder = TFViTModelTester(self, batch_size=13)
         model_tester_decoder = TFGPT2ModelTester(self)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (config, pixel_values, labels) = encoder_config_and_inputs
         (
             decoder_config,
@@ -691,7 +836,9 @@ class TFVisionEncoderDecoderModelTest(unittest.TestCase):
         return TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
     def get_encoder_decoder_models(self):
-        encoder_model = TFViTModel.from_pretrained("google/vit-base-patch16-224-in21k", name="encoder")
+        encoder_model = TFViTModel.from_pretrained(
+            "google/vit-base-patch16-224-in21k", name="encoder"
+        )
         decoder_model = TFGPT2LMHeadModel.from_pretrained(
             "openai-community/gpt2", config=self.get_decoder_config(), name="decoder"
         )
@@ -723,15 +870,25 @@ def prepare_img():
 class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
     def get_encoder_decoder_config(self):
         encoder_config = AutoConfig.from_pretrained("google/vit-base-patch16-224-in21k")
-        decoder_config = AutoConfig.from_pretrained("openai-community/gpt2", is_decoder=True, add_cross_attention=True)
-        return VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        decoder_config = AutoConfig.from_pretrained(
+            "openai-community/gpt2", is_decoder=True, add_cross_attention=True
+        )
+        return VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config, decoder_config
+        )
 
     def get_encoder_decoder_config_small(self):
-        encoder_config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-vit")
-        decoder_config = AutoConfig.from_pretrained(
-            "hf-internal-testing/tiny-random-gpt2", is_decoder=True, add_cross_attention=True
+        encoder_config = AutoConfig.from_pretrained(
+            "hf-internal-testing/tiny-random-vit"
         )
-        return VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        decoder_config = AutoConfig.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2",
+            is_decoder=True,
+            add_cross_attention=True,
+        )
+        return VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config, decoder_config
+        )
 
     def test_encoder_decoder_save_load_from_encoder_decoder(self):
         config = self.get_encoder_decoder_config_small()
@@ -742,7 +899,9 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         decoder = TFGPT2LMHeadModel(config.decoder)
         decoder.build_in_name_scope()
 
-        encoder_decoder_orig = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
+        encoder_decoder_orig = TFVisionEncoderDecoderModel(
+            encoder=encoder, decoder=decoder
+        )
 
         pixel_values = floats_tensor(
             [
@@ -754,7 +913,9 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         )
         decoder_input_ids = ids_tensor([13, 1], decoder.config.vocab_size)
 
-        logits_orig = encoder_decoder_orig(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
+        logits_orig = encoder_decoder_orig(
+            pixel_values=pixel_values, decoder_input_ids=decoder_input_ids
+        ).logits
 
         with tempfile.TemporaryDirectory() as tmp_dirname:
             encoder_path = os.path.join(tmp_dirname, "encoder")
@@ -763,9 +924,15 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             encoder.save_pretrained(encoder_path)
             decoder.save_pretrained(decoder_path)
 
-            encoder_decoder = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(encoder_path, decoder_path)
+            encoder_decoder = (
+                TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_path, decoder_path
+                )
+            )
 
-        logits_1 = encoder_decoder(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
+        logits_1 = encoder_decoder(
+            pixel_values=pixel_values, decoder_input_ids=decoder_input_ids
+        ).logits
 
         self.assertTrue(logits_orig.numpy().sum() - logits_1.numpy().sum() < 1e-3)
 
@@ -776,7 +943,9 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             encoder_decoder.save_pretrained(tmp_dirname)
             encoder_decoder = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-        logits_2 = encoder_decoder(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
+        logits_2 = encoder_decoder(
+            pixel_values=pixel_values, decoder_input_ids=decoder_input_ids
+        ).logits
 
         max_diff = np.max(np.abs(logits_2.numpy() - logits_orig.numpy()))
         self.assertAlmostEqual(max_diff, 0.0, places=4)
@@ -790,7 +959,11 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         encoder_pt = ViTModel(config.encoder).to(torch_device).eval()
         decoder_pt = GPT2LMHeadModel(config.decoder).to(torch_device).eval()
 
-        encoder_decoder_pt = VisionEncoderDecoderModel(encoder=encoder_pt, decoder=decoder_pt).to(torch_device).eval()
+        encoder_decoder_pt = (
+            VisionEncoderDecoderModel(encoder=encoder_pt, decoder=decoder_pt)
+            .to(torch_device)
+            .eval()
+        )
 
         pixel_values = floats_tensor(
             [
@@ -802,20 +975,30 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         )
         decoder_input_ids = ids_tensor([13, 1], decoder_pt.config.vocab_size)
 
-        pt_pixel_values = torch.tensor(pixel_values.numpy(), device=torch_device, dtype=torch.float)
-        pt_decoder_input_ids = torch.tensor(decoder_input_ids.numpy(), device=torch_device, dtype=torch.long)
+        pt_pixel_values = torch.tensor(
+            pixel_values.numpy(), device=torch_device, dtype=torch.float
+        )
+        pt_decoder_input_ids = torch.tensor(
+            decoder_input_ids.numpy(), device=torch_device, dtype=torch.long
+        )
 
-        logits_pt = encoder_decoder_pt(pixel_values=pt_pixel_values, decoder_input_ids=pt_decoder_input_ids).logits
+        logits_pt = encoder_decoder_pt(
+            pixel_values=pt_pixel_values, decoder_input_ids=pt_decoder_input_ids
+        ).logits
 
         # PyTorch => TensorFlow
         with tempfile.TemporaryDirectory() as tmp_dirname_1, tempfile.TemporaryDirectory() as tmp_dirname_2:
             encoder_decoder_pt.encoder.save_pretrained(tmp_dirname_1)
             encoder_decoder_pt.decoder.save_pretrained(tmp_dirname_2)
-            encoder_decoder_tf = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                tmp_dirname_1, tmp_dirname_2
+            encoder_decoder_tf = (
+                TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    tmp_dirname_1, tmp_dirname_2
+                )
             )
 
-        logits_tf = encoder_decoder_tf(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
+        logits_tf = encoder_decoder_tf(
+            pixel_values=pixel_values, decoder_input_ids=decoder_input_ids
+        ).logits
 
         max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
         self.assertAlmostEqual(max_diff, 0.0, places=3)
@@ -824,9 +1007,13 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         # (See https://github.com/huggingface/transformers/pull/14016)
         with tempfile.TemporaryDirectory() as tmp_dirname:
             encoder_decoder_tf.save_pretrained(tmp_dirname, safe_serialization=False)
-            encoder_decoder_tf = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
+            encoder_decoder_tf = TFVisionEncoderDecoderModel.from_pretrained(
+                tmp_dirname
+            )
 
-            logits_tf_2 = encoder_decoder_tf(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
+            logits_tf_2 = encoder_decoder_tf(
+                pixel_values=pixel_values, decoder_input_ids=decoder_input_ids
+            ).logits
 
             max_diff = np.max(np.abs(logits_tf_2.numpy() - logits_tf.numpy()))
             self.assertAlmostEqual(max_diff, 0.0, places=3)
@@ -837,12 +1024,16 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         load_weight_prefix = TFVisionEncoderDecoderModel.load_weight_prefix
 
         config = self.get_encoder_decoder_config()
-        image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+        image_processor = AutoImageProcessor.from_pretrained(
+            "google/vit-base-patch16-224-in21k"
+        )
         decoder_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
         img = prepare_img()
         pixel_values = image_processor(images=img, return_tensors="tf").pixel_values
-        decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+        decoder_input_ids = decoder_tokenizer(
+            "Linda Davis", return_tensors="tf"
+        ).input_ids
 
         with tempfile.TemporaryDirectory() as tmp_dirname:
             # Since most of HF's models don't have pretrained cross-attention layers, they are randomly
@@ -851,10 +1042,15 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             # So we create pretrained models (without `load_weight_prefix`), save them, and later,
             # we load them using `from_pretrained`.
             # (we don't need to do this for encoder, but let's make the code more similar between encoder/decoder)
-            encoder = TFAutoModel.from_pretrained("google/vit-base-patch16-224-in21k", name="encoder")
+            encoder = TFAutoModel.from_pretrained(
+                "google/vit-base-patch16-224-in21k", name="encoder"
+            )
             # It's necessary to specify `add_cross_attention=True` here.
             decoder = TFAutoModelForCausalLM.from_pretrained(
-                "openai-community/gpt2", is_decoder=True, add_cross_attention=True, name="decoder"
+                "openai-community/gpt2",
+                is_decoder=True,
+                add_cross_attention=True,
+                name="decoder",
             )
             pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
             pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")
@@ -872,21 +1068,33 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             enc_dec_model.save_pretrained(tmp_dirname)
             enc_dec_model = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-            output = enc_dec_model(pixel_values, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+            output = enc_dec_model(
+                pixel_values,
+                decoder_input_ids=decoder_input_ids,
+                labels=decoder_input_ids,
+            )
 
             loss_pretrained = output.loss
             del enc_dec_model
 
             # Create the model using `__init__` with loaded ``pretrained`` encoder / decoder
             encoder = TFAutoModel.from_pretrained(
-                pretrained_encoder_dir, load_weight_prefix=load_weight_prefix, name="encoder"
+                pretrained_encoder_dir,
+                load_weight_prefix=load_weight_prefix,
+                name="encoder",
             )
             decoder = TFAutoModelForCausalLM.from_pretrained(
-                pretrained_decoder_dir, load_weight_prefix=load_weight_prefix, name="decoder"
+                pretrained_decoder_dir,
+                load_weight_prefix=load_weight_prefix,
+                name="decoder",
             )
-            enc_dec_model = TFVisionEncoderDecoderModel(config=config, encoder=encoder, decoder=decoder)
+            enc_dec_model = TFVisionEncoderDecoderModel(
+                config=config, encoder=encoder, decoder=decoder
+            )
 
-        output = enc_dec_model(pixel_values, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+        output = enc_dec_model(
+            pixel_values, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids
+        )
 
         loss_init = output.loss
 
@@ -937,7 +1145,9 @@ class TFViT2GPT2ModelIntegrationTest(unittest.TestCase):
         self.assertLessEqual(max_diff, 1e-4)
 
         def generate_step(pixel_values):
-            outputs = model.generate(pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True)
+            outputs = model.generate(
+                pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
+            )
             output_ids = outputs.sequences
             preds = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             preds = [pred.strip() for pred in preds]

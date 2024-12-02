@@ -153,7 +153,12 @@ class ScheduleInitTest(unittest.TestCase):
                 [0.0, 5.0, 10.0, 8.165, 7.071, 6.325, 5.774, 5.345, 5.0, 4.714],
             ),
             get_wsd_schedule: (
-                {"num_warmup_steps": 2, "num_stable_steps": 2, "num_decay_steps": 3, "min_lr_ratio": 0.1},
+                {
+                    "num_warmup_steps": 2,
+                    "num_stable_steps": 2,
+                    "num_decay_steps": 3,
+                    "min_lr_ratio": 0.1,
+                },
                 [0.0, 5.0, 10.0, 10.0, 10.0, 7.75, 3.25, 1.0, 1.0, 1.0],
             ),
         }
@@ -173,9 +178,13 @@ class ScheduleInitTest(unittest.TestCase):
 
             scheduler = scheduler_func(self.optimizer, **kwargs)
             if scheduler_func.__name__ != "get_constant_schedule":
-                LambdaScheduleWrapper.wrap_scheduler(scheduler)  # wrap to test picklability of the schedule
+                LambdaScheduleWrapper.wrap_scheduler(
+                    scheduler
+                )  # wrap to test picklability of the schedule
             lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
-            self.assertListEqual(lrs_1, lrs_2, msg=f"failed for {scheduler_func} in save and reload")
+            self.assertListEqual(
+                lrs_1, lrs_2, msg=f"failed for {scheduler_func} in save and reload"
+            )
 
     def test_get_scheduler(self):
         test_params = [
@@ -183,20 +192,34 @@ class ScheduleInitTest(unittest.TestCase):
                 "name": "warmup_stable_decay",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
-                "scheduler_specific_kwargs": {"num_stable_steps": 1, "num_decay_steps": 3},
+                "scheduler_specific_kwargs": {
+                    "num_stable_steps": 1,
+                    "num_decay_steps": 3,
+                },
             },
             {
                 "name": "warmup_stable_decay",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
-                "scheduler_specific_kwargs": {"num_stable_steps": 1, "num_decay_steps": 3},
+                "scheduler_specific_kwargs": {
+                    "num_stable_steps": 1,
+                    "num_decay_steps": 3,
+                },
             },
-            {"name": "cosine", "optimizer": self.optimizer, "num_warmup_steps": 2, "num_training_steps": 10},
+            {
+                "name": "cosine",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+            },
         ]
 
         for param in test_params:
-            self.assertTrue(get_scheduler(**param), msg=f"failed for {param['name']} in get_scheduler")
+            self.assertTrue(
+                get_scheduler(**param),
+                msg=f"failed for {param['name']} in get_scheduler",
+            )
 
 
 class LambdaScheduleWrapper:

@@ -163,7 +163,9 @@ class DPREncoder(DPRPreTrainedModel):
             raise ValueError("Encoder hidden_size can't be zero")
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
-            self.encode_proj = nn.Linear(self.bert_model.config.hidden_size, config.projection_dim)
+            self.encode_proj = nn.Linear(
+                self.bert_model.config.hidden_size, config.projection_dim
+            )
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -230,7 +232,9 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         return_dict: bool = False,
     ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
-        n_passages, sequence_length = input_ids.size() if input_ids is not None else inputs_embeds.size()[:2]
+        n_passages, sequence_length = (
+            input_ids.size() if input_ids is not None else inputs_embeds.size()[:2]
+        )
         # feed encoder
         outputs = self.encoder(
             input_ids,
@@ -431,7 +435,9 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
@@ -456,14 +462,24 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         >>> embeddings = model(input_ids).pooler_output
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
@@ -495,7 +511,9 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         if not return_dict:
             return outputs[1:]
         return DPRContextEncoderOutput(
-            pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            pooler_output=outputs.pooler_output,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -512,7 +530,9 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
@@ -537,14 +557,24 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         >>> embeddings = model(input_ids).pooler_output
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -577,7 +607,9 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         if not return_dict:
             return outputs[1:]
         return DPRQuestionEncoderOutput(
-            pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            pooler_output=outputs.pooler_output,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -594,7 +626,9 @@ class DPRReader(DPRPretrainedReader):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DPR_READER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DPRReaderOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DPRReaderOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
@@ -626,14 +660,24 @@ class DPRReader(DPRPretrainedReader):
         >>> relevance_logits = outputs.relevance_logits
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()

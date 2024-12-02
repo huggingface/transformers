@@ -64,7 +64,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_mt5"] = ["TFMT5EncoderModel", "TFMT5ForConditionalGeneration", "TFMT5Model"]
+    _import_structure["modeling_tf_mt5"] = [
+        "TFMT5EncoderModel",
+        "TFMT5ForConditionalGeneration",
+        "TFMT5Model",
+    ]
 
 try:
     if not is_flax_available():
@@ -72,7 +76,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_mt5"] = ["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]
+    _import_structure["modeling_flax_mt5"] = [
+        "FlaxMT5EncoderModel",
+        "FlaxMT5ForConditionalGeneration",
+        "FlaxMT5Model",
+    ]
 
 
 if TYPE_CHECKING:
@@ -101,7 +109,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
+        from .modeling_tf_mt5 import (
+            TFMT5EncoderModel,
+            TFMT5ForConditionalGeneration,
+            TFMT5Model,
+        )
 
     try:
         if not is_flax_available():
@@ -109,7 +121,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .modeling_flax_mt5 import (
+            FlaxMT5EncoderModel,
+            FlaxMT5ForConditionalGeneration,
+            FlaxMT5Model,
+        )
 
 else:
     import sys
@@ -118,6 +134,9 @@ else:
         __name__,
         globals()["__file__"],
         _import_structure,
-        extra_objects={"MT5Tokenizer": MT5Tokenizer, "MT5TokenizerFast": MT5TokenizerFast},
+        extra_objects={
+            "MT5Tokenizer": MT5Tokenizer,
+            "MT5TokenizerFast": MT5TokenizerFast,
+        },
         module_spec=__spec__,
     )

@@ -42,7 +42,9 @@ if is_mamba_ssm_available():
         vocab_size = config_ssm.vocab_size
         pad_vocab_size_multiple = config_ssm.pad_vocab_size_multiple
         if (vocab_size % pad_vocab_size_multiple) != 0:
-            vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
+            vocab_size += pad_vocab_size_multiple - (
+                vocab_size % pad_vocab_size_multiple
+            )
         hf_config.vocab_size = vocab_size
         return hf_config
 
@@ -74,7 +76,10 @@ def convert_mamba_ssm_checkpoint_to_huggingface_model(
 
 
 def validate_converted_model(
-    original_state_dict: dict, original_ssm_config_dict: dict, hf_model: MambaForCausalLM, tokenizer: AutoTokenizer
+    original_state_dict: dict,
+    original_ssm_config_dict: dict,
+    hf_model: MambaForCausalLM,
+    tokenizer: AutoTokenizer,
 ) -> None:
     """Validate the converted model returns the same output as the original model."""
     torch_device = "cuda"
@@ -84,13 +89,17 @@ def validate_converted_model(
     original_model.load_state_dict(original_state_dict)
 
     hf_model = hf_model.to(torch_device)
-    input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
+    input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")[
+        "input_ids"
+    ].to(torch_device)
     # Assert model logits are close
     with torch.no_grad():
         original_model_logits = original_model(input_ids).logits
         hf_model_logits = hf_model(input_ids).logits
     if not torch.allclose(original_model_logits, hf_model_logits, atol=1e-3):
-        raise ValueError("The converted model did not return the same logits as the original model.")
+        raise ValueError(
+            "The converted model did not return the same logits as the original model."
+        )
 
     logger.info("Model conversion validated successfully.")
 
@@ -106,7 +115,9 @@ def convert_mamba_checkpoint_file_to_huggingface_model_file(
         raise ValueError(
             "This script is to be run with a CUDA device, as the original mamba_ssm model does not support cpu."
         )
-    logger.info(f"Loading model from {mamba_checkpoint_path} based on config from {config_json_file}")
+    logger.info(
+        f"Loading model from {mamba_checkpoint_path} based on config from {config_json_file}"
+    )
     # Load weights and config from paths
     original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu")
     with open(config_json_file, "r", encoding="utf-8") as json_file:
@@ -118,7 +129,9 @@ def convert_mamba_checkpoint_file_to_huggingface_model_file(
     )
 
     # Validate the conversion
-    validate_converted_model(original_state_dict, original_ssm_config_dict, hf_model, tokenizer)
+    validate_converted_model(
+        original_state_dict, original_ssm_config_dict, hf_model, tokenizer
+    )
 
     logger.info(f"Model converted successfully. Saving model to {output_dir}")
 
@@ -144,7 +157,11 @@ if __name__ == "__main__":
         help="Path to a `config.json` file corresponding to a MambaConfig of the original mamba_ssm model.",
     )
     parser.add_argument(
-        "-o", "--output_dir", type=str, required=True, help="Path to directory to save the converted output model to."
+        "-o",
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Path to directory to save the converted output model to.",
     )
     args = parser.parse_args()
 

@@ -19,17 +19,33 @@ from pathlib import Path
 import torch
 from torch.serialization import default_restore_location
 
-from transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
+from transformers import (
+    BertConfig,
+    DPRConfig,
+    DPRContextEncoder,
+    DPRQuestionEncoder,
+    DPRReader,
+)
 
 
 CheckpointState = collections.namedtuple(
-    "CheckpointState", ["model_dict", "optimizer_dict", "scheduler_dict", "offset", "epoch", "encoder_params"]
+    "CheckpointState",
+    [
+        "model_dict",
+        "optimizer_dict",
+        "scheduler_dict",
+        "offset",
+        "epoch",
+        "encoder_params",
+    ],
 )
 
 
 def load_states_from_checkpoint(model_file: str) -> CheckpointState:
     print(f"Reading saved model from {model_file}")
-    state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, "cpu"))
+    state_dict = torch.load(
+        model_file, map_location=lambda s, l: default_restore_location(s, "cpu")
+    )
     return CheckpointState(**state_dict)
 
 
@@ -49,17 +65,23 @@ class DPRState:
         if comp_type.startswith("r"):
             return DPRReaderState(*args, **kwargs)
         else:
-            raise ValueError("Component type must be either 'ctx_encoder', 'question_encoder' or 'reader'.")
+            raise ValueError(
+                "Component type must be either 'ctx_encoder', 'question_encoder' or 'reader'."
+            )
 
 
 class DPRContextEncoderState(DPRState):
     def load_dpr_model(self):
-        model = DPRContextEncoder(DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0]))
+        model = DPRContextEncoder(
+            DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0])
+        )
         print(f"Loading DPR biencoder from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.ctx_encoder, "ctx_model."
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3
-        state_dict = {"bert_model.embeddings.position_ids": model.ctx_encoder.bert_model.embeddings.position_ids}
+        state_dict = {
+            "bert_model.embeddings.position_ids": model.ctx_encoder.bert_model.embeddings.position_ids
+        }
         for key, value in saved_state.model_dict.items():
             if key.startswith(prefix):
                 key = key[len(prefix) :]
@@ -72,12 +94,16 @@ class DPRContextEncoderState(DPRState):
 
 class DPRQuestionEncoderState(DPRState):
     def load_dpr_model(self):
-        model = DPRQuestionEncoder(DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0]))
+        model = DPRQuestionEncoder(
+            DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0])
+        )
         print(f"Loading DPR biencoder from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.question_encoder, "question_model."
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3
-        state_dict = {"bert_model.embeddings.position_ids": model.question_encoder.bert_model.embeddings.position_ids}
+        state_dict = {
+            "bert_model.embeddings.position_ids": model.question_encoder.bert_model.embeddings.position_ids
+        }
         for key, value in saved_state.model_dict.items():
             if key.startswith(prefix):
                 key = key[len(prefix) :]
@@ -90,7 +116,9 @@ class DPRQuestionEncoderState(DPRState):
 
 class DPRReaderState(DPRState):
     def load_dpr_model(self):
-        model = DPRReader(DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0]))
+        model = DPRReader(
+            DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0])
+        )
         print(f"Loading DPR reader from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3
@@ -119,7 +147,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--type", type=str, help="Type of the component to convert: 'ctx_encoder', 'question_encoder' or 'reader'."
+        "--type",
+        type=str,
+        help="Type of the component to convert: 'ctx_encoder', 'question_encoder' or 'reader'.",
     )
     parser.add_argument(
         "--src",
@@ -130,7 +160,12 @@ if __name__ == "__main__":
             " 'retriever' checkpoints."
         ),
     )
-    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model directory.")
+    parser.add_argument(
+        "--dest",
+        type=str,
+        default=None,
+        help="Path to the output PyTorch model directory.",
+    )
     args = parser.parse_args()
 
     src_file = Path(args.src)

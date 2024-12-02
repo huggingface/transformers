@@ -385,10 +385,18 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
         self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
         self.t2u_max_position_embeddings = t2u_max_position_embeddings
-        self.t2u_variance_predictor_embed_dim = t2u_variance_predictor_embed_dim  # TODO: add to docstrings
-        self.t2u_variance_predictor_hidden_dim = t2u_variance_predictor_hidden_dim  # TODO: add to docstrings
-        self.t2u_variance_predictor_kernel_size = t2u_variance_predictor_kernel_size  # TODO: add to docstrings
-        self.t2u_variance_pred_dropout = t2u_variance_pred_dropout  # TODO: add to docstrings
+        self.t2u_variance_predictor_embed_dim = (
+            t2u_variance_predictor_embed_dim  # TODO: add to docstrings
+        )
+        self.t2u_variance_predictor_hidden_dim = (
+            t2u_variance_predictor_hidden_dim  # TODO: add to docstrings
+        )
+        self.t2u_variance_predictor_kernel_size = (
+            t2u_variance_predictor_kernel_size  # TODO: add to docstrings
+        )
+        self.t2u_variance_pred_dropout = (
+            t2u_variance_pred_dropout  # TODO: add to docstrings
+        )
 
         # hifi-gan vocoder config
         # original parameters specific to Hifi-Gan

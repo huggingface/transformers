@@ -186,7 +186,10 @@ class SpeechT5Config(PretrainedConfig):
     ```"""
 
     model_type = "speecht5"
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "num_hidden_layers": "encoder_layers",
+    }
 
     def __init__(
         self,

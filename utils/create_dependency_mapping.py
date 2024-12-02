@@ -15,7 +15,9 @@ def topological_sort(dependencies):
             in_degree[node] += 1  # increase in-degree of node
 
     # Add all nodes with zero in-degree to the queue
-    zero_in_degree_queue = deque([node for node in dependencies if in_degree[node] == 0])
+    zero_in_degree_queue = deque(
+        [node for node in dependencies if in_degree[node] == 0]
+    )
 
     sorted_list = []
     # Perform topological sorting

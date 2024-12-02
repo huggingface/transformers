@@ -16,14 +16,21 @@
 
 import argparse
 
-from transformers import BigBirdConfig, BigBirdForPreTraining, BigBirdForQuestionAnswering, load_tf_weights_in_big_bird
+from transformers import (
+    BigBirdConfig,
+    BigBirdForPreTraining,
+    BigBirdForQuestionAnswering,
+    load_tf_weights_in_big_bird,
+)
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, pytorch_dump_path, is_trivia_qa):
+def convert_tf_checkpoint_to_pytorch(
+    tf_checkpoint_path, big_bird_config_file, pytorch_dump_path, is_trivia_qa
+):
     # Initialise PyTorch model
     config = BigBirdConfig.from_json_file(big_bird_config_file)
     print(f"Building PyTorch model from configuration: {config}")
@@ -45,7 +52,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--tf_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
         "--big_bird_config_file",
@@ -58,12 +69,21 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
-        "--is_trivia_qa", action="store_true", help="Whether to convert a model with a trivia_qa head."
+        "--is_trivia_qa",
+        action="store_true",
+        help="Whether to convert a model with a trivia_qa head.",
     )
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(
-        args.tf_checkpoint_path, args.big_bird_config_file, args.pytorch_dump_path, args.is_trivia_qa
+        args.tf_checkpoint_path,
+        args.big_bird_config_file,
+        args.pytorch_dump_path,
+        args.is_trivia_qa,
     )

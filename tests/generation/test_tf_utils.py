@@ -67,7 +67,9 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
     @slow
     def test_generate_tf_function_export_fixed_input_length(self):
         # TF-only test: tf.saved_model export
-        test_model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        test_model = TFAutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        )
         input_length = 2
         max_new_tokens = 2
 
@@ -79,7 +81,9 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
             @tf.function(
                 input_signature=(
                     tf.TensorSpec((None, input_length), tf.int32, name="input_ids"),
-                    tf.TensorSpec((None, input_length), tf.int32, name="attention_mask"),
+                    tf.TensorSpec(
+                        (None, input_length), tf.int32, name="attention_mask"
+                    ),
                 ),
                 jit_compile=True,
             )
@@ -96,7 +100,11 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
         dummy_attention_masks = [[1, 0], [1, 1]]
         dummy_model = DummyModel(model=test_model)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tf.saved_model.save(dummy_model, tmp_dir, signatures={"serving_default": dummy_model.serving})
+            tf.saved_model.save(
+                dummy_model,
+                tmp_dir,
+                signatures={"serving_default": dummy_model.serving},
+            )
             serving_func = tf.saved_model.load(tmp_dir).signatures["serving_default"]
             for batch_size in range(1, len(dummy_input_ids) + 1):
                 inputs = {
@@ -104,13 +112,17 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
                     "attention_mask": tf.constant(dummy_attention_masks[:batch_size]),
                 }
                 tf_func_outputs = serving_func(**inputs)["sequences"]
-                tf_model_outputs = test_model.generate(**inputs, max_new_tokens=max_new_tokens)
+                tf_model_outputs = test_model.generate(
+                    **inputs, max_new_tokens=max_new_tokens
+                )
                 tf.debugging.assert_equal(tf_func_outputs, tf_model_outputs)
 
     @slow
     def test_generate_tf_function_export_fixed_batch_size(self):
         # TF-only test: tf.saved_model export
-        test_model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        test_model = TFAutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        )
         batch_size = 1
         max_new_tokens = 2
 
@@ -139,7 +151,11 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
         dummy_attention_masks = [[1], [1, 1]]
         dummy_model = DummyModel(model=test_model)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tf.saved_model.save(dummy_model, tmp_dir, signatures={"serving_default": dummy_model.serving})
+            tf.saved_model.save(
+                dummy_model,
+                tmp_dir,
+                signatures={"serving_default": dummy_model.serving},
+            )
             serving_func = tf.saved_model.load(tmp_dir).signatures["serving_default"]
             for input_row in range(len(dummy_input_ids)):
                 inputs = {
@@ -147,7 +163,9 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
                     "attention_mask": tf.constant([dummy_attention_masks[input_row]]),
                 }
                 tf_func_outputs = serving_func(**inputs)["sequences"]
-                tf_model_outputs = test_model.generate(**inputs, max_new_tokens=max_new_tokens)
+                tf_model_outputs = test_model.generate(
+                    **inputs, max_new_tokens=max_new_tokens
+                )
                 tf.debugging.assert_equal(tf_func_outputs, tf_model_outputs)
 
     @slow
@@ -156,22 +174,34 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
         # TF-only test: tf.saved_model export
         with tempfile.TemporaryDirectory() as tmp_dir:
             # file needed to load the TF tokenizer
-            hf_hub_download(repo_id="google/flan-t5-small", filename="spiece.model", local_dir=tmp_dir)
+            hf_hub_download(
+                repo_id="google/flan-t5-small",
+                filename="spiece.model",
+                local_dir=tmp_dir,
+            )
 
             class CompleteSentenceTransformer(keras.layers.Layer):
                 def __init__(self):
                     super().__init__()
                     self.tokenizer = text.SentencepieceTokenizer(
-                        model=tf.io.gfile.GFile(os.path.join(tmp_dir, "spiece.model"), "rb").read()
+                        model=tf.io.gfile.GFile(
+                            os.path.join(tmp_dir, "spiece.model"), "rb"
+                        ).read()
                     )
-                    self.model = TFAutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
+                    self.model = TFAutoModelForSeq2SeqLM.from_pretrained(
+                        "hf-internal-testing/tiny-random-t5"
+                    )
 
                 def call(self, inputs, *args, **kwargs):
                     tokens = self.tokenizer.tokenize(inputs)
                     input_ids, attention_mask = text.pad_model_inputs(
-                        tokens, max_seq_length=64, pad_value=self.model.config.pad_token_id
+                        tokens,
+                        max_seq_length=64,
+                        pad_value=self.model.config.pad_token_id,
                     )
-                    outputs = self.model.generate(input_ids=input_ids, attention_mask=attention_mask)
+                    outputs = self.model.generate(
+                        input_ids=input_ids, attention_mask=attention_mask
+                    )
                     return self.tokenizer.detokenize(outputs)
 
             complete_model = CompleteSentenceTransformer()
@@ -191,30 +221,44 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
         }
         expectation = 14
 
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        )
         text = """Hello, my dog is cute and"""
         tokens = tokenizer(text, return_tensors="tf")
-        model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = TFAutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        )
 
         eos_token_id = 638
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
             tf.random.set_seed(0)
-            generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+            generated_tokens = model.generate(
+                **tokens, eos_token_id=eos_token_id, **generation_kwargs
+            )
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         eos_token_id = [638, 198]
         with tf.device(":/CPU:0"):
             tf.random.set_seed(0)
-            generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+            generated_tokens = model.generate(
+                **tokens, eos_token_id=eos_token_id, **generation_kwargs
+            )
         self.assertTrue(expectation == len(generated_tokens[0]))
 
     def test_model_kwarg_encoder_signature_filtering(self):
         # Has PT equivalent: ample use of framework-specific code
-        bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        article = """Hugging Face is a technology company based in New York and Paris."""
+        bart_tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-bart"
+        )
+        article = (
+            """Hugging Face is a technology company based in New York and Paris."""
+        )
         input_ids = bart_tokenizer(article, return_tensors="tf").input_ids
-        bart_model = TFBartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart")
+        bart_model = TFBartForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-random-bart"
+        )
         output = bart_model.generate(input_ids).numpy()
 
         # Let's create a fake model that has a different signature. In particular, this fake model accepts "foo" as an

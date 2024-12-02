@@ -37,14 +37,21 @@ from transformers import (
 
 
 def load_demo_image(image_size, device):
-    img_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    img_url = (
+        "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    )
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
     transform = transforms.Compose(
         [
-            transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
+            transforms.Resize(
+                (image_size, image_size), interpolation=InterpolationMode.BICUBIC
+            ),
             transforms.ToTensor(),
-            transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+            transforms.Normalize(
+                (0.48145466, 0.4578275, 0.40821073),
+                (0.26862954, 0.26130258, 0.27577711),
+            ),
         ]
     )
     image = transform(raw_image).unsqueeze(0).to(device)
@@ -110,19 +117,44 @@ def convert_blip_checkpoint(pytorch_dump_folder_path, config_path=None):
 
     out = hf_model.generate(image, input_ids)
 
-    assert out[0].tolist() == [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
+    assert out[0].tolist() == [
+        30522,
+        1037,
+        3861,
+        1997,
+        1037,
+        2450,
+        3564,
+        2006,
+        1996,
+        3509,
+        2007,
+        2014,
+        3899,
+        102,
+    ]
 
     out = hf_model.generate(image)
 
-    assert out[0].tolist() == [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
+    assert out[0].tolist() == [
+        30522,
+        1037,
+        2450,
+        3564,
+        2006,
+        1996,
+        3509,
+        2007,
+        2014,
+        3899,
+        102,
+    ]
 
     if pytorch_dump_folder_path is not None:
         hf_model.save_pretrained(pytorch_dump_folder_path)
 
     # model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_vqa.pth'
-    model_url = (
-        "https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_vqa_capfilt_large.pth"
-    )
+    model_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_vqa_capfilt_large.pth"
 
     vqa_model = blip_vqa(pretrained=model_url, image_size=image_size, vit="base")
     vqa_model.eval()
@@ -176,7 +208,10 @@ def convert_blip_checkpoint(pytorch_dump_folder_path, config_path=None):
     out = hf_itm_model(question_input_ids, image, use_itm_head=False)
 
     assert out[0].item() == 0.2110687494277954
-    assert torch.nn.functional.softmax(out_itm[0], dim=1)[:, 1].item() == 0.45698845386505127
+    assert (
+        torch.nn.functional.softmax(out_itm[0], dim=1)[:, 1].item()
+        == 0.45698845386505127
+    )
 
     if pytorch_dump_folder_path is not None:
         hf_itm_model.save_pretrained(pytorch_dump_folder_path + "_itm")
@@ -184,8 +219,18 @@ def convert_blip_checkpoint(pytorch_dump_folder_path, config_path=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
     args = parser.parse_args()
 
     convert_blip_checkpoint(args.pytorch_dump_folder_path, args.config_path)

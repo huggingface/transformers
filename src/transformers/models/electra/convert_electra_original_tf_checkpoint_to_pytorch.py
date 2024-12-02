@@ -18,14 +18,21 @@ import argparse
 
 import torch
 
-from transformers import ElectraConfig, ElectraForMaskedLM, ElectraForPreTraining, load_tf_weights_in_electra
+from transformers import (
+    ElectraConfig,
+    ElectraForMaskedLM,
+    ElectraForPreTraining,
+    load_tf_weights_in_electra,
+)
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path, discriminator_or_generator):
+def convert_tf_checkpoint_to_pytorch(
+    tf_checkpoint_path, config_file, pytorch_dump_path, discriminator_or_generator
+):
     # Initialise PyTorch model
     config = ElectraConfig.from_json_file(config_file)
     print(f"Building PyTorch model from configuration: {config}")
@@ -35,11 +42,16 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
     elif discriminator_or_generator == "generator":
         model = ElectraForMaskedLM(config)
     else:
-        raise ValueError("The discriminator_or_generator argument should be either 'discriminator' or 'generator'")
+        raise ValueError(
+            "The discriminator_or_generator argument should be either 'discriminator' or 'generator'"
+        )
 
     # Load weights from tf checkpoint
     load_tf_weights_in_electra(
-        model, config, tf_checkpoint_path, discriminator_or_generator=discriminator_or_generator
+        model,
+        config,
+        tf_checkpoint_path,
+        discriminator_or_generator=discriminator_or_generator,
     )
 
     # Save pytorch-model
@@ -51,7 +63,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--tf_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
         "--config_file",
@@ -61,7 +77,11 @@ if __name__ == "__main__":
         help="The config json file corresponding to the pre-trained model. \nThis specifies the model architecture.",
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
         "--discriminator_or_generator",
@@ -75,5 +95,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(
-        args.tf_checkpoint_path, args.config_file, args.pytorch_dump_path, args.discriminator_or_generator
+        args.tf_checkpoint_path,
+        args.config_file,
+        args.pytorch_dump_path,
+        args.discriminator_or_generator,
     )

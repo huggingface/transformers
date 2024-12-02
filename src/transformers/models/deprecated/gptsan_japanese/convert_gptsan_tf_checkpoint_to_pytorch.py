@@ -47,23 +47,39 @@ def convert_tf_gptsan_to_pt(args):
                     player = int(key_name[9])
                 elif key_name.startswith("pasts/out"):
                     player = 8
-                name = "model.sqout.%d.weight" % (player * 2)  # enter to nn.Sequencial with Tanh, so 2 at a time
-                state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
+                name = "model.sqout.%d.weight" % (
+                    player * 2
+                )  # enter to nn.Sequencial with Tanh, so 2 at a time
+                state = vnp.transpose(
+                    [1, 0]
+                ).copy()  # Mesh-Tensorflow is a diagonal matrix
                 new_state[name] = torch.tensor(state)
             elif key_name.startswith("model/moe"):
                 player = int(key_name[9:].split("/")[0])
                 if key_name.endswith("/switch_gating/kernel"):
-                    name = "model.blocks.%d.feed_forward.mlp.router.classifier.weight" % player
-                    state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
+                    name = (
+                        "model.blocks.%d.feed_forward.mlp.router.classifier.weight"
+                        % player
+                    )
+                    state = vnp.transpose(
+                        [1, 0]
+                    ).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif key_name.endswith("/softmlp/kernel"):
-                    name = "model.blocks.%d.feed_forward.soft_bypass_mlp.weight" % player
-                    state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
+                    name = (
+                        "model.blocks.%d.feed_forward.soft_bypass_mlp.weight" % player
+                    )
+                    state = vnp.transpose(
+                        [1, 0]
+                    ).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif key_name.endswith("/wo/kernel") or key_name.endswith("/wi/kernel"):
                     nlayer = key_name[-9:-7]
                     for i in range(16):
-                        name = "model.blocks.%d.feed_forward.mlp.experts.expert_%d.%s.weight" % (player, i, nlayer)
+                        name = (
+                            "model.blocks.%d.feed_forward.mlp.experts.expert_%d.%s.weight"
+                            % (player, i, nlayer)
+                        )
                         state = (
                             vnp[i].transpose([1, 0]).copy()
                         )  # In Mesh-Tensorflow, it is one array, so it is divided
@@ -72,7 +88,9 @@ def convert_tf_gptsan_to_pt(args):
                 player = int(key_name[9:].split("/")[0])
                 if key_name.endswith("/p1/kernel"):
                     name = "model.blocks.%d.feed_forward.mlp.wi.weight" % player
-                    state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
+                    state = vnp.transpose(
+                        [1, 0]
+                    ).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif key_name.endswith("/p1/bias"):
                     name = "model.blocks.%d.feed_forward.mlp.wi.bias" % player
@@ -80,7 +98,9 @@ def convert_tf_gptsan_to_pt(args):
                     new_state[name] = torch.tensor(state)
                 elif key_name.endswith("/p2/kernel"):
                     name = "model.blocks.%d.feed_forward.mlp.wo.weight" % player
-                    state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
+                    state = vnp.transpose(
+                        [1, 0]
+                    ).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif key_name.endswith("/p2/bias"):
                     name = "model.blocks.%d.feed_forward.mlp.wo.bias" % player
@@ -99,22 +119,30 @@ def convert_tf_gptsan_to_pt(args):
             elif key_name.startswith("model/att"):
                 player = int(key_name[9:].split("/")[0])
                 if key_name.endswith("/qkv/kernel"):
-                    state = vnp.copy()  # Compute same dimension as Mesh-tensorflow using einsum
+                    state = (
+                        vnp.copy()
+                    )  # Compute same dimension as Mesh-tensorflow using einsum
                     state_q = state[:, 0, :, :]
                     state_k = state[:, 1, :, :]
                     state_v = state[:, 2, :, :]
                     state_q = (
-                        state_q.reshape([state_q.shape[0], state_q.shape[1] * state_q.shape[2]])
+                        state_q.reshape(
+                            [state_q.shape[0], state_q.shape[1] * state_q.shape[2]]
+                        )
                         .transpose([1, 0])
                         .copy()
                     )  # Mesh-Tensorflow is a diagonal matrix
                     state_k = (
-                        state_k.reshape([state_k.shape[0], state_k.shape[1] * state_k.shape[2]])
+                        state_k.reshape(
+                            [state_k.shape[0], state_k.shape[1] * state_k.shape[2]]
+                        )
                         .transpose([1, 0])
                         .copy()
                     )  # Mesh-Tensorflow is a diagonal matrix
                     state_v = (
-                        state_v.reshape([state_v.shape[0], state_v.shape[1] * state_v.shape[2]])
+                        state_v.reshape(
+                            [state_v.shape[0], state_v.shape[1] * state_v.shape[2]]
+                        )
                         .transpose([1, 0])
                         .copy()
                     )  # Mesh-Tensorflow is a diagonal matrix
@@ -125,9 +153,13 @@ def convert_tf_gptsan_to_pt(args):
                     name = "model.blocks.%d.self_attn.self_attn.v_proj.weight" % player
                     new_state[name] = torch.tensor(state_v)
                 elif key_name.endswith("/o/kernel"):
-                    name = "model.blocks.%d.self_attn.self_attn.out_proj.weight" % player
+                    name = (
+                        "model.blocks.%d.self_attn.self_attn.out_proj.weight" % player
+                    )
                     state = (
-                        vnp.reshape([vnp.shape[0] * vnp.shape[1], vnp.shape[2]]).transpose([1, 0]).copy()
+                        vnp.reshape([vnp.shape[0] * vnp.shape[1], vnp.shape[2]])
+                        .transpose([1, 0])
+                        .copy()
                     )  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
             elif key_name.startswith("model/an"):
@@ -145,9 +177,11 @@ def convert_tf_gptsan_to_pt(args):
                 or key_name.startswith("model/wpe")
                 or key_name.startswith("model/ete")
             ):
-                nlayer = {"wte": "embed_tokens", "wpe": "position_embeddings", "ete": "extra_position_embeddings"}[
-                    key_name[-3:]
-                ]
+                nlayer = {
+                    "wte": "embed_tokens",
+                    "wpe": "position_embeddings",
+                    "ete": "extra_position_embeddings",
+                }[key_name[-3:]]
                 name = "model.%s.weight" % nlayer
                 state = vnp.copy()  # same in embedded
                 new_state[name] = torch.tensor(state)
@@ -162,7 +196,9 @@ def convert_tf_gptsan_to_pt(args):
                 new_state[name] = torch.tensor(state)
             elif key_name == "model/dense/kernel":
                 name = "model.last_project.weight"
-                state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
+                state = vnp.transpose(
+                    [1, 0]
+                ).copy()  # Mesh-Tensorflow is a diagonal matrix
                 new_state[name] = torch.tensor(state)
             elif key_name == "model/dense_1/bias":
                 name = "model.last_project.bias"
@@ -173,9 +209,14 @@ def convert_tf_gptsan_to_pt(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="model converter.", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="model converter.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--tf_model_dir", metavar="PATH", type=str, required=True, help="import model")
-    parser.add_argument("--output", metavar="PATH", type=str, required=True, help="output model")
+    parser.add_argument(
+        "--tf_model_dir", metavar="PATH", type=str, required=True, help="import model"
+    )
+    parser.add_argument(
+        "--output", metavar="PATH", type=str, required=True, help="output model"
+    )
     args = parser.parse_args()
     convert_tf_gptsan_to_pt(args)

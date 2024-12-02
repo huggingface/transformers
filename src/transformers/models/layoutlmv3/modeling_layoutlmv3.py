@@ -214,18 +214,30 @@ class LayoutLMv3PatchEmbeddings(nn.Module):
             if isinstance(config.patch_size, collections.abc.Iterable)
             else (config.patch_size, config.patch_size)
         )
-        self.patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
-        self.proj = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.patch_shape = (
+            image_size[0] // patch_size[0],
+            image_size[1] // patch_size[1],
+        )
+        self.proj = nn.Conv2d(
+            config.num_channels,
+            config.hidden_size,
+            kernel_size=patch_size,
+            stride=patch_size,
+        )
 
     def forward(self, pixel_values, position_embedding=None):
         embeddings = self.proj(pixel_values)
 
         if position_embedding is not None:
             # interpolate the position embedding to the corresponding size
-            position_embedding = position_embedding.view(1, self.patch_shape[0], self.patch_shape[1], -1)
+            position_embedding = position_embedding.view(
+                1, self.patch_shape[0], self.patch_shape[1], -1
+            )
             position_embedding = position_embedding.permute(0, 3, 1, 2)
             patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
-            position_embedding = F.interpolate(position_embedding, size=(patch_height, patch_width), mode="bicubic")
+            position_embedding = F.interpolate(
+                position_embedding, size=(patch_height, patch_width), mode="bicubic"
+            )
             embeddings = embeddings + position_embedding
 
         embeddings = embeddings.flatten(2).transpose(1, 2)
@@ -239,26 +251,42 @@ class LayoutLMv3TextEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)),
+            persistent=False,
         )
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+            config.max_position_embeddings,
+            config.hidden_size,
+            padding_idx=self.padding_idx,
         )
 
-        self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.coordinate_size)
-        self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.coordinate_size)
-        self.h_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.shape_size)
-        self.w_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.shape_size)
+        self.x_position_embeddings = nn.Embedding(
+            config.max_2d_position_embeddings, config.coordinate_size
+        )
+        self.y_position_embeddings = nn.Embedding(
+            config.max_2d_position_embeddings, config.coordinate_size
+        )
+        self.h_position_embeddings = nn.Embedding(
+            config.max_2d_position_embeddings, config.shape_size
+        )
+        self.w_position_embeddings = nn.Embedding(
+            config.max_2d_position_embeddings, config.shape_size
+        )
 
     def calculate_spatial_position_embeddings(self, bbox):
         try:
@@ -267,10 +295,16 @@ class LayoutLMv3TextEmbeddings(nn.Module):
             right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
             lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
         except IndexError as e:
-            raise IndexError("The `bbox` coordinate values should be within 0-1000 range.") from e
+            raise IndexError(
+                "The `bbox` coordinate values should be within 0-1000 range."
+            ) from e
 
-        h_position_embeddings = self.h_position_embeddings(torch.clip(bbox[:, :, 3] - bbox[:, :, 1], 0, 1023))
-        w_position_embeddings = self.w_position_embeddings(torch.clip(bbox[:, :, 2] - bbox[:, :, 0], 0, 1023))
+        h_position_embeddings = self.h_position_embeddings(
+            torch.clip(bbox[:, :, 3] - bbox[:, :, 1], 0, 1023)
+        )
+        w_position_embeddings = self.w_position_embeddings(
+            torch.clip(bbox[:, :, 2] - bbox[:, :, 0], 0, 1023)
+        )
 
         # below is the difference between LayoutLMEmbeddingsV2 (torch.cat) and LayoutLMEmbeddingsV1 (add)
         spatial_position_embeddings = torch.cat(
@@ -304,7 +338,10 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         sequence_length = input_shape[1]
 
         position_ids = torch.arange(
-            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+            self.padding_idx + 1,
+            sequence_length + self.padding_idx + 1,
+            dtype=torch.long,
+            device=inputs_embeds.device,
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
@@ -319,11 +356,13 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx).to(
-                    input_ids.device
-                )
+                position_ids = self.create_position_ids_from_input_ids(
+                    input_ids, self.padding_idx
+                ).to(input_ids.device)
             else:
-                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+                position_ids = self.create_position_ids_from_inputs_embeds(
+                    inputs_embeds
+                )
 
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -331,7 +370,9 @@ class LayoutLMv3TextEmbeddings(nn.Module):
             input_shape = inputs_embeds.size()[:-1]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(
+                input_shape, dtype=torch.long, device=self.position_ids.device
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -379,7 +420,9 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
 class LayoutLMv3SelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -398,7 +441,10 @@ class LayoutLMv3SelfAttention(nn.Module):
         self.has_spatial_attention_bias = config.has_spatial_attention_bias
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -432,10 +478,15 @@ class LayoutLMv3SelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
         # Changing the computational order into QT(K/√d) alleviates the problem. (https://arxiv.org/pdf/2105.13290.pdf)
-        attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
+        attention_scores = torch.matmul(
+            query_layer / math.sqrt(self.attention_head_size),
+            key_layer.transpose(-1, -2),
+        )
 
         if self.has_relative_attention_bias and self.has_spatial_attention_bias:
-            attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
+            attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(
+                self.attention_head_size
+            )
         elif self.has_relative_attention_bias:
             attention_scores += rel_pos / math.sqrt(self.attention_head_size)
 
@@ -461,7 +512,9 @@ class LayoutLMv3SelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -474,7 +527,9 @@ class LayoutLMv3SelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -506,7 +561,9 @@ class LayoutLMv3Attention(nn.Module):
             rel_2d_pos=rel_2d_pos,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -539,10 +596,15 @@ class LayoutLMv3Layer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -558,7 +620,9 @@ class LayoutLMv3Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([LayoutLMv3Layer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [LayoutLMv3Layer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
         self.has_relative_attention_bias = config.has_relative_attention_bias
@@ -567,15 +631,23 @@ class LayoutLMv3Encoder(nn.Module):
         if self.has_relative_attention_bias:
             self.rel_pos_bins = config.rel_pos_bins
             self.max_rel_pos = config.max_rel_pos
-            self.rel_pos_bias = nn.Linear(self.rel_pos_bins, config.num_attention_heads, bias=False)
+            self.rel_pos_bias = nn.Linear(
+                self.rel_pos_bins, config.num_attention_heads, bias=False
+            )
 
         if self.has_spatial_attention_bias:
             self.max_rel_2d_pos = config.max_rel_2d_pos
             self.rel_2d_pos_bins = config.rel_2d_pos_bins
-            self.rel_pos_x_bias = nn.Linear(self.rel_2d_pos_bins, config.num_attention_heads, bias=False)
-            self.rel_pos_y_bias = nn.Linear(self.rel_2d_pos_bins, config.num_attention_heads, bias=False)
+            self.rel_pos_x_bias = nn.Linear(
+                self.rel_2d_pos_bins, config.num_attention_heads, bias=False
+            )
+            self.rel_pos_y_bias = nn.Linear(
+                self.rel_2d_pos_bins, config.num_attention_heads, bias=False
+            )
 
-    def relative_position_bucket(self, relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+    def relative_position_bucket(
+        self, relative_position, bidirectional=True, num_buckets=32, max_distance=128
+    ):
         ret = 0
         if bidirectional:
             num_buckets //= 2
@@ -591,9 +663,13 @@ class LayoutLMv3Encoder(nn.Module):
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         val_if_large = max_exact + (
-            torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact)
+            torch.log(n.float() / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
         ).to(torch.long)
-        val_if_large = torch.min(val_if_large, torch.full_like(val_if_large, num_buckets - 1))
+        val_if_large = torch.min(
+            val_if_large, torch.full_like(val_if_large, num_buckets - 1)
+        )
 
         ret += torch.where(is_small, n, val_if_large)
         return ret
@@ -618,8 +694,12 @@ class LayoutLMv3Encoder(nn.Module):
     def _cal_2d_pos_emb(self, bbox):
         position_coord_x = bbox[:, :, 0]
         position_coord_y = bbox[:, :, 3]
-        rel_pos_x_2d_mat = position_coord_x.unsqueeze(-2) - position_coord_x.unsqueeze(-1)
-        rel_pos_y_2d_mat = position_coord_y.unsqueeze(-2) - position_coord_y.unsqueeze(-1)
+        rel_pos_x_2d_mat = position_coord_x.unsqueeze(-2) - position_coord_x.unsqueeze(
+            -1
+        )
+        rel_pos_y_2d_mat = position_coord_y.unsqueeze(-2) - position_coord_y.unsqueeze(
+            -1
+        )
         rel_pos_x = self.relative_position_bucket(
             rel_pos_x_2d_mat,
             num_buckets=self.rel_2d_pos_bins,
@@ -658,8 +738,14 @@ class LayoutLMv3Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        rel_pos = self._cal_1d_pos_emb(position_ids) if self.has_relative_attention_bias else None
-        rel_2d_pos = self._cal_2d_pos_emb(bbox) if self.has_spatial_attention_bias else None
+        rel_pos = (
+            self._cal_1d_pos_emb(position_ids)
+            if self.has_relative_attention_bias
+            else None
+        )
+        rel_2d_pos = (
+            self._cal_2d_pos_emb(bbox) if self.has_spatial_attention_bias else None
+        )
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -735,7 +821,9 @@ class LayoutLMv3Output(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -761,13 +849,18 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
 
             size = int(config.input_size / config.patch_size)
             self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-            self.pos_embed = nn.Parameter(torch.zeros(1, size * size + 1, config.hidden_size))
+            self.pos_embed = nn.Parameter(
+                torch.zeros(1, size * size + 1, config.hidden_size)
+            )
             self.pos_drop = nn.Dropout(p=0.0)
 
             self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-            if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
+            if (
+                self.config.has_relative_attention_bias
+                or self.config.has_spatial_attention_bias
+            ):
                 self.init_visual_bbox(image_size=(size, size))
 
             self.norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
@@ -795,10 +888,14 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         Create the bounding boxes for the visual (patch) tokens.
         """
         visual_bbox_x = torch.div(
-            torch.arange(0, max_len * (image_size[1] + 1), max_len), image_size[1], rounding_mode="trunc"
+            torch.arange(0, max_len * (image_size[1] + 1), max_len),
+            image_size[1],
+            rounding_mode="trunc",
         )
         visual_bbox_y = torch.div(
-            torch.arange(0, max_len * (image_size[0] + 1), max_len), image_size[0], rounding_mode="trunc"
+            torch.arange(0, max_len * (image_size[0] + 1), max_len),
+            image_size[0],
+            rounding_mode="trunc",
         )
         visual_bbox = torch.stack(
             [
@@ -838,7 +935,9 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
     @add_start_docstrings_to_model_forward(
         LAYOUTLMV3_MODEL_INPUTS_DOCSTRING.format("batch_size, token_sequence_length")
     )
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -876,11 +975,19 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -894,15 +1001,21 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             batch_size = len(pixel_values)
             device = pixel_values.device
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds or pixel_values")
+            raise ValueError(
+                "You have to specify either input_ids or inputs_embeds or pixel_values"
+            )
 
         if input_ids is not None or inputs_embeds is not None:
             if attention_mask is None:
                 attention_mask = torch.ones(((batch_size, seq_length)), device=device)
             if token_type_ids is None:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+                token_type_ids = torch.zeros(
+                    input_shape, dtype=torch.long, device=device
+                )
             if bbox is None:
-                bbox = torch.zeros(tuple(list(input_shape) + [4]), dtype=torch.long, device=device)
+                bbox = torch.zeros(
+                    tuple(list(input_shape) + [4]), dtype=torch.long, device=device
+                )
 
             embedding_output = self.embeddings(
                 input_ids=input_ids,
@@ -921,16 +1034,25 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             )
             visual_embeddings = self.forward_image(pixel_values)
             visual_attention_mask = torch.ones(
-                (batch_size, visual_embeddings.shape[1]), dtype=torch.long, device=device
+                (batch_size, visual_embeddings.shape[1]),
+                dtype=torch.long,
+                device=device,
             )
             if attention_mask is not None:
-                attention_mask = torch.cat([attention_mask, visual_attention_mask], dim=1)
+                attention_mask = torch.cat(
+                    [attention_mask, visual_attention_mask], dim=1
+                )
             else:
                 attention_mask = visual_attention_mask
 
-            if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
+            if (
+                self.config.has_relative_attention_bias
+                or self.config.has_spatial_attention_bias
+            ):
                 if self.config.has_spatial_attention_bias:
-                    visual_bbox = self.calculate_visual_bbox(device, dtype=torch.long, batch_size=batch_size)
+                    visual_bbox = self.calculate_visual_bbox(
+                        device, dtype=torch.long, batch_size=batch_size
+                    )
                     if bbox is not None:
                         final_bbox = torch.cat([bbox, visual_bbox], dim=1)
                     else:
@@ -940,20 +1062,29 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
                     0, visual_embeddings.shape[1], dtype=torch.long, device=device
                 ).repeat(batch_size, 1)
                 if input_ids is not None or inputs_embeds is not None:
-                    position_ids = torch.arange(0, input_shape[1], device=device).unsqueeze(0)
+                    position_ids = torch.arange(
+                        0, input_shape[1], device=device
+                    ).unsqueeze(0)
                     position_ids = position_ids.expand(input_shape)
-                    final_position_ids = torch.cat([position_ids, visual_position_ids], dim=1)
+                    final_position_ids = torch.cat(
+                        [position_ids, visual_position_ids], dim=1
+                    )
                 else:
                     final_position_ids = visual_position_ids
 
             if input_ids is not None or inputs_embeds is not None:
-                embedding_output = torch.cat([embedding_output, visual_embeddings], dim=1)
+                embedding_output = torch.cat(
+                    [embedding_output, visual_embeddings], dim=1
+                )
             else:
                 embedding_output = visual_embeddings
 
             embedding_output = self.LayerNorm(embedding_output)
             embedding_output = self.dropout(embedding_output)
-        elif self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
+        elif (
+            self.config.has_relative_attention_bias
+            or self.config.has_spatial_attention_bias
+        ):
             if self.config.has_spatial_attention_bias:
                 final_bbox = bbox
             if self.config.has_relative_attention_bias:
@@ -1010,7 +1141,9 @@ class LayoutLMv3ClassificationHead(nn.Module):
         else:
             self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+            config.classifier_dropout
+            if config.classifier_dropout is not None
+            else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
@@ -1050,7 +1183,9 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
     @add_start_docstrings_to_model_forward(
         LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
     )
-    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1094,7 +1229,9 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.layoutlmv3(
             input_ids,
@@ -1158,7 +1295,9 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     @add_start_docstrings_to_model_forward(
         LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
     )
-    @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1214,7 +1353,9 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         >>> end_scores = outputs.end_logits
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.layoutlmv3(
             input_ids,
@@ -1288,7 +1429,9 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
     @add_start_docstrings_to_model_forward(
         LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
     )
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1330,7 +1473,9 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.layoutlmv3(
             input_ids,
@@ -1354,7 +1499,9 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"

@@ -37,7 +37,9 @@ from git import Repo
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 
 
-def get_new_python_files_between_commits(base_commit: str, commits: List[str]) -> List[str]:
+def get_new_python_files_between_commits(
+    base_commit: str, commits: List[str]
+) -> List[str]:
     """
     Get the list of added python files between a base commit and one or several commits.
 
@@ -136,7 +138,9 @@ def get_models(commit_message: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--commit_message", type=str, default="", help="The commit message.")
+    parser.add_argument(
+        "--commit_message", type=str, default="", help="The commit message."
+    )
     args = parser.parse_args()
 
     new_model = get_new_model()

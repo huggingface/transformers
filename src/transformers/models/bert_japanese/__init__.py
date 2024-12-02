@@ -17,13 +17,25 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule
 
 
-_import_structure = {"tokenization_bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"]}
+_import_structure = {
+    "tokenization_bert_japanese": [
+        "BertJapaneseTokenizer",
+        "CharacterTokenizer",
+        "MecabTokenizer",
+    ]
+}
 
 
 if TYPE_CHECKING:
-    from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
+    from .tokenization_bert_japanese import (
+        BertJapaneseTokenizer,
+        CharacterTokenizer,
+        MecabTokenizer,
+    )
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

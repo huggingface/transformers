@@ -21,7 +21,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import DPTConfig, DPTForDepthEstimation, DPTImageProcessor, Swinv2Config
+from transformers import (
+    DPTConfig,
+    DPTForDepthEstimation,
+    DPTImageProcessor,
+    Swinv2Config,
+)
 from transformers.utils import logging
 
 
@@ -75,7 +80,9 @@ def get_dpt_config(model_name):
     elif model_name == "dpt-swinv2-large-384":
         neck_hidden_sizes = [192, 384, 768, 1536]
 
-    config = DPTConfig(backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes)
+    config = DPTConfig(
+        backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes
+    )
 
     return config, image_size
 
@@ -157,17 +164,23 @@ def remove_ignore_keys_(state_dict):
 def read_in_q_k_v(state_dict, config, model):
     for i in range(len(config.backbone_config.depths)):
         for j in range(config.backbone_config.depths[i]):
-            dim = model.backbone.encoder.layers[i].blocks[j].attention.self.all_head_size
+            dim = (
+                model.backbone.encoder.layers[i].blocks[j].attention.self.all_head_size
+            )
             # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-            in_proj_weight = state_dict.pop(f"pretrained.model.layers.{i}.blocks.{j}.attn.qkv.weight")
+            in_proj_weight = state_dict.pop(
+                f"pretrained.model.layers.{i}.blocks.{j}.attn.qkv.weight"
+            )
             # next, add query, keys and values (in that order) to the state dict
-            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.query.weight"] = in_proj_weight[:dim, :]
-            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"] = in_proj_weight[
-                dim : dim * 2, :
-            ]
-            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[
-                -dim:, :
-            ]
+            state_dict[
+                f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.query.weight"
+            ] = in_proj_weight[:dim, :]
+            state_dict[
+                f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"
+            ] = in_proj_weight[dim : dim * 2, :]
+            state_dict[
+                f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"
+            ] = in_proj_weight[-dim:, :]
 
 
 def rename_key(dct, old, new):
@@ -183,7 +196,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, verify_logits, push_to_hub):
+def convert_dpt_checkpoint(
+    model_name, pytorch_dump_folder_path, verify_logits, push_to_hub
+):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -261,7 +276,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, verify_logits, 
             # OK, checked
             expected_shape = torch.Size([1, 256, 256])
             expected_slice = torch.tensor(
-                [[978.9163, 976.5215, 978.5349], [974.1859, 971.7249, 975.8046], [971.3419, 970.3118, 971.6830]],
+                [
+                    [978.9163, 976.5215, 978.5349],
+                    [974.1859, 971.7249, 975.8046],
+                    [971.3419, 970.3118, 971.6830],
+                ],
             )
         elif model_name == "dpt-swinv2-large-384":
             # OK, checked
@@ -318,4 +337,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.verify_logits, args.push_to_hub)
+    convert_dpt_checkpoint(
+        args.model_name,
+        args.pytorch_dump_folder_path,
+        args.verify_logits,
+        args.push_to_hub,
+    )

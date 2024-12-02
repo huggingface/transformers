@@ -38,7 +38,14 @@ from jax import lax, random
 
 
 def nonnegative_softmax_kernel_feature_creator(
-    data, projection_matrix, attention_dims_t, batch_dims_t, precision, is_query, normalize_data=True, eps=0.0001
+    data,
+    projection_matrix,
+    attention_dims_t,
+    batch_dims_t,
+    precision,
+    is_query,
+    normalize_data=True,
+    eps=0.0001,
 ):
     """
     Constructs nonnegative kernel features for fast softmax attention
@@ -71,7 +78,10 @@ def nonnegative_softmax_kernel_feature_creator(
     data_dash = lax.dot_general(
         data_normalizer * data,
         data_thick_random_matrix,
-        (((data.ndim - 1,), (data_thick_random_matrix.ndim - 1,)), (batch_dims_t, batch_dims_t)),
+        (
+            ((data.ndim - 1,), (data_thick_random_matrix.ndim - 1,)),
+            (batch_dims_t, batch_dims_t),
+        ),
         precision=precision,
     )
 
@@ -83,7 +93,12 @@ def nonnegative_softmax_kernel_feature_creator(
     if is_query:
         last_dims_t = (len(data_dash.shape) - 1,)
         data_dash = ratio * (
-            jnp.exp(data_dash - diag_data - jnp.max(data_dash, axis=last_dims_t, keepdims=True)) + eps
+            jnp.exp(
+                data_dash
+                - diag_data
+                - jnp.max(data_dash, axis=last_dims_t, keepdims=True)
+            )
+            + eps
         )
     else:
         data_dash = ratio * (jnp.exp(data_dash - diag_data - jnp.max(data_dash)) + eps)
@@ -92,7 +107,12 @@ def nonnegative_softmax_kernel_feature_creator(
 
 
 def sincos_softmax_kernel_feature_creator(
-    data, projection_matrix, attention_dims_t, batch_dims_t, precision, normalize_data=True
+    data,
+    projection_matrix,
+    attention_dims_t,
+    batch_dims_t,
+    precision,
+    normalize_data=True,
 ):
     """
     Constructs kernel sin-cos features for fast softmax attention
@@ -121,7 +141,10 @@ def sincos_softmax_kernel_feature_creator(
     data_dash = lax.dot_general(
         data_normalizer * data,
         data_thick_random_matrix,
-        (((data.ndim - 1,), (data_thick_random_matrix.ndim - 1,)), (batch_dims_t, batch_dims_t)),
+        (
+            ((data.ndim - 1,), (data_thick_random_matrix.ndim - 1,)),
+            (batch_dims_t, batch_dims_t),
+        ),
         precision=precision,
     )
     data_dash_cos = ratio * jnp.cos(data_dash)
@@ -142,7 +165,13 @@ def sincos_softmax_kernel_feature_creator(
 
 
 def generalized_kernel_feature_creator(
-    data, projection_matrix, batch_dims_t, precision, kernel_fn, kernel_epsilon, normalize_data
+    data,
+    projection_matrix,
+    batch_dims_t,
+    precision,
+    kernel_fn,
+    kernel_epsilon,
+    normalize_data,
 ):
     """
     Constructs kernel features for fast generalized attention
@@ -172,7 +201,10 @@ def generalized_kernel_feature_creator(
         data_dash = lax.dot_general(
             data_normalizer * data,
             data_thick_random_matrix,
-            (((data.ndim - 1,), (data_thick_random_matrix.ndim - 1,)), (batch_dims_t, batch_dims_t)),
+            (
+                ((data.ndim - 1,), (data_thick_random_matrix.ndim - 1,)),
+                (batch_dims_t, batch_dims_t),
+            ),
             precision=precision,
         )
     data_prime = kernel_fn(data_dash) + kernel_epsilon
@@ -199,13 +231,23 @@ def make_fast_softmax_attention(
         renormalize_attention,
     )
     if ortho_features:
-        matrix_creator = functools.partial(GaussianOrthogonalRandomMatrix, nb_features, qkv_dim, scaling=ortho_scaling)
+        matrix_creator = functools.partial(
+            GaussianOrthogonalRandomMatrix, nb_features, qkv_dim, scaling=ortho_scaling
+        )
     else:
-        matrix_creator = functools.partial(GaussianUnstructuredRandomMatrix, nb_features, qkv_dim)
+        matrix_creator = functools.partial(
+            GaussianUnstructuredRandomMatrix, nb_features, qkv_dim
+        )
     if nonnegative_features:
 
         def kernel_feature_creator(
-            data, projection_matrix, attention_dims_t, batch_dims_t, precision, is_query, normalize_data=True
+            data,
+            projection_matrix,
+            attention_dims_t,
+            batch_dims_t,
+            precision,
+            is_query,
+            normalize_data=True,
         ):
             return nonnegative_softmax_kernel_feature_creator(
                 data,
@@ -221,11 +263,22 @@ def make_fast_softmax_attention(
     else:
 
         def kernel_feature_creator(
-            data, projection_matrix, attention_dims_t, batch_dims_t, precision, is_query, normalize_data=True
+            data,
+            projection_matrix,
+            attention_dims_t,
+            batch_dims_t,
+            precision,
+            is_query,
+            normalize_data=True,
         ):
             del is_query
             return sincos_softmax_kernel_feature_creator(
-                data, projection_matrix, attention_dims_t, batch_dims_t, precision, normalize_data
+                data,
+                projection_matrix,
+                attention_dims_t,
+                batch_dims_t,
+                precision,
+                normalize_data,
             )
 
     attention_fn = FastAttentionviaLowRankDecomposition(
@@ -253,23 +306,43 @@ def make_fast_generalized_attention(
     lax_scan_unroll=1,
 ):
     """Construct a fast generalized attention menthod."""
-    logging.info("Fast generalized attention.: %s features and renormalize=%s", nb_features, renormalize_attention)
+    logging.info(
+        "Fast generalized attention.: %s features and renormalize=%s",
+        nb_features,
+        renormalize_attention,
+    )
     if features_type == "ortho":
-        matrix_creator = functools.partial(GaussianOrthogonalRandomMatrix, nb_features, qkv_dim, scaling=False)
+        matrix_creator = functools.partial(
+            GaussianOrthogonalRandomMatrix, nb_features, qkv_dim, scaling=False
+        )
     elif features_type == "iid":
-        matrix_creator = functools.partial(GaussianUnstructuredRandomMatrix, nb_features, qkv_dim)
+        matrix_creator = functools.partial(
+            GaussianUnstructuredRandomMatrix, nb_features, qkv_dim
+        )
     elif features_type == "deterministic":
         matrix_creator = None
     else:
         raise ValueError("Unknown feature value type")
 
     def kernel_feature_creator(
-        data, projection_matrix, attention_dims_t, batch_dims_t, precision, is_query, normalize_data=False
+        data,
+        projection_matrix,
+        attention_dims_t,
+        batch_dims_t,
+        precision,
+        is_query,
+        normalize_data=False,
     ):
         del attention_dims_t
         del is_query
         return generalized_kernel_feature_creator(
-            data, projection_matrix, batch_dims_t, precision, kernel_fn, kernel_epsilon, normalize_data
+            data,
+            projection_matrix,
+            batch_dims_t,
+            precision,
+            kernel_fn,
+            kernel_epsilon,
+            normalize_data,
         )
 
     attention_fn = FastAttentionviaLowRankDecomposition(
@@ -325,21 +398,27 @@ class GaussianOrthogonalRandomMatrix(RandomMatrix):
         rng = self.key
         for _ in range(nb_full_blocks):
             rng, rng_input = jax.random.split(rng)
-            unstructured_block = random.normal(rng_input, (self.nb_columns, self.nb_columns))
+            unstructured_block = random.normal(
+                rng_input, (self.nb_columns, self.nb_columns)
+            )
             q, _ = jnp.linalg.qr(unstructured_block)
             q = jnp.transpose(q)
             block_list.append(q)
         remaining_rows = self.nb_rows - nb_full_blocks * self.nb_columns
         if remaining_rows > 0:
             rng, rng_input = jax.random.split(rng)
-            unstructured_block = random.normal(rng_input, (self.nb_columns, self.nb_columns))
+            unstructured_block = random.normal(
+                rng_input, (self.nb_columns, self.nb_columns)
+            )
             q, _ = jnp.linalg.qr(unstructured_block)
             q = jnp.transpose(q)
             block_list.append(q[0:remaining_rows])
         final_matrix = jnp.vstack(block_list)
 
         if self.scaling == 0:
-            multiplier = jnp.linalg.norm(random.normal(self.key, (self.nb_rows, self.nb_columns)), axis=1)
+            multiplier = jnp.linalg.norm(
+                random.normal(self.key, (self.nb_rows, self.nb_columns)), axis=1
+            )
         elif self.scaling == 1:
             multiplier = jnp.sqrt(float(self.nb_columns)) * jnp.ones((self.nb_rows))
         else:
@@ -425,7 +504,11 @@ def _numerator(z_slice_shape, precision, unroll=1):
 
         p, qs, ks, vs = pqkv
         _, (qs_ct, ks_ct, vs_ct) = lax.scan(
-            body, (p, jnp.zeros_like(p)), (qs, ks, vs, W_ct), reverse=True, unroll=unroll
+            body,
+            (p, jnp.zeros_like(p)),
+            (qs, ks, vs, W_ct),
+            reverse=True,
+            unroll=unroll,
         )
         return qs_ct, ks_ct, vs_ct
 
@@ -462,7 +545,9 @@ def _denominator(t_slice_shape, precision, unroll=1):
             return (p, p_ct), (q_ct, k_ct)
 
         qs, ks, p = qkp
-        _, (qs_ct, ks_ct) = lax.scan(body, (p, jnp.zeros_like(p)), (qs, ks, R_ct), reverse=True, unroll=unroll)
+        _, (qs_ct, ks_ct) = lax.scan(
+            body, (p, jnp.zeros_like(p)), (qs, ks, R_ct), reverse=True, unroll=unroll
+        )
         return (qs_ct, ks_ct)
 
     @jax.custom_vjp
@@ -533,13 +618,17 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
         assert key.ndim == value.ndim
         for ax in axis:
             if not (query.ndim >= 3 and 1 <= ax < query.ndim - 2):
-                raise ValueError("Attention axis must be between the batch axis and the last-two axes.")
+                raise ValueError(
+                    "Attention axis must be between the batch axis and the last-two axes."
+                )
         n = key.ndim
 
         # Constructing projection tensor.
         if self.redraw_features:
             # TODO(kchoro): Get rid of the constant below.
-            query_seed = lax.convert_element_type(jnp.ceil(jnp.sum(query) * 10000000.0), jnp.int32)
+            query_seed = lax.convert_element_type(
+                jnp.ceil(jnp.sum(query) * 10000000.0), jnp.int32
+            )
             rng = random.PRNGKey(query_seed)
             self.projection_matrix = self.draw_weights(rng)
 
@@ -559,19 +648,35 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
 
         # Constructing tensors Q^{'} and K^{'}.
         query_prime = self.kernel_feature_creator(
-            query, self.projection_matrix, attention_dims_t, batch_dims_t, precision, True
+            query,
+            self.projection_matrix,
+            attention_dims_t,
+            batch_dims_t,
+            precision,
+            True,
         )
         key_prime = self.kernel_feature_creator(
-            key, self.projection_matrix, attention_dims_t, batch_dims_t, precision, False
+            key,
+            self.projection_matrix,
+            attention_dims_t,
+            batch_dims_t,
+            precision,
+            False,
         )
 
         if self.unidirectional:
             index = attention_dims_t[0]
-            z_slice_shape = key_prime.shape[0 : len(batch_dims_t)] + (key_prime.shape[-1],) + (value.shape[-1],)
+            z_slice_shape = (
+                key_prime.shape[0 : len(batch_dims_t)]
+                + (key_prime.shape[-1],)
+                + (value.shape[-1],)
+            )
 
             numerator_fn = _numerator(z_slice_shape, precision, self.lax_scan_unroll)
             W = numerator_fn(
-                jnp.moveaxis(query_prime, index, 0), jnp.moveaxis(key_prime, index, 0), jnp.moveaxis(value, index, 0)
+                jnp.moveaxis(query_prime, index, 0),
+                jnp.moveaxis(key_prime, index, 0),
+                jnp.moveaxis(value, index, 0),
             )
 
             # Constructing W = (Q^{'}(K^{'})^{T})_{masked}V
@@ -584,16 +689,27 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
                 return result
             else:
                 # Unidirectional, normalized attention.
-                thick_all_ones = jnp.zeros(key.shape[0:-1]) + jnp.ones(key_extra.shape[0 : len(axis)])
+                thick_all_ones = jnp.zeros(key.shape[0:-1]) + jnp.ones(
+                    key_extra.shape[0 : len(axis)]
+                )
 
                 index = attention_dims_t[0]
-                t_slice_shape = key_prime.shape[0 : len(batch_dims_t)] + (key_prime.shape[-1],)
-                denominator_fn = _denominator(t_slice_shape, precision, self.lax_scan_unroll)
-                R = denominator_fn(jnp.moveaxis(query_prime, index, 0), jnp.moveaxis(key_prime, index, 0))
+                t_slice_shape = key_prime.shape[0 : len(batch_dims_t)] + (
+                    key_prime.shape[-1],
+                )
+                denominator_fn = _denominator(
+                    t_slice_shape, precision, self.lax_scan_unroll
+                )
+                R = denominator_fn(
+                    jnp.moveaxis(query_prime, index, 0),
+                    jnp.moveaxis(key_prime, index, 0),
+                )
 
                 R = jnp.moveaxis(R, 0, index)
         else:
-            contract_query = tuple(range(len(batch_dims) + len(axis), len(batch_dims) + len(axis) + 1))
+            contract_query = tuple(
+                range(len(batch_dims) + len(axis), len(batch_dims) + len(axis) + 1)
+            )
             contract_z = tuple(range(len(batch_dims), len(batch_dims) + 1))
             # Constructing Z = (K^{'})^{T}V
             # Z (bs, <non-attention dims>, num_heads, channels_m, channels_v)
@@ -608,7 +724,10 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
             # Z (bs, <non-attention dims>, num_heads, channels_m, channels_v)
             # W (bs,  <non-attention dims>, num_heads, <attention dims>, channels_v)
             W = lax.dot_general(
-                query_prime, Z, ((contract_query, contract_z), (batch_dims_t, batch_dims_t)), precision=precision
+                query_prime,
+                Z,
+                ((contract_query, contract_z), (batch_dims_t, batch_dims_t)),
+                precision=precision,
             )
             if not self.renormalize_attention:
                 # Bidirectional, not-normalized attention.
@@ -617,15 +736,24 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
                 return result
             else:
                 # Bidirectional, normalized attention.
-                thick_all_ones = jnp.zeros(key.shape[0:-1]) + jnp.ones(key_extra.shape[0 : len(axis)])
-                contract_key = tuple(range(len(batch_dims), len(batch_dims) + len(axis)))
-                contract_thick_all_ones = tuple(range(thick_all_ones.ndim - len(axis), thick_all_ones.ndim))
+                thick_all_ones = jnp.zeros(key.shape[0:-1]) + jnp.ones(
+                    key_extra.shape[0 : len(axis)]
+                )
+                contract_key = tuple(
+                    range(len(batch_dims), len(batch_dims) + len(axis))
+                )
+                contract_thick_all_ones = tuple(
+                    range(thick_all_ones.ndim - len(axis), thick_all_ones.ndim)
+                )
                 # Construct T = (K^{'})^{T} 1_L
                 # k (bs, <non-attention dims>, num_heads, <attention dims>, channels)
                 T = lax.dot_general(
                     key_prime,
                     thick_all_ones,
-                    ((contract_key, contract_thick_all_ones), (batch_dims_t, batch_dims_t)),
+                    (
+                        (contract_key, contract_thick_all_ones),
+                        (batch_dims_t, batch_dims_t),
+                    ),
                     precision=precision,
                 )
 
@@ -635,11 +763,16 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
                 R = lax.dot_general(
                     query_prime,
                     T,
-                    (((query_prime.ndim - 1,), (T.ndim - 1,)), (batch_dims_t, range(0, len(T.shape) - 1))),
+                    (
+                        ((query_prime.ndim - 1,), (T.ndim - 1,)),
+                        (batch_dims_t, range(0, len(T.shape) - 1)),
+                    ),
                     precision=precision,
                 )
 
-        R = R + 2 * self.numerical_stabilizer * (jnp.abs(R) <= self.numerical_stabilizer)
+        R = R + 2 * self.numerical_stabilizer * (
+            jnp.abs(R) <= self.numerical_stabilizer
+        )
         R = jnp.reciprocal(R)
         R = jnp.expand_dims(R, len(R.shape))
         # W (bs, <non-attention dims>, num_heads, <attention dims>, channels_v)

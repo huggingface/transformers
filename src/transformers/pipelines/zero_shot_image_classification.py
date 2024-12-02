@@ -21,10 +21,14 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
+    from ..models.auto.modeling_auto import (
+        MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    )
 
 if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
+    from ..models.auto.modeling_tf_auto import (
+        TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    )
     from ..tf_utils import stable_softmax
 
 logger = logging.get_logger(__name__)
@@ -74,7 +78,9 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             else MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
         )
 
-    def __call__(self, image: Union[str, List[str], "Image", List["Image"]] = None, **kwargs):
+    def __call__(
+        self, image: Union[str, List[str], "Image", List["Image"]] = None, **kwargs
+    ):
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -109,7 +115,9 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         if "images" in kwargs:
             image = kwargs.pop("images")
         if image is None:
-            raise ValueError("Cannot call the zero-shot-image-classification pipeline without an images argument!")
+            raise ValueError(
+                "Cannot call the zero-shot-image-classification pipeline without an images argument!"
+            )
         return super().__call__(image, **kwargs)
 
     def _sanitize_parameters(self, tokenizer_kwargs=None, **kwargs):
@@ -146,7 +154,12 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         padding = "max_length" if self.model.config.model_type == "siglip" else True
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=padding, **tokenizer_kwargs)
+        text_inputs = self.tokenizer(
+            sequences,
+            return_tensors=self.framework,
+            padding=padding,
+            **tokenizer_kwargs,
+        )
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -188,6 +201,8 @@ class ZeroShotImageClassificationPipeline(Pipeline):
 
         result = [
             {"score": score, "label": candidate_label}
-            for score, candidate_label in sorted(zip(scores, candidate_labels), key=lambda x: -x[0])
+            for score, candidate_label in sorted(
+                zip(scores, candidate_labels), key=lambda x: -x[0]
+            )
         ]
         return result

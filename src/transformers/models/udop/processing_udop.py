@@ -86,7 +86,9 @@ class UdopProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         # The following is to capture `text_pair` argument that may be passed as a positional argument.
         # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
         # or this conversation for more context: https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
@@ -121,8 +123,12 @@ class UdopProcessor(ProcessorMixin):
         boxes = output_kwargs["text_kwargs"].pop("boxes", None)
         word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
         text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
-        return_overflowing_tokens = output_kwargs["text_kwargs"].get("return_overflowing_tokens", False)
-        return_offsets_mapping = output_kwargs["text_kwargs"].get("return_offsets_mapping", False)
+        return_overflowing_tokens = output_kwargs["text_kwargs"].get(
+            "return_overflowing_tokens", False
+        )
+        return_offsets_mapping = output_kwargs["text_kwargs"].get(
+            "return_offsets_mapping", False
+        )
         text_target = output_kwargs["text_kwargs"].get("text_target", None)
 
         if self.image_processor.apply_ocr and (boxes is not None):
@@ -136,7 +142,9 @@ class UdopProcessor(ProcessorMixin):
             )
 
         if return_overflowing_tokens and not return_offsets_mapping:
-            raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
+            raise ValueError(
+                "You cannot return overflowing tokens without returning the offsets mapping."
+            )
 
         if text_target is not None:
             # use the processor to prepare the targets of UDOP
@@ -147,20 +155,30 @@ class UdopProcessor(ProcessorMixin):
         else:
             # use the processor to prepare the inputs of UDOP
             # first, apply the image processor
-            features = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            features = self.image_processor(
+                images=images, **output_kwargs["images_kwargs"]
+            )
             features_words = features.pop("words", None)
             features_boxes = features.pop("boxes", None)
 
             output_kwargs["text_kwargs"].pop("text_target", None)
             output_kwargs["text_kwargs"].pop("text_pair_target", None)
             output_kwargs["text_kwargs"]["text_pair"] = text_pair
-            output_kwargs["text_kwargs"]["boxes"] = boxes if boxes is not None else features_boxes
+            output_kwargs["text_kwargs"]["boxes"] = (
+                boxes if boxes is not None else features_boxes
+            )
             output_kwargs["text_kwargs"]["word_labels"] = word_labels
 
             # second, apply the tokenizer
-            if text is not None and self.image_processor.apply_ocr and text_pair is None:
+            if (
+                text is not None
+                and self.image_processor.apply_ocr
+                and text_pair is None
+            ):
                 if isinstance(text, str):
-                    text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
+                    text = [
+                        text
+                    ]  # add batch dimension (as the image processor always adds a batch dimension)
                 output_kwargs["text_kwargs"]["text_pair"] = features_words
 
             encoded_inputs = self.tokenizer(
@@ -171,7 +189,8 @@ class UdopProcessor(ProcessorMixin):
             # add pixel values
             if return_overflowing_tokens is True:
                 features["pixel_values"] = self.get_overflowing_images(
-                    features["pixel_values"], encoded_inputs["overflow_to_sample_mapping"]
+                    features["pixel_values"],
+                    encoded_inputs["overflow_to_sample_mapping"],
                 )
             features.update(encoded_inputs)
 

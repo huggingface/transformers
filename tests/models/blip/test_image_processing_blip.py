@@ -19,7 +19,10 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_vision_available():
@@ -73,7 +76,9 @@ class BlipImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -131,18 +136,26 @@ class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.Tes
         self.assertTrue(hasattr(image_processor, "image_std"))
         self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
-    @unittest.skip(reason="BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
+    @unittest.skip(
+        reason="BlipImageProcessor does not support 4 channels yet"
+    )  # FIXME Amy
     def test_call_numpy(self):
         return super().test_call_numpy()
 
-    @unittest.skip(reason="BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
+    @unittest.skip(
+        reason="BlipImageProcessor does not support 4 channels yet"
+    )  # FIXME Amy
     def test_call_pytorch(self):
         return super().test_call_torch()
 
-    @unittest.skip(reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    @unittest.skip(
+        reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet"
+    )  # FIXME Amy
     def test_call_pil(self):
         pass
 
-    @unittest.skip(reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    @unittest.skip(
+        reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet"
+    )  # FIXME Amy
     def test_call_numpy_4_channels(self):
         pass

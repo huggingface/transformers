@@ -24,10 +24,17 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import save_model
 
-from transformers import GPTNeoXTokenizerFast, LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM
+from transformers import (
+    GPTNeoXTokenizerFast,
+    LlamaTokenizerFast,
+    Mamba2Config,
+    Mamba2ForCausalLM,
+)
 
 
-def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str) -> Dict[str, torch.Tensor]:
+def load_state_dict_from_safetensors(
+    mamba2_checkpoint_path: str, ckpt_name: str
+) -> Dict[str, torch.Tensor]:
     # Load weights and config from paths
     original_state_dict = {}
     with safe_open(path.join(mamba2_checkpoint_path, ckpt_name), framework="pt") as f:
@@ -37,11 +44,15 @@ def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str
     return original_state_dict
 
 
-def load_state_dict_from_torch(mamba2_checkpoint_path: str, ckpt_name: str) -> Dict[str, torch.Tensor]:
+def load_state_dict_from_torch(
+    mamba2_checkpoint_path: str, ckpt_name: str
+) -> Dict[str, torch.Tensor]:
     return torch.load(path.join(mamba2_checkpoint_path, ckpt_name), map_location="cpu")
 
 
-def convert_ssm_config_to_hf_config(config_ssm: Dict, mamba2_model_dict: Dict) -> Mamba2Config:
+def convert_ssm_config_to_hf_config(
+    config_ssm: Dict, mamba2_model_dict: Dict
+) -> Mamba2Config:
     """Convert a Mamba2Config from mamba_ssm to a Mamba2Config from here."""
     hf_config = Mamba2Config()
 
@@ -50,7 +61,9 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict, mamba2_model_dict: Dict) -
 
     # Set important values from config and recalculate other resulting entries
     hf_config.hidden_size = config_ssm[config_dict["hidden_size"]]
-    hf_config.num_heads = (hf_config.hidden_size * hf_config.expand) // hf_config.head_dim
+    hf_config.num_heads = (
+        hf_config.hidden_size * hf_config.expand
+    ) // hf_config.head_dim
     hf_config.num_hidden_layers = config_ssm[config_dict["num_hidden_layers"]]
     hf_config.n_groups = config_ssm.get(config_dict["n_groups"], 1)
     hf_config.tie_word_embeddings = config_ssm["tie_embeddings"]
@@ -80,7 +93,9 @@ def load_and_save_tokenizer(
         tokenizer_class = LlamaTokenizerFast
         tokenizer = tokenizer_class(tokenizer_model_path, legacy=False, from_slow=True)
     elif mamba2_model_type == "mamba_ssm":
-        tokenizer = GPTNeoXTokenizerFast.from_pretrained("state-spaces/mamba-130m-hf", padding_side="left")
+        tokenizer = GPTNeoXTokenizerFast.from_pretrained(
+            "state-spaces/mamba-130m-hf", padding_side="left"
+        )
 
     # Save tokenizer
     if tokenizer is not None:
@@ -96,7 +111,9 @@ _MAMBA2_MODELS_DICT = {
         "pad_token_id": 1,
         "eos_token_id": 2,
         "config_name": "params.json",
-        "load_state_dict": partial(load_state_dict_from_safetensors, ckpt_name="consolidated.safetensors"),
+        "load_state_dict": partial(
+            load_state_dict_from_safetensors, ckpt_name="consolidated.safetensors"
+        ),
         "load_and_save_tokenizer": partial(load_and_save_tokenizer, "codestral"),
     },
     "mamba_ssm": {
@@ -107,7 +124,9 @@ _MAMBA2_MODELS_DICT = {
         "pad_token_id": 0,
         "eos_token_id": 0,
         "config_name": "config.json",
-        "load_state_dict": partial(load_state_dict_from_torch, ckpt_name="pytorch_model.bin"),
+        "load_state_dict": partial(
+            load_state_dict_from_torch, ckpt_name="pytorch_model.bin"
+        ),
         "load_and_save_tokenizer": partial(load_and_save_tokenizer, "mamba_ssm"),
     },
 }
@@ -126,20 +145,34 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     config_path = path.join(mamba2_checkpoint_path, mamba2_model_dict["config_name"])
     with open(config_path, "r", encoding="utf-8") as json_file:
         config = json.load(json_file)
-    hf_config = convert_ssm_config_to_hf_config(config_ssm=config, mamba2_model_dict=mamba2_model_dict)
+    hf_config = convert_ssm_config_to_hf_config(
+        config_ssm=config, mamba2_model_dict=mamba2_model_dict
+    )
     hf_config.save_pretrained(output_dir)
 
     # Load state dict of the original model and transfer to hf model
-    original_state_dict = mamba2_model_dict["load_state_dict"](mamba2_checkpoint_path=mamba2_checkpoint_path)
+    original_state_dict = mamba2_model_dict["load_state_dict"](
+        mamba2_checkpoint_path=mamba2_checkpoint_path
+    )
     hf_model = Mamba2ForCausalLM(hf_config)
     hf_model.load_state_dict(original_state_dict)
 
     # Save new model to pytorch_dump_path
-    dtype = torch.float32 if precision == "fp32" else (torch.bfloat16 if precision == "bf16" else torch.float16)
-    save_model(hf_model.to(dtype), path.join(output_dir, "model.safetensors"), metadata={"format": "pt"})
+    dtype = (
+        torch.float32
+        if precision == "fp32"
+        else (torch.bfloat16 if precision == "bf16" else torch.float16)
+    )
+    save_model(
+        hf_model.to(dtype),
+        path.join(output_dir, "model.safetensors"),
+        metadata={"format": "pt"},
+    )
 
     # Load and save tokenizer
-    mamba2_model_dict["load_and_save_tokenizer"](output_dir=output_dir, tokenizer_model_path=tokenizer_model_path)
+    mamba2_model_dict["load_and_save_tokenizer"](
+        output_dir=output_dir, tokenizer_model_path=tokenizer_model_path
+    )
 
 
 if __name__ == "__main__":
@@ -172,7 +205,11 @@ if __name__ == "__main__":
         help="The precision the model will be saved in. Select from fp32, fp16 or bf16.",
     )
     parser.add_argument(
-        "-o", "--output_dir", type=str, required=True, help="Path to directory to save the converted output model to."
+        "-o",
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Path to directory to save the converted output model to.",
     )
     parser.add_argument(
         "-t",

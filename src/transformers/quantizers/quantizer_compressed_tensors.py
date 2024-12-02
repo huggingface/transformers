@@ -47,11 +47,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         if not is_torch_available():
             # torch already should be installed as part of compressed tensors
-            raise ImportError("torch is required for using compressed-tensors quantization")
+            raise ImportError(
+                "torch is required for using compressed-tensors quantization"
+            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            logger.info("Loading model using torch.float16 for compressed-tensors quantization")
+            logger.info(
+                "Loading model using torch.float16 for compressed-tensors quantization"
+            )
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
             logger.info(

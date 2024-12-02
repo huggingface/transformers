@@ -41,7 +41,11 @@ from transformers import (
 )
 from transformers.testing_utils import TOKEN, USER, get_tests_dir, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
-from transformers.utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, is_tokenizers_available
+from transformers.utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    is_tokenizers_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -83,7 +87,10 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_processor_from_local_directory_from_extractor_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             # copy relevant files
-            copyfile(SAMPLE_PROCESSOR_CONFIG, os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME))
+            copyfile(
+                SAMPLE_PROCESSOR_CONFIG,
+                os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME),
+            )
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
@@ -197,14 +204,18 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_from_pretrained_dynamic_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
-            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor")
+            processor = AutoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_processor"
+            )
         # If remote code is disabled, we can't load this config.
         with self.assertRaises(ValueError):
             processor = AutoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_processor", trust_remote_code=False
             )
 
-        processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor", trust_remote_code=True)
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_processor", trust_remote_code=True
+        )
         self.assertTrue(processor.special_attribute_present)
         self.assertEqual(processor.__class__.__name__, "NewProcessor")
 
@@ -219,7 +230,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             # Test we can also load the slow version
             new_processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
+                "hf-internal-testing/test_dynamic_processor",
+                trust_remote_code=True,
+                use_fast=False,
             )
             new_tokenizer = new_processor.tokenizer
             self.assertTrue(new_tokenizer.special_attribute_present)
@@ -238,7 +251,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 AutoProcessor.register(Wav2Vec2Config, Wav2Vec2Processor)
 
             # Now that the config is registered, it can be used as any other config with the auto-API
-            feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
+            feature_extractor = CustomFeatureExtractor.from_pretrained(
+                SAMPLE_PROCESSOR_CONFIG_DIR
+            )
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 vocab_file = os.path.join(tmp_dir, "vocab.txt")
@@ -281,7 +296,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             AutoTokenizer.register(CustomConfig, slow_tokenizer_class=NewTokenizer)
             AutoProcessor.register(CustomConfig, NewProcessor)
             # If remote code is not set, the default is to use local classes.
-            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor")
+            processor = AutoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_processor"
+            )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertFalse(processor.special_attribute_present)
             self.assertFalse(processor.feature_extractor.special_attribute_present)
@@ -326,7 +343,13 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             feature_extractor_class = "AutoFeatureExtractor"
             tokenizer_class = "AutoTokenizer"
 
-            def __init__(self, feature_extractor, tokenizer, processor_attr_1=1, processor_attr_2=True):
+            def __init__(
+                self,
+                feature_extractor,
+                tokenizer,
+                processor_attr_1=1,
+                processor_attr_2=True,
+            ):
                 super().__init__(feature_extractor, tokenizer)
 
                 self.processor_attr_1 = processor_attr_1
@@ -355,11 +378,15 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
 
     def test_auto_processor_creates_tokenizer(self):
-        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/tiny-random-bert"
+        )
         self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")
 
     def test_auto_processor_creates_image_processor(self):
-        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/tiny-random-convnext"
+        )
         self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
 
 
@@ -384,14 +411,20 @@ class ProcessorPushToHubTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
                 tmp_repo = f"{USER}/test-processor-{Path(tmp_dir).name}"
-                processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
+                processor = Wav2Vec2Processor.from_pretrained(
+                    SAMPLE_PROCESSOR_CONFIG_DIR
+                )
                 # Push to hub via save_pretrained
-                processor.save_pretrained(tmp_repo, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+                processor.save_pretrained(
+                    tmp_repo, repo_id=tmp_repo, push_to_hub=True, token=self._token
+                )
 
                 new_processor = Wav2Vec2Processor.from_pretrained(tmp_repo)
                 for k, v in processor.feature_extractor.__dict__.items():
                     self.assertEqual(v, getattr(new_processor.feature_extractor, k))
-                self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
+                self.assertDictEqual(
+                    new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab()
+                )
             finally:
                 # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
@@ -400,7 +433,9 @@ class ProcessorPushToHubTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
                 tmp_repo = f"valid_org/test-processor-org-{Path(tmp_dir).name}"
-                processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
+                processor = Wav2Vec2Processor.from_pretrained(
+                    SAMPLE_PROCESSOR_CONFIG_DIR
+                )
 
                 # Push to hub via save_pretrained
                 processor.save_pretrained(
@@ -413,7 +448,9 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 new_processor = Wav2Vec2Processor.from_pretrained(tmp_repo)
                 for k, v in processor.feature_extractor.__dict__.items():
                     self.assertEqual(v, getattr(new_processor.feature_extractor, k))
-                self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
+                self.assertDictEqual(
+                    new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab()
+                )
             finally:
                 # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
@@ -427,12 +464,16 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 CustomTokenizer.register_for_auto_class()
                 CustomProcessor.register_for_auto_class()
 
-                feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
+                feature_extractor = CustomFeatureExtractor.from_pretrained(
+                    SAMPLE_PROCESSOR_CONFIG_DIR
+                )
 
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     vocab_file = os.path.join(tmp_dir, "vocab.txt")
                     with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
-                        vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+                        vocab_writer.write(
+                            "".join([x + "\n" for x in self.vocab_tokens])
+                        )
                     tokenizer = CustomTokenizer(vocab_file)
 
                 processor = CustomProcessor(feature_extractor, tokenizer)
@@ -462,13 +503,23 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 )
 
                 # The code has been copied from fixtures
-                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
-                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
-                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
+                self.assertTrue(
+                    os.path.isfile(
+                        os.path.join(tmp_dir, "custom_feature_extraction.py")
+                    )
+                )
+                self.assertTrue(
+                    os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py"))
+                )
+                self.assertTrue(
+                    os.path.isfile(os.path.join(tmp_dir, "custom_processing.py"))
+                )
 
                 repo.push_to_hub()
 
-                new_processor = AutoProcessor.from_pretrained(tmp_repo, trust_remote_code=True)
+                new_processor = AutoProcessor.from_pretrained(
+                    tmp_repo, trust_remote_code=True
+                )
                 # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
                 self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
 

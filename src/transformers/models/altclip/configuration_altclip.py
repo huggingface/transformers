@@ -119,7 +119,12 @@ class AltCLIPTextConfig(PretrainedConfig):
         project_dim=768,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -278,10 +283,18 @@ class AltCLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "altclip"
-    sub_configs = {"text_config": AltCLIPTextConfig, "vision_config": AltCLIPVisionConfig}
+    sub_configs = {
+        "text_config": AltCLIPTextConfig,
+        "vision_config": AltCLIPVisionConfig,
+    }
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=768, logit_scale_init_value=2.6592, **kwargs
+        self,
+        text_config=None,
+        vision_config=None,
+        projection_dim=768,
+        logit_scale_init_value=2.6592,
+        **kwargs,
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
@@ -303,7 +316,11 @@ class AltCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in text_config
+                    and value != text_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -330,12 +347,17 @@ class AltCLIPConfig(PretrainedConfig):
             # convert keys to string instead of integer
             if "id2label" in _vision_config_dict:
                 _vision_config_dict["id2label"] = {
-                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                    str(key): value
+                    for key, value in _vision_config_dict["id2label"].items()
                 }
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in vision_config
+                    and value != vision_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -355,11 +377,15 @@ class AltCLIPConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `AltCLIPTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `AltCLIPTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `AltCLIPVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. initializing the `AltCLIPVisionConfig` with default values."
+            )
 
         self.text_config = AltCLIPTextConfig(**text_config)
         self.vision_config = AltCLIPVisionConfig(**vision_config)
@@ -369,7 +395,12 @@ class AltCLIPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: AltCLIPTextConfig, vision_config: AltCLIPVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls,
+        text_config: AltCLIPTextConfig,
+        vision_config: AltCLIPVisionConfig,
+        **kwargs,
+    ):
         r"""
         Instantiate a [`AltCLIPConfig`] (or a derived class) from altclip text model configuration and altclip vision
         model configuration.
@@ -378,7 +409,11 @@ class AltCLIPConfig(PretrainedConfig):
             [`AltCLIPConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["AltCLIPTextConfig", "AltCLIPVisionConfig", "AltCLIPConfig"]

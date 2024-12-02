@@ -45,7 +45,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_opt"] = ["TFOPTForCausalLM", "TFOPTModel", "TFOPTPreTrainedModel"]
+    _import_structure["modeling_tf_opt"] = [
+        "TFOPTForCausalLM",
+        "TFOPTModel",
+        "TFOPTPreTrainedModel",
+    ]
 
 try:
     if not is_flax_available():
@@ -91,9 +95,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
+        from .modeling_flax_opt import (
+            FlaxOPTForCausalLM,
+            FlaxOPTModel,
+            FlaxOPTPreTrainedModel,
+        )
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

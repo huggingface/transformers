@@ -25,7 +25,19 @@ import urllib.request
 import zipfile
 
 
-TASKS = ["CoLA", "SST", "MRPC", "QQP", "STS", "MNLI", "SNLI", "QNLI", "RTE", "WNLI", "diagnostic"]
+TASKS = [
+    "CoLA",
+    "SST",
+    "MRPC",
+    "QQP",
+    "STS",
+    "MNLI",
+    "SNLI",
+    "QNLI",
+    "RTE",
+    "WNLI",
+    "diagnostic",
+]
 TASK2PATH = {
     "CoLA": "https://firebasestorage.googleapis.com/v0/b/mtl-sentence-representations.appspot.com/o/data%2FCoLA.zip?alt=media&token=46d5e637-3411-4188-bc44-5809b5bfb5f4",
     "SST": "https://firebasestorage.googleapis.com/v0/b/mtl-sentence-representations.appspot.com/o/data%2FSST-2.zip?alt=media&token=aabc5f6b-e466-44a2-b9b4-cf6337f84ac8",
@@ -40,8 +52,12 @@ TASK2PATH = {
     "diagnostic": "https://storage.googleapis.com/mtl-sentence-representations.appspot.com/tsvsWithoutLabels%2FAX.tsv?GoogleAccessId=firebase-adminsdk-0khhl@mtl-sentence-representations.iam.gserviceaccount.com&Expires=2498860800&Signature=DuQ2CSPt2Yfre0C%2BiISrVYrIFaZH1Lc7hBVZDD4ZyR7fZYOMNOUGpi8QxBmTNOrNPjR3z1cggo7WXFfrgECP6FBJSsURv8Ybrue8Ypt%2FTPxbuJ0Xc2FhDi%2BarnecCBFO77RSbfuz%2Bs95hRrYhTnByqu3U%2FYZPaj3tZt5QdfpH2IUROY8LiBXoXS46LE%2FgOQc%2FKN%2BA9SoscRDYsnxHfG0IjXGwHN%2Bf88q6hOmAxeNPx6moDulUF6XMUAaXCSFU%2BnRO2RDL9CapWxj%2BDl7syNyHhB7987hZ80B%2FwFkQ3MEs8auvt5XW1%2Bd4aCU7ytgM69r8JDCwibfhZxpaa4gd50QXQ%3D%3D",
 }
 
-MRPC_TRAIN = "https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_train.txt"
-MRPC_TEST = "https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_test.txt"
+MRPC_TRAIN = (
+    "https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_train.txt"
+)
+MRPC_TEST = (
+    "https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_test.txt"
+)
 
 
 def download_and_extract(task, data_dir):
@@ -81,7 +97,9 @@ def format_mrpc(data_dir, path_to_data):
 
     with open(mrpc_train_file, encoding="utf8") as data_fh, open(
         os.path.join(mrpc_dir, "train.tsv"), "w", encoding="utf8"
-    ) as train_fh, open(os.path.join(mrpc_dir, "dev.tsv"), "w", encoding="utf8") as dev_fh:
+    ) as train_fh, open(
+        os.path.join(mrpc_dir, "dev.tsv"), "w", encoding="utf8"
+    ) as dev_fh:
         header = data_fh.readline()
         train_fh.write(header)
         dev_fh.write(header)
@@ -128,9 +146,14 @@ def get_tasks(task_names):
 
 def main(arguments):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", help="directory to save data to", type=str, default="glue_data")
     parser.add_argument(
-        "--tasks", help="tasks to download data for as a comma separated string", type=str, default="all"
+        "--data_dir", help="directory to save data to", type=str, default="glue_data"
+    )
+    parser.add_argument(
+        "--tasks",
+        help="tasks to download data for as a comma separated string",
+        type=str,
+        default="all",
     )
     parser.add_argument(
         "--path_to_mrpc",

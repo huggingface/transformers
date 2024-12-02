@@ -40,7 +40,11 @@ from transformers.testing_utils import require_tensorflow_probability, require_t
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (
+    TFModelTesterMixin,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -165,7 +169,11 @@ class TFTapasModelTester:
 
         token_type_ids = []
         for type_vocab_size in self.type_vocab_sizes:
-            token_type_ids.append(ids_tensor(shape=[self.batch_size, self.seq_length], vocab_size=type_vocab_size))
+            token_type_ids.append(
+                ids_tensor(
+                    shape=[self.batch_size, self.seq_length], vocab_size=type_vocab_size
+                )
+            )
         token_type_ids = tf.stack(token_type_ids, axis=2)
 
         sequence_labels = None
@@ -176,13 +184,23 @@ class TFTapasModelTester:
         float_answer = None
         aggregation_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             labels = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-            numeric_values = ids_tensor([self.batch_size, self.seq_length], vocab_size=2, dtype=tf.float32)
-            numeric_values_scale = ids_tensor([self.batch_size, self.seq_length], vocab_size=2, dtype=tf.float32)
+            numeric_values = ids_tensor(
+                [self.batch_size, self.seq_length], vocab_size=2, dtype=tf.float32
+            )
+            numeric_values_scale = ids_tensor(
+                [self.batch_size, self.seq_length], vocab_size=2, dtype=tf.float32
+            )
             float_answer = ids_tensor([self.batch_size], vocab_size=2, dtype=tf.float32)
-            aggregation_labels = ids_tensor([self.batch_size], self.num_aggregation_labels)
+            aggregation_labels = ids_tensor(
+                [self.batch_size], self.num_aggregation_labels
+            )
 
         config = self.get_config()
 
@@ -265,8 +283,13 @@ class TFTapasModelTester:
         inputs.pop("token_type_ids")
         result = model(inputs)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_masked_lm(
         self,
@@ -290,7 +313,9 @@ class TFTapasModelTester:
             "labels": token_labels,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_for_sequence_classification(
         self,
@@ -353,7 +378,10 @@ class TFTapasModelTester:
         }
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
+        self.parent.assertEqual(
+            result.logits_aggregation.shape,
+            (self.batch_size, self.num_aggregation_labels),
+        )
 
         # training: can happen in 3 main ways
         # case 1: conversational (SQA)
@@ -382,7 +410,10 @@ class TFTapasModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.loss.shape, (1,))
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
+        self.parent.assertEqual(
+            result.logits_aggregation.shape,
+            (self.batch_size, self.num_aggregation_labels),
+        )
 
         # case 3: strong supervision for aggregation (WikiSQL-supervised)
         wikisql_config = copy.copy(config)
@@ -398,7 +429,10 @@ class TFTapasModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.loss.shape, (1,))
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
+        self.parent.assertEqual(
+            result.logits_aggregation.shape,
+            (self.batch_size, self.num_aggregation_labels),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -415,7 +449,11 @@ class TFTapasModelTester:
             float_answer,
             aggregation_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -463,31 +501,55 @@ class TFTapasModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
         if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
             inputs_dict = {
-                k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
-                if isinstance(v, tf.Tensor) and v.ndim > 0
-                else v
+                k: (
+                    tf.tile(
+                        tf.expand_dims(v, 1),
+                        (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1),
+                    )
+                    if isinstance(v, tf.Tensor) and v.ndim > 0
+                    else v
+                )
                 for k, v in inputs_dict.items()
             }
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING):
-                inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                inputs_dict["labels"] = tf.ones(
+                    self.model_tester.batch_size, dtype=tf.int32
                 )
-                inputs_dict["aggregation_labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+            elif model_class in get_values(
+                TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+            ):
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=tf.int32,
+                )
+                inputs_dict["aggregation_labels"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
                 inputs_dict["numeric_values"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.float32
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=tf.float32,
                 )
                 inputs_dict["numeric_values_scale"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.float32
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=tf.float32,
                 )
-                inputs_dict["float_answer"] = tf.zeros(self.model_tester.batch_size, dtype=tf.float32)
-            elif model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
-                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["float_answer"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.float32
+                )
+            elif model_class in get_values(
+                TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+            ):
+                inputs_dict["labels"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
+            elif model_class in get_values(
+                TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING
+            ):
+                inputs_dict["next_sentence_label"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
             elif model_class in [
                 *get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
                 *get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING),
@@ -496,13 +558,16 @@ class TFTapasModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 *get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
             ]:
                 inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=tf.int32,
                 )
         return inputs_dict
 
     def setUp(self):
         self.model_tester = TFTapasModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TapasConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=TapasConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -521,21 +586,31 @@ class TFTapasModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
-    @unittest.skip(reason="The default test gets NaN losses with the test-generated inputs")
+    @unittest.skip(
+        reason="The default test gets NaN losses with the test-generated inputs"
+    )
     def test_dataset_conversion(self):
         pass
 
-    @unittest.skip(reason="The default test gets NaN losses with the test-generated inputs")
+    @unittest.skip(
+        reason="The default test gets NaN losses with the test-generated inputs"
+    )
     def test_keras_fit(self):
         pass
 
-    @unittest.skip(reason="The default test gets NaN losses with the test-generated inputs")
+    @unittest.skip(
+        reason="The default test gets NaN losses with the test-generated inputs"
+    )
     def test_loss_computation(self):
         pass
 
-    @unittest.skip("tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
+    @unittest.skip(
+        "tfp is not defined even if installed. FIXME @Arthur in a followup PR!"
+    )
     def test_pt_tf_model_equivalence(self):
         pass
 
@@ -610,12 +685,16 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
                 ]
             ]
         )
-        tf.debugging.assert_near(outputs.last_hidden_state[:, :3, :3], expected_slice, atol=0.0005)
+        tf.debugging.assert_near(
+            outputs.last_hidden_state[:, :3, :3], expected_slice, atol=0.0005
+        )
 
         # test the pooled output
         expected_slice = tf.constant([[0.987518311, -0.970520139, -0.994303405]])
 
-        tf.debugging.assert_near(outputs.pooler_output[:, :3], expected_slice, atol=0.0005)
+        tf.debugging.assert_near(
+            outputs.pooler_output[:, :3], expected_slice, atol=0.0005
+        )
 
     @unittest.skip(reason="Model not available yet")
     def test_inference_masked_lm(self):
@@ -629,7 +708,9 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_conversational(self):
         # note that google/tapas-base-finetuned-sqa should correspond to tapas_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-sqa")
+        model = TFTapasForQuestionAnswering.from_pretrained(
+            "google/tapas-base-finetuned-sqa"
+        )
         tokenizer = self.default_tokenizer
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="tf")
@@ -674,7 +755,9 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     def test_inference_question_answering_head_conversational_absolute_embeddings(self):
         # note that google/tapas-small-finetuned-sqa should correspond to tapas_sqa_inter_masklm_small_reset
         # however here we test the version with absolute position embeddings
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-small-finetuned-sqa")
+        model = TFTapasForQuestionAnswering.from_pretrained(
+            "google/tapas-small-finetuned-sqa"
+        )
         tokenizer = self.default_tokenizer
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="tf")
@@ -718,12 +801,16 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_weak_supervision(self):
         # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
+        model = TFTapasForQuestionAnswering.from_pretrained(
+            "google/tapas-base-finetuned-wtq"
+        )
 
         tokenizer = self.default_tokenizer
         # let's test on a batch
         table, queries = prepare_tapas_batch_inputs_for_inference()
-        inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="tf")
+        inputs = tokenizer(
+            table=table, queries=queries, padding="longest", return_tensors="tf"
+        )
         outputs = model(**inputs)
 
         # test the logits
@@ -733,8 +820,22 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
 
         expected_slice = tf.constant(
             [
-                [-160.375504, -160.375504, -160.375504, -10072.3965, -10070.9414, -10094.9736],
-                [-9861.6123, -9861.6123, -9861.6123, -9861.6123, -9891.01172, 146.600677],
+                [
+                    -160.375504,
+                    -160.375504,
+                    -160.375504,
+                    -10072.3965,
+                    -10070.9414,
+                    -10094.9736,
+                ],
+                [
+                    -9861.6123,
+                    -9861.6123,
+                    -9861.6123,
+                    -9861.6123,
+                    -9891.01172,
+                    146.600677,
+                ],
             ]
         )
 
@@ -745,7 +846,10 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
         expected_shape = tf.TensorShape([2, 4])
         tf.debugging.assert_equal(logits_aggregation.shape, expected_shape)
         expected_tensor = tf.constant(
-            [[18.8545208, -9.76614857, -6.3128891, -2.93525243], [-4.05782509, 40.0351, -5.35329962, 23.3978653]]
+            [
+                [18.8545208, -9.76614857, -6.3128891, -2.93525243],
+                [-4.05782509, 40.0351, -5.35329962, 23.3978653],
+            ]
         )
         tf.debugging.assert_near(logits_aggregation, expected_tensor, atol=0.001)
 
@@ -753,19 +857,29 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
         EXPECTED_PREDICTED_ANSWER_COORDINATES = [[(0, 0)], [(1, 2)]]
         EXPECTED_PREDICTED_AGGREGATION_INDICES = [0, 1]
 
-        predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(
-            inputs, outputs.logits, outputs.logits_aggregation
+        predicted_answer_coordinates, predicted_aggregation_indices = (
+            tokenizer.convert_logits_to_predictions(
+                inputs, outputs.logits, outputs.logits_aggregation
+            )
         )
-        tf.debugging.assert_equal(EXPECTED_PREDICTED_ANSWER_COORDINATES, predicted_answer_coordinates)
-        tf.debugging.assert_equal(EXPECTED_PREDICTED_AGGREGATION_INDICES, predicted_aggregation_indices)
+        tf.debugging.assert_equal(
+            EXPECTED_PREDICTED_ANSWER_COORDINATES, predicted_answer_coordinates
+        )
+        tf.debugging.assert_equal(
+            EXPECTED_PREDICTED_AGGREGATION_INDICES, predicted_aggregation_indices
+        )
 
     @slow
     def test_training_question_answering_head_weak_supervision(self):
         # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
+        model = TFTapasForQuestionAnswering.from_pretrained(
+            "google/tapas-base-finetuned-wtq"
+        )
         tokenizer = self.default_tokenizer
         # let's test on a batch
-        table, queries, answer_coordinates, answer_text, float_answer = prepare_tapas_batch_inputs_for_training()
+        table, queries, answer_coordinates, answer_text, float_answer = (
+            prepare_tapas_batch_inputs_for_training()
+        )
         inputs = tokenizer(
             table=table,
             queries=queries,
@@ -820,7 +934,9 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
         # note that google/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wikisql-supervised")
+        model = TFTapasForQuestionAnswering.from_pretrained(
+            "google/tapas-base-finetuned-wikisql-supervised"
+        )
         tokenizer = self.default_tokenizer
 
         table, queries = prepare_tapas_single_inputs_for_inference()
@@ -864,13 +980,17 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
         logits_aggregation = outputs.logits_aggregation
         expected_shape = tf.TensorShape([1, 4])
         tf.debugging.assert_equal(logits_aggregation.shape, expected_shape)
-        expected_tensor = tf.constant([[16.5659733, -3.06624889, -2.34152961, -0.970244825]])
+        expected_tensor = tf.constant(
+            [[16.5659733, -3.06624889, -2.34152961, -0.970244825]]
+        )
         tf.debugging.assert_near(logits_aggregation, expected_tensor, atol=0.003)
 
     @slow
     def test_inference_classification_head(self):
         # note that google/tapas-base-finetuned-tabfact should correspond to tapas_tabfact_inter_masklm_base_reset
-        model = TFTapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
+        model = TFTapasForSequenceClassification.from_pretrained(
+            "google/tapas-base-finetuned-tabfact"
+        )
         tokenizer = self.default_tokenizer
 
         table, queries = prepare_tapas_single_inputs_for_inference()
@@ -938,11 +1058,15 @@ class TFTapasUtilsTest(unittest.TestCase):
 
         # Projections should give back the original indices.
         # we use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
-        np.testing.assert_array_equal(row_index.indices.numpy(), row_index_proj.indices.numpy())
+        np.testing.assert_array_equal(
+            row_index.indices.numpy(), row_index_proj.indices.numpy()
+        )
         self.assertEqual(row_index.num_segments, row_index_proj.num_segments)
         self.assertEqual(row_index.batch_dims, row_index_proj.batch_dims)
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
-        np.testing.assert_array_equal(col_index.indices.numpy(), col_index_proj.indices.numpy())
+        np.testing.assert_array_equal(
+            col_index.indices.numpy(), col_index_proj.indices.numpy()
+        )
         self.assertEqual(col_index.batch_dims, col_index_proj.batch_dims)
 
         # The first and second "column" are identified in the first table.
@@ -968,18 +1092,24 @@ class TFTapasUtilsTest(unittest.TestCase):
         col_index_flat = flatten(col_index)
 
         shape = [3, 4, 5]
-        batched_index = IndexMap(indices=tf.zeros(shape, dtype=tf.int32), num_segments=1, batch_dims=3)
+        batched_index = IndexMap(
+            indices=tf.zeros(shape, dtype=tf.int32), num_segments=1, batch_dims=3
+        )
         batched_index_flat = flatten(batched_index)
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(
-            row_index_flat.indices.numpy(), [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5]
+            row_index_flat.indices.numpy(),
+            [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
         )
         np.testing.assert_array_equal(
-            col_index_flat.indices.numpy(), [0, 0, 1, 0, 0, 1, 0, 0, 1, 3, 4, 5, 3, 4, 5, 3, 4, 5]
+            col_index_flat.indices.numpy(),
+            [0, 0, 1, 0, 0, 1, 0, 0, 1, 3, 4, 5, 3, 4, 5, 3, 4, 5],
         )
         self.assertEqual(batched_index_flat.num_segments.numpy(), np.prod(shape))
-        np.testing.assert_array_equal(batched_index_flat.indices.numpy(), range(np.prod(shape)))
+        np.testing.assert_array_equal(
+            batched_index_flat.indices.numpy(), range(np.prod(shape))
+        )
 
     def test_range_index_map(self):
         batch_shape = [3, 4]
@@ -994,7 +1124,9 @@ class TFTapasUtilsTest(unittest.TestCase):
         for i in range(batch_shape[0]):
             for j in range(batch_shape[1]):
                 # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
-                np.testing.assert_array_equal(indices[i, j, :].numpy(), range(num_segments))
+                np.testing.assert_array_equal(
+                    indices[i, j, :].numpy(), range(num_segments)
+                )
 
     def test_reduce_sum(self):
         values, row_index, col_index = self._prepare_tables()
@@ -1008,7 +1140,10 @@ class TFTapasUtilsTest(unittest.TestCase):
         np.testing.assert_allclose(col_sum.numpy(), [[9.0, 8.0, 0.0], [4.0, 5.0, 8.0]])
         np.testing.assert_allclose(
             cell_sum.numpy(),
-            [[3.0, 3.0, 0.0, 2.0, 1.0, 0.0, 4.0, 4.0, 0.0], [1.0, 2.0, 3.0, 2.0, 0.0, 1.0, 1.0, 3.0, 4.0]],
+            [
+                [3.0, 3.0, 0.0, 2.0, 1.0, 0.0, 4.0, 4.0, 0.0],
+                [1.0, 2.0, 3.0, 2.0, 0.0, 1.0, 1.0, 3.0, 4.0],
+            ],
         )
 
     def test_reduce_mean(self):
@@ -1020,9 +1155,13 @@ class TFTapasUtilsTest(unittest.TestCase):
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(
-            row_mean.numpy(), [[6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0], [6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0]]
+            row_mean.numpy(),
+            [[6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0], [6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0]],
         )
-        np.testing.assert_allclose(col_mean.numpy(), [[9.0 / 6.0, 8.0 / 3.0, 0.0], [4.0 / 3.0, 5.0 / 3.0, 8.0 / 3.0]])
+        np.testing.assert_allclose(
+            col_mean.numpy(),
+            [[9.0 / 6.0, 8.0 / 3.0, 0.0], [4.0 / 3.0, 5.0 / 3.0, 8.0 / 3.0]],
+        )
         np.testing.assert_allclose(
             cell_mean.numpy(),
             [
@@ -1040,8 +1179,12 @@ class TFTapasUtilsTest(unittest.TestCase):
         np.testing.assert_array_equal(maximum.numpy(), [2, 3])
 
     def test_reduce_sum_vectorized(self):
-        values = tf.convert_to_tensor([[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]])
-        index = IndexMap(indices=tf.convert_to_tensor([0, 0, 1]), num_segments=2, batch_dims=0)
+        values = tf.convert_to_tensor(
+            [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]]
+        )
+        index = IndexMap(
+            indices=tf.convert_to_tensor([0, 0, 1]), num_segments=2, batch_dims=0
+        )
         sums, new_index = reduce_sum(values, index)
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
@@ -1065,13 +1208,20 @@ class TFTapasUtilsTest(unittest.TestCase):
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_allclose(
             cell_sum.numpy(),
-            [[[3.0, 3.0, 3.0], [2.0, 2.0, 1.0], [4.0, 4.0, 4.0]], [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]]],
+            [
+                [[3.0, 3.0, 3.0], [2.0, 2.0, 1.0], [4.0, 4.0, 4.0]],
+                [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
+            ],
         )
 
     def test_gather_vectorized(self):
         values = tf.constant([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
-        index = IndexMap(indices=tf.convert_to_tensor([[0, 1], [1, 0]]), num_segments=2, batch_dims=1)
+        index = IndexMap(
+            indices=tf.convert_to_tensor([[0, 1], [1, 0]]), num_segments=2, batch_dims=1
+        )
         result = gather(values, index)
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
-        np.testing.assert_array_equal(result.numpy(), [[[1, 2], [3, 4]], [[7, 8], [5, 6]]])
+        np.testing.assert_array_equal(
+            result.numpy(), [[[1, 2], [3, 4]], [[7, 8], [5, 6]]]
+        )

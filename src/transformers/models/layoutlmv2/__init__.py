@@ -80,7 +80,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
+        from .feature_extraction_layoutlmv2 import (
+            LayoutLMv2FeatureExtractor,
+            LayoutLMv2ImageProcessor,
+        )
 
     try:
         if not is_torch_available():
@@ -99,4 +102,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

@@ -47,7 +47,11 @@ def get_all_model_names():
             x
             for x in dir(module)
             if x.endswith("_MAPPING_NAMES")
-            and (x.startswith("MODEL_") or x.startswith("TF_MODEL_") or x.startswith("FLAX_MODEL_"))
+            and (
+                x.startswith("MODEL_")
+                or x.startswith("TF_MODEL_")
+                or x.startswith("FLAX_MODEL_")
+            )
         ]
         for name in mapping_names:
             mapping = getattr(module, name)
@@ -172,7 +176,9 @@ def get_tiny_model_summary_from_hub(output_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
+    parser.add_argument(
+        "--num_workers", default=1, type=int, help="The number of workers to run."
+    )
     args = parser.parse_args()
 
     # This has to be `spawn` to avoid hanging forever!

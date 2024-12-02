@@ -59,7 +59,11 @@ def convert_to_float(value):
         if "," in sanitized and _split_thousands(",", sanitized):
             return float(sanitized.replace(",", ""))
         # 5,5556
-        if "," in sanitized and sanitized.count(",") == 1 and not _split_thousands(",", sanitized):
+        if (
+            "," in sanitized
+            and sanitized.count(",") == 1
+            and not _split_thousands(",", sanitized)
+        ):
             return float(sanitized.replace(",", "."))
         # 0.0.0.1
         if sanitized.count(".") > 1:
@@ -158,7 +162,9 @@ def _respect_conditions(table, row, conditions):
             cmp_value = _normalize_for_match(cmp_value)
 
         if not isinstance(table_value, type(cmp_value)):
-            raise TypeError("Type difference {} != {}".format(type(table_value), type(cmp_value)))
+            raise TypeError(
+                "Type difference {} != {}".format(type(table_value), type(cmp_value))
+            )
 
         if not _compare(cond.operator, table_value, cmp_value):
             return False
@@ -214,7 +220,9 @@ def _get_answer_coordinates(table, sql_query):
     conditions = [
         _Condition(column, _Operator(operator), cmp_value)
         for column, operator, cmp_value in zip(
-            sql_query["conds"]["column_index"], sql_query["conds"]["operator_index"], sql_query["conds"]["condition"]
+            sql_query["conds"]["column_index"],
+            sql_query["conds"]["operator_index"],
+            sql_query["conds"]["condition"],
         )
     ]
 

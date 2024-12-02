@@ -44,7 +44,10 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
 
         processor = LlavaOnevisionProcessor(
-            video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
+            video_processor=video_processor,
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            **processor_kwargs
         )
         processor.save_pretrained(self.tmpdirname)
 
@@ -58,7 +61,11 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
     def prepare_processor_dict(self):
-        return {"chat_template": "dummy_template", "num_image_tokens": 6, "vision_feature_select_strategy": "default"}
+        return {
+            "chat_template": "dummy_template",
+            "num_image_tokens": 6,
+            "vision_feature_select_strategy": "default",
+        }
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()
@@ -79,13 +86,17 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+        self.assertTrue(
+            processor_loaded.chat_template == processor_dict.get("chat_template", None)
+        )
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
+        processor = AutoProcessor.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-7b-ov-hf"
+        )
         expected_prompt = "<|im_start|>user <image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
 
         messages = [
@@ -98,5 +109,7 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True
+        )
         self.assertEqual(expected_prompt, formatted_prompt)

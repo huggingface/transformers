@@ -24,7 +24,10 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
+    from transformers.models.fuyu.processing_fuyu import (
+        construct_full_unpacked_stream,
+        full_unpacked_stream_to_tensor,
+    )
 
 
 @require_torch
@@ -48,7 +51,9 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     def get_processor(self):
         image_processor = FuyuImageProcessor()
         tokenizer = AutoTokenizer.from_pretrained("adept/fuyu-8b")
-        processor = FuyuProcessor(image_processor, tokenizer, **self.prepare_processor_dict())
+        processor = FuyuProcessor(
+            image_processor, tokenizer, **self.prepare_processor_dict()
+        )
 
         return processor
 
@@ -69,8 +74,14 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         one_image_bus_model_inputs = self.get_processor()(text=self.text_prompt, images=self.bus_image_pil)
 
         # fmt: on
-        torch.testing.assert_close(one_image_bus_model_inputs["image_patches_indices"], EXPECTED_IMAGE_PATCH_INPUTS)
-        torch.testing.assert_close(one_image_bus_model_inputs["input_ids"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS)
+        torch.testing.assert_close(
+            one_image_bus_model_inputs["image_patches_indices"],
+            EXPECTED_IMAGE_PATCH_INPUTS,
+        )
+        torch.testing.assert_close(
+            one_image_bus_model_inputs["input_ids"],
+            EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS,
+        )
 
     def test_fuyu_processing_no_image(self):
         """
@@ -114,7 +125,12 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
         processor_outputs = self.get_processor()(images=self.bus_image_pil)
-        self.assertTrue((processor_outputs["image_patches_indices"] == EXPECTED_IMAGE_PATCH_INPUTS).all())
+        self.assertTrue(
+            (
+                processor_outputs["image_patches_indices"]
+                == EXPECTED_IMAGE_PATCH_INPUTS
+            ).all()
+        )
 
     def test_fuyu_processing_multiple_image_sample(self):
         """
@@ -130,72 +146,137 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Batch of two images - equally sized
         images = [self.bus_image_pil, self.bus_image_pil]
-        processor_outputs = self.get_processor()(text=[self.text_prompt, self.text_prompt], images=images)
+        processor_outputs = self.get_processor()(
+            text=[self.text_prompt, self.text_prompt], images=images
+        )
 
         self.assertTrue(
             (
                 processor_outputs["image_patches_indices"]
-                == torch.cat([SINGLE_IMAGE_PATCH_INPUTS, SINGLE_IMAGE_PATCH_INPUTS], dim=0)
+                == torch.cat(
+                    [SINGLE_IMAGE_PATCH_INPUTS, SINGLE_IMAGE_PATCH_INPUTS], dim=0
+                )
             ).all()
         )
         self.assertTrue(
             (
                 processor_outputs["input_ids"]
-                == torch.cat([SINGLE_PADDED_UNPACKED_TOKEN_INPUTS, SINGLE_PADDED_UNPACKED_TOKEN_INPUTS], dim=0)
+                == torch.cat(
+                    [
+                        SINGLE_PADDED_UNPACKED_TOKEN_INPUTS,
+                        SINGLE_PADDED_UNPACKED_TOKEN_INPUTS,
+                    ],
+                    dim=0,
+                )
             ).all()
         )
 
         # Processes single images with different sizes as expected
         images = [self.bus_image_pil]
         processor_outputs = self.get_processor()(text=self.text_prompt, images=images)
-        self.assertTrue((processor_outputs["image_patches_indices"] == SINGLE_IMAGE_PATCH_INPUTS).all())
-        self.assertTrue((processor_outputs["input_ids"] == SINGLE_PADDED_UNPACKED_TOKEN_INPUTS).all())
+        self.assertTrue(
+            (
+                processor_outputs["image_patches_indices"] == SINGLE_IMAGE_PATCH_INPUTS
+            ).all()
+        )
+        self.assertTrue(
+            (
+                processor_outputs["input_ids"] == SINGLE_PADDED_UNPACKED_TOKEN_INPUTS
+            ).all()
+        )
 
         images = [self.bus_image_pil.resize((64, 300))]
         processor_outputs = self.get_processor()(text=self.text_prompt, images=images)
-        self.assertTrue((processor_outputs["image_patches_indices"] == SINGLE_RESIZED_IMAGE_PATCH_INPUTS).all())
-        self.assertTrue((processor_outputs["input_ids"] == SINGLE_RESIZED_PADDED_UNPACKED_TOKEN_INPUTS).all())
+        self.assertTrue(
+            (
+                processor_outputs["image_patches_indices"]
+                == SINGLE_RESIZED_IMAGE_PATCH_INPUTS
+            ).all()
+        )
+        self.assertTrue(
+            (
+                processor_outputs["input_ids"]
+                == SINGLE_RESIZED_PADDED_UNPACKED_TOKEN_INPUTS
+            ).all()
+        )
 
         # Batch of two images - different sizes. Left-pads the smaller image inputs
         images = [self.bus_image_pil, self.bus_image_pil.resize((64, 300))]
-        processor_outputs = self.get_processor()(text=[self.text_prompt, self.text_prompt], images=images)
-
-        padding_len_patch = SINGLE_IMAGE_PATCH_INPUTS.shape[1] - SINGLE_RESIZED_IMAGE_PATCH_INPUTS.shape[1]
-        padded_single_resized_image_patch = torch.cat(
-            [torch.ones([1, padding_len_patch]) * -1, SINGLE_RESIZED_IMAGE_PATCH_INPUTS], dim=1
+        processor_outputs = self.get_processor()(
+            text=[self.text_prompt, self.text_prompt], images=images
         )
-        expected_image_patch_inputs = torch.cat([SINGLE_IMAGE_PATCH_INPUTS, padded_single_resized_image_patch], dim=0)
+
+        padding_len_patch = (
+            SINGLE_IMAGE_PATCH_INPUTS.shape[1]
+            - SINGLE_RESIZED_IMAGE_PATCH_INPUTS.shape[1]
+        )
+        padded_single_resized_image_patch = torch.cat(
+            [
+                torch.ones([1, padding_len_patch]) * -1,
+                SINGLE_RESIZED_IMAGE_PATCH_INPUTS,
+            ],
+            dim=1,
+        )
+        expected_image_patch_inputs = torch.cat(
+            [SINGLE_IMAGE_PATCH_INPUTS, padded_single_resized_image_patch], dim=0
+        )
 
         padding_len_token = (
-            SINGLE_PADDED_UNPACKED_TOKEN_INPUTS.shape[1] - SINGLE_RESIZED_PADDED_UNPACKED_TOKEN_INPUTS.shape[1]
+            SINGLE_PADDED_UNPACKED_TOKEN_INPUTS.shape[1]
+            - SINGLE_RESIZED_PADDED_UNPACKED_TOKEN_INPUTS.shape[1]
         )
         padded_single_resized_padded_unpacked_token_inputs = torch.cat(
-            [torch.zeros([1, padding_len_token]), SINGLE_RESIZED_PADDED_UNPACKED_TOKEN_INPUTS], dim=1
+            [
+                torch.zeros([1, padding_len_token]),
+                SINGLE_RESIZED_PADDED_UNPACKED_TOKEN_INPUTS,
+            ],
+            dim=1,
         )
         expected_padded_unpacked_token_inputs = torch.cat(
-            [SINGLE_PADDED_UNPACKED_TOKEN_INPUTS, padded_single_resized_padded_unpacked_token_inputs], dim=0
+            [
+                SINGLE_PADDED_UNPACKED_TOKEN_INPUTS,
+                padded_single_resized_padded_unpacked_token_inputs,
+            ],
+            dim=0,
         )
 
-        self.assertTrue((processor_outputs["image_patches_indices"] == expected_image_patch_inputs).all())
-        self.assertTrue((processor_outputs["input_ids"] == expected_padded_unpacked_token_inputs).all())
+        self.assertTrue(
+            (
+                processor_outputs["image_patches_indices"]
+                == expected_image_patch_inputs
+            ).all()
+        )
+        self.assertTrue(
+            (
+                processor_outputs["input_ids"] == expected_padded_unpacked_token_inputs
+            ).all()
+        )
 
     # Rewrite as Fuyu supports tokenizer kwargs only when image is None.
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117)
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
         image_input = None
 
         inputs = processor(
-            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            max_length=112,
+            padding="max_length",
         )
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
@@ -212,11 +293,17 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+        tokenizer = self.get_component(
+            "tokenizer", max_length=117, padding="max_length"
+        )
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
@@ -230,11 +317,15 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_structured_kwargs_nested(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -257,12 +348,16 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
 
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         # Fuyu uses tokenizer kwargs only when image is None.
@@ -283,11 +378,15 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -308,11 +407,15 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_unstructured_kwargs_batched(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2)
@@ -337,12 +440,17 @@ class TestImageTextProcessingUtils(unittest.TestCase):
         self.num_sub_sequences = 1
 
         self.all_bi_tokens_to_place = [4, 6]
-        self.full_unpacked_stream = [torch.tensor([1, 2, 3, 4]), torch.tensor([5, 6, 7, 8, 9, 10])]
+        self.full_unpacked_stream = [
+            torch.tensor([1, 2, 3, 4]),
+            torch.tensor([5, 6, 7, 8, 9, 10]),
+        ]
         self.fill_value = 0
 
         self.num_real_text_tokens = [[3, 2], [2, 4]]
         # Here the input stream is padded to avoid inconsistencies (current model release matches)
-        self.input_stream = torch.tensor([[[1, 2, 3], [4, 5, 0]], [[6, 7, 0], [8, 9, 10]]])
+        self.input_stream = torch.tensor(
+            [[[1, 2, 3], [4, 5, 0]], [[6, 7, 0], [8, 9, 10]]]
+        )
         self.image_tokens = [
             [torch.tensor([1, 2]), torch.tensor([3])],
             [torch.tensor([4, 5, 6]), torch.tensor([7, 8])],
@@ -357,14 +465,23 @@ class TestImageTextProcessingUtils(unittest.TestCase):
             self.new_seq_len,
             offset=0,
         )
-        EXPECTED_TENSOR = torch.tensor([[1, 2, 3, 4, 0, 0, 0, 0], [5, 6, 7, 8, 9, 10, 0, 0]])
+        EXPECTED_TENSOR = torch.tensor(
+            [[1, 2, 3, 4, 0, 0, 0, 0], [5, 6, 7, 8, 9, 10, 0, 0]]
+        )
         self.assertTrue(torch.equal(result, EXPECTED_TENSOR))
 
     def test_construct_full_unpacked_stream(self):
         result = construct_full_unpacked_stream(
-            self.num_real_text_tokens, self.input_stream, self.image_tokens, self.batch_size, self.num_sub_sequences
+            self.num_real_text_tokens,
+            self.input_stream,
+            self.image_tokens,
+            self.batch_size,
+            self.num_sub_sequences,
         )
-        EXPECTED_UNPACKED_STREAM = [torch.tensor([1, 2, 1, 2, 3]), torch.tensor([4, 5, 6, 6, 7])]
+        EXPECTED_UNPACKED_STREAM = [
+            torch.tensor([1, 2, 1, 2, 3]),
+            torch.tensor([4, 5, 6, 6, 7]),
+        ]
         for i in range(len(result)):
             self.assertTrue(torch.equal(result[i], EXPECTED_UNPACKED_STREAM[i]))
 
@@ -386,7 +503,10 @@ class TestProcessImagesForModelInput(unittest.TestCase):
         self.image_newline_id = 888
         self.variable_sized = True
         self.image_processor = FuyuImageProcessor(
-            patch_size={"height": self.image_patch_dim_h, "width": self.image_patch_dim_w}
+            patch_size={
+                "height": self.image_patch_dim_h,
+                "width": self.image_patch_dim_w,
+            }
         )
 
     def test_process_images_for_model_input_fixed_sized(self):

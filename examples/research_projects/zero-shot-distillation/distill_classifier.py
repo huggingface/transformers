@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TeacherModelArguments:
     teacher_name_or_path: Optional[str] = field(
-        default="roberta-large-mnli", metadata={"help": "The NLI/zero-shot teacher model to be distilled."}
+        default="roberta-large-mnli",
+        metadata={"help": "The NLI/zero-shot teacher model to be distilled."},
     )
     hypothesis_template: Optional[str] = field(
         default="This example is {}.",
@@ -59,24 +60,32 @@ class TeacherModelArguments:
         },
     )
     temperature: Optional[float] = field(
-        default=1.0, metadata={"help": "Temperature applied to teacher softmax for distillation."}
+        default=1.0,
+        metadata={"help": "Temperature applied to teacher softmax for distillation."},
     )
 
 
 @dataclass
 class StudentModelArguments:
     student_name_or_path: Optional[str] = field(
-        default="distilbert-base-uncased", metadata={"help": "The NLI/zero-shot teacher model to be distilled."}
+        default="distilbert-base-uncased",
+        metadata={"help": "The NLI/zero-shot teacher model to be distilled."},
     )
 
 
 @dataclass
 class DataTrainingArguments:
-    data_file: str = field(metadata={"help": "Text file with one unlabeled instance per line."})
-    class_names_file: str = field(metadata={"help": "Text file with one class name per line."})
+    data_file: str = field(
+        metadata={"help": "Text file with one unlabeled instance per line."}
+    )
+    class_names_file: str = field(
+        metadata={"help": "Text file with one class name per line."}
+    )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the Rust tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the Rust tokenizers library) or not."
+        },
     )
 
 
@@ -84,16 +93,23 @@ class DataTrainingArguments:
 class DistillTrainingArguments(TrainingArguments):
     output_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written."
+        },
     )
     per_device_train_batch_size: int = field(
         default=32, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
-        default=128, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+        default=128,
+        metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."},
     )
-    num_train_epochs: float = field(default=1.0, metadata={"help": "Total number of training epochs to perform."})
-    do_train: bool = field(default=True, metadata={"help": "Whether to run training of student model."})
+    num_train_epochs: float = field(
+        default=1.0, metadata={"help": "Total number of training epochs to perform."}
+    )
+    do_train: bool = field(
+        default=True, metadata={"help": "Whether to run training of student model."}
+    )
     do_eval: bool = field(
         default=True,
         metadata={
@@ -152,7 +168,9 @@ def get_entailment_id(config):
     for label, ind in config.label2id.items():
         if label.lower().startswith("entail"):
             return ind
-    logger.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
+    logger.warning(
+        "Could not identify entailment dimension from teacher config label2id. Setting to -1."
+    )
     return -1
 
 
@@ -178,7 +196,9 @@ def get_teacher_predictions(
         batch_size *= len(model.device_ids)
     tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=use_fast_tokenizer)
 
-    premises, hypotheses = get_premise_hypothesis_pairs(examples, class_names, hypothesis_template)
+    premises, hypotheses = get_premise_hypothesis_pairs(
+        examples, class_names, hypothesis_template
+    )
     logits = []
 
     for i in tqdm(range(0, len(premises), batch_size)):
@@ -201,7 +221,9 @@ def get_teacher_predictions(
     entail_id = get_entailment_id(model_config)
     contr_id = -1 if entail_id == 0 else 0
     logits = torch.cat(logits, dim=0)  # N*K x 3
-    nli_logits = logits.reshape(len(examples), len(class_names), -1)[..., [contr_id, entail_id]]  # N x K x 2
+    nli_logits = logits.reshape(len(examples), len(class_names), -1)[
+        ..., [contr_id, entail_id]
+    ]  # N x K x 2
 
     if multi_label:
         # softmax over (contr, entail) logits for each class independently
@@ -215,7 +237,12 @@ def get_teacher_predictions(
 
 def main():
     parser = HfArgumentParser(
-        (DataTrainingArguments, TeacherModelArguments, StudentModelArguments, DistillTrainingArguments),
+        (
+            DataTrainingArguments,
+            TeacherModelArguments,
+            StudentModelArguments,
+            DistillTrainingArguments,
+        ),
         description=DESCRIPTION,
     )
 
@@ -226,11 +253,17 @@ def main():
             json_file=os.path.abspath(sys.argv[1])
         )
     else:
-        data_args, teacher_args, student_args, training_args = parser.parse_args_into_dataclasses()
+        data_args, teacher_args, student_args, training_args = (
+            parser.parse_args_into_dataclasses()
+        )
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
@@ -249,7 +282,9 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(
+        logging.INFO if is_main_process(training_args.local_rank) else logging.WARN
+    )
 
     # Log on each process the small summary:
     logger.warning(
@@ -302,7 +337,9 @@ def main():
     model = AutoModelForSequenceClassification.from_pretrained(
         student_args.student_name_or_path, num_labels=len(class_names)
     )
-    tokenizer = AutoTokenizer.from_pretrained(student_args.student_name_or_path, use_fast=data_args.use_fast_tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained(
+        student_args.student_name_or_path, use_fast=data_args.use_fast_tokenizer
+    )
     model.config.id2label = dict(enumerate(class_names))
     model.config.label2id = {label: i for i, label in enumerate(class_names)}
 
@@ -329,7 +366,9 @@ def main():
 
     if training_args.do_eval:
         agreement = trainer.evaluate(eval_dataset=dataset)["eval_agreement"]
-        logger.info(f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%")
+        logger.info(
+            f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%"
+        )
 
     trainer.save_model()
 

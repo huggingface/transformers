@@ -48,7 +48,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Owlv2ForObjectDetection, Owlv2Model, Owlv2TextModel, Owlv2VisionModel
+    from transformers import (
+        Owlv2ForObjectDetection,
+        Owlv2Model,
+        Owlv2TextModel,
+        Owlv2VisionModel,
+    )
 
 
 if is_vision_available():
@@ -96,7 +101,9 @@ class Owlv2VisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -125,8 +132,13 @@ class Owlv2VisionModelTester:
             result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (self.image_size // self.patch_size) ** 2
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -152,7 +164,10 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Owlv2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=Owlv2VisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -207,11 +222,15 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Owlv2VisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Owlv2VisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Owlv2VisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Owlv2VisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -263,11 +282,15 @@ class Owlv2TextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size * self.num_queries, self.seq_length], self.vocab_size
+        )
         input_mask = None
 
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size * self.num_queries, self.seq_length])
+            input_mask = random_attention_mask(
+                [self.batch_size * self.num_queries, self.seq_length]
+            )
 
         if input_mask is not None:
             num_text, seq_length = input_mask.shape
@@ -301,9 +324,13 @@ class Owlv2TextModelTester:
             result = model(input_ids=input_ids, attention_mask=input_mask)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size * self.num_queries, self.seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size * self.num_queries, self.seq_length, self.hidden_size),
         )
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size * self.num_queries, self.hidden_size))
+        self.parent.assertEqual(
+            result.pooler_output.shape,
+            (self.batch_size * self.num_queries, self.hidden_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -322,7 +349,9 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Owlv2TextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -355,11 +384,15 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Owlv2TextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Owlv2TextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Owlv2TextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Owlv2TextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -383,16 +416,24 @@ class Owlv2ModelTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
         config = self.get_config()
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Owlv2Config.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return Owlv2Config.from_text_vision_configs(
+            self.text_config, self.vision_config, projection_dim=64
+        )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = Owlv2Model(config).to(torch_device).eval()
@@ -449,7 +490,10 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = Owlv2ModelTester(self)
         common_properties = ["projection_dim", "logit_scale_init_value"]
         self.config_tester = ConfigTester(
-            self, config_class=Owlv2Config, has_text_modality=False, common_properties=common_properties
+            self,
+            config_class=Owlv2Config,
+            has_text_modality=False,
+            common_properties=common_properties,
         )
 
     def test_config(self):
@@ -542,10 +586,14 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -573,7 +621,9 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = Owlv2VisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save Owlv2Config and check if we can load Owlv2TextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -597,16 +647,24 @@ class Owlv2ForObjectDetectionTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
         config = self.get_config()
         return config, pixel_values, input_ids, attention_mask
 
     def get_config(self):
-        return Owlv2Config.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return Owlv2Config.from_text_vision_configs(
+            self.text_config, self.vision_config, projection_dim=64
+        )
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
         model = Owlv2ForObjectDetection(config).to(torch_device).eval()
@@ -620,17 +678,20 @@ class Owlv2ForObjectDetectionTester:
 
         pred_boxes_size = (
             self.vision_model_tester.batch_size,
-            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size)
+            ** 2,
             4,
         )
         pred_logits_size = (
             self.vision_model_tester.batch_size,
-            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size)
+            ** 2,
             4,
         )
         pred_class_embeds_size = (
             self.vision_model_tester.batch_size,
-            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size)
+            ** 2,
             self.text_model_tester.hidden_size,
         )
         self.parent.assertEqual(result.pred_boxes.shape, pred_boxes_size)
@@ -689,7 +750,9 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="Test_save_load_fast_init_from_base is tested in individual model tests")
+    @unittest.skip(
+        reason="Test_save_load_fast_init_from_base is tested in individual model tests"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -756,10 +819,14 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -826,7 +893,9 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
         expected_logits = torch.tensor([[-6.2229, -8.2601]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3)
+        )
 
     @slow
     def test_inference_object_detection(self):
@@ -847,17 +916,37 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
+        num_queries = int(
+            (
+                model.config.vision_config.image_size
+                / model.config.vision_config.patch_size
+            )
+            ** 2
+        )
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_logits = torch.tensor(
-            [[-21.413497, -21.612638], [-19.008193, -19.548841], [-20.958896, -21.382694]]
+            [
+                [-21.413497, -21.612638],
+                [-19.008193, -19.548841],
+                [-20.958896, -21.382694],
+            ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4)
+        )
         expected_slice_boxes = torch.tensor(
-            [[0.241309, 0.051896, 0.453267], [0.139474, 0.045701, 0.250660], [0.233022, 0.050479, 0.427671]],
+            [
+                [0.241309, 0.051896, 0.453267],
+                [0.139474, 0.045701, 0.250660],
+                [0.233022, 0.050479, 0.427671],
+            ],
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4
+            )
+        )
 
     @slow
     def test_inference_one_shot_object_detection(self):
@@ -879,20 +968,38 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model.image_guided_detection(**inputs)
 
-        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
-        self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
+        num_queries = int(
+            (
+                model.config.vision_config.image_size
+                / model.config.vision_config.patch_size
+            )
+            ** 2
+        )
+        self.assertEqual(
+            outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4))
+        )
 
         expected_slice_boxes = torch.tensor(
-            [[0.2413, 0.0519, 0.4533], [0.1395, 0.0457, 0.2507], [0.2330, 0.0505, 0.4277]],
+            [
+                [0.2413, 0.0519, 0.4533],
+                [0.1395, 0.0457, 0.2507],
+                [0.2330, 0.0505, 0.4277],
+            ],
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4
+            )
+        )
 
     @slow
     @require_torch_accelerator
     @require_torch_fp16
     def test_inference_one_shot_object_detection_fp16(self):
         model_name = "google/owlv2-base-patch16"
-        model = Owlv2ForObjectDetection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = Owlv2ForObjectDetection.from_pretrained(
+            model_name, torch_dtype=torch.float16
+        ).to(torch_device)
 
         processor = OwlViTProcessor.from_pretrained(model_name)
 
@@ -910,5 +1017,13 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
             outputs = model.image_guided_detection(**inputs)
 
         # No need to check the logits, we just check inference runs fine.
-        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
-        self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
+        num_queries = int(
+            (
+                model.config.vision_config.image_size
+                / model.config.vision_config.patch_size
+            )
+            ** 2
+        )
+        self.assertEqual(
+            outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4))
+        )

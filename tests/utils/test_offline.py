@@ -151,7 +151,9 @@ def offline_socket(*args, **kwargs): raise socket.error("Offline mode is enabled
 socket.socket = offline_socket
         """
 
-        _, stderr = self._execute_with_env(load, mock, run, should_fail=True, TRANSFORMERS_OFFLINE="1")
+        _, stderr = self._execute_with_env(
+            load, mock, run, should_fail=True, TRANSFORMERS_OFFLINE="1"
+        )
         self.assertIn(
             "You cannot infer task automatically within `pipeline` when using offline mode",
             stderr.replace("\n", ""),
@@ -193,7 +195,9 @@ print("success")
         stdout, _ = self._execute_with_env(load, run, HF_HUB_OFFLINE="1")
         self.assertIn("True", stdout)
 
-    def _execute_with_env(self, *commands: Tuple[str, ...], should_fail: bool = False, **env) -> Tuple[str, str]:
+    def _execute_with_env(
+        self, *commands: Tuple[str, ...], should_fail: bool = False, **env
+    ) -> Tuple[str, str]:
         """Execute Python code with a given environment and return the stdout/stderr as strings.
 
         If `should_fail=True`, the command is expected to fail. Otherwise, it should succeed.

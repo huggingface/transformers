@@ -16,7 +16,12 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, LlavaProcessor
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    LlamaTokenizerFast,
+    LlavaProcessor,
+)
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -69,7 +74,9 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+        self.assertTrue(
+            processor_loaded.chat_template == processor_dict.get("chat_template", None)
+        )
 
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
@@ -91,12 +98,16 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True
+        )
         self.assertEqual(expected_prompt, formatted_prompt)
 
     def test_chat_template_with_continue_final_message(self):
         processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
-        expected_prompt = "USER: <image>\nDescribe this image. ASSISTANT: There is a dog and"
+        expected_prompt = (
+            "USER: <image>\nDescribe this image. ASSISTANT: There is a dog and"
+        )
         messages = [
             {
                 "role": "user",

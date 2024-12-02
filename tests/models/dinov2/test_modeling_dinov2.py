@@ -95,7 +95,9 @@ class Dinov2ModelTester:
         self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -127,7 +129,10 @@ class Dinov2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
         model = Dinov2Backbone(config=config)
@@ -139,7 +144,8 @@ class Dinov2ModelTester:
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         expected_size = self.image_size // config.patch_size
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+            list(result.feature_maps[0].shape),
+            [self.batch_size, model.channels[0], expected_size, expected_size],
         )
 
         # verify channels
@@ -155,7 +161,8 @@ class Dinov2ModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+            list(result.feature_maps[0].shape),
+            [self.batch_size, model.channels[0], expected_size, expected_size],
         )
 
         # verify channels
@@ -173,7 +180,8 @@ class Dinov2ModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.seq_length, self.hidden_size],
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -182,7 +190,9 @@ class Dinov2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
@@ -190,9 +200,13 @@ class Dinov2ModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -222,7 +236,10 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
+        {
+            "image-feature-extraction": Dinov2Model,
+            "image-classification": Dinov2ForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -234,7 +251,9 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37
+        )
 
     @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
     def test_initialization(self):
@@ -308,7 +327,11 @@ def prepare_img():
 class Dinov2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/dinov2-base") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/dinov2-base")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_no_head(self):
@@ -327,10 +350,18 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-2.1747, -0.4729, 1.0936], [-3.2780, -0.8269, -0.9210], [-2.9129, 1.1284, -0.7306]],
+            [
+                [-2.1747, -0.4729, 1.0936],
+                [-3.2780, -0.8269, -0.9210],
+                [-2.9129, 1.1284, -0.7306],
+            ],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4
+            )
+        )
 
 
 @require_torch

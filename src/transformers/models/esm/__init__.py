@@ -13,7 +13,12 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -34,7 +39,10 @@ else:
         "EsmModel",
         "EsmPreTrainedModel",
     ]
-    _import_structure["modeling_esmfold"] = ["EsmForProteinFolding", "EsmFoldPreTrainedModel"]
+    _import_structure["modeling_esmfold"] = [
+        "EsmForProteinFolding",
+        "EsmFoldPreTrainedModel",
+    ]
 
 try:
     if not is_tf_available():
@@ -87,4 +95,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure
+    )

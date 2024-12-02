@@ -67,7 +67,9 @@ def export_with_optimum(args):
 
 
 def export_with_transformers(args):
-    args.output = args.output if args.output.is_file() else args.output.joinpath("model.onnx")
+    args.output = (
+        args.output if args.output.is_file() else args.output.joinpath("model.onnx")
+    )
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
@@ -76,7 +78,9 @@ def export_with_transformers(args):
         args.feature, args.model, framework=args.framework, cache_dir=args.cache_dir
     )
 
-    model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
+    model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(
+        model, feature=args.feature
+    )
     onnx_config = model_onnx_config(model.config)
 
     if model_kind in ENCODER_DECODER_MODELS:
@@ -89,9 +93,15 @@ def export_with_transformers(args):
         )
 
         if args.opset is None:
-            args.opset = max(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset)
+            args.opset = max(
+                encoder_onnx_config.default_onnx_opset,
+                decoder_onnx_config.default_onnx_opset,
+            )
 
-        if args.opset < min(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset):
+        if args.opset < min(
+            encoder_onnx_config.default_onnx_opset,
+            decoder_onnx_config.default_onnx_opset,
+        ):
             raise ValueError(
                 f"Opset {args.opset} is not sufficient to export {model_kind}. At least "
                 f" {min(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset)} is required."
@@ -175,7 +185,9 @@ def export_with_transformers(args):
         if args.atol is None:
             args.atol = onnx_config.atol_for_validation
 
-        validate_model_outputs(onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol)
+        validate_model_outputs(
+            onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol
+        )
         logger.info(f"All good, model saved at: {args.output.as_posix()}")
         warnings.warn(
             "The export was done by transformers.onnx which is deprecated and will be removed in v5. We recommend"
@@ -188,16 +200,28 @@ def export_with_transformers(args):
 def main():
     parser = ArgumentParser("Hugging Face Transformers ONNX exporter")
     parser.add_argument(
-        "-m", "--model", type=str, required=True, help="Model ID on huggingface.co or path on disk to load model from."
+        "-m",
+        "--model",
+        type=str,
+        required=True,
+        help="Model ID on huggingface.co or path on disk to load model from.",
     )
     parser.add_argument(
         "--feature",
         default="default",
         help="The type of features to export the model with.",
     )
-    parser.add_argument("--opset", type=int, default=None, help="ONNX opset version to export the model with.")
     parser.add_argument(
-        "--atol", type=float, default=None, help="Absolute difference tolerance when validating the model."
+        "--opset",
+        type=int,
+        default=None,
+        help="ONNX opset version to export the model with.",
+    )
+    parser.add_argument(
+        "--atol",
+        type=float,
+        default=None,
+        help="Absolute difference tolerance when validating the model.",
     )
     parser.add_argument(
         "--framework",
@@ -210,12 +234,25 @@ def main():
             " or what is available in the environment."
         ),
     )
-    parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
-    parser.add_argument("--cache_dir", type=str, default=None, help="Path indicating where to store cache.")
+    parser.add_argument(
+        "output", type=Path, help="Path indicating where to store generated ONNX model."
+    )
+    parser.add_argument(
+        "--cache_dir",
+        type=str,
+        default=None,
+        help="Path indicating where to store cache.",
+    )
     parser.add_argument(
         "--preprocessor",
         type=str,
-        choices=["auto", "tokenizer", "feature_extractor", "image_processor", "processor"],
+        choices=[
+            "auto",
+            "tokenizer",
+            "feature_extractor",
+            "image_processor",
+            "processor",
+        ],
         default="auto",
         help="Which type of preprocessor to use. 'auto' tries to automatically detect it.",
     )

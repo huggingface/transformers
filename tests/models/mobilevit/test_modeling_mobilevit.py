@@ -17,7 +17,13 @@
 import unittest
 
 from transformers import MobileViTConfig
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -28,7 +34,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MobileViTForImageClassification, MobileViTForSemanticSegmentation, MobileViTModel
+    from transformers import (
+        MobileViTForImageClassification,
+        MobileViTForSemanticSegmentation,
+        MobileViTModel,
+    )
 
 
 if is_vision_available():
@@ -87,13 +97,17 @@ class MobileViTModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         pixel_labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.num_labels)
-            pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            pixel_labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -131,7 +145,9 @@ class MobileViTModelTester:
             ),
         )
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_classification(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.num_labels
         model = MobileViTForImageClassification(config)
         model.to(torch_device)
@@ -139,7 +155,9 @@ class MobileViTModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_semantic_segmentation(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.num_labels
         model = MobileViTForSemanticSegmentation(config)
         model.to(torch_device)
@@ -180,7 +198,11 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     """
 
     all_model_classes = (
-        (MobileViTModel, MobileViTForImageClassification, MobileViTForSemanticSegmentation)
+        (
+            MobileViTModel,
+            MobileViTForImageClassification,
+            MobileViTForSemanticSegmentation,
+        )
         if is_torch_available()
         else ()
     )
@@ -201,7 +223,9 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = MobileViTModelTester(self)
-        self.config_tester = MobileViTConfigTester(self, config_class=MobileViTConfig, has_text_modality=False)
+        self.config_tester = MobileViTConfigTester(
+            self, config_class=MobileViTConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -242,7 +266,10 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             for i in range(len(hidden_states)):
                 self.assertListEqual(
                     list(hidden_states[i].shape[-2:]),
-                    [self.model_tester.image_size // divisor, self.model_tester.image_size // divisor],
+                    [
+                        self.model_tester.image_size // divisor,
+                        self.model_tester.image_size // divisor,
+                    ],
                 )
                 divisor *= 2
 
@@ -274,7 +301,9 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model = MobileViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
+    @is_flaky(
+        description="is_flaky https://github.com/huggingface/transformers/issues/29516"
+    )
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
 
@@ -290,11 +319,17 @@ def prepare_img():
 class MobileViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return MobileViTImageProcessor.from_pretrained("apple/mobilevit-xx-small") if is_vision_available() else None
+        return (
+            MobileViTImageProcessor.from_pretrained("apple/mobilevit-xx-small")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-xx-small").to(torch_device)
+        model = MobileViTForImageClassification.from_pretrained(
+            "apple/mobilevit-xx-small"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -310,14 +345,20 @@ class MobileViTModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.9364, -1.2327, -0.4653]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
+        )
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        model = MobileViTForSemanticSegmentation.from_pretrained(
+            "apple/deeplabv3-mobilevit-xx-small"
+        )
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        image_processor = MobileViTImageProcessor.from_pretrained(
+            "apple/deeplabv3-mobilevit-xx-small"
+        )
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -333,21 +374,39 @@ class MobileViTModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [[6.9713, 6.9786, 7.2422], [7.2893, 7.2825, 7.4446], [7.6580, 7.8797, 7.9420]],
-                [[-10.6869, -10.3250, -10.3471], [-10.4228, -9.9868, -9.7132], [-11.0405, -11.0221, -10.7318]],
-                [[-3.3089, -2.8539, -2.6740], [-3.2706, -2.5621, -2.5108], [-3.2534, -2.6615, -2.6651]],
+                [
+                    [6.9713, 6.9786, 7.2422],
+                    [7.2893, 7.2825, 7.4446],
+                    [7.6580, 7.8797, 7.9420],
+                ],
+                [
+                    [-10.6869, -10.3250, -10.3471],
+                    [-10.4228, -9.9868, -9.7132],
+                    [-11.0405, -11.0221, -10.7318],
+                ],
+                [
+                    [-3.3089, -2.8539, -2.6740],
+                    [-3.2706, -2.5621, -2.5108],
+                    [-3.2534, -2.6615, -2.6651],
+                ],
             ],
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4)
+        )
 
     @slow
     def test_post_processing_semantic_segmentation(self):
-        model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        model = MobileViTForSemanticSegmentation.from_pretrained(
+            "apple/deeplabv3-mobilevit-xx-small"
+        )
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        image_processor = MobileViTImageProcessor.from_pretrained(
+            "apple/deeplabv3-mobilevit-xx-small"
+        )
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -358,10 +417,14 @@ class MobileViTModelIntegrationTest(unittest.TestCase):
 
         outputs.logits = outputs.logits.detach().cpu()
 
-        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(50, 60)])
+        segmentation = image_processor.post_process_semantic_segmentation(
+            outputs=outputs, target_sizes=[(50, 60)]
+        )
         expected_shape = torch.Size((50, 60))
         self.assertEqual(segmentation[0].shape, expected_shape)
 
-        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
+        segmentation = image_processor.post_process_semantic_segmentation(
+            outputs=outputs
+        )
         expected_shape = torch.Size((32, 32))
         self.assertEqual(segmentation[0].shape, expected_shape)

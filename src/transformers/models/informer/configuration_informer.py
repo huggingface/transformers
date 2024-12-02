@@ -179,7 +179,9 @@ class InformerConfig(PretrainedConfig):
         self.loss = loss
         self.input_size = input_size
         self.num_time_features = num_time_features
-        self.lags_sequence = lags_sequence if lags_sequence is not None else [1, 2, 3, 4, 5, 6, 7]
+        self.lags_sequence = (
+            lags_sequence if lags_sequence is not None else [1, 2, 3, 4, 5, 6, 7]
+        )
         self.scaling = scaling
         self.num_dynamic_real_features = num_dynamic_real_features
         self.num_static_real_features = num_static_real_features
@@ -203,12 +205,16 @@ class InformerConfig(PretrainedConfig):
                 )
             self.embedding_dimension = embedding_dimension
         else:
-            self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]
+            self.embedding_dimension = [
+                min(50, (cat + 1) // 2) for cat in self.cardinality
+            ]
 
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.feature_size = input_size * len(self.lags_sequence) + self._number_of_features
+        self.feature_size = (
+            input_size * len(self.lags_sequence) + self._number_of_features
+        )
         self.d_model = d_model
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads

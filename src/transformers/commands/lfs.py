@@ -59,7 +59,9 @@ class LfsCommands(BaseTransformersCLICommand):
                 "Deprecated: use `huggingface-cli` instead. Configure your repository to enable upload of files > 5GB."
             ),
         )
-        enable_parser.add_argument("path", type=str, help="Local path to repository you want to configure.")
+        enable_parser.add_argument(
+            "path", type=str, help="Local path to repository you want to configure."
+        )
         enable_parser.set_defaults(func=lambda args: LfsEnableCommand(args))
 
         upload_parser = parser.add_parser(
@@ -85,7 +87,9 @@ class LfsEnableCommand:
             print("This does not look like a valid git repo.")
             exit(1)
         subprocess.run(
-            "git config lfs.customtransfer.multipart.path transformers-cli".split(), check=True, cwd=local_path
+            "git config lfs.customtransfer.multipart.path transformers-cli".split(),
+            check=True,
+            cwd=local_path,
         )
         subprocess.run(
             f"git config lfs.customtransfer.multipart.args {LFS_MULTIPART_UPLOAD_COMMAND}".split(),
@@ -163,7 +167,9 @@ class LfsUploadCommand:
         # sends initiation data to the process over stdin.
         # This tells the process useful information about the configuration.
         init_msg = json.loads(sys.stdin.readline().strip())
-        if not (init_msg.get("event") == "init" and init_msg.get("operation") == "upload"):
+        if not (
+            init_msg.get("event") == "init" and init_msg.get("operation") == "upload"
+        ):
             write_msg({"error": {"code": 32, "message": "Wrong lfs init operation"}})
             sys.exit(1)
 
@@ -193,7 +199,9 @@ class LfsUploadCommand:
 
             parts = []
             for i, presigned_url in enumerate(presigned_urls):
-                with FileSlice(filepath, seek_from=i * chunk_size, read_limit=chunk_size) as data:
+                with FileSlice(
+                    filepath, seek_from=i * chunk_size, read_limit=chunk_size
+                ) as data:
                     r = requests.put(presigned_url, data=data)
                     r.raise_for_status()
                     parts.append(

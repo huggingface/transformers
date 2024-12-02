@@ -65,7 +65,9 @@ def rename_key(name):
     if "decoder.model" in name:
         name = name.replace("decoder.model", "decoder")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "embeddings.norm")
     if name.startswith("encoder"):
@@ -100,29 +102,36 @@ def convert_state_dict(orig_state_dict, model):
             key_split = key.split(".")
             layer_num = int(key_split[3])
             block_num = int(key_split[5])
-            dim = model.encoder.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
+            dim = (
+                model.encoder.encoder.layers[layer_num]
+                .blocks[block_num]
+                .attention.self.all_head_size
+            )
 
             if "weight" in key:
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
                 ] = val[:dim, :]
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = (
-                    val[dim : dim * 2, :]
-                )
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
+                ] = val[dim : dim * 2, :]
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
                 ] = val[-dim:, :]
             else:
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = (
-                    val[:dim]
-                )
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = (
-                    val[dim : dim * 2]
-                )
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = (
-                    val[-dim:]
-                )
-        elif "attn_mask" in key or key in ["encoder.model.norm.weight", "encoder.model.norm.bias"]:
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
+                ] = val[-dim:]
+        elif "attn_mask" in key or key in [
+            "encoder.model.norm.weight",
+            "encoder.model.norm.bias",
+        ]:
             # HuggingFace implementation doesn't use attn_mask buffer
             # and model doesn't use final LayerNorms for the encoder
             pass
@@ -132,7 +141,9 @@ def convert_state_dict(orig_state_dict, model):
     return orig_state_dict
 
 
-def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_donut_checkpoint(
+    model_name, pytorch_dump_folder_path=None, push_to_hub=False
+):
     # load original model
     original_model = DonutModel.from_pretrained(model_name).eval()
 
@@ -153,7 +164,8 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)
     image_processor = DonutImageProcessor(
-        do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
+        do_align_long_axis=original_model.config.align_long_axis,
+        size=original_model.config.input_size[::-1],
     )
     processor = DonutProcessor(image_processor, tokenizer)
     pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -178,9 +190,9 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         task_prompt = "hello world"
     else:
         raise ValueError("Model name not supported")
-    prompt_tensors = original_model.decoder.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt")[
-        "input_ids"
-    ]
+    prompt_tensors = original_model.decoder.tokenizer(
+        task_prompt, add_special_tokens=False, return_tensors="pt"
+    )["input_ids"]
 
     original_patch_embed = original_model.encoder.model.patch_embed(pixel_values)
     patch_embeddings, _ = model.encoder.embeddings(pixel_values)
@@ -203,8 +215,12 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub("nielsr/" + model_name.split("/")[-1], commit_message="Update model")
-        processor.push_to_hub("nielsr/" + model_name.split("/")[-1], commit_message="Update model")
+        model.push_to_hub(
+            "nielsr/" + model_name.split("/")[-1], commit_message="Update model"
+        )
+        processor.push_to_hub(
+            "nielsr/" + model_name.split("/")[-1], commit_message="Update model"
+        )
 
 
 if __name__ == "__main__":
@@ -231,4 +247,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_donut_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_donut_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

@@ -137,7 +137,9 @@ class GlmDecoderLayer(LlamaDecoderLayer):
 
         self.mlp = GlmMLP(config)
         self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GlmRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
 
 class GlmPreTrainedModel(LlamaPreTrainedModel):
@@ -148,11 +150,16 @@ class GlmModel(GlmPreTrainedModel, LlamaModel):
     def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                GlmDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
+            dim=config.head_dim // 2,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
         )
         self.gradient_checkpointing = False
 

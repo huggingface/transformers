@@ -46,7 +46,9 @@ def original_transform(image, image_size=224):
 
 def get_image():
     filepath = hf_hub_download(
-        repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        repo_id="hf-internal-testing/fixtures_docvqa",
+        filename="document_2.png",
+        repo_type="dataset",
     )
     image = Image.open(filepath).convert("RGB")
 
@@ -80,15 +82,23 @@ def prepare_dummy_inputs(tokenizer, image_processor):
     bbox = [[0, 0, 0, 0]] * len(prompt_ids) + bbox_list
 
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
-    original_pixel_values = original_transform(image, image_size=image_processor.size["height"]).unsqueeze(0)
+    original_pixel_values = original_transform(
+        image, image_size=image_processor.size["height"]
+    ).unsqueeze(0)
     # verify pixel values
     assert torch.allclose(original_pixel_values, pixel_values)
     print("Pixel values are ok!")
 
-    return torch.tensor(input_ids).unsqueeze(0), torch.tensor(bbox).unsqueeze(0).float(), pixel_values
+    return (
+        torch.tensor(input_ids).unsqueeze(0),
+        torch.tensor(bbox).unsqueeze(0).float(),
+        pixel_values,
+    )
 
 
-def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_udop_checkpoint(
+    model_name, pytorch_dump_folder_path=None, push_to_hub=False
+):
     # model_name to checkpoint_path
     name_to_checkpoint_path = {
         "udop-large": "/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-224/pytorch_model.bin",
@@ -109,13 +119,19 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     model.eval()
 
     # rename keys
-    state_dict = {k.replace("cell2dembedding", "cell_2d_embedding"): v for k, v in state_dict.items()}
+    state_dict = {
+        k.replace("cell2dembedding", "cell_2d_embedding"): v
+        for k, v in state_dict.items()
+    }
 
     # load weights
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
-    assert missing_keys == ["encoder.embed_patches.proj.weight", "encoder.embed_patches.proj.bias"]
+    assert missing_keys == [
+        "encoder.embed_patches.proj.weight",
+        "encoder.embed_patches.proj.bias",
+    ]
     assert unexpected_keys == ["pos_embed"]
 
     # Add extra_ids to the special token list
@@ -155,14 +171,23 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     print("Testing single forward pass..")
     with torch.no_grad():
         decoder_input_ids = torch.tensor([[101]])
-        outputs = model(input_ids=input_ids, bbox=bbox, pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+        outputs = model(
+            input_ids=input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            decoder_input_ids=decoder_input_ids,
+        )
         print("Shape of logits:", outputs.logits.shape)
         print("First values of logits:", outputs.logits[0, :3, :3])
 
     # tensor([[-18.5262,   1.5087, -15.7051]]) on linux
     # tensor([[-19.4976,   0.8515, -17.1873]]) on mac
     try:
-        assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-18.5262, 1.5087, -15.7051]]), atol=1e-4)
+        assert torch.allclose(
+            outputs.logits[0, :3, :3],
+            torch.tensor([[-18.5262, 1.5087, -15.7051]]),
+            atol=1e-4,
+        )
         print("Looks ok!")
     except Exception:
         print("logits don't match let's try to generate")
@@ -176,15 +201,27 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
 
     # autoregressive decoding with original input data
     print("Testing generation with original inputs...")
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset")
+    filepath = hf_hub_download(
+        repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset"
+    )
     input_ids = torch.load(filepath)
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset")
+    filepath = hf_hub_download(
+        repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset"
+    )
     bbox = torch.load(filepath)
-    pixel_values_filename = "pixel_values_udop_512.pt" if "512" in model_name else "pixel_values_udop_224.pt"
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=pixel_values_filename, repo_type="dataset")
+    pixel_values_filename = (
+        "pixel_values_udop_512.pt"
+        if "512" in model_name
+        else "pixel_values_udop_224.pt"
+    )
+    filepath = hf_hub_download(
+        repo_id="nielsr/test-image", filename=pixel_values_filename, repo_type="dataset"
+    )
     pixel_values = torch.load(filepath)
 
-    print("Decoded input ids:", tokenizer.decode(input_ids[0], skip_special_tokens=True))
+    print(
+        "Decoded input ids:", tokenizer.decode(input_ids[0], skip_special_tokens=True)
+    )
     print("Bbox shape:", bbox.shape)
 
     model_kwargs = {"bbox": bbox, "pixel_values": pixel_values}
@@ -214,11 +251,18 @@ if __name__ == "__main__":
         help=("Name of the UDOP model you'd like to convert."),
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_udop_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_udop_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

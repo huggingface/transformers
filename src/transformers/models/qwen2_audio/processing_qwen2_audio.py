@@ -53,7 +53,9 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audios: Union[np.ndarray, List[np.ndarray]] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         sampling_rate: Optional[int] = None,
@@ -92,7 +94,11 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
         if audios is not None:
             audio_inputs = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length", **kwargs
+                audios,
+                sampling_rate=sampling_rate,
+                return_attention_mask=True,
+                padding="max_length",
+                **kwargs,
             )
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
@@ -119,7 +125,13 @@ class Qwen2AudioProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
+        return list(
+            dict.fromkeys(
+                tokenizer_input_names
+                + feature_extractor_input_names
+                + ["feature_attention_mask"]
+            )
+        )
 
     @property
     def default_chat_template(self):

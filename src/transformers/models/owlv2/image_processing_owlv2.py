@@ -140,7 +140,10 @@ def _preprocess_resize_output_shape(image, output_shape):
         # multichannel case: append shape of last axis
         output_shape = output_shape + (image.shape[-1],)
     elif output_ndim < image.ndim:
-        raise ValueError("output_shape length cannot be smaller than the " "image number of dimensions")
+        raise ValueError(
+            "output_shape length cannot be smaller than the "
+            "image number of dimensions"
+        )
 
     return image, output_shape
 
@@ -310,25 +313,44 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             if anti_aliasing_sigma is None:
                 anti_aliasing_sigma = np.maximum(0, (factors - 1) / 2)
             else:
-                anti_aliasing_sigma = np.atleast_1d(anti_aliasing_sigma) * np.ones_like(factors)
+                anti_aliasing_sigma = np.atleast_1d(anti_aliasing_sigma) * np.ones_like(
+                    factors
+                )
                 if np.any(anti_aliasing_sigma < 0):
-                    raise ValueError("Anti-aliasing standard deviation must be " "greater than or equal to zero")
+                    raise ValueError(
+                        "Anti-aliasing standard deviation must be "
+                        "greater than or equal to zero"
+                    )
                 elif np.any((anti_aliasing_sigma > 0) & (factors <= 1)):
                     warnings.warn(
-                        "Anti-aliasing standard deviation greater than zero but " "not down-sampling along all axes"
+                        "Anti-aliasing standard deviation greater than zero but "
+                        "not down-sampling along all axes"
                     )
-            filtered = ndi.gaussian_filter(image, anti_aliasing_sigma, cval=cval, mode=ndi_mode)
+            filtered = ndi.gaussian_filter(
+                image, anti_aliasing_sigma, cval=cval, mode=ndi_mode
+            )
         else:
             filtered = image
 
         zoom_factors = [1 / f for f in factors]
-        out = ndi.zoom(filtered, zoom_factors, order=order, mode=ndi_mode, cval=cval, grid_mode=True)
+        out = ndi.zoom(
+            filtered,
+            zoom_factors,
+            order=order,
+            mode=ndi_mode,
+            cval=cval,
+            grid_mode=True,
+        )
 
         image = _clip_warp_output(image, out)
 
-        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
+        image = to_channel_dimension_format(
+            image, input_data_format, ChannelDimension.LAST
+        )
         image = (
-            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+            to_channel_dimension_format(image, data_format, input_data_format)
+            if data_format is not None
+            else image
         )
         return image
 
@@ -391,7 +413,9 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -436,12 +460,19 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_pad:
-            images = [self.pad(image=image, input_data_format=input_data_format) for image in images]
+            images = [
+                self.pad(image=image, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_resize:
             images = [
@@ -455,19 +486,30 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs,
+        threshold: float = 0.1,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
     ):
         """
         Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -526,7 +568,9 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         return results
 
     # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_image_guided_detection
-    def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
+    def post_process_image_guided_detection(
+        self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None
+    ):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
         api.
@@ -551,9 +595,13 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
         if target_sizes is not None and len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+            )
         if target_sizes is not None and target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         probs = torch.max(logits, dim=-1)
         scores = torch.sigmoid(probs.values)
@@ -568,7 +616,9 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                     if not scores[idx][i]:
                         continue
 
-                    ious = box_iou(target_boxes[idx][i, :].unsqueeze(0), target_boxes[idx])[0][0]
+                    ious = box_iou(
+                        target_boxes[idx][i, :].unsqueeze(0), target_boxes[idx]
+                    )[0][0]
                     ious[i] = -1.0  # Mask self-IoU.
                     scores[idx][ious > nms_threshold] = 0.0
 
@@ -579,7 +629,9 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 img_w = torch.tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(target_boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                target_boxes.device
+            )
             target_boxes = target_boxes * scale_fct[:, None, :]
 
         # Compute box display alphas based on prediction scores

@@ -16,14 +16,21 @@
 
 import argparse
 
-from transformers import ConvBertConfig, ConvBertModel, TFConvBertModel, load_tf_weights_in_convbert
+from transformers import (
+    ConvBertConfig,
+    ConvBertModel,
+    TFConvBertModel,
+    load_tf_weights_in_convbert,
+)
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 
 
-def convert_orig_tf1_checkpoint_to_pytorch(tf_checkpoint_path, convbert_config_file, pytorch_dump_path):
+def convert_orig_tf1_checkpoint_to_pytorch(
+    tf_checkpoint_path, convbert_config_file, pytorch_dump_path
+):
     conf = ConvBertConfig.from_json_file(convbert_config_file)
     model = ConvBertModel(conf)
 
@@ -38,7 +45,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--tf_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
         "--convbert_config_file",
@@ -51,7 +62,13 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_orig_tf1_checkpoint_to_pytorch(args.tf_checkpoint_path, args.convbert_config_file, args.pytorch_dump_path)
+    convert_orig_tf1_checkpoint_to_pytorch(
+        args.tf_checkpoint_path, args.convbert_config_file, args.pytorch_dump_path
+    )

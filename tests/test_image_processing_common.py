@@ -26,7 +26,11 @@ import requests
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_vision,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 
@@ -53,7 +57,9 @@ def prepare_image_inputs(
     One can specify whether the images are of the same resolution or not.
     """
 
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+    assert not (
+        numpify and torchify
+    ), "You cannot specify both numpy and PyTorch tensors at the same time"
 
     image_inputs = []
     for i in range(batch_size):
@@ -64,12 +70,18 @@ def prepare_image_inputs(
             if size_divisor is not None:
                 # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
                 min_resolution = max(size_divisor, min_resolution)
-            width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
-        image_inputs.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
+            width, height = np.random.choice(
+                np.arange(min_resolution, max_resolution), 2
+            )
+        image_inputs.append(
+            np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8)
+        )
 
     if not numpify and not torchify:
         # PIL expects the channel dimension as last dimension
-        image_inputs = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs]
+        image_inputs = [
+            Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs
+        ]
 
     if torchify:
         image_inputs = [torch.from_numpy(image) for image in image_inputs]
@@ -81,12 +93,16 @@ def prepare_image_inputs(
     return image_inputs
 
 
-def prepare_video(num_frames, num_channels, width=10, height=10, numpify=False, torchify=False):
+def prepare_video(
+    num_frames, num_channels, width=10, height=10, numpify=False, torchify=False
+):
     """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
 
     video = []
     for i in range(num_frames):
-        video.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
+        video.append(
+            np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8)
+        )
 
     if not numpify and not torchify:
         # PIL expects the channel dimension as last dimension
@@ -114,14 +130,18 @@ def prepare_video_inputs(
     One can specify whether the videos are of the same resolution or not.
     """
 
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+    assert not (
+        numpify and torchify
+    ), "You cannot specify both numpy and PyTorch tensors at the same time"
 
     video_inputs = []
     for i in range(batch_size):
         if equal_resolution:
             width = height = max_resolution
         else:
-            width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
+            width, height = np.random.choice(
+                np.arange(min_resolution, max_resolution), 2
+            )
             video = prepare_video(
                 num_frames=num_frames,
                 num_channels=num_channels,
@@ -158,22 +178,35 @@ class ImageProcessingTestMixin:
     @require_torch
     def test_slow_fast_equivalence(self):
         dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
         )
 
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                reason="Skipping slow/fast equivalence test as one of the image processors is not defined"
+            )
 
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict
+        )
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2))
+        self.assertTrue(
+            torch.allclose(
+                encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2
+            )
+        )
 
     @require_vision
     @require_torch
@@ -181,8 +214,13 @@ class ImageProcessingTestMixin:
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                reason="Skipping speed test as one of the image processors is not defined"
+            )
 
         def measure_time(image_processor, image):
             start = time.time()
@@ -191,7 +229,9 @@ class ImageProcessingTestMixin:
 
         dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict
+        )
 
         fast_time = measure_time(image_processor_fast, dummy_images)
         slow_time = measure_time(image_processor_slow, dummy_images)
@@ -212,9 +252,13 @@ class ImageProcessingTestMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 json_file_path = os.path.join(tmpdirname, "image_processor.json")
                 image_processor_first.to_json_file(json_file_path)
-                image_processor_second = image_processing_class.from_json_file(json_file_path)
+                image_processor_second = image_processing_class.from_json_file(
+                    json_file_path
+                )
 
-            self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
+            self.assertEqual(
+                image_processor_second.to_dict(), image_processor_first.to_dict()
+            )
 
     def test_image_processor_from_and_save_pretrained(self):
         for image_processing_class in self.image_processor_list:
@@ -223,9 +267,13 @@ class ImageProcessingTestMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
                 check_json_file_has_correct_format(saved_file)
-                image_processor_second = image_processing_class.from_pretrained(tmpdirname)
+                image_processor_second = image_processing_class.from_pretrained(
+                    tmpdirname
+                )
 
-            self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
+            self.assertEqual(
+                image_processor_second.to_dict(), image_processor_first.to_dict()
+            )
 
     def test_image_processor_save_load_with_autoimageprocessor(self):
         for image_processing_class in self.image_processor_list:
@@ -237,53 +285,89 @@ class ImageProcessingTestMixin:
 
                 image_processor_second = AutoImageProcessor.from_pretrained(tmpdirname)
 
-            self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
+            self.assertEqual(
+                image_processor_second.to_dict(), image_processor_first.to_dict()
+            )
 
     def test_save_load_fast_slow(self):
         "Test that we can load a fast image processor from a slow one and vice-versa."
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest("Skipping slow/fast save/load test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                "Skipping slow/fast save/load test as one of the image processors is not defined"
+            )
 
-        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+        image_processor_dict = (
+            self.image_processor_tester.prepare_image_processor_dict()
+        )
         image_processor_slow_0 = self.image_processing_class(**image_processor_dict)
 
         # Load fast image processor from slow one
         with tempfile.TemporaryDirectory() as tmpdirname:
             image_processor_slow_0.save_pretrained(tmpdirname)
-            image_processor_fast_0 = self.fast_image_processing_class.from_pretrained(tmpdirname)
+            image_processor_fast_0 = self.fast_image_processing_class.from_pretrained(
+                tmpdirname
+            )
 
-        image_processor_fast_1 = self.fast_image_processing_class(**image_processor_dict)
+        image_processor_fast_1 = self.fast_image_processing_class(
+            **image_processor_dict
+        )
 
         # Load slow image processor from fast one
         with tempfile.TemporaryDirectory() as tmpdirname:
             image_processor_fast_1.save_pretrained(tmpdirname)
-            image_processor_slow_1 = self.image_processing_class.from_pretrained(tmpdirname)
+            image_processor_slow_1 = self.image_processing_class.from_pretrained(
+                tmpdirname
+            )
 
-        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
-        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
+        self.assertEqual(
+            image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict()
+        )
+        self.assertEqual(
+            image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict()
+        )
 
     def test_save_load_fast_slow_auto(self):
         "Test that we can load a fast image processor from a slow one and vice-versa using AutoImageProcessor."
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest("Skipping slow/fast save/load test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                "Skipping slow/fast save/load test as one of the image processors is not defined"
+            )
 
-        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+        image_processor_dict = (
+            self.image_processor_tester.prepare_image_processor_dict()
+        )
         image_processor_slow_0 = self.image_processing_class(**image_processor_dict)
 
         # Load fast image processor from slow one
         with tempfile.TemporaryDirectory() as tmpdirname:
             image_processor_slow_0.save_pretrained(tmpdirname)
-            image_processor_fast_0 = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=True)
+            image_processor_fast_0 = AutoImageProcessor.from_pretrained(
+                tmpdirname, use_fast=True
+            )
 
-        image_processor_fast_1 = self.fast_image_processing_class(**image_processor_dict)
+        image_processor_fast_1 = self.fast_image_processing_class(
+            **image_processor_dict
+        )
 
         # Load slow image processor from fast one
         with tempfile.TemporaryDirectory() as tmpdirname:
             image_processor_fast_1.save_pretrained(tmpdirname)
-            image_processor_slow_1 = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=False)
+            image_processor_slow_1 = AutoImageProcessor.from_pretrained(
+                tmpdirname, use_fast=False
+            )
 
-        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
-        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
+        self.assertEqual(
+            image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict()
+        )
+        self.assertEqual(
+            image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict()
+        )
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processor_list:
@@ -299,23 +383,31 @@ class ImageProcessingTestMixin:
                 image_processor = image_processing_class(**self.image_processor_dict)
 
                 # create random PyTorch tensors
-                image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+                image_inputs = self.image_processor_tester.prepare_image_inputs(
+                    equal_resolution=False, torchify=True
+                )
 
                 encoding = image_processor(image_inputs, return_tensors="pt")
                 # for layoutLM compatiblity
                 self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
                 self.assertEqual(encoding.pixel_values.dtype, torch.float32)
 
-                encoding = image_processor(image_inputs, return_tensors="pt").to(torch.float16)
+                encoding = image_processor(image_inputs, return_tensors="pt").to(
+                    torch.float16
+                )
                 self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
                 self.assertEqual(encoding.pixel_values.dtype, torch.float16)
 
-                encoding = image_processor(image_inputs, return_tensors="pt").to("cpu", torch.bfloat16)
+                encoding = image_processor(image_inputs, return_tensors="pt").to(
+                    "cpu", torch.bfloat16
+                )
                 self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
                 self.assertEqual(encoding.pixel_values.dtype, torch.bfloat16)
 
                 with self.assertRaises(TypeError):
-                    _ = image_processor(image_inputs, return_tensors="pt").to(torch.bfloat16, "cpu")
+                    _ = image_processor(image_inputs, return_tensors="pt").to(
+                        torch.bfloat16, "cpu"
+                    )
 
                 # Try with text + image feature
                 encoding = image_processor(image_inputs, return_tensors="pt")
@@ -331,20 +423,35 @@ class ImageProcessingTestMixin:
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=False
+            )
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
-            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            encoded_images = image_processing(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(
+                    [image_inputs[0]]
+                )
+            )
+            self.assertEqual(
+                tuple(encoded_images.shape), (1, *expected_output_image_shape)
+            )
 
             # Test batched
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            encoded_images = image_processing(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(image_inputs)
+            )
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape),
+                (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
 
     def test_call_numpy(self):
@@ -352,20 +459,35 @@ class ImageProcessingTestMixin:
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=False, numpify=True
+            )
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
-            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            encoded_images = image_processing(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(
+                    [image_inputs[0]]
+                )
+            )
+            self.assertEqual(
+                tuple(encoded_images.shape), (1, *expected_output_image_shape)
+            )
 
             # Test batched
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            encoded_images = image_processing(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(image_inputs)
+            )
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape),
+                (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
 
     def test_call_pytorch(self):
@@ -373,19 +495,33 @@ class ImageProcessingTestMixin:
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=False, torchify=True
+            )
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Test not batched input
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
-            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            encoded_images = image_processing(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(
+                    [image_inputs[0]]
+                )
+            )
+            self.assertEqual(
+                tuple(encoded_images.shape), (1, *expected_output_image_shape)
+            )
 
             # Test batched
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(image_inputs)
+            )
+            encoded_images = image_processing(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
             self.assertEqual(
                 tuple(encoded_images.shape),
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
@@ -399,7 +535,9 @@ class ImageProcessingTestMixin:
 
             # create random numpy tensors
             self.image_processor_tester.num_channels = 4
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=False, numpify=True
+            )
 
             # Test not batched input
             encoded_images = image_processor(
@@ -409,8 +547,14 @@ class ImageProcessingTestMixin:
                 image_mean=0,
                 image_std=1,
             ).pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
-            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(
+                    [image_inputs[0]]
+                )
+            )
+            self.assertEqual(
+                tuple(encoded_images.shape), (1, *expected_output_image_shape)
+            )
 
             # Test batched
             encoded_images = image_processor(
@@ -420,9 +564,12 @@ class ImageProcessingTestMixin:
                 image_mean=0,
                 image_std=1,
             ).pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = (
+                self.image_processor_tester.expected_output_image_shape(image_inputs)
+            )
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape),
+                (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
 
     def test_image_processor_preprocess_arguments(self):
@@ -432,8 +579,12 @@ class ImageProcessingTestMixin:
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # validation done by _valid_processor_keys attribute
-            if hasattr(image_processor, "_valid_processor_keys") and hasattr(image_processor, "preprocess"):
-                preprocess_parameter_names = inspect.getfullargspec(image_processor.preprocess).args
+            if hasattr(image_processor, "_valid_processor_keys") and hasattr(
+                image_processor, "preprocess"
+            ):
+                preprocess_parameter_names = inspect.getfullargspec(
+                    image_processor.preprocess
+                ).args
                 preprocess_parameter_names.remove("self")
                 preprocess_parameter_names.sort()
                 valid_processor_keys = image_processor._valid_processor_keys
@@ -469,8 +620,12 @@ class AnnotationFormatTestMixin:
     # supported for the time being
 
     def test_processor_can_use_legacy_annotation_format(self):
-        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
-        fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
+        image_processor_dict = (
+            self.image_processor_tester.prepare_image_processor_dict()
+        )
+        fixtures_path = (
+            pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
+        )
 
         with open(fixtures_path / "coco_annotations.txt", "r") as f:
             detection_target = json.loads(f.read())
@@ -486,7 +641,11 @@ class AnnotationFormatTestMixin:
         with open(fixtures_path / "coco_panoptic_annotations.txt", "r") as f:
             panoptic_target = json.loads(f.read())
 
-        panoptic_annotations = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": panoptic_target}
+        panoptic_annotations = {
+            "file_name": "000000039769.png",
+            "image_id": 39769,
+            "segments_info": panoptic_target,
+        }
 
         masks_path = pathlib.Path(fixtures_path / "coco_panoptic")
 
@@ -522,17 +681,26 @@ class AnnotationFormatTestMixin:
 
         for annotation_format, params in test_cases:
             with self.subTest(annotation_format):
-                image_processor_params = {**image_processor_dict, **{"format": annotation_format}}
-                image_processor_first = self.image_processing_class(**image_processor_params)
+                image_processor_params = {
+                    **image_processor_dict,
+                    **{"format": annotation_format},
+                }
+                image_processor_first = self.image_processing_class(
+                    **image_processor_params
+                )
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     image_processor_first.save_pretrained(tmpdirname)
-                    image_processor_second = self.image_processing_class.from_pretrained(tmpdirname)
+                    image_processor_second = (
+                        self.image_processing_class.from_pretrained(tmpdirname)
+                    )
 
                 # check the 'format' key exists and that the dicts of the
                 # first and second processors are equal
                 self.assertIn("format", image_processor_first.to_dict().keys())
-                self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
+                self.assertEqual(
+                    image_processor_second.to_dict(), image_processor_first.to_dict()
+                )
 
                 # perform encoding using both processors and compare
                 # the resulting BatchFeatures

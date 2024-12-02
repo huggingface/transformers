@@ -101,7 +101,11 @@ class UnivNetConfig(PretrainedConfig):
         leaky_relu_slope=0.2,
         **kwargs,
     ):
-        if not (len(resblock_kernel_sizes) == len(resblock_stride_sizes) == len(resblock_dilation_sizes)):
+        if not (
+            len(resblock_kernel_sizes)
+            == len(resblock_stride_sizes)
+            == len(resblock_dilation_sizes)
+        ):
             raise ValueError(
                 "`resblock_kernel_sizes`, `resblock_stride_sizes`, and `resblock_dilation_sizes` must all have the"
                 " same length (which will be the number of resnet blocks in the model)."

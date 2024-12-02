@@ -82,7 +82,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             help="Optional flag to create new TensorFlow weights, even if they already exist.",
         )
         train_parser.add_argument(
-            "--no-pr", action="store_true", help="Optional flag to NOT open a PR with converted weights."
+            "--no-pr",
+            action="store_true",
+            help="Optional flag to NOT open a PR with converted weights.",
         )
         train_parser.add_argument(
             "--push",

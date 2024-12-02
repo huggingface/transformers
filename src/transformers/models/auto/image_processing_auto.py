@@ -23,7 +23,10 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...image_processing_utils import BaseImageProcessor, ImageProcessingMixin
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
@@ -49,7 +52,9 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, Tuple[Optional[str], Optional[str]]] = OrderedDict()
+    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[
+        str, Tuple[Optional[str], Optional[str]]
+    ] = OrderedDict()
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
@@ -68,7 +73,10 @@ else:
             ("convnextv2", ("ConvNextImageProcessor",)),
             ("cvt", ("ConvNextImageProcessor",)),
             ("data2vec-vision", ("BeitImageProcessor",)),
-            ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
+            (
+                "deformable_detr",
+                ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast"),
+            ),
             ("deit", ("DeiTImageProcessor",)),
             ("depth_anything", ("DPTImageProcessor",)),
             ("deta", ("DetaImageProcessor",)),
@@ -160,14 +168,23 @@ for model_type, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
         slow_image_processor_class = None
 
     # If the fast image processor is not defined, or torchvision is not available, we set it to None
-    if not fast_image_processor_class or fast_image_processor_class[0] is None or not is_torchvision_available():
+    if (
+        not fast_image_processor_class
+        or fast_image_processor_class[0] is None
+        or not is_torchvision_available()
+    ):
         fast_image_processor_class = None
     else:
         fast_image_processor_class = fast_image_processor_class[0]
 
-    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_image_processor_class, fast_image_processor_class)
+    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (
+        slow_image_processor_class,
+        fast_image_processor_class,
+    )
 
-IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
+IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES
+)
 
 
 def image_processor_class_from_name(class_name: str):
@@ -274,7 +291,9 @@ def get_image_processor_config(
             FutureWarning,
         )
         if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
         token = use_auth_token
 
     resolved_config_file = get_file_from_repo(
@@ -413,7 +432,9 @@ class AutoImageProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
         image_processor_class = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
@@ -424,16 +445,24 @@ class AutoImageProcessor:
         if image_processor_class is None and image_processor_auto_map is None:
             feature_extractor_class = config_dict.pop("feature_extractor_type", None)
             if feature_extractor_class is not None:
-                image_processor_class = feature_extractor_class.replace("FeatureExtractor", "ImageProcessor")
+                image_processor_class = feature_extractor_class.replace(
+                    "FeatureExtractor", "ImageProcessor"
+                )
             if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
-                feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
-                image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
+                feature_extractor_auto_map = config_dict["auto_map"][
+                    "AutoFeatureExtractor"
+                ]
+                image_processor_auto_map = feature_extractor_auto_map.replace(
+                    "FeatureExtractor", "ImageProcessor"
+                )
 
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_class is None and image_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
                 )
             # It could be in `config.image_processor_type``
             image_processor_class = getattr(config, "image_processor_type", None)
@@ -447,15 +476,24 @@ class AutoImageProcessor:
                     image_processor_class += "Fast"
                 elif not use_fast and image_processor_class.endswith("Fast"):
                     image_processor_class = image_processor_class[:-4]
-            image_processor_class = image_processor_class_from_name(image_processor_class)
+            image_processor_class = image_processor_class_from_name(
+                image_processor_class
+            )
 
         has_remote_code = image_processor_auto_map is not None
-        has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
+        has_local_code = (
+            image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
+        )
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code,
+            has_remote_code,
         )
 
-        if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
+        if image_processor_auto_map is not None and not isinstance(
+            image_processor_auto_map, tuple
+        ):
             # In some configs, only the slow image processor class is stored
             image_processor_auto_map = (image_processor_auto_map, None)
 
@@ -467,7 +505,9 @@ class AutoImageProcessor:
                 class_ref = image_processor_auto_map[1]
             else:
                 class_ref = image_processor_auto_map[0]
-            image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            image_processor_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, **kwargs
+            )
             _ = kwargs.pop("code_revision", None)
             if os.path.isdir(pretrained_model_name_or_path):
                 image_processor_class.register_for_auto_class()
@@ -483,11 +523,17 @@ class AutoImageProcessor:
             if not use_fast and image_processor_class_fast is not None:
                 _warning_fast_image_processor_available(image_processor_class_fast)
 
-            if image_processor_class_fast and (use_fast or image_processor_class_py is None):
-                return image_processor_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            if image_processor_class_fast and (
+                use_fast or image_processor_class_py is None
+            ):
+                return image_processor_class_fast.from_pretrained(
+                    pretrained_model_name_or_path, *inputs, **kwargs
+                )
             else:
                 if image_processor_class_py is not None:
-                    return image_processor_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    return image_processor_class_py.from_pretrained(
+                        pretrained_model_name_or_path, *inputs, **kwargs
+                    )
                 else:
                     raise ValueError(
                         "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
@@ -517,7 +563,9 @@ class AutoImageProcessor:
         """
         if image_processor_class is not None:
             if slow_image_processor_class is not None:
-                raise ValueError("Cannot specify both image_processor_class and slow_image_processor_class")
+                raise ValueError(
+                    "Cannot specify both image_processor_class and slow_image_processor_class"
+                )
             warnings.warn(
                 "The image_processor_class argument is deprecated and will be removed in v4.42. Please use `slow_image_processor_class`, or `fast_image_processor_class` instead",
                 FutureWarning,
@@ -525,17 +573,28 @@ class AutoImageProcessor:
             slow_image_processor_class = image_processor_class
 
         if slow_image_processor_class is None and fast_image_processor_class is None:
-            raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
-        if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
-            raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
-        if fast_image_processor_class is not None and issubclass(fast_image_processor_class, BaseImageProcessor):
-            raise ValueError("You passed a slow image processor in as the `fast_image_processor_class`.")
+            raise ValueError(
+                "You need to specify either slow_image_processor_class or fast_image_processor_class"
+            )
+        if slow_image_processor_class is not None and issubclass(
+            slow_image_processor_class, BaseImageProcessorFast
+        ):
+            raise ValueError(
+                "You passed a fast image processor in as the `slow_image_processor_class`."
+            )
+        if fast_image_processor_class is not None and issubclass(
+            fast_image_processor_class, BaseImageProcessor
+        ):
+            raise ValueError(
+                "You passed a slow image processor in as the `fast_image_processor_class`."
+            )
 
         if (
             slow_image_processor_class is not None
             and fast_image_processor_class is not None
             and issubclass(fast_image_processor_class, BaseImageProcessorFast)
-            and fast_image_processor_class.slow_image_processor_class != slow_image_processor_class
+            and fast_image_processor_class.slow_image_processor_class
+            != slow_image_processor_class
         ):
             raise ValueError(
                 "The fast processor class you are passing has a `slow_image_processor_class` attribute that is not "
@@ -553,5 +612,7 @@ class AutoImageProcessor:
                 fast_image_processor_class = existing_fast
 
         IMAGE_PROCESSOR_MAPPING.register(
-            config_class, (slow_image_processor_class, fast_image_processor_class), exist_ok=exist_ok
+            config_class,
+            (slow_image_processor_class, fast_image_processor_class),
+            exist_ok=exist_ok,
         )

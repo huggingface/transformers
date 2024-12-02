@@ -84,7 +84,11 @@ class UdopConfig(PretrainedConfig):
 
     model_type = "udop"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+    }
 
     def __init__(
         self,
@@ -97,7 +101,11 @@ class UdopConfig(PretrainedConfig):
         num_heads=16,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
-        relative_bias_args=[{"type": "1d"}, {"type": "horizontal"}, {"type": "vertical"}],
+        relative_bias_args=[
+            {"type": "1d"},
+            {"type": "horizontal"},
+            {"type": "vertical"},
+        ],
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,

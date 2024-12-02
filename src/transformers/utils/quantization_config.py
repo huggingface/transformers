@@ -25,7 +25,13 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, is_torchao_available, logging
+from ..utils import (
+    is_auto_awq_available,
+    is_hqq_available,
+    is_torch_available,
+    is_torchao_available,
+    logging,
+)
 
 
 if is_torch_available():
@@ -183,7 +189,9 @@ class QuantizationConfigMixin:
                 to_remove.append(key)
 
         # Remove all the attributes that were updated, without modifying the input dict
-        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        unused_kwargs = {
+            key: value for key, value in kwargs.items() if key not in to_remove
+        }
         return unused_kwargs
 
 
@@ -226,12 +234,15 @@ class HqqConfig(QuantizationConfigMixin):
         for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
             if deprecated_key in kwargs:
                 logger.info(
-                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
+                    deprecated_key
+                    + " is deprecated. This parameter will be ignored in quantization settings."
                 )
 
         if axis is None:
             axis = 1
-            logger.info("Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it.")
+            logger.info(
+                "Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it."
+            )
 
         if axis not in [0, 1]:
             raise ValueError("Invalid axis value. Only 0 and 1 are allowed.")
@@ -378,7 +389,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
 
         if load_in_4bit and load_in_8bit:
-            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
+            raise ValueError(
+                "load_in_4bit and load_in_8bit are both True, but only one can be used at the same time"
+            )
 
         self._load_in_8bit = load_in_8bit
         self._load_in_4bit = load_in_4bit
@@ -401,7 +414,14 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if bnb_4bit_quant_storage is None:
             self.bnb_4bit_quant_storage = torch.uint8
         elif isinstance(bnb_4bit_quant_storage, str):
-            if bnb_4bit_quant_storage not in ["float16", "float32", "int8", "uint8", "float64", "bfloat16"]:
+            if bnb_4bit_quant_storage not in [
+                "float16",
+                "float32",
+                "int8",
+                "uint8",
+                "float64",
+                "bfloat16",
+            ]:
                 raise ValueError(
                     "`bnb_4bit_quant_storage` must be a valid string (one of 'float16', 'float32', 'int8', 'uint8', 'float64', 'bfloat16') "
                 )
@@ -412,7 +432,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise ValueError("bnb_4bit_quant_storage must be a string or a torch.dtype")
 
         if kwargs:
-            logger.warning(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
+            logger.warning(
+                f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}."
+            )
 
         self.post_init()
 
@@ -426,7 +448,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise TypeError("load_in_4bit must be a boolean")
 
         if self.load_in_8bit and value:
-            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
+            raise ValueError(
+                "load_in_4bit and load_in_8bit are both True, but only one can be used at the same time"
+            )
         self._load_in_4bit = value
 
     @property
@@ -439,7 +463,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise TypeError("load_in_8bit must be a boolean")
 
         if self.load_in_4bit and value:
-            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
+            raise ValueError(
+                "load_in_4bit and load_in_8bit are both True, but only one can be used at the same time"
+            )
         self._load_in_8bit = value
 
     def post_init(self):
@@ -455,7 +481,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if not isinstance(self.llm_int8_threshold, float):
             raise TypeError("llm_int8_threshold must be a float")
 
-        if self.llm_int8_skip_modules is not None and not isinstance(self.llm_int8_skip_modules, list):
+        if self.llm_int8_skip_modules is not None and not isinstance(
+            self.llm_int8_skip_modules, list
+        ):
             raise TypeError("llm_int8_skip_modules must be a list of strings")
         if not isinstance(self.llm_int8_enable_fp32_cpu_offload, bool):
             raise TypeError("llm_int8_enable_fp32_cpu_offload must be a boolean")
@@ -463,7 +491,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if not isinstance(self.llm_int8_has_fp16_weight, bool):
             raise TypeError("llm_int8_has_fp16_weight must be a boolean")
 
-        if self.bnb_4bit_compute_dtype is not None and not isinstance(self.bnb_4bit_compute_dtype, torch.dtype):
+        if self.bnb_4bit_compute_dtype is not None and not isinstance(
+            self.bnb_4bit_compute_dtype, torch.dtype
+        ):
             raise TypeError("bnb_4bit_compute_dtype must be torch.dtype")
 
         if not isinstance(self.bnb_4bit_quant_type, str):
@@ -472,9 +502,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
 
-        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
-        ):
+        if self.load_in_4bit and not version.parse(
+            importlib.metadata.version("bitsandbytes")
+        ) >= version.parse("0.39.0"):
             raise ValueError(
                 "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
             )
@@ -505,8 +535,12 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
-        output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
-        output["bnb_4bit_quant_storage"] = str(output["bnb_4bit_quant_storage"]).split(".")[1]
+        output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(
+            "."
+        )[1]
+        output["bnb_4bit_quant_storage"] = str(output["bnb_4bit_quant_storage"]).split(
+            "."
+        )[1]
         output["load_in_4bit"] = self.load_in_4bit
         output["load_in_8bit"] = self.load_in_8bit
 
@@ -654,8 +688,16 @@ class GPTQConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "use_exllama", "exllama_config", "use_cuda_fp16", "max_input_length"]
-        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        loading_attibutes = [
+            "disable_exllama",
+            "use_exllama",
+            "exllama_config",
+            "use_cuda_fp16",
+            "max_input_length",
+        ]
+        loading_attibutes_dict = {
+            i: j for i, j in attibutes_dict.items() if i in loading_attibutes
+        }
         return loading_attibutes_dict
 
     def post_init(self):
@@ -663,7 +705,9 @@ class GPTQConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         if self.bits not in [2, 3, 4, 8]:
-            raise ValueError(f"Only support quantization to [2,3,4,8] bits but found {self.bits}")
+            raise ValueError(
+                f"Only support quantization to [2,3,4,8] bits but found {self.bits}"
+            )
         if self.group_size != -1 and self.group_size <= 0:
             raise ValueError("group_size must be greater than 0 or equal to -1")
         if not (0 < self.damp_percent < 1):
@@ -699,14 +743,19 @@ class GPTQConfig(QuantizationConfigMixin):
             self.disable_exllama = None
         elif self.disable_exllama is not None and self.use_exllama is not None:
             # Only happens if user explicitly passes in both arguments
-            raise ValueError("Cannot specify both `disable_exllama` and `use_exllama`. Please use just `use_exllama`")
+            raise ValueError(
+                "Cannot specify both `disable_exllama` and `use_exllama`. Please use just `use_exllama`"
+            )
 
         if self.exllama_config is None:
             self.exllama_config = {"version": ExllamaVersion.ONE}
         else:
             if "version" not in self.exllama_config:
                 raise ValueError("`exllama_config` needs to have a `version` key.")
-            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+            elif self.exllama_config["version"] not in [
+                ExllamaVersion.ONE,
+                ExllamaVersion.TWO,
+            ]:
                 exllama_version = self.exllama_config["version"]
                 raise ValueError(
                     f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
@@ -720,8 +769,12 @@ class GPTQConfig(QuantizationConfigMixin):
                 )
             elif self.exllama_config["version"] == ExllamaVersion.TWO:
                 optimum_version = version.parse(importlib.metadata.version("optimum"))
-                autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
-                if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                autogptq_version = version.parse(
+                    importlib.metadata.version("auto_gptq")
+                )
+                if optimum_version <= version.parse(
+                    "1.13.2"
+                ) or autogptq_version <= version.parse("0.4.2"):
                     raise ValueError(
                         f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
@@ -834,7 +887,10 @@ class AwqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        if self.backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]:
+        if self.backend not in [
+            AwqBackendPackingMethod.AUTOAWQ,
+            AwqBackendPackingMethod.LLMAWQ,
+        ]:
             raise ValueError(
                 f"Only supported quantization backends in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
             )
@@ -854,7 +910,9 @@ class AwqConfig(QuantizationConfigMixin):
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if major < 8:
-                raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")
+                raise ValueError(
+                    "LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0"
+                )
 
         if self.do_fuse and self.fuse_max_seq_len is None:
             raise ValueError(
@@ -865,9 +923,9 @@ class AwqConfig(QuantizationConfigMixin):
             awq_version_supports_fusing = False
             MIN_AWQ_VERSION = "0.1.7"
             if is_auto_awq_available():
-                awq_version_supports_fusing = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
-                    MIN_AWQ_VERSION
-                )
+                awq_version_supports_fusing = version.parse(
+                    importlib.metadata.version("autoawq")
+                ) >= version.parse(MIN_AWQ_VERSION)
 
             if not awq_version_supports_fusing:
                 raise ValueError(
@@ -906,9 +964,9 @@ class AwqConfig(QuantizationConfigMixin):
             awq_version_supports_exllama = False
             MIN_AWQ_VERSION = "0.2.0"
             if is_auto_awq_available():
-                awq_version_supports_exllama = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
-                    MIN_AWQ_VERSION
-                )
+                awq_version_supports_exllama = version.parse(
+                    importlib.metadata.version("autoawq")
+                ) >= version.parse(MIN_AWQ_VERSION)
 
             if not awq_version_supports_exllama:
                 raise ValueError(
@@ -917,11 +975,18 @@ class AwqConfig(QuantizationConfigMixin):
                 )
 
             if self.exllama_config is None:
-                self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
+                self.exllama_config = {
+                    "version": ExllamaVersion.TWO,
+                    "max_input_len": 2048,
+                    "max_batch_size": 8,
+                }
             else:
                 if "version" not in self.exllama_config:
                     raise ValueError("`exllama_config` needs to have a `version` key.")
-                elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+                elif self.exllama_config["version"] not in [
+                    ExllamaVersion.ONE,
+                    ExllamaVersion.TWO,
+                ]:
                     exllama_version = self.exllama_config["version"]
                     raise ValueError(
                         f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
@@ -929,8 +994,16 @@ class AwqConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["version", "do_fuse", "modules_to_fuse", "fuse_max_seq_len", "exllama_config"]
-        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        loading_attibutes = [
+            "version",
+            "do_fuse",
+            "modules_to_fuse",
+            "fuse_max_seq_len",
+            "exllama_config",
+        ]
+        loading_attibutes_dict = {
+            i: j for i, j in attibutes_dict.items() if i in loading_attibutes
+        }
         return loading_attibutes_dict
 
 
@@ -1030,9 +1103,13 @@ class QuantoConfig(QuantizationConfigMixin):
         accepted_weights = ["float8", "int8", "int4", "int2"]
         accepted_activations = [None, "int8", "float8"]
         if self.weights not in accepted_weights:
-            raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+            raise ValueError(
+                f"Only support weights in {accepted_weights} but found {self.weights}"
+            )
         if self.activations not in accepted_activations:
-            raise ValueError(f"Only support weights in {accepted_activations} but found {self.activations}")
+            raise ValueError(
+                f"Only support weights in {accepted_activations} but found {self.activations}"
+            )
 
 
 @dataclass
@@ -1066,7 +1143,9 @@ class EetqConfig(QuantizationConfigMixin):
         """
         accepted_weights = ["int8"]
         if self.weights not in accepted_weights:
-            raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+            raise ValueError(
+                f"Only support weights in {accepted_weights} but found {self.weights}"
+            )
 
 
 class CompressedTensorsConfig(QuantizationConfigMixin):
@@ -1094,7 +1173,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
+        config_groups: Dict[
+            str, Union["QuantizationScheme", List[str]]
+        ] = None,  # noqa: F821
         format: str = "dense",
         quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
         kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
@@ -1156,15 +1237,23 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 **config_dict["quantization_config"],
             )
 
-        return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
+        return super().from_dict(
+            config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
-        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+        quantization_config = (
+            self.quantization_config.dict()
+            if self.quantization_config is not None
+            else None
+        )
+        sparsity_config = (
+            self.sparsity_config.dict() if self.sparsity_config is not None else None
+        )
 
         return {
             "quantization_config": quantization_config,
@@ -1220,7 +1309,9 @@ class FbgemmFp8Config(QuantizationConfigMixin):
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
         loading_attibutes = ["activation_scale_ub"]
-        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        loading_attibutes_dict = {
+            i: j for i, j in attibutes_dict.items() if i in loading_attibutes
+        }
         return loading_attibutes_dict
 
 
@@ -1248,7 +1339,9 @@ class TorchAoConfig(QuantizationConfigMixin):
     ```
     """
 
-    def __init__(self, quant_type: str, modules_to_not_convert: Optional[List] = None, **kwargs):
+    def __init__(
+        self, quant_type: str, modules_to_not_convert: Optional[List] = None, **kwargs
+    ):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
@@ -1265,7 +1358,9 @@ class TorchAoConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if is_torchao_available():
-            if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
+            if not version.parse(
+                importlib.metadata.version("torchao")
+            ) >= version.parse("0.4.0"):
                 raise ValueError("Requires torchao 0.4.0 version and above")
         else:
             raise ValueError(

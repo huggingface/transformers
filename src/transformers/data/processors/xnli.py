@@ -37,7 +37,9 @@ class XnliProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         """See base class."""
         lg = self.language if self.train_language is None else self.train_language
-        lines = self._read_tsv(os.path.join(data_dir, f"XNLI-MT-1.0/multinli/multinli.train.{lg}.tsv"))
+        lines = self._read_tsv(
+            os.path.join(data_dir, f"XNLI-MT-1.0/multinli/multinli.train.{lg}.tsv")
+        )
         examples = []
         for i, line in enumerate(lines):
             if i == 0:
@@ -52,7 +54,9 @@ class XnliProcessor(DataProcessor):
                 raise TypeError(f"Training input {text_b} is not a string")
             if not isinstance(label, str):
                 raise TypeError(f"Training label {label} is not a string")
-            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label)
+            )
         return examples
 
     def get_test_examples(self, data_dir):
@@ -75,7 +79,9 @@ class XnliProcessor(DataProcessor):
                 raise TypeError(f"Training input {text_b} is not a string")
             if not isinstance(label, str):
                 raise TypeError(f"Training label {label} is not a string")
-            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label)
+            )
         return examples
 
     def get_labels(self):

@@ -85,8 +85,14 @@ class AutoQuantizationConfig:
     def from_dict(cls, quantization_config_dict: Dict):
         quant_method = quantization_config_dict.get("quant_method", None)
         # We need a special care for bnb models to make sure everything is BC ..
-        if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
-            suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
+        if quantization_config_dict.get(
+            "load_in_8bit", False
+        ) or quantization_config_dict.get("load_in_4bit", False):
+            suffix = (
+                "_4bit"
+                if quantization_config_dict.get("load_in_4bit", False)
+                else "_8bit"
+            )
             quant_method = QuantizationMethod.BITS_AND_BYTES + suffix
         elif quant_method is None:
             raise ValueError(
@@ -104,7 +110,9 @@ class AutoQuantizationConfig:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        model_config = AutoConfig.from_pretrained(
+            pretrained_model_name_or_path, **kwargs
+        )
         if getattr(model_config, "quantization_config", None) is None:
             raise ValueError(
                 f"Did not found a `quantization_config` in {pretrained_model_name_or_path}. Make sure that the model is correctly quantized."
@@ -123,7 +131,9 @@ class AutoHfQuantizer:
     """
 
     @classmethod
-    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, Dict], **kwargs):
+    def from_config(
+        cls, quantization_config: Union[QuantizationConfigMixin, Dict], **kwargs
+    ):
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
@@ -149,7 +159,9 @@ class AutoHfQuantizer:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        quantization_config = AutoQuantizationConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        quantization_config = AutoQuantizationConfig.from_pretrained(
+            pretrained_model_name_or_path, **kwargs
+        )
         return cls.from_config(quantization_config)
 
     @classmethod

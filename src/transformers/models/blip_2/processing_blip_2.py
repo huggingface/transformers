@@ -128,12 +128,16 @@ class Blip2Processor(ProcessorMixin):
             if isinstance(text, str):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+                raise ValueError(
+                    "Invalid input text. Please provide a string, or a list of strings"
+                )
 
             text_encoding = {}
 
             return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-            _text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+            _text_encoding = self.tokenizer(
+                text, **output_kwargs["text_kwargs"], return_tensors=None
+            )
             output_kwargs["text_kwargs"]["return_tensors"] = return_tensors
 
             # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
@@ -141,12 +145,16 @@ class Blip2Processor(ProcessorMixin):
             if self.num_query_tokens is not None:
                 image_tokens = self.image_token.content * self.num_query_tokens
                 image_token_encoding = self.tokenizer(
-                    [image_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                    [image_tokens] * len(text),
+                    add_special_tokens=False,
+                    return_tensors=None,
                 )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding
-                        for img_encoding, txt_encoding in zip(image_token_encoding[k], _text_encoding[k])
+                        for img_encoding, txt_encoding in zip(
+                            image_token_encoding[k], _text_encoding[k]
+                        )
                     ]
             else:
                 text_encoding = _text_encoding
@@ -162,7 +170,9 @@ class Blip2Processor(ProcessorMixin):
         # else, return the text encoding.
 
         if images is not None:
-            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_encoding = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
             encoding.update(image_encoding)
         return encoding
 

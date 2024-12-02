@@ -50,7 +50,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # FIXME - just load the processor directly from the checkpoint
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/pixtral-12b")
         image_processor = PixtralImageProcessor()
-        processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = PixtralProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
@@ -70,7 +72,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             },
         ]
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True
+        )
         self.assertEqual(expected_prompt, formatted_prompt)
 
     @unittest.skip("No chat template was set for this model (yet)")
@@ -107,7 +111,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.image_processor.patch_size = {"height": 2, "width": 2}
 
         # Test passing in an image
-        inputs_image = processor(text=prompt_string, images=self.image_0, return_tensors="pt")
+        inputs_image = processor(
+            text=prompt_string, images=self.image_0, return_tensors="pt"
+        )
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 1)
         self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
@@ -127,7 +133,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
         # Test passing in a url
-        inputs_url = processor(text=prompt_string, images=self.url_0, return_tensors="pt")
+        inputs_url = processor(
+            text=prompt_string, images=self.url_0, return_tensors="pt"
+        )
         self.assertIn("input_ids", inputs_url)
         self.assertTrue(len(inputs_url["input_ids"]) == 1)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
@@ -155,7 +163,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.image_processor.patch_size = {"height": 2, "width": 2}
 
         # Test passing in an image
-        inputs_image = processor(text=prompt_string, images=[self.image_0, self.image_1], return_tensors="pt")
+        inputs_image = processor(
+            text=prompt_string, images=[self.image_0, self.image_1], return_tensors="pt"
+        )
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 1)
         self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
@@ -175,7 +185,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
         # Test passing in a url
-        inputs_url = processor(text=prompt_string, images=[self.url_0, self.url_1], return_tensors="pt")
+        inputs_url = processor(
+            text=prompt_string, images=[self.url_0, self.url_1], return_tensors="pt"
+        )
         self.assertIn("input_ids", inputs_url)
         self.assertTrue(len(inputs_url["input_ids"]) == 1)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
@@ -207,7 +219,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.image_processor.patch_size = {"height": 2, "width": 2}
 
         # Test passing in an image
-        inputs_image = processor(text=prompt_string, images=image_inputs, return_tensors="pt", padding=True)
+        inputs_image = processor(
+            text=prompt_string, images=image_inputs, return_tensors="pt", padding=True
+        )
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 2)
         self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
@@ -227,7 +241,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
         # Test passing in a url
-        inputs_url = processor(text=prompt_string, images=image_inputs, return_tensors="pt", padding=True)
+        inputs_url = processor(
+            text=prompt_string, images=image_inputs, return_tensors="pt", padding=True
+        )
         self.assertIn("input_ids", inputs_url)
         self.assertTrue(len(inputs_url["input_ids"]) == 2)
         self.assertIsInstance(inputs_url["input_ids"], torch.Tensor)
@@ -260,7 +276,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.image_processor.patch_size = {"height": 2, "width": 2}
 
         # Test passing in an image
-        inputs_image = processor(text=prompt_string, images=image_inputs, return_tensors="pt", padding=True)
+        inputs_image = processor(
+            text=prompt_string, images=image_inputs, return_tensors="pt", padding=True
+        )
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 5)
         self.assertTrue(len(inputs_image["pixel_values"]) == 5)

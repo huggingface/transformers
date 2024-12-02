@@ -88,7 +88,9 @@ def prepare_ref(lines: List[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokeni
 
     bert_res = []
     for i in range(0, len(lines), 100):
-        res = bert_tokenizer(lines[i : i + 100], add_special_tokens=True, truncation=True, max_length=512)
+        res = bert_tokenizer(
+            lines[i : i + 100], add_special_tokens=True, truncation=True, max_length=512
+        )
         bert_res.extend(res["input_ids"])
     assert len(bert_res) == len(lines)
 
@@ -119,7 +121,9 @@ def main(args):
     # If we want to fine-tune these model, we have to use same tokenizer : LTP (https://github.com/HIT-SCIR/ltp)
     with open(args.file_name, "r", encoding="utf-8") as f:
         data = f.readlines()
-    data = [line.strip() for line in data if len(line) > 0 and not line.isspace()]  # avoid delimiter like '\u2029'
+    data = [
+        line.strip() for line in data if len(line) > 0 and not line.isspace()
+    ]  # avoid delimiter like '\u2029'
     ltp_tokenizer = LTP(args.ltp)  # faster in GPU device
     bert_tokenizer = BertTokenizer.from_pretrained(args.bert)
 
@@ -139,10 +143,20 @@ if __name__ == "__main__":
         help="file need process, same as training data in lm",
     )
     parser.add_argument(
-        "--ltp", type=str, default="./resources/ltp", help="resources for LTP tokenizer, usually a path"
+        "--ltp",
+        type=str,
+        default="./resources/ltp",
+        help="resources for LTP tokenizer, usually a path",
     )
-    parser.add_argument("--bert", type=str, default="./resources/robert", help="resources for Bert tokenizer")
-    parser.add_argument("--save_path", type=str, default="./resources/ref.txt", help="path to save res")
+    parser.add_argument(
+        "--bert",
+        type=str,
+        default="./resources/robert",
+        help="resources for Bert tokenizer",
+    )
+    parser.add_argument(
+        "--save_path", type=str, default="./resources/ref.txt", help="path to save res"
+    )
 
     args = parser.parse_args()
     main(args)

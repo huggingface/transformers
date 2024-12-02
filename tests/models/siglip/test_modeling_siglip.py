@@ -59,7 +59,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
+    from transformers import (
+        SiglipForImageClassification,
+        SiglipModel,
+        SiglipTextModel,
+        SiglipVisionModel,
+    )
 
 if is_torch_sdpa_available():
     from torch.nn.attention import SDPBackend, sdpa_kernel
@@ -73,7 +78,9 @@ if is_vision_available():
 class SiglipModelTesterMixin(ModelTesterMixin):
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -93,11 +100,21 @@ class SiglipModelTesterMixin(ModelTesterMixin):
             # SigLip has one shared cls attr for all models, so we assign both submodels heer
             vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
 
-            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "text_model"):
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
-                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
+            if hasattr(model_sdpa, "vision_model") and hasattr(
+                model_sdpa, "text_model"
+            ):
+                self.assertTrue(
+                    model_sdpa.vision_model.config._attn_implementation == vision_attn
+                )
+                self.assertTrue(
+                    model_sdpa.text_model.config._attn_implementation == text_attn
+                )
+                self.assertTrue(
+                    model_eager.vision_model.config._attn_implementation == "eager"
+                )
+                self.assertTrue(
+                    model_eager.text_model.config._attn_implementation == "eager"
+                )
 
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
@@ -105,7 +122,9 @@ class SiglipModelTesterMixin(ModelTesterMixin):
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
                 if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    raise ValueError("The eager model should not have SDPA attention layers")
+                    raise ValueError(
+                        "The eager model should not have SDPA attention layers"
+                    )
 
             has_sdpa = False
             for name, submodule in model_sdpa.named_modules():
@@ -120,15 +139,26 @@ class SiglipModelTesterMixin(ModelTesterMixin):
         self,
         torch_dtype: str,
         use_attention_mask_options: Tuple[bool, ...] = (True, False),
-        logit_keys: Tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
+        logit_keys: Tuple[str, ...] = (
+            "logits_per_image",
+            "logits_per_text",
+            "image_embeds",
+            "text_embeds",
+        ),
     ):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(
+            torch_device
+        ):
+            self.skipTest(
+                f"float16 not supported on {torch_device} (on the specific device currently used)"
+            )
 
-        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(
+            torch_device
+        ):
             self.skipTest(
                 f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
             )
@@ -159,14 +189,18 @@ class SiglipModelTesterMixin(ModelTesterMixin):
             return f"{msg} {current_case}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
                 # Load the model with SDPA
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch_dtype
+                )
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 # Load model with eager attention
@@ -187,7 +221,11 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                     SDPBackend.MATH,
                     [SDPBackend.FLASH_ATTENTION, SDPBackend.MATH],
                     [SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
-                    [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
+                    [
+                        SDPBackend.FLASH_ATTENTION,
+                        SDPBackend.EFFICIENT_ATTENTION,
+                        SDPBackend.MATH,
+                    ],
                 ]
                 for batch_size in [1, 5]
             ]
@@ -198,7 +236,9 @@ class SiglipModelTesterMixin(ModelTesterMixin):
 
                 # convert to torch_dtype
                 if "pixel_values" in processed_inputs:
-                    processed_inputs["pixel_values"] = processed_inputs["pixel_values"].to(torch_dtype)
+                    processed_inputs["pixel_values"] = processed_inputs[
+                        "pixel_values"
+                    ].to(torch_dtype)
 
                 # slice for different batch sizes
                 for key in ["pixel_values", "input_ids", "attention_mask"]:
@@ -217,9 +257,7 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 processed_inputs["output_attentions"] = output_attentions
                 processed_inputs["output_hidden_states"] = True
 
-                current_case = (
-                    f"padding_side=left, use_mask={use_mask}, batch_size={batch_size}, sdpa_backend={sdpa_backend}"
-                )
+                current_case = f"padding_side=left, use_mask={use_mask}, batch_size={batch_size}, sdpa_backend={sdpa_backend}"
 
                 prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
 
@@ -240,9 +278,15 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                         eager_logits = eager_logits[:, 1:]
                         sdpa_logits = sdpa_logits[:, 1:]
 
-                    is_close = torch.allclose(eager_logits, sdpa_logits, atol=atol, rtol=rtol)
+                    is_close = torch.allclose(
+                        eager_logits, sdpa_logits, atol=atol, rtol=rtol
+                    )
                     if not is_close:
-                        fail_cases.append(get_mean_reldiff(key, current_case, sdpa_logits, eager_logits, atol, rtol))
+                        fail_cases.append(
+                            get_mean_reldiff(
+                                key, current_case, sdpa_logits, eager_logits, atol, rtol
+                            )
+                        )
 
             self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
@@ -286,7 +330,9 @@ class SiglipVisionModelTester:
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPVisionModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -314,9 +360,16 @@ class SiglipVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPVisionModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
@@ -348,7 +401,10 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=SiglipVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -399,15 +455,21 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -509,8 +571,13 @@ class SiglipTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
@@ -531,7 +598,9 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SiglipTextConfig, hidden_size=37
+        )
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
     def test_config(self):
@@ -563,17 +632,23 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_save_load_fast_init_from_base
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_save_load_fast_init_to_base
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -609,13 +684,19 @@ class SiglipModelTester:
         self.parent = parent
         self.text_model_tester = SiglipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = SiglipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -632,10 +713,12 @@ class SiglipModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -653,7 +736,9 @@ class SiglipModelTester:
 @require_torch
 class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": SiglipModel} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -669,7 +754,9 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = SiglipModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SiglipConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=SiglipConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -699,7 +786,9 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -751,10 +840,14 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -783,7 +876,9 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = SiglipVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save SiglipConfig and check if we can load SiglipTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -804,35 +899,59 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(
+                    f"{model_class.__name__} does not support Flash Attention 2"
+                )
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation="flash_attention_2",
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
                 dummy_input_ids = inputs_dict["input_ids"]
 
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
+                outputs = model(
+                    pixel_values=dummy_pixel_values,
+                    input_ids=dummy_input_ids,
+                    output_hidden_states=True,
+                )
                 outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
+                    pixel_values=dummy_pixel_values,
+                    input_ids=dummy_input_ids,
+                    output_hidden_states=True,
                 )
 
                 self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
+                    torch.allclose(
+                        outputs.logits_per_image,
+                        outputs_fa.logits_per_image,
+                        atol=4e-2,
+                        rtol=4e-2,
+                    ),
                     f"Image logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
                 )
                 self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
+                    torch.allclose(
+                        outputs.logits_per_text,
+                        outputs_fa.logits_per_text,
+                        atol=4e-2,
+                        rtol=4e-2,
+                    ),
                     f"Text logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
                 )
 
@@ -857,11 +976,21 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
                 )
 
                 self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
+                    torch.allclose(
+                        outputs.logits_per_image,
+                        outputs_fa.logits_per_image,
+                        atol=4e-2,
+                        rtol=4e-2,
+                    ),
                     f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
                 )
                 self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
+                    torch.allclose(
+                        outputs.logits_per_text,
+                        outputs_fa.logits_per_text,
+                        atol=4e-2,
+                        rtol=4e-2,
+                    ),
                     f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
                 )
 
@@ -887,7 +1016,12 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
-            logit_keys=("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
+            logit_keys=(
+                "logits_per_image",
+                "logits_per_text",
+                "image_embeds",
+                "text_embeds",
+            ),
             use_attention_mask_options=(False, True),
         )
 
@@ -918,9 +1052,15 @@ class SiglipForImageClassificationModelTester(SiglipModelTester):
 
 
 @require_torch
-class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class SiglipForImageClassificationModelTest(
+    SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (SiglipForImageClassification,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-classification": SiglipForImageClassification} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-classification": SiglipForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -945,19 +1085,27 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(
+        reason="SiglipForImageClassification does not support gradient checkpointing yet"
+    )
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(
+        reason="SiglipForImageClassification does not support gradient checkpointing yet"
+    )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(
+        reason="SiglipForImageClassification does not support gradient checkpointing yet"
+    )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -967,7 +1115,9 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype, logit_keys=("logits",), use_attention_mask_options=(False,)
+            torch_dtype=torch_dtype,
+            logit_keys=("logits",),
+            use_attention_mask_options=(False,),
         )
 
     @require_torch_sdpa
@@ -993,7 +1143,10 @@ class SiglipModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         inputs = processor(
-            text=["a photo of 2 cats", "a photo of 2 dogs"], images=image, padding="max_length", return_tensors="pt"
+            text=["a photo of 2 cats", "a photo of 2 dogs"],
+            images=image,
+            padding="max_length",
+            return_tensors="pt",
         ).to(torch_device)
 
         # forward pass
@@ -1014,7 +1167,9 @@ class SiglipModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[-0.7567, -10.3354]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3)
+        )
 
         # verify the probs
         probs = torch.sigmoid(logits_per_image)  # these are the probabilities
@@ -1028,9 +1183,13 @@ class SiglipModelIntegrationTest(unittest.TestCase):
 
         # 640 x 480 image
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = SiglipProcessor.from_pretrained(model_name, do_resize=False, size={"height": 480, "width": 640})
+        processor = SiglipProcessor.from_pretrained(
+            model_name, do_resize=False, size={"height": 480, "width": 640}
+        )
 
-        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            text="what's in the image", images=image, return_tensors="pt"
+        ).to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -1041,4 +1200,6 @@ class SiglipModelIntegrationTest(unittest.TestCase):
         # batch size 1, (640/16) * (480/16) = 1200 patches, 768 hidden size
         expected_shape = torch.Size((1, 1200, 768))
 
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+        self.assertEqual(
+            outputs.vision_model_output.last_hidden_state.shape, expected_shape
+        )

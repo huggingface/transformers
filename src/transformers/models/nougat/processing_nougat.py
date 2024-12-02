@@ -18,7 +18,11 @@ Processor class for Nougat.
 
 from typing import Dict, List, Optional, Union
 
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
+from transformers.tokenization_utils_base import (
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 
 from ...processing_utils import ProcessorMixin
 from ...utils import PaddingStrategy, TensorType
@@ -63,11 +67,21 @@ class NougatProcessor(ProcessorMixin):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        input_data_format: Optional[
+            Union[str, "ChannelDimension"]
+        ] = None,  # noqa: F821
+        text_pair: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
+        text_target: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
         ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -86,7 +100,9 @@ class NougatProcessor(ProcessorMixin):
         verbose: bool = True,
     ):
         if images is None and text is None:
-            raise ValueError("You need to specify either an `images` or `text` input to process.")
+            raise ValueError(
+                "You need to specify either an `images` or `text` input to process."
+            )
 
         if images is not None:
             inputs = self.image_processor(

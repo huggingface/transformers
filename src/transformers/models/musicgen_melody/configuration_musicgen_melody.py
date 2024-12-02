@@ -118,11 +118,15 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.layerdrop = layerdrop
         self.use_cache = use_cache
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = (
+            scale_embedding  # scale factor will be sqrt(d_model) if True
+        )
         self.num_codebooks = num_codebooks
 
         if audio_channels not in [1, 2]:
-            raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {audio_channels} channels.")
+            raise ValueError(
+                f"Expected 1 (mono) or 2 (stereo) audio channels, got {audio_channels} channels."
+            )
         self.audio_channels = audio_channels
 
         super().__init__(
@@ -210,8 +214,14 @@ class MusicgenMelodyConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
+        if (
+            "text_encoder" not in kwargs
+            or "audio_encoder" not in kwargs
+            or "decoder" not in kwargs
+        ):
+            raise ValueError(
+                "Config has to be initialized with text_encoder, audio_encoder and decoder config"
+            )
 
         text_encoder_config = kwargs.pop("text_encoder")
         text_encoder_model_type = text_encoder_config.pop("model_type")
@@ -221,8 +231,12 @@ class MusicgenMelodyConfig(PretrainedConfig):
 
         decoder_config = kwargs.pop("decoder")
 
-        self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
-        self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
+        self.text_encoder = AutoConfig.for_model(
+            text_encoder_model_type, **text_encoder_config
+        )
+        self.audio_encoder = AutoConfig.for_model(
+            audio_encoder_model_type, **audio_encoder_config
+        )
         self.decoder = MusicgenMelodyDecoderConfig(**decoder_config)
         self.is_encoder_decoder = False
 

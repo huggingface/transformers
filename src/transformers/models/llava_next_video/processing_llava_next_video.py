@@ -22,7 +22,12 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (
+    PaddingStrategy,
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 from ...utils import TensorType, logging
 
 
@@ -94,13 +99,21 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
-        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
-        super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
+        self.image_token = (
+            tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        )
+        self.video_token = (
+            tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        )
+        super().__init__(
+            video_processor, image_processor, tokenizer, chat_template=chat_template
+        )
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
         images: ImageInput = None,
         videos: VideoInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -171,7 +184,9 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise ValueError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
 
         if self.patch_size is None or self.vision_feature_select_strategy is None:
             logger.warning_once(
@@ -185,7 +200,9 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             # images expand taking into account num_of_patches in each image
             if image_inputs:
                 image_sizes = iter(image_inputs["image_sizes"])
-                height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+                height, width = get_image_size(
+                    to_numpy_array(image_inputs["pixel_values"][0][0])
+                )
                 prompt_strings = []
                 for sample in text:
                     while self.image_token in sample:
@@ -193,12 +210,19 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                         if not isinstance(image_size, (list, tuple)):
                             # cast to list to avoid numerical precision errors when calculating unpadding
                             orig_height, orig_width = image_size.tolist()
-                        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                        num_image_tokens = self._get_number_of_features(
+                            orig_height, orig_width, height, width
+                        )
                         if self.vision_feature_select_strategy == "default":
                             num_image_tokens -= self.num_additional_image_tokens
-                        sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
+                        sample = sample.replace(
+                            self.image_token, "<placeholder>" * num_image_tokens, 1
+                        )
                     prompt_strings.append(sample)
-                text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+                text = [
+                    sample.replace("<placeholder>", self.image_token)
+                    for sample in prompt_strings
+                ]
 
             # videos are easier, simply get frames and multiply
             if videos_inputs:
@@ -207,11 +231,17 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
                 # no `self.num_additional_image_tokens` added because video always has a default feature selection strategy
-                num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
-                num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
+                num_image_tokens = (height // self.patch_size) * (
+                    width // self.patch_size
+                )
+                num_video_tokens = (
+                    num_image_tokens // 4 * num_frames
+                )  # divide by 4 needed for avg pooling layer
                 prompt_strings = []
                 for sample in text:
-                    sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
+                    sample = sample.replace(
+                        self.video_token, self.video_token * num_video_tokens
+                    )
                     prompt_strings.append(sample)
                 text = prompt_strings
 
@@ -225,26 +255,40 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
 
     # Copied from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_number_of_features
-    def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
+    def _get_number_of_features(
+        self, orig_height: int, orig_width: int, height: int, width: int
+    ) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
 
         height_best_resolution, width_best_resolution = select_best_resolution(
             [orig_height, orig_width], image_grid_pinpoints
         )
-        scale_height, scale_width = height_best_resolution // height, width_best_resolution // width
+        scale_height, scale_width = (
+            height_best_resolution // height,
+            width_best_resolution // width,
+        )
 
         patches_height = height // self.patch_size
         patches_width = width // self.patch_size
         unpadded_features, newline_features = self._get_unpadded_features(
-            orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
+            orig_height,
+            orig_width,
+            patches_height,
+            patches_width,
+            scale_height,
+            scale_width,
         )
         # The base patch covers the entire image (+1 for the CLS)
-        base_features = patches_height * patches_width + self.num_additional_image_tokens
+        base_features = (
+            patches_height * patches_width + self.num_additional_image_tokens
+        )
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 
     # Copied from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_unpadded_features
-    def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
+    def _get_unpadded_features(
+        self, height, width, patches_height, patches_width, scale_height, scale_width
+    ):
         """
         Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
         because it divided each image into patches depending on its resolution. Therefore we need to calculate how many

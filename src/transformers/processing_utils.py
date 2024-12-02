@@ -116,9 +116,15 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
     """
 
-    text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-    text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
-    text_pair_target: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    text_pair: Optional[
+        Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+    ]
+    text_target: Union[
+        TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+    ]
+    text_pair_target: Optional[
+        Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+    ]
     add_special_tokens: Optional[bool]
     padding: Union[bool, str, PaddingStrategy]
     truncation: Union[bool, str, TruncationStrategy]
@@ -270,7 +276,9 @@ class AudioKwargs(TypedDict, total=False):
     """
 
     sampling_rate: Optional[int]
-    raw_speech: Optional[Union["np.ndarray", List[float], List["np.ndarray"], List[List[float]]]]
+    raw_speech: Optional[
+        Union["np.ndarray", List[float], List["np.ndarray"], List[List[float]]]
+    ]
     padding: Optional[Union[bool, str, PaddingStrategy]]
     max_length: Optional[int]
     truncation: Optional[bool]
@@ -282,7 +290,9 @@ class CommonKwargs(TypedDict, total=False):
     return_tensors: Optional[Union[str, TensorType]]
 
 
-class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, total=False):
+class ProcessingKwargs(
+    TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, total=False
+):
     """
     Base class for kwargs passing to processors.
     A model should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
@@ -379,7 +389,9 @@ class ProcessorMixin(PushToHubMixin):
             # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
             class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
             if isinstance(class_name, tuple):
-                proper_class = tuple(getattr(transformers_module, n) for n in class_name if n is not None)
+                proper_class = tuple(
+                    getattr(transformers_module, n) for n in class_name if n is not None
+                )
             else:
                 proper_class = getattr(transformers_module, class_name)
 
@@ -425,7 +437,10 @@ class ProcessorMixin(PushToHubMixin):
         output = {
             k: v
             for k, v in output.items()
-            if not (isinstance(v, PushToHubMixin) or v.__class__.__name__ == "BeamSearchDecoderCTC")
+            if not (
+                isinstance(v, PushToHubMixin)
+                or v.__class__.__name__ == "BeamSearchDecoderCTC"
+            )
         }
 
         return output
@@ -453,9 +468,13 @@ class ProcessorMixin(PushToHubMixin):
             writer.write(self.to_json_string())
 
     def __repr__(self):
-        attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.attributes]
+        attributes_repr = [
+            f"- {name}: {repr(getattr(self, name))}" for name in self.attributes
+        ]
         attributes_repr = "\n".join(attributes_repr)
-        return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
+        return (
+            f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
+        )
 
     def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
         """
@@ -504,8 +523,13 @@ class ProcessorMixin(PushToHubMixin):
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
-            attrs = [getattr(self, attribute_name) for attribute_name in self.attributes]
-            configs = [(a.init_kwargs if isinstance(a, PreTrainedTokenizerBase) else a) for a in attrs]
+            attrs = [
+                getattr(self, attribute_name) for attribute_name in self.attributes
+            ]
+            configs = [
+                (a.init_kwargs if isinstance(a, PreTrainedTokenizerBase) else a)
+                for a in attrs
+            ]
             configs.append(self)
             custom_object_save(self, save_directory, config=configs)
 
@@ -534,7 +558,10 @@ class ProcessorMixin(PushToHubMixin):
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
             chat_template_json_string = (
-                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+                json.dumps(
+                    {"chat_template": self.chat_template}, indent=2, sort_keys=True
+                )
+                + "\n"
             )
             with open(output_chat_template_file, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
@@ -601,7 +628,9 @@ class ProcessorMixin(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
-            chat_template_file = os.path.join(pretrained_model_name_or_path, "chat_template.json")
+            chat_template_file = os.path.join(
+                pretrained_model_name_or_path, "chat_template.json"
+            )
 
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
@@ -692,9 +721,14 @@ class ProcessorMixin(PushToHubMixin):
         if is_local:
             logger.info(f"loading configuration file {resolved_processor_file}")
         else:
-            logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
+            logger.info(
+                f"loading configuration file {processor_file} from cache at {resolved_processor_file}"
+            )
 
-        if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
+        if (
+            "chat_template" in processor_dict
+            and processor_dict["chat_template"] is not None
+        ):
             logger.warning_once(
                 "Chat templates should be in a 'chat_template.json' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
@@ -741,7 +775,9 @@ class ProcessorMixin(PushToHubMixin):
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
-        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
+        unused_kwargs = cls.validate_init_kwargs(
+            processor_config=processor_dict, valid_kwargs=cls.valid_kwargs
+        )
         processor = cls(*args, **processor_dict)
         if chat_template is not None:
             setattr(processor, "chat_template", chat_template)
@@ -824,9 +860,13 @@ class ProcessorMixin(PushToHubMixin):
 
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
-            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(
+                modality, {}
+            ).copy()
             # update defaults with arguments from tokenizer init
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[
+                modality
+            ].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
                     value = (
@@ -842,12 +882,17 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality in output_kwargs:
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[
+                modality
+            ].__annotations__.keys():
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
                     # check if this key was passed as a flat kwarg.
-                    if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
+                    if (
+                        kwarg_value != "__empty__"
+                        and modality_key in non_modality_kwargs
+                    ):
                         raise ValueError(
                             f"Keyword argument {modality_key} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."
@@ -875,7 +920,12 @@ class ProcessorMixin(PushToHubMixin):
             # kwargs is a flat dictionary
             for key in kwargs:
                 if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                    if (
+                        key
+                        in ModelProcessorKwargs.__annotations__[
+                            "common_kwargs"
+                        ].__annotations__.keys()
+                    ):
                         output_kwargs["common_kwargs"][key] = kwargs[key]
                     else:
                         logger.warning_once(
@@ -946,8 +996,12 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
-        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        args = cls._get_arguments_from_pretrained(
+            pretrained_model_name_or_path, **kwargs
+        )
+        processor_dict, kwargs = cls.get_processor_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
 
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
@@ -983,7 +1037,10 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
-                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                classes = tuple(
+                    getattr(transformers_module, n) if n is not None else None
+                    for n in class_name
+                )
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
@@ -992,7 +1049,9 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = getattr(transformers_module, class_name)
 
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+            args.append(
+                attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            )
         return args
 
     @property
@@ -1069,7 +1128,10 @@ class ProcessorMixin(PushToHubMixin):
                 f"However, got {len(args)} positional arguments instead."
                 "Please pass all arguments as keyword arguments instead (e.g. `processor(arg_name_1=..., arg_name_2=...))`."
             )
-        return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
+        return {
+            arg_name: arg_value
+            for arg_value, arg_name in zip(args, self.optional_call_args)
+        }
 
     def apply_chat_template(
         self,
@@ -1170,14 +1232,20 @@ def _validate_images_text_input_order(images, text):
         return images, text
 
     # Handle cases where inputs need to and can be swapped
-    if (images is None and text_is_images) or (text is None and images_is_text) or (images_is_text and text_is_images):
+    if (
+        (images is None and text_is_images)
+        or (text is None and images_is_text)
+        or (images_is_text and text_is_images)
+    ):
         logger.warning_once(
             "You may have used the wrong order for inputs. `images` should be passed before `text`. "
             "The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47."
         )
         return text, images
 
-    raise ValueError("Invalid input type. Check that `images` and/or `text` are valid inputs.")
+    raise ValueError(
+        "Invalid input type. Check that `images` and/or `text` are valid inputs."
+    )
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)

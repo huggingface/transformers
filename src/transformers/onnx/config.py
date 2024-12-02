@@ -16,13 +16,28 @@ import dataclasses
 import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 from packaging import version
 
 from ..utils import TensorType, is_torch_available, is_vision_available, logging
-from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
+from .utils import (
+    ParameterFormat,
+    compute_effective_axis_dimension,
+    compute_serialized_parameters_size,
+)
 
 
 if TYPE_CHECKING:
@@ -100,7 +115,9 @@ class OnnxConfig(ABC):
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
-        "semantic-segmentation": OrderedDict({"logits": {0: "batch", 1: "num_labels", 2: "height", 3: "width"}}),
+        "semantic-segmentation": OrderedDict(
+            {"logits": {0: "batch", 1: "num_labels", 2: "height", 3: "width"}}
+        ),
         "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
         "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
@@ -108,7 +125,12 @@ class OnnxConfig(ABC):
         "speech2seq-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
-    def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
+    def __init__(
+        self,
+        config: "PretrainedConfig",
+        task: str = "default",
+        patching_specs: List[PatchingSpec] = None,
+    ):
         self._config = config
 
         if task not in self._tasks_to_common_outputs:
@@ -121,11 +143,15 @@ class OnnxConfig(ABC):
         for spec in patching_specs if patching_specs is not None else []:
             final_spec = spec
             if spec.orig_op is None:
-                final_spec = dataclasses.replace(spec, orig_op=getattr(spec.o, spec.name))
+                final_spec = dataclasses.replace(
+                    spec, orig_op=getattr(spec.o, spec.name)
+                )
             self._patching_specs.append(final_spec)
 
     @classmethod
-    def from_model_config(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfig":
+    def from_model_config(
+        cls, config: "PretrainedConfig", task: str = "default"
+    ) -> "OnnxConfig":
         """
         Instantiate a OnnxConfig for a specific model
 
@@ -256,7 +282,11 @@ class OnnxConfig(ABC):
         )
 
     def _generate_dummy_images(
-        self, batch_size: int = 2, num_channels: int = 3, image_height: int = 40, image_width: int = 40
+        self,
+        batch_size: int = 2,
+        num_channels: int = 3,
+        image_height: int = 40,
+        image_width: int = 40,
     ):
         images = []
         for _ in range(batch_size):
@@ -265,12 +295,18 @@ class OnnxConfig(ABC):
         return images
 
     def _generate_dummy_audio(
-        self, batch_size: int = 2, sampling_rate: int = 22050, time_duration: float = 5.0, frequency: int = 220
+        self,
+        batch_size: int = 2,
+        sampling_rate: int = 22050,
+        time_duration: float = 5.0,
+        frequency: int = 220,
     ):
         audio_data = []
         for _ in range(batch_size):
             # time variable
-            t = np.linspace(0, time_duration, int(time_duration * sampling_rate), endpoint=False)
+            t = np.linspace(
+                0, time_duration, int(time_duration * sampling_rate), endpoint=False
+            )
 
             # generate pure sine wave at `frequency` Hz
             audio_data.append(0.5 * np.sin(2 * np.pi * frequency * t))
@@ -279,7 +315,9 @@ class OnnxConfig(ABC):
 
     def generate_dummy_inputs(
         self,
-        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin", "ImageProcessingMixin"],
+        preprocessor: Union[
+            "PreTrainedTokenizerBase", "FeatureExtractionMixin", "ImageProcessingMixin"
+        ],
         batch_size: int = -1,
         seq_length: int = -1,
         num_choices: int = -1,
@@ -330,29 +368,40 @@ class OnnxConfig(ABC):
         from ..tokenization_utils_base import PreTrainedTokenizerBase
 
         if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-            raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
+            raise ValueError(
+                "You cannot provide both a tokenizer and a preprocessor to generate dummy inputs."
+            )
         if tokenizer is not None:
             warnings.warn(
                 "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
                 " `preprocessor` instead.",
                 FutureWarning,
             )
-            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+            logger.warning(
+                "Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs."
+            )
             preprocessor = tokenizer
         if isinstance(preprocessor, PreTrainedTokenizerBase):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(
-                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+                batch_size,
+                fixed_dimension=OnnxConfig.default_fixed_batch,
+                num_token_to_add=0,
             )
             # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
             token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
             seq_length = compute_effective_axis_dimension(
-                seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+                seq_length,
+                fixed_dimension=OnnxConfig.default_fixed_sequence,
+                num_token_to_add=token_to_add,
             )
             # Generate dummy inputs according to compute batch and sequence
             input_token = (
                 preprocessor.unk_token
-                if (preprocessor.unk_token is not None and len(preprocessor.unk_token) > 0)
+                if (
+                    preprocessor.unk_token is not None
+                    and len(preprocessor.unk_token) > 0
+                )
                 else "0"
             )
             dummy_input = [" ".join([input_token]) * seq_length] * batch_size
@@ -360,14 +409,18 @@ class OnnxConfig(ABC):
                 # If dynamic axis (-1) we forward with a fixed dimension of 4 candidate answers to avoid optimizations
                 # made by ONNX
                 num_choices = compute_effective_axis_dimension(
-                    num_choices, fixed_dimension=OnnxConfig.default_fixed_num_choices, num_token_to_add=0
+                    num_choices,
+                    fixed_dimension=OnnxConfig.default_fixed_num_choices,
+                    num_token_to_add=0,
                 )
                 dummy_input = dummy_input * num_choices
                 # The shape of the tokenized inputs values is [batch_size * num_choices, seq_length]
                 tokenized_input = preprocessor(dummy_input, text_pair=dummy_input)
                 # Unflatten the tokenized inputs values expanding it to the shape [batch_size, num_choices, seq_length]
                 for k, v in tokenized_input.items():
-                    tokenized_input[k] = [v[i : i + num_choices] for i in range(0, len(v), num_choices)]
+                    tokenized_input[k] = [
+                        v[i : i + num_choices] for i in range(0, len(v), num_choices)
+                    ]
                 return dict(tokenized_input.convert_to_tensors(tensor_type=framework))
             return dict(preprocessor(dummy_input, return_tensors=framework))
         elif isinstance(preprocessor, ImageProcessingMixin):
@@ -377,27 +430,45 @@ class OnnxConfig(ABC):
                     f' `model_input_names[0]` to be "pixel_values", but got {preprocessor.model_input_names[0]}'
                 )
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
-            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
-            return dict(preprocessor(images=dummy_input, return_tensors=framework))
-        elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
-            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
-            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch
+            )
+            dummy_input = self._generate_dummy_images(
+                batch_size, num_channels, image_height, image_width
+            )
             return dict(preprocessor(images=dummy_input, return_tensors=framework))
         elif (
-            isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "input_features"
+            isinstance(preprocessor, FeatureExtractionMixin)
+            and preprocessor.model_input_names[0] == "pixel_values"
         ):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
-            dummy_input = self._generate_dummy_audio(batch_size, sampling_rate, time_duration, frequency)
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch
+            )
+            dummy_input = self._generate_dummy_images(
+                batch_size, num_channels, image_height, image_width
+            )
+            return dict(preprocessor(images=dummy_input, return_tensors=framework))
+        elif (
+            isinstance(preprocessor, FeatureExtractionMixin)
+            and preprocessor.model_input_names[0] == "input_features"
+        ):
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch
+            )
+            dummy_input = self._generate_dummy_audio(
+                batch_size, sampling_rate, time_duration, frequency
+            )
             return dict(preprocessor(dummy_input, return_tensors=framework))
         else:
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
 
-    def generate_dummy_inputs_onnxruntime(self, reference_model_inputs: Mapping[str, Any]) -> Mapping[str, Any]:
+    def generate_dummy_inputs_onnxruntime(
+        self, reference_model_inputs: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
         """
         Generate inputs for ONNX Runtime using the reference model inputs. Override this to run inference with seq2seq
         models which have the encoder and decoder exported as separate ONNX files.
@@ -413,16 +484,26 @@ class OnnxConfig(ABC):
 
     def patch_ops(self):
         for spec in self._patching_specs:
-            custom_op = spec.custom_op if spec.op_wrapper is None else spec.op_wrapper(spec.custom_op)
+            custom_op = (
+                spec.custom_op
+                if spec.op_wrapper is None
+                else spec.op_wrapper(spec.custom_op)
+            )
             setattr(spec.o, spec.name, custom_op)
 
     def restore_ops(self):
         for spec in self._patching_specs:
-            orig_op = spec.orig_op if spec.op_wrapper is None else spec.op_wrapper(spec.orig_op)
+            orig_op = (
+                spec.orig_op
+                if spec.op_wrapper is None
+                else spec.op_wrapper(spec.orig_op)
+            )
             setattr(spec.o, spec.name, orig_op)
 
     @classmethod
-    def flatten_output_collection_property(cls, name: str, field: Iterable[Any]) -> Dict[str, Any]:
+    def flatten_output_collection_property(
+        cls, name: str, field: Iterable[Any]
+    ) -> Dict[str, Any]:
         """
         Flatten any potential nested structure expanding the name of the field with the index of the element within the
         structure.
@@ -437,7 +518,9 @@ class OnnxConfig(ABC):
         """
         from itertools import chain
 
-        return {f"{name}.{idx}": item for idx, item in enumerate(chain.from_iterable(field))}
+        return {
+            f"{name}.{idx}": item for idx, item in enumerate(chain.from_iterable(field))
+        }
 
 
 class OnnxConfigWithPast(OnnxConfig, ABC):
@@ -452,7 +535,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         self.use_past = use_past
 
     @classmethod
-    def with_past(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfigWithPast":
+    def with_past(
+        cls, config: "PretrainedConfig", task: str = "default"
+    ) -> "OnnxConfigWithPast":
         """
         Instantiate a OnnxConfig with `use_past` attribute set to True
 
@@ -515,12 +600,18 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
     ) -> Mapping[str, Any]:
         # TODO: should we set seq_length = 1 when self.use_past = True?
         common_inputs = super().generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
+            framework=framework,
         )
 
         if self.use_past:
             if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                raise ValueError(
+                    "Cannot generate dummy past_keys inputs without PyTorch installed."
+                )
             else:
                 import torch
 
@@ -537,18 +628,26 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             if "attention_mask" in common_inputs:
                 mask_dtype = common_inputs["attention_mask"].dtype
                 common_inputs["attention_mask"] = torch.cat(
-                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)],
+                    [
+                        common_inputs["attention_mask"],
+                        torch.ones(batch, past_key_values_length, dtype=mask_dtype),
+                    ],
                     dim=1,
                 )
 
             common_inputs["past_key_values"] = []
             for _ in range(self.num_layers):
-                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+                common_inputs["past_key_values"].append(
+                    (torch.zeros(shape), torch.zeros(shape))
+                )
 
         return common_inputs
 
     def fill_with_past_key_values_(
-        self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str, inverted_values_shape: bool = False
+        self,
+        inputs_or_outputs: Mapping[str, Mapping[int, str]],
+        direction: str,
+        inverted_values_shape: bool = False,
     ):
         """
         Fill the input_or_outputs mapping with past_key_values dynamic axes considering.
@@ -562,21 +661,34 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
         """
         if direction not in ["inputs", "outputs"]:
-            raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
+            raise ValueError(
+                f'direction must either be "inputs" or "outputs", but {direction} was given'
+            )
 
         name = "past_key_values" if direction == "inputs" else "present"
         for i in range(self.num_layers):
-            inputs_or_outputs[f"{name}.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
+            inputs_or_outputs[f"{name}.{i}.key"] = {
+                0: "batch",
+                2: "past_sequence + sequence",
+            }
             if inverted_values_shape:
-                inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 1: "past_sequence + sequence"}
+                inputs_or_outputs[f"{name}.{i}.value"] = {
+                    0: "batch",
+                    1: "past_sequence + sequence",
+                }
             else:
-                inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+                inputs_or_outputs[f"{name}.{i}.value"] = {
+                    0: "batch",
+                    2: "past_sequence + sequence",
+                }
 
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
         flattened_output[f"{name}.{idx}.key"] = t[0]
         flattened_output[f"{name}.{idx}.value"] = t[1]
 
-    def flatten_output_collection_property(self, name: str, field: Iterable[Any]) -> Dict[str, Any]:
+    def flatten_output_collection_property(
+        self, name: str, field: Iterable[Any]
+    ) -> Dict[str, Any]:
         flattened_output = {}
         if name in ["present", "past_key_values"]:
             for idx, t in enumerate(field):
@@ -593,7 +705,9 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         common_outputs = super(OnnxConfigWithPast, self).outputs
         # Renaming the outputs axes properly.
         for name, axes_names in common_outputs.items():
-            sequence_name = "encoder_sequence" if "encoder" in name else "decoder_sequence"
+            sequence_name = (
+                "encoder_sequence" if "encoder" in name else "decoder_sequence"
+            )
             for axis_idx, name in axes_names.items():
                 if "sequence" in name:
                     axes_names[axis_idx] = sequence_name
@@ -611,7 +725,9 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
             num_layers = super().num_layers
             num_layers = (num_layers, num_layers)
         except AttributeError:
-            if hasattr(self._config, "encoder_layers") and hasattr(self._config, "decoder_layers"):
+            if hasattr(self._config, "encoder_layers") and hasattr(
+                self._config, "decoder_layers"
+            ):
                 num_layers = (self._config.encoder_layers, self._config.decoder_layers)
             else:
                 raise AttributeError(
@@ -627,8 +743,13 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
             num_attention_heads = super().num_attention_heads
             num_attention_heads = (num_attention_heads, num_attention_heads)
         except AttributeError:
-            if hasattr(self._config, "encoder_attention_heads") and hasattr(self._config, "decoder_attention_heads"):
-                num_attention_heads = (self._config.encoder_attention_heads, self._config.decoder_attention_heads)
+            if hasattr(self._config, "encoder_attention_heads") and hasattr(
+                self._config, "decoder_attention_heads"
+            ):
+                num_attention_heads = (
+                    self._config.encoder_attention_heads,
+                    self._config.decoder_attention_heads,
+                )
             else:
                 raise AttributeError(
                     "could not find the number of attention heads for the encoder and the decoder attributes in the"
@@ -646,26 +767,40 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
+            framework=framework,
         )
 
         # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=decoder_seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=decoder_seq_length,
+            is_pair=is_pair,
+            framework=framework,
         )
-        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+        decoder_inputs = {
+            f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()
+        }
         common_inputs = dict(**encoder_inputs, **decoder_inputs)
 
         if self.use_past:
             if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                raise ValueError(
+                    "Cannot generate dummy past_keys inputs without PyTorch installed."
+                )
             else:
                 import torch
             batch = common_inputs["input_ids"].shape[0]
             encoder_seq_length = common_inputs["input_ids"].shape[1]
             decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
-            num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
+            num_encoder_attention_heads, num_decoder_attention_heads = (
+                self.num_attention_heads
+            )
             encoder_shape = (
                 batch,
                 num_encoder_attention_heads,
@@ -684,8 +819,12 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
             # If the number of encoder and decoder layers are present in the model configuration, both are considered
             num_encoder_layers, num_decoder_layers = self.num_layers
             min_num_layers = min(num_encoder_layers, num_decoder_layers)
-            max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
-            remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+            max_num_layers = (
+                max(num_encoder_layers, num_decoder_layers) - min_num_layers
+            )
+            remaining_side_name = (
+                "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+            )
 
             for _ in range(min_num_layers):
                 # For encoder-decoder models, past_key_values contains pre-computed values for both the encoder and the
@@ -702,13 +841,19 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
             # TODO: test this.
             shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
             for _ in range(min_num_layers, max_num_layers):
-                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+                common_inputs["past_key_values"].append(
+                    (torch.zeros(shape), torch.zeros(shape))
+                )
 
         return common_inputs
 
-    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+    def fill_with_past_key_values_(
+        self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str
+    ):
         if direction not in ["inputs", "outputs"]:
-            raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
+            raise ValueError(
+                f'direction must either be "inputs" or "outputs", but {direction} was given'
+            )
 
         name = "past_key_values" if direction == "inputs" else "present"
 
@@ -716,16 +861,34 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         num_encoder_layers, num_decoder_layers = self.num_layers
         min_num_layers = min(num_encoder_layers, num_decoder_layers)
         max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
-        remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+        remaining_side_name = (
+            "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+        )
 
         encoder_sequence = "past_encoder_sequence"
-        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_decoder_sequence + sequence"
+        decoder_sequence = (
+            "past_decoder_sequence"
+            if direction == "inputs"
+            else "past_decoder_sequence + sequence"
+        )
 
         for i in range(min_num_layers):
-            inputs_or_outputs[f"{name}.{i}.decoder.key"] = {0: "batch", 2: decoder_sequence}
-            inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
-            inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
-            inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.decoder.key"] = {
+                0: "batch",
+                2: decoder_sequence,
+            }
+            inputs_or_outputs[f"{name}.{i}.decoder.value"] = {
+                0: "batch",
+                2: decoder_sequence,
+            }
+            inputs_or_outputs[f"{name}.{i}.encoder.key"] = {
+                0: "batch",
+                2: encoder_sequence,
+            }
+            inputs_or_outputs[f"{name}.{i}.encoder.value"] = {
+                0: "batch",
+                2: encoder_sequence,
+            }
 
         for i in range(min_num_layers, max_num_layers):
             if remaining_side_name == "encoder":

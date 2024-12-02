@@ -20,7 +20,13 @@ import unittest
 import numpy as np
 
 from transformers import is_flax_available, is_torch_available, is_vision_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_flax,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from ...test_modeling_flax_common import floats_tensor, ids_tensor
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
@@ -72,7 +78,11 @@ class FlaxEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
 
         enc_dec_model = FlaxVisionEncoderDecoderModel(encoder_decoder_config)
@@ -86,10 +96,17 @@ class FlaxEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[0],
+            pixel_values.shape[0],
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1],
+            config.hidden_size,
+        )
 
     def check_encoder_decoder_model_from_pretrained(
         self,
@@ -102,9 +119,17 @@ class FlaxEncoderDecoderMixin:
         return_dict,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
-        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        kwargs = {
+            "encoder_model": encoder_model,
+            "decoder_model": decoder_model,
+            "return_dict": return_dict,
+        }
+        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
@@ -113,10 +138,17 @@ class FlaxEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
-        self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[0],
+            pixel_values.shape[0],
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1],
+            config.hidden_size,
+        )
 
     def check_save_and_load(
         self,
@@ -128,9 +160,13 @@ class FlaxEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
 
         outputs = enc_dec_model(
             pixel_values=pixel_values,
@@ -167,9 +203,13 @@ class FlaxEncoderDecoderMixin:
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
@@ -180,7 +220,9 @@ class FlaxEncoderDecoderMixin:
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
-        self.assertEqual(encoder_attentions[0].shape[-3:-2], (config.num_attention_heads,))
+        self.assertEqual(
+            encoder_attentions[0].shape[-3:-2], (config.num_attention_heads,)
+        )
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
         num_decoder_layers = (
@@ -192,7 +234,11 @@ class FlaxEncoderDecoderMixin:
 
         self.assertEqual(
             decoder_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, decoder_input_ids.shape[-1], decoder_input_ids.shape[-1]),
+            (
+                decoder_config.num_attention_heads,
+                decoder_input_ids.shape[-1],
+                decoder_input_ids.shape[-1],
+            ),
         )
 
         cross_attentions = outputs_encoder_decoder["cross_attentions"]
@@ -206,10 +252,16 @@ class FlaxEncoderDecoderMixin:
             (decoder_config.num_attention_heads, cross_attention_input_seq_len),
         )
 
-    def check_encoder_decoder_model_generate(self, pixel_values, config, decoder_config, **kwargs):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+    def check_encoder_decoder_model_generate(
+        self, pixel_values, config, decoder_config, **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
 
         pad_token_id = enc_dec_model.config.decoder.pad_token_id
         eos_token_id = enc_dec_model.config.decoder.eos_token_id
@@ -233,7 +285,10 @@ class FlaxEncoderDecoderMixin:
             decoder_start_token_id=decoder_start_token_id,
         )
         generated_sequences = generated_output.sequences
-        self.assertEqual(generated_sequences.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_sequences.shape,
+            (pixel_values.shape[0],) + (decoder_config.max_length,),
+        )
 
     def check_pt_flax_equivalence(self, pt_model, fx_model, inputs_dict):
         pt_model.to(torch_device)
@@ -241,30 +296,46 @@ class FlaxEncoderDecoderMixin:
 
         # prepare inputs
         flax_inputs = inputs_dict
-        pt_inputs = {k: torch.tensor(v.tolist()).to(torch_device) for k, v in flax_inputs.items()}
+        pt_inputs = {
+            k: torch.tensor(v.tolist()).to(torch_device) for k, v in flax_inputs.items()
+        }
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
 
         fx_outputs = fx_model(**inputs_dict).to_tuple()
-        self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+        self.assertEqual(
+            len(fx_outputs),
+            len(pt_outputs),
+            "Output lengths differ between Flax and PyTorch",
+        )
         for fx_output, pt_output in zip(fx_outputs, pt_outputs):
             self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 1e-5)
 
         # PT -> Flax
         with tempfile.TemporaryDirectory() as tmpdirname:
             pt_model.save_pretrained(tmpdirname)
-            fx_model_loaded = FlaxVisionEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
+            fx_model_loaded = FlaxVisionEncoderDecoderModel.from_pretrained(
+                tmpdirname, from_pt=True
+            )
 
         fx_outputs_loaded = fx_model_loaded(**inputs_dict).to_tuple()
-        self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+        self.assertEqual(
+            len(fx_outputs_loaded),
+            len(pt_outputs),
+            "Output lengths differ between Flax and PyTorch",
+        )
         for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(force=True), 1e-5)
+            self.assert_almost_equals(
+                fx_output_loaded, pt_output.numpy(force=True), 1e-5
+            )
 
         # Flax -> PT
         with tempfile.TemporaryDirectory() as tmpdirname:
             fx_model.save_pretrained(tmpdirname)
-            pt_model_loaded = VisionEncoderDecoderModel.from_pretrained(tmpdirname, from_flax=True)
+            pt_model_loaded = VisionEncoderDecoderModel.from_pretrained(
+                tmpdirname, from_flax=True
+            )
 
         pt_model_loaded.to(torch_device)
         pt_model_loaded.eval()
@@ -272,12 +343,22 @@ class FlaxEncoderDecoderMixin:
         with torch.no_grad():
             pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
-        self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
+        self.assertEqual(
+            len(fx_outputs),
+            len(pt_outputs_loaded),
+            "Output lengths differ between Flax and PyTorch",
+        )
         for fx_output, pt_output_loaded in zip(fx_outputs, pt_outputs_loaded):
-            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(force=True), 1e-5)
+            self.assert_almost_equals(
+                fx_output, pt_output_loaded.numpy(force=True), 1e-5
+            )
 
     def check_equivalence_pt_to_flax(self, config, decoder_config, inputs_dict):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
 
         pt_model = VisionEncoderDecoderModel(encoder_decoder_config)
         fx_model = FlaxVisionEncoderDecoderModel(encoder_decoder_config)
@@ -288,7 +369,11 @@ class FlaxEncoderDecoderMixin:
         self.check_pt_flax_equivalence(pt_model, fx_model, inputs_dict)
 
     def check_equivalence_flax_to_pt(self, config, decoder_config, inputs_dict):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
 
         pt_model = VisionEncoderDecoderModel(encoder_decoder_config)
         fx_model = FlaxVisionEncoderDecoderModel(encoder_decoder_config)
@@ -303,11 +388,15 @@ class FlaxEncoderDecoderMixin:
 
     def test_encoder_decoder_model_from_pretrained(self):
         config_inputs_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**config_inputs_dict, return_dict=False)
+        self.check_encoder_decoder_model_from_pretrained(
+            **config_inputs_dict, return_dict=False
+        )
 
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         config_inputs_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**config_inputs_dict, return_dict=True)
+        self.check_encoder_decoder_model_from_pretrained(
+            **config_inputs_dict, return_dict=True
+        )
 
     def test_save_and_load_from_pretrained(self):
         config_inputs_dict = self.prepare_config_and_inputs()
@@ -323,7 +412,9 @@ class FlaxEncoderDecoderMixin:
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
+        self.assertLessEqual(
+            diff, tol, f"Difference between torch and flax is {diff} (>= {tol})."
+        )
 
     @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
@@ -338,7 +429,11 @@ class FlaxEncoderDecoderMixin:
         # Avoid the case where a sequence has no place to attend (after combined with the causal attention mask)
         batch_size = inputs_dict["decoder_attention_mask"].shape[0]
         inputs_dict["decoder_attention_mask"] = np.concatenate(
-            [np.ones(shape=(batch_size, 1)), inputs_dict["decoder_attention_mask"][:, 1:]], axis=1
+            [
+                np.ones(shape=(batch_size, 1)),
+                inputs_dict["decoder_attention_mask"][:, 1:],
+            ],
+            axis=1,
         )
 
         # Flax models don't use the `use_cache` option and cache is not returned as a default.
@@ -403,7 +498,9 @@ class FlaxViT2GPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.Test
         model_tester_encoder = FlaxViTModelTester(self, batch_size=13)
         model_tester_decoder = FlaxGPT2ModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (config, pixel_values) = encoder_config_and_inputs
         (
             decoder_config,

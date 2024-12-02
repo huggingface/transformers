@@ -30,7 +30,9 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
 
     def setUp(self):
         super().setUp()
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
@@ -39,7 +41,9 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
         return input_text, output_text
 
     # Custom `get_clean_sequence` since FastSpeech2ConformerTokenizer can't decode id -> string
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, **kwargs):  # max_length=20, min_length=5
+    def get_clean_sequence(
+        self, tokenizer, with_prefix_space=False, **kwargs
+    ):  # max_length=20, min_length=5
         input_text, output_text = self.get_input_output_texts(tokenizer)
         ids = tokenizer.encode(output_text, add_special_tokens=False)
         return output_text, ids
@@ -88,7 +92,10 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
 
         tokens = tokenizer.tokenize("This is a test")
         ids = [9, 12, 6, 12, 11, 2, 4, 15, 6, 4, 77]
-        self.assertListEqual(tokens, ["DH", "IH1", "S", "IH1", "Z", "AH0", "T", "EH1", "S", "T", "<sos/eos>"])
+        self.assertListEqual(
+            tokens,
+            ["DH", "IH1", "S", "IH1", "Z", "AH0", "T", "EH1", "S", "T", "<sos/eos>"],
+        )
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), ids)
         self.assertListEqual(tokenizer.convert_ids_to_tokens(ids), tokens)
 
@@ -110,7 +117,8 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
             "The quick brown fox jumps over the lazy dog.",
         ]
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained(
-            "espnet/fastspeech2_conformer", revision="07f9c4a2d6bbc69b277d87d2202ad1e35b05e113"
+            "espnet/fastspeech2_conformer",
+            revision="07f9c4a2d6bbc69b277d87d2202ad1e35b05e113",
         )
         actual_encoding = tokenizer(sequences)
 
@@ -129,13 +137,20 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
         }
         # fmt: on
 
-        actual_tokens = [tokenizer.decode(input_ids) for input_ids in expected_encoding["input_ids"]]
+        actual_tokens = [
+            tokenizer.decode(input_ids) for input_ids in expected_encoding["input_ids"]
+        ]
         expected_tokens = [
-            [tokenizer.convert_ids_to_tokens(id) for id in sequence] for sequence in expected_encoding["input_ids"]
+            [tokenizer.convert_ids_to_tokens(id) for id in sequence]
+            for sequence in expected_encoding["input_ids"]
         ]
 
-        self.assertListEqual(actual_encoding["input_ids"], expected_encoding["input_ids"])
-        self.assertListEqual(actual_encoding["attention_mask"], expected_encoding["attention_mask"])
+        self.assertListEqual(
+            actual_encoding["input_ids"], expected_encoding["input_ids"]
+        )
+        self.assertListEqual(
+            actual_encoding["attention_mask"], expected_encoding["attention_mask"]
+        )
         self.assertTrue(actual_tokens == expected_tokens)
 
     @unittest.skip(
@@ -162,15 +177,21 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
     def test_save_and_load_tokenizer(self):
         pass
 
-    @unittest.skip(reason="Phonemes cannot be reliably converted to string due to one-many mapping")
+    @unittest.skip(
+        reason="Phonemes cannot be reliably converted to string due to one-many mapping"
+    )
     def test_internal_consistency(self):
         pass
 
-    @unittest.skip(reason="Phonemes cannot be reliably converted to string due to one-many mapping")
+    @unittest.skip(
+        reason="Phonemes cannot be reliably converted to string due to one-many mapping"
+    )
     def test_encode_decode_with_spaces(self):
         pass
 
-    @unittest.skip(reason="Phonemes cannot be reliably converted to string due to one-many mapping")
+    @unittest.skip(
+        reason="Phonemes cannot be reliably converted to string due to one-many mapping"
+    )
     def test_convert_tokens_to_string_format(self):
         pass
 

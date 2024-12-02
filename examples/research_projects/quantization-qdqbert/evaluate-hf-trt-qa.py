@@ -100,7 +100,12 @@ parser.add_argument(
     help="When splitting up a long document into chunks, how much stride to take between chunks.",
 )
 
-parser.add_argument("--per_device_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.")
+parser.add_argument(
+    "--per_device_eval_batch_size",
+    default=8,
+    type=int,
+    help="Batch size per GPU/CPU for evaluation.",
+)
 
 parser.add_argument(
     "--n_best_size",
@@ -118,7 +123,9 @@ parser.add_argument(
     ),
 )
 
-parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+parser.add_argument(
+    "--seed", type=int, default=42, help="random seed for initialization"
+)
 
 parser.add_argument(
     "--dataset_name",
@@ -134,9 +141,16 @@ parser.add_argument(
     help="The configuration name of the dataset to use (via the datasets library).",
 )
 parser.add_argument(
-    "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
+    "--preprocessing_num_workers",
+    type=int,
+    default=4,
+    help="A csv or a json file containing the training data.",
 )
-parser.add_argument("--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets")
+parser.add_argument(
+    "--overwrite_cache",
+    action="store_true",
+    help="Overwrite the cached training and evaluation sets",
+)
 parser.add_argument(
     "--fp16",
     action="store_true",
@@ -178,9 +192,9 @@ if not os.path.exists("temp_engine"):
     os.makedirs("temp_engine")
 
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) as network, trt.OnnxParser(
-    network, TRT_LOGGER
-) as parser:
+with trt.Builder(TRT_LOGGER) as builder, builder.create_network(
+    EXPLICIT_BATCH
+) as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
     with open(args.onnx_model_path, "rb") as model:
         if not parser.parse(model.read()):
             for error in range(parser.num_errors):
@@ -210,7 +224,9 @@ with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) 
 
 
 # run inference with TRT
-def model_infer(inputs, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream):
+def model_infer(
+    inputs, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream
+):
     input_ids = np.asarray(inputs["input_ids"], dtype=np.int32)
     attention_mask = np.asarray(inputs["attention_mask"], dtype=np.int32)
     token_type_ids = np.asarray(inputs["token_type_ids"], dtype=np.int32)
@@ -223,7 +239,8 @@ def model_infer(inputs, context, d_inputs, h_output0, h_output1, d_output0, d_ou
     start_time = time.time()
     # Run inference
     context.execute_async(
-        bindings=[int(d_inp) for d_inp in d_inputs] + [int(d_output0), int(d_output1)], stream_handle=stream.handle
+        bindings=[int(d_inp) for d_inp in d_inputs] + [int(d_output0), int(d_output1)],
+        stream_handle=stream.handle,
     )
     # Transfer predictions back from GPU
     cuda.memcpy_dtoh_async(h_output0, d_output0, stream)
@@ -301,7 +318,9 @@ def prepare_validation_features(examples):
     # Some of the questions have lots of whitespace on the left, which is not useful and will make the
     # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
     # left whitespace
-    examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
+    examples[question_column_name] = [
+        q.lstrip() for q in examples[question_column_name]
+    ]
 
     # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
     # in one example possible giving several features when a context is long, each of those features having a
@@ -359,7 +378,9 @@ data_collator = default_data_collator
 
 eval_dataset_for_model = eval_dataset.remove_columns(["example_id", "offset_mapping"])
 eval_dataloader = DataLoader(
-    eval_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+    eval_dataset_for_model,
+    collate_fn=data_collator,
+    batch_size=args.per_device_eval_batch_size,
 )
 
 
@@ -380,12 +401,17 @@ def post_processing_function(examples, features, predictions, stage="eval"):
     # Format the result to the format the metric expects.
     if args.version_2_with_negative:
         formatted_predictions = [
-            {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
+            {"id": k, "prediction_text": v, "no_answer_probability": 0.0}
+            for k, v in predictions.items()
         ]
     else:
-        formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
+        formatted_predictions = [
+            {"id": k, "prediction_text": v} for k, v in predictions.items()
+        ]
 
-    references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
+    references = [
+        {"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples
+    ]
     return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
 
@@ -393,7 +419,9 @@ metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
 
 # Evaluation!
 logger.info("Loading ONNX model %s for evaluation", args.onnx_model_path)
-with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.deserialize_cuda_engine(
+with open(engine_name, "rb") as f, trt.Runtime(
+    TRT_LOGGER
+) as runtime, runtime.deserialize_cuda_engine(
     f.read()
 ) as engine, engine.create_execution_context() as context:
     # setup for TRT inferrence
@@ -402,14 +430,25 @@ with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.d
     assert context.all_binding_shapes_specified
 
     def binding_nbytes(binding):
-        return trt.volume(engine.get_binding_shape(binding)) * engine.get_binding_dtype(binding).itemsize
+        return (
+            trt.volume(engine.get_binding_shape(binding))
+            * engine.get_binding_dtype(binding).itemsize
+        )
 
     # Allocate device memory for inputs and outputs.
-    d_inputs = [cuda.mem_alloc(binding_nbytes(binding)) for binding in engine if engine.binding_is_input(binding)]
+    d_inputs = [
+        cuda.mem_alloc(binding_nbytes(binding))
+        for binding in engine
+        if engine.binding_is_input(binding)
+    ]
 
     # Allocate output buffer
-    h_output0 = cuda.pagelocked_empty(tuple(context.get_binding_shape(3)), dtype=np.float32)
-    h_output1 = cuda.pagelocked_empty(tuple(context.get_binding_shape(4)), dtype=np.float32)
+    h_output0 = cuda.pagelocked_empty(
+        tuple(context.get_binding_shape(3)), dtype=np.float32
+    )
+    h_output1 = cuda.pagelocked_empty(
+        tuple(context.get_binding_shape(4)), dtype=np.float32
+    )
     d_output0 = cuda.mem_alloc(h_output0.nbytes)
     d_output1 = cuda.mem_alloc(h_output1.nbytes)
 
@@ -427,7 +466,9 @@ with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.d
 
     all_preds = None
     for step, batch in enumerate(eval_dataloader):
-        outputs, infer_time = model_infer(batch, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream)
+        outputs, infer_time = model_infer(
+            batch, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream
+        )
         total_time += infer_time
         niter += 1
 
@@ -436,22 +477,37 @@ with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.d
         end_logits = torch.tensor(end_logits)
 
         # necessary to pad predictions and labels for being gathered
-        start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
+        start_logits = accelerator.pad_across_processes(
+            start_logits, dim=1, pad_index=-100
+        )
         end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
-        logits = (accelerator.gather(start_logits).cpu().numpy(), accelerator.gather(end_logits).cpu().numpy())
-        all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
+        logits = (
+            accelerator.gather(start_logits).cpu().numpy(),
+            accelerator.gather(end_logits).cpu().numpy(),
+        )
+        all_preds = (
+            logits
+            if all_preds is None
+            else nested_concat(all_preds, logits, padding_index=-100)
+        )
 
     if all_preds is not None:
         all_preds = nested_truncate(all_preds, len(eval_dataset))
 
     evalTime = timeit.default_timer() - start_time
-    logger.info("  Evaluation done in total %f secs (%f sec per example)", evalTime, evalTime / len(eval_dataset))
+    logger.info(
+        "  Evaluation done in total %f secs (%f sec per example)",
+        evalTime,
+        evalTime / len(eval_dataset),
+    )
     # Inference time from TRT
     logger.info("Average Inference Time = {:.3f} ms".format(total_time * 1000 / niter))
     logger.info("Total Inference Time =  {:.3f} ms".format(total_time * 1000))
     logger.info("Total Number of Inference =  %d", niter)
 
 prediction = post_processing_function(eval_examples, eval_dataset, all_preds)
-eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
+eval_metric = metric.compute(
+    predictions=prediction.predictions, references=prediction.label_ids
+)
 logger.info(f"Evaluation metrics: {eval_metric}")

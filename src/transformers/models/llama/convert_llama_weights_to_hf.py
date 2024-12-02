@@ -22,7 +22,13 @@ from typing import List
 import torch
 from tokenizers import AddedToken, processors
 
-from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM, LlamaTokenizer, PreTrainedTokenizerFast
+from transformers import (
+    GenerationConfig,
+    LlamaConfig,
+    LlamaForCausalLM,
+    LlamaTokenizer,
+    PreTrainedTokenizerFast,
+)
 from transformers.convert_slow_tokenizer import TikTokenConverter
 
 
@@ -93,16 +99,38 @@ NUM_SHARDS = {
     "405B-MP16": 16,
 }
 
-CONTEXT_LENGTH_FOR_VERSION = {"Guard-3": 131072, "3.2": 131072, "3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
+CONTEXT_LENGTH_FOR_VERSION = {
+    "Guard-3": 131072,
+    "3.2": 131072,
+    "3.1": 131072,
+    "3": 8192,
+    "2": 4096,
+    "1": 2048,
+}
 
 BOS_ADDED_TOKEN = AddedToken(
-    "<|begin_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
+    "<|begin_of_text|>",
+    single_word=False,
+    lstrip=False,
+    rstrip=False,
+    normalized=False,
+    special=True,
 )
 EOS_ADDED_TOKEN = AddedToken(
-    "<|end_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
+    "<|end_of_text|>",
+    single_word=False,
+    lstrip=False,
+    rstrip=False,
+    normalized=False,
+    special=True,
 )
 EOT_ADDED_TOKEN = AddedToken(
-    "<|eot_id|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
+    "<|eot_id|>",
+    single_word=False,
+    lstrip=False,
+    rstrip=False,
+    normalized=False,
+    special=True,
 )
 
 DEFAULT_LLAMA_SPECIAL_TOKENS = {
@@ -169,7 +197,9 @@ def is_llama_3(version):
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
-    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
+    return multiple_of * (
+        (int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of
+    )
 
 
 def read_json(path):
@@ -203,7 +233,9 @@ def write_model(
     dim = params["dim"]
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head)
+    )
     if base > 10000.0 and not is_llama_3(llama_version):
         max_position_embeddings = 16384
     else:
@@ -220,7 +252,11 @@ def write_model(
 
     # permute for sliced rotary
     def permute(w, n_heads, dim1=dim, dim2=dim):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+        return (
+            w.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+            .transpose(1, 2)
+            .reshape(dim1, dim2)
+        )
 
     with tempfile.TemporaryDirectory() as tmp_model_path:
         print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
@@ -228,12 +264,19 @@ def write_model(
         if num_shards == 1:
             # Not sharded
             # (The sharded implementation would also work, but this is simpler.)
-            loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
+            loaded = torch.load(
+                os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu"
+            )
         else:
             # Sharded
-            checkpoint_list = sorted([file for file in os.listdir(input_base_path) if file.endswith(".pth")])
+            checkpoint_list = sorted(
+                [file for file in os.listdir(input_base_path) if file.endswith(".pth")]
+            )
             print("Loading in order:", checkpoint_list)
-            loaded = [torch.load(os.path.join(input_base_path, file), map_location="cpu") for file in checkpoint_list]
+            loaded = [
+                torch.load(os.path.join(input_base_path, file), map_location="cpu")
+                for file in checkpoint_list
+            ]
         param_count = 0
         index_dict = {"weight_map": {}}
         for layer_i in range(n_layers):
@@ -249,11 +292,21 @@ def write_model(
                         n_heads=num_key_value_heads,
                         dim1=key_value_dim,
                     ),
-                    f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
-                    f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
-                    f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
-                    f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w2.weight"],
-                    f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w3.weight"],
+                    f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[
+                        f"layers.{layer_i}.attention.wv.weight"
+                    ],
+                    f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
+                        f"layers.{layer_i}.attention.wo.weight"
+                    ],
+                    f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[
+                        f"layers.{layer_i}.feed_forward.w1.weight"
+                    ],
+                    f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[
+                        f"layers.{layer_i}.feed_forward.w2.weight"
+                    ],
+                    f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[
+                        f"layers.{layer_i}.feed_forward.w3.weight"
+                    ],
                     f"model.layers.{layer_i}.input_layernorm.weight": loaded[
                         f"layers.{layer_i}.attention_norm.weight"
                     ],
@@ -271,9 +324,9 @@ def write_model(
                     f"model.layers.{layer_i}.input_layernorm.weight": loaded[0][
                         f"layers.{layer_i}.attention_norm.weight"
                     ].clone(),
-                    f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[0][
-                        f"layers.{layer_i}.ffn_norm.weight"
-                    ].clone(),
+                    f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                        0
+                    ][f"layers.{layer_i}.ffn_norm.weight"].clone(),
                 }
                 state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
                     torch.cat(
@@ -301,30 +354,52 @@ def write_model(
                     key_value_dim,
                     dim,
                 )
-                state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
+                state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = (
+                    torch.cat(
+                        [
+                            loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(
+                                num_key_value_heads_per_shard, dims_per_head, dim
+                            )
+                            for i in range(len(loaded))
+                        ],
+                        dim=0,
+                    ).reshape(key_value_dim, dim)
+                )
+
+                state_dict[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = (
+                    torch.cat(
+                        [
+                            loaded[i][f"layers.{layer_i}.attention.wo.weight"]
+                            for i in range(len(loaded))
+                        ],
+                        dim=1,
+                    )
+                )
+                state_dict[f"model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
                     [
-                        loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(
-                            num_key_value_heads_per_shard, dims_per_head, dim
-                        )
+                        loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"]
                         for i in range(len(loaded))
                     ],
                     dim=0,
-                ).reshape(key_value_dim, dim)
-
-                state_dict[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.attention.wo.weight"] for i in range(len(loaded))], dim=1
-                )
-                state_dict[f"model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"] for i in range(len(loaded))], dim=0
                 )
                 state_dict[f"model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"] for i in range(len(loaded))], dim=1
+                    [
+                        loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"]
+                        for i in range(len(loaded))
+                    ],
+                    dim=1,
                 )
                 state_dict[f"model.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(len(loaded))], dim=0
+                    [
+                        loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"]
+                        for i in range(len(loaded))
+                    ],
+                    dim=0,
                 )
 
-            state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
+            state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = (
+                inv_freq
+            )
             for k, v in state_dict.items():
                 index_dict["weight_map"][k] = filename
                 param_count += v.numel()
@@ -343,9 +418,12 @@ def write_model(
             state_dict = {
                 "model.norm.weight": loaded[0]["norm.weight"],
                 "model.embed_tokens.weight": torch.cat(
-                    [loaded[i]["tok_embeddings.weight"] for i in range(len(loaded))], dim=concat_dim
+                    [loaded[i]["tok_embeddings.weight"] for i in range(len(loaded))],
+                    dim=concat_dim,
                 ),
-                "lm_head.weight": torch.cat([loaded[i]["output.weight"] for i in range(len(loaded))], dim=0),
+                "lm_head.weight": torch.cat(
+                    [loaded[i]["output.weight"] for i in range(len(loaded))], dim=0
+                ),
             }
 
         for k, v in state_dict.items():
@@ -355,8 +433,12 @@ def write_model(
 
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
-        write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-        ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
+        write_json(
+            index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json")
+        )
+        ffn_dim_multiplier = (
+            params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
+        )
         multiple_of = params["multiple_of"] if "multiple_of" in params else 256
 
         if is_llama_3(llama_version):
@@ -383,7 +465,9 @@ def write_model(
 
         config = LlamaConfig(
             hidden_size=dim,
-            intermediate_size=compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of),
+            intermediate_size=compute_intermediate_size(
+                dim, ffn_dim_multiplier, multiple_of
+            ),
             num_attention_heads=params["n_heads"],
             num_hidden_layers=params["n_layers"],
             rms_norm_eps=params["norm_eps"],
@@ -414,7 +498,9 @@ def write_model(
         gc.collect()
 
         print("Loading the checkpoint in a Llama model.")
-        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        model = LlamaForCausalLM.from_pretrained(
+            tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        )
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
@@ -423,24 +509,51 @@ def write_model(
         print("Saving in the Transformers format.")
         if push_to_hub:
             print("Pushing to the hub.")
-            model.push_to_hub(model_path, safe_serialization=safe_serialization, private=True, use_temp_dir=True)
+            model.push_to_hub(
+                model_path,
+                safe_serialization=safe_serialization,
+                private=True,
+                use_temp_dir=True,
+            )
         else:
             print("Saving to disk.")
             model.save_pretrained(model_path, safe_serialization=safe_serialization)
 
 
 class Llama3Converter(TikTokenConverter):
-    def __init__(self, vocab_file, special_tokens=None, instruct=False, llama_version="3.2", **kwargs):
+    def __init__(
+        self,
+        vocab_file,
+        special_tokens=None,
+        instruct=False,
+        llama_version="3.2",
+        **kwargs,
+    ):
         super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
 
         # References for chat templates in instruct models
         templates_for_version = {
-            "2": ("meta-llama/Llama-2-7b-chat-hf", "f5db02db724555f92da89c216ac04704f23d4590"),
-            "3": ("meta-llama/Meta-Llama-3-8B-Instruct", "5f0b02c75b57c5855da9ae460ce51323ea669d8a"),
-            "3.1": ("meta-llama/Llama-3.1-8B-Instruct", "0e9e39f249a16976918f6564b8830bc894c89659"),
-            "3.2": ("meta-llama/Llama-3.2-1B-Instruct", "e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14"),
-            "Guard-3": ("meta-llama/Llama-Guard-3-1B", "acf7aafa60f0410f8f42b1fa35e077d705892029"),
+            "2": (
+                "meta-llama/Llama-2-7b-chat-hf",
+                "f5db02db724555f92da89c216ac04704f23d4590",
+            ),
+            "3": (
+                "meta-llama/Meta-Llama-3-8B-Instruct",
+                "5f0b02c75b57c5855da9ae460ce51323ea669d8a",
+            ),
+            "3.1": (
+                "meta-llama/Llama-3.1-8B-Instruct",
+                "0e9e39f249a16976918f6564b8830bc894c89659",
+            ),
+            "3.2": (
+                "meta-llama/Llama-3.2-1B-Instruct",
+                "e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14",
+            ),
+            "Guard-3": (
+                "meta-llama/Llama-Guard-3-1B",
+                "acf7aafa60f0410f8f42b1fa35e077d705892029",
+            ),
         }
 
         # Add chat_template only if instruct is True.
@@ -467,7 +580,9 @@ class Llama3Converter(TikTokenConverter):
         self.update_post_processor(self.converted_tokenizer)
         # finer special_tokens_map.json
         self.converted_tokenizer._bos_token = BOS_ADDED_TOKEN
-        self.converted_tokenizer._eos_token = EOT_ADDED_TOKEN if instruct else EOS_ADDED_TOKEN
+        self.converted_tokenizer._eos_token = (
+            EOT_ADDED_TOKEN if instruct else EOS_ADDED_TOKEN
+        )
 
     # We can't do this while building the tokenizer because we have no easy access to the bos token id
     def update_post_processor(self, tokenizer):
@@ -478,7 +593,10 @@ class Llama3Converter(TikTokenConverter):
                     single="<|begin_of_text|> $A",
                     pair="<|begin_of_text|>:0 $A:0 <|begin_of_text|>:1 $B:1",
                     special_tokens=[
-                        ("<|begin_of_text|>", tokenizer.convert_tokens_to_ids("<|begin_of_text|>")),
+                        (
+                            "<|begin_of_text|>",
+                            tokenizer.convert_tokens_to_ids("<|begin_of_text|>"),
+                        ),
                     ],
                 ),
             ]
@@ -486,10 +604,17 @@ class Llama3Converter(TikTokenConverter):
 
 
 def write_tokenizer(
-    tokenizer_path, input_tokenizer_path, llama_version="2", special_tokens=None, instruct=False, push_to_hub=False
+    tokenizer_path,
+    input_tokenizer_path,
+    llama_version="2",
+    special_tokens=None,
+    instruct=False,
+    push_to_hub=False,
 ):
     print("Converting the tokenizer.")
-    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    tokenizer_class = (
+        LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    )
     if is_llama_3(llama_version):
         tokenizer = Llama3Converter(
             input_tokenizer_path,
@@ -506,7 +631,9 @@ def write_tokenizer(
             )
 
     if push_to_hub:
-        print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
+        print(
+            f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}."
+        )
         tokenizer.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
@@ -536,7 +663,10 @@ def main():
         default=False,
     )
     parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
+        "--safe_serialization",
+        action="store_true",
+        default=True,
+        help="Whether or not to save using `safetensors`.",
     )
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
@@ -566,10 +696,14 @@ def main():
     )
     args = parser.parse_args()
     if args.model_size is None and args.num_shards is None:
-        raise ValueError("You have to set at least `num_shards` if you are not giving the `model_size`")
+        raise ValueError(
+            "You have to set at least `num_shards` if you are not giving the `model_size`"
+        )
     if args.special_tokens is None:
         # no special tokens by default
-        args.special_tokens = DEFAULT_LLAMA_SPECIAL_TOKENS.get(str(args.llama_version), [])
+        args.special_tokens = DEFAULT_LLAMA_SPECIAL_TOKENS.get(
+            str(args.llama_version), []
+        )
 
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
     vocab_size = len(

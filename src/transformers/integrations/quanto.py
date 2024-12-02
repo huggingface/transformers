@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_optimum_quanto_available, is_quanto_available, is_torch_available, logging
+from ..utils import (
+    is_optimum_quanto_available,
+    is_quanto_available,
+    is_torch_available,
+    logging,
+)
 
 
 if is_torch_available():

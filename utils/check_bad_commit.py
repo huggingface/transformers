@@ -132,7 +132,9 @@ def get_commit_info(commit):
     author = None
     merged_author = None
 
-    url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}/pulls"
+    url = (
+        f"https://api.github.com/repos/huggingface/transformers/commits/{commit}/pulls"
+    )
     pr_info_for_commit = requests.get(url).json()
 
     if len(pr_info_for_commit) > 0:
@@ -148,16 +150,33 @@ def get_commit_info(commit):
         commit_info = requests.get(url).json()
         author = commit_info["author"]["login"]
 
-    return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author}
+    return {
+        "commit": commit,
+        "pr_number": pr_number,
+        "author": author,
+        "merged_by": merged_author,
+    }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start_commit", type=str, required=True, help="The latest commit hash to check.")
-    parser.add_argument("--end_commit", type=str, required=True, help="The earliest commit hash to check.")
+    parser.add_argument(
+        "--start_commit",
+        type=str,
+        required=True,
+        help="The latest commit hash to check.",
+    )
+    parser.add_argument(
+        "--end_commit",
+        type=str,
+        required=True,
+        help="The earliest commit hash to check.",
+    )
     parser.add_argument("--test", type=str, help="The test to check.")
     parser.add_argument("--file", type=str, help="The report file.")
-    parser.add_argument("--output_file", type=str, required=True, help="The path of the output file.")
+    parser.add_argument(
+        "--output_file", type=str, required=True, help="The path of the output file."
+    )
     args = parser.parse_args()
 
     print(f"start_commit: {args.start_commit}")
@@ -167,7 +186,11 @@ if __name__ == "__main__":
         raise ValueError("Exactly one argument `test` or `file` must be specified.")
 
     if args.test is not None:
-        commit = find_bad_commit(target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit)
+        commit = find_bad_commit(
+            target_test=args.test,
+            start_commit=args.start_commit,
+            end_commit=args.end_commit,
+        )
         with open(args.output_file, "w", encoding="UTF-8") as fp:
             fp.write(f"{args.test}\n{commit}")
     elif os.path.isfile(args.file):
@@ -181,7 +204,11 @@ if __name__ == "__main__":
 
             failed_tests_with_bad_commits = []
             for test in failed_tests:
-                commit = find_bad_commit(target_test=test, start_commit=args.start_commit, end_commit=args.end_commit)
+                commit = find_bad_commit(
+                    target_test=test,
+                    start_commit=args.start_commit,
+                    end_commit=args.end_commit,
+                )
                 info = {"test": test, "commit": commit}
                 info.update(get_commit_info(commit))
                 failed_tests_with_bad_commits.append(info)

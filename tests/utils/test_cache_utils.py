@@ -68,18 +68,27 @@ class CacheTest(unittest.TestCase):
             self.assertTrue(len(legacy_cache[layer_idx]), len(legacy_cache[layer_idx]))
             for key_value_idx in range(2):
                 self.assertTrue(
-                    legacy_cache[layer_idx][key_value_idx].shape == new_cache[layer_idx][key_value_idx].shape
+                    legacy_cache[layer_idx][key_value_idx].shape
+                    == new_cache[layer_idx][key_value_idx].shape
                 )
 
         # Sanity check 2: we can get the sequence length in multiple ways with DynamicCache, and they return the
         # expected value
-        self.assertTrue(legacy_cache[0][0].shape[-2] == new_cache[0][0].shape[-2] == new_cache.get_seq_length() == 8)
+        self.assertTrue(
+            legacy_cache[0][0].shape[-2]
+            == new_cache[0][0].shape[-2]
+            == new_cache.get_seq_length()
+            == 8
+        )
 
         # Sanity check 3: they must be equal, and both support indexing
         for layer_idx in range(10):
             for key_value_idx in range(2):
                 self.assertTrue(
-                    torch.allclose(new_cache[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
+                    torch.allclose(
+                        new_cache[layer_idx][key_value_idx],
+                        legacy_cache[layer_idx][key_value_idx],
+                    )
                 )
 
         # Test 1: We can convert from legacy to new with no changes
@@ -87,7 +96,10 @@ class CacheTest(unittest.TestCase):
         for layer_idx in range(10):
             for key_value_idx in range(2):
                 self.assertTrue(
-                    torch.allclose(from_legacy[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
+                    torch.allclose(
+                        from_legacy[layer_idx][key_value_idx],
+                        legacy_cache[layer_idx][key_value_idx],
+                    )
                 )
 
         # Test 2: We can convert from new to legacy with no changes
@@ -95,12 +107,17 @@ class CacheTest(unittest.TestCase):
         for layer_idx in range(10):
             for key_value_idx in range(2):
                 self.assertTrue(
-                    torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
+                    torch.allclose(
+                        to_legacy[layer_idx][key_value_idx],
+                        new_cache[layer_idx][key_value_idx],
+                    )
                 )
 
     def test_reorder_cache_retrocompatibility(self):
         """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
-        legacy_reorder_fn = GPT2LMHeadModel._reorder_cache  # An example of a legacy `_reorder_cache` function
+        legacy_reorder_fn = (
+            GPT2LMHeadModel._reorder_cache
+        )  # An example of a legacy `_reorder_cache` function
 
         legacy_cache = ()
         new_cache = DynamicCache()
@@ -124,7 +141,8 @@ class CacheTest(unittest.TestCase):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(
-                        new_cache[layer_idx][key_value_idx], legacy_cache_reordered[layer_idx][key_value_idx]
+                        new_cache[layer_idx][key_value_idx],
+                        legacy_cache_reordered[layer_idx][key_value_idx],
                     )
                 )
 
@@ -137,35 +155,57 @@ class CacheTest(unittest.TestCase):
         def _random_kvs(config):
             # shape for key and values: (batch_size, num_heads, seq_len, head_dim)
             random_keys = torch.rand(
-                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                (
+                    1,
+                    config.num_key_value_heads,
+                    1,
+                    config.hidden_size // config.num_attention_heads,
+                ),
                 device=torch_device,
             )
             random_values = torch.rand(
-                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                (
+                    1,
+                    config.num_key_value_heads,
+                    1,
+                    config.hidden_size // config.num_attention_heads,
+                ),
                 device=torch_device,
             )
             return random_keys, random_values
 
         mha_config = LlamaConfig(num_attention_heads=32)
-        mha_static_cache = StaticCache(config=mha_config, batch_size=1, max_cache_len=10, device=torch_device)
+        mha_static_cache = StaticCache(
+            config=mha_config, batch_size=1, max_cache_len=10, device=torch_device
+        )
         cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
+            *_random_kvs(mha_config),
+            0,
+            cache_kwargs={"cache_position": torch.arange(1).to(torch_device)},
         )
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
 
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
-        gqa_static_cache = StaticCache(config=gqa_config, batch_size=1, max_cache_len=10, device=torch_device)
+        gqa_static_cache = StaticCache(
+            config=gqa_config, batch_size=1, max_cache_len=10, device=torch_device
+        )
         cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
+            *_random_kvs(gqa_config),
+            0,
+            cache_kwargs={"cache_position": torch.arange(1).to(torch_device)},
         )
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
 
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
-        mqa_static_cache = StaticCache(config=mqa_config, batch_size=1, max_cache_len=10, device=torch_device)
+        mqa_static_cache = StaticCache(
+            config=mqa_config, batch_size=1, max_cache_len=10, device=torch_device
+        )
         cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
+            *_random_kvs(mqa_config),
+            0,
+            cache_kwargs={"cache_position": torch.arange(1).to(torch_device)},
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
@@ -183,7 +223,9 @@ class CacheTest(unittest.TestCase):
         device = "cpu"
         dtype = "bfloat16"
         cache_implementation = "static"
-        attn_implementation = "sdpa"  # Export and ExecuTorch only works for SdpaAttention
+        attn_implementation = (
+            "sdpa"  # Export and ExecuTorch only works for SdpaAttention
+        )
         batch_size = 1
         max_cache_len = 1234
         model = AutoModelForCausalLM.from_pretrained(
@@ -203,11 +245,15 @@ class CacheTest(unittest.TestCase):
         )
         # Check if cache config is passed through correctly
         self.assertEqual(model.generation_config.use_cache, True)
-        self.assertEqual(model.generation_config.cache_implementation, cache_implementation)
+        self.assertEqual(
+            model.generation_config.cache_implementation, cache_implementation
+        )
         self.assertEqual(model.generation_config.max_length, max_cache_len)
         self.assertTrue(model.generation_config.cache_config is not None)
         self.assertEqual(model.generation_config.cache_config.batch_size, batch_size)
-        self.assertEqual(model.generation_config.cache_config.max_cache_len, max_cache_len)
+        self.assertEqual(
+            model.generation_config.cache_config.max_cache_len, max_cache_len
+        )
 
         exported_program = convert_and_export_with_cache(model)
 
@@ -230,17 +276,23 @@ class CacheTest(unittest.TestCase):
 @slow
 class CacheIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", padding_side="left"
+        )
         model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
         )
-        inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
+        inputs = tokenizer(
+            ["Here's everything I know about cats. Cats"], return_tensors="pt"
+        ).to(model.device)
 
         # DynamicCache and the legacy cache format should be equivalent
         set_seed(0)
         gen_out_legacy = model.generate(**inputs, do_sample=True, max_new_tokens=256)
         set_seed(0)
-        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, past_key_values=DynamicCache())
+        gen_out = model.generate(
+            **inputs, do_sample=True, max_new_tokens=256, past_key_values=DynamicCache()
+        )
         self.assertListEqual(gen_out_legacy.tolist(), gen_out.tolist())
 
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
@@ -259,22 +311,33 @@ class CacheIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded[0], expected_text)
 
     def test_dynamic_cache_batched(self):
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", padding_side="left"
+        )
         tokenizer.pad_token = tokenizer.eos_token
         model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
         )
-        inputs = tokenizer(["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt").to(
-            model.device
-        )
+        inputs = tokenizer(
+            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"],
+            padding=True,
+            return_tensors="pt",
+        ).to(model.device)
 
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache())
+        gen_out = model.generate(
+            **inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache()
+        )
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        expected_text = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
+        expected_text = [
+            "A sequence: 1, 2, 3, 4, 5, 6, 7, 8,",
+            "A sequence: A, B, C, D, E, F, G, H",
+        ]
         self.assertListEqual(decoded, expected_text)
 
     def test_dynamic_cache_beam_search(self):
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", padding_side="left"
+        )
         model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
         )
@@ -322,16 +385,26 @@ class CacheIntegrationTest(unittest.TestCase):
     @require_auto_gptq
     def test_sink_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("TheBloke/LLaMa-7B-GPTQ")
-        model = AutoModelForCausalLM.from_pretrained("TheBloke/LLaMa-7B-GPTQ", device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            "TheBloke/LLaMa-7B-GPTQ", device_map="auto"
+        )
 
-        inputs = tokenizer(["Vaswani et al. (2017) introduced the Transformers"], return_tensors="pt").to(model.device)
+        inputs = tokenizer(
+            ["Vaswani et al. (2017) introduced the Transformers"], return_tensors="pt"
+        ).to(model.device)
 
         # Set up the SinkCache. Using a small window length to contain computational complexity. If this example is run
         # without a SinkCache, the last few tokens are gibberish (ends in "of the of the of a of a of")
         cache = SinkCache(window_length=508, num_sink_tokens=4)
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=3000, past_key_values=cache)
+        gen_out = model.generate(
+            **inputs, do_sample=False, max_new_tokens=3000, past_key_values=cache
+        )
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        self.assertTrue(decoded[0].endswith("to perform a variety of tasks. The Transformer is a neural network"))
+        self.assertTrue(
+            decoded[0].endswith(
+                "to perform a variety of tasks. The Transformer is a neural network"
+            )
+        )
 
     def test_sink_cache_iterative_prompts(self):
         """Tests that SinkCache supports more than one new token at once, when shifting the cache"""
@@ -350,14 +423,18 @@ class CacheIntegrationTest(unittest.TestCase):
         for _ in range(3):
             # Tokenize the prompt with the correct chat template
             chat = [{"role": "user", "content": prompt}]
-            tokenized_chat = tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
-                model.device
-            )
+            tokenized_chat = tokenizer.apply_chat_template(
+                chat, return_tensors="pt", add_generation_prompt=True
+            ).to(model.device)
             input_ids = torch.cat((input_ids, tokenized_chat), dim=1)
 
             # Perform the generation
             gen_out = model.generate(
-                input_ids, do_sample=False, max_new_tokens=100, past_key_values=cache, use_cache=True
+                input_ids,
+                do_sample=False,
+                max_new_tokens=100,
+                past_key_values=cache,
+                use_cache=True,
             )
             input_ids = gen_out
 
@@ -384,7 +461,9 @@ class CacheIntegrationTest(unittest.TestCase):
             ("sdpa", "offloaded-static"),
         ]
     )
-    def test_static_cache_greedy_decoding_pad_left(self, attn_implementation, cache_implementation):
+    def test_static_cache_greedy_decoding_pad_left(
+        self, attn_implementation, cache_implementation
+    ):
         EXPECTED_GENERATION = [
             "The best color is the one that complements the skin tone of the",
             "We should not undermind the issues at hand.\nWe should not undermind the issues",
@@ -399,7 +478,9 @@ class CacheIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         set_seed(0)
@@ -431,7 +512,9 @@ class CacheIntegrationTest(unittest.TestCase):
             ("sdpa", "offloaded-static"),
         ]
     )
-    def test_static_cache_greedy_decoding_pad_right(self, attn_implementation, cache_implementation):
+    def test_static_cache_greedy_decoding_pad_right(
+        self, attn_implementation, cache_implementation
+    ):
         EXPECTED_GENERATION = [
             "The best color isЋ the one that complements the skin tone of",
             "We should not undermind the issues at hand.\nWe should not undermind the issues",
@@ -446,7 +529,9 @@ class CacheIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         set_seed(0)
@@ -497,7 +582,9 @@ class CacheIntegrationTest(unittest.TestCase):
             torch_dtype=torch.bfloat16,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
@@ -537,7 +624,9 @@ class CacheIntegrationTest(unittest.TestCase):
             torch_dtype=torch.bfloat16,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         model.generation_config.cache_implementation = cache_implementation
@@ -567,7 +656,9 @@ class CacheIntegrationTest(unittest.TestCase):
         """Tests that OffloadedCache produces the same result as the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="auto", torch_dtype=torch.float16
+        )
         device = model.device
         input_text = "Fun fact:"
         inputs = tokenizer(input_text, return_tensors="pt").to(device)
@@ -583,7 +674,9 @@ class CacheIntegrationTest(unittest.TestCase):
         offloaded = GenerationConfig(cache_implementation="offloaded", **common)
         original_outputs = model.generate(generation_config=original, **inputs)
         offloaded_outputs = model.generate(generation_config=offloaded, **inputs)
-        for original_output, offloaded_output in zip(original_outputs, offloaded_outputs):
+        for original_output, offloaded_output in zip(
+            original_outputs, offloaded_outputs
+        ):
             assert torch.all(original_output == offloaded_output).item()
 
     @require_torch_gpu
@@ -591,7 +684,9 @@ class CacheIntegrationTest(unittest.TestCase):
         """Tests that OffloadedCache uses less memory than the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="auto", torch_dtype=torch.float16
+        )
         device = model.device
         input_text = "Fun fact:"
         inputs = tokenizer(input_text, return_tensors="pt").to(device)
@@ -617,24 +712,41 @@ class CacheIntegrationTest(unittest.TestCase):
     def test_cache_copy(self):
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="cuda", torch_dtype=torch.bfloat16
+        )
 
         prompt_cache = StaticCache(
-            config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16
+            config=model.config,
+            max_batch_size=1,
+            max_cache_len=1024,
+            device="cuda",
+            dtype=torch.bfloat16,
         )
 
         INITIAL_PROMPT = "You are a helpful assistant. "
-        inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
+        inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(
+            "cuda"
+        )
         # This is the common prompt cached, we need to run forward without grad to be abel to copy
         with torch.no_grad():
-            prompt_cache = model(**inputs_initial_prompt, past_key_values=prompt_cache).past_key_values
+            prompt_cache = model(
+                **inputs_initial_prompt, past_key_values=prompt_cache
+            ).past_key_values
 
-        prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
+        prompts = [
+            "Help me to write a blogpost about travelling.",
+            "What is the capital of France?",
+        ]
         responses = []
         for prompt in prompts:
-            new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
+            new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(
+                "cuda"
+            )
             past_key_values = copy.deepcopy(prompt_cache)
-            outputs = model.generate(**new_inputs, past_key_values=past_key_values, max_new_tokens=40)
+            outputs = model.generate(
+                **new_inputs, past_key_values=past_key_values, max_new_tokens=40
+            )
             response = tokenizer.batch_decode(outputs)[0]
             responses.append(response)
 

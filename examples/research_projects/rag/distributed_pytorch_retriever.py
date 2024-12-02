@@ -31,7 +31,9 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             If specified, use this index instead of the one built using the configuration
     """
 
-    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None):
+    def __init__(
+        self, config, question_encoder_tokenizer, generator_tokenizer, index=None
+    ):
         super().__init__(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
@@ -79,7 +81,9 @@ class RagPyTorchDistributedRetriever(RagRetriever):
 
     def _scattered(self, scatter_list, target_shape, target_type=torch.float32):
         target_tensor = torch.empty(target_shape, dtype=target_type)
-        dist.scatter(target_tensor, src=0, scatter_list=scatter_list, group=self.process_group)
+        dist.scatter(
+            target_tensor, src=0, scatter_list=scatter_list, group=self.process_group
+        )
         return target_tensor
 
     def _infer_socket_ifname(self):
@@ -88,7 +92,9 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         ifname = next((addr for addr in addrs if addr.startswith("e")), None)
         return ifname
 
-    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, List[dict]]:
+    def retrieve(
+        self, question_hidden_states: np.ndarray, n_docs: int
+    ) -> Tuple[np.ndarray, List[dict]]:
         """
         Retrieves documents for specified ``question_hidden_states``. The main process, which has the access to the index stored in memory, gathers queries
         from all the processes in the main training process group, performs the retrieval and scatters back the results.
@@ -110,7 +116,9 @@ class RagPyTorchDistributedRetriever(RagRetriever):
 
         # single GPU training
         if not dist.is_initialized():
-            doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
+            doc_ids, retrieved_doc_embeds = self._main_retrieve(
+                question_hidden_states, n_docs
+            )
             return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
         # distributed training
@@ -119,8 +127,16 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         # gather logic
         gather_list = None
         if self._is_main():
-            gather_list = [torch.empty(question_hidden_states.shape, dtype=torch.float32) for _ in range(world_size)]
-        dist.gather(torch.tensor(question_hidden_states), dst=0, gather_list=gather_list, group=self.process_group)
+            gather_list = [
+                torch.empty(question_hidden_states.shape, dtype=torch.float32)
+                for _ in range(world_size)
+            ]
+        dist.gather(
+            torch.tensor(question_hidden_states),
+            dst=0,
+            gather_list=gather_list,
+            group=self.process_group,
+        )
 
         # scatter logic
         n_queries = question_hidden_states.shape[0]
@@ -132,7 +148,15 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             ids, vectors = torch.tensor(ids), torch.tensor(vectors)
             scatter_ids = self._chunk_tensor(ids, n_queries)
             scatter_vectors = self._chunk_tensor(vectors, n_queries)
-        doc_ids = self._scattered(scatter_ids, [n_queries, n_docs], target_type=torch.int64)
-        retrieved_doc_embeds = self._scattered(scatter_vectors, [n_queries, n_docs, question_hidden_states.shape[1]])
+        doc_ids = self._scattered(
+            scatter_ids, [n_queries, n_docs], target_type=torch.int64
+        )
+        retrieved_doc_embeds = self._scattered(
+            scatter_vectors, [n_queries, n_docs, question_hidden_states.shape[1]]
+        )
 
-        return retrieved_doc_embeds.numpy(), doc_ids.numpy(), self.index.get_doc_dicts(doc_ids)
+        return (
+            retrieved_doc_embeds.numpy(),
+            doc_ids.numpy(),
+            self.index.get_doc_dicts(doc_ids),
+        )

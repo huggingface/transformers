@@ -30,7 +30,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration, TFBlenderbotModel
+    from transformers import (
+        TFAutoModelForSeq2SeqLM,
+        TFBlenderbotForConditionalGeneration,
+        TFBlenderbotModel,
+    )
 
 
 @require_tf
@@ -78,10 +82,14 @@ class TFBlenderbotModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
-        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
+        eos_tensor = tf.expand_dims(
+            tf.constant([self.eos_token_id] * self.batch_size), 1
+        )
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = self.config_cls(
             vocab_size=self.vocab_size,
@@ -101,7 +109,9 @@ class TFBlenderbotModelTester:
             decoder_start_token_id=self.pad_token_id,
             **self.config_updates,
         )
-        inputs_dict = prepare_blenderbot_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_blenderbot_inputs_dict(
+            config, input_ids, decoder_input_ids
+        )
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
@@ -114,7 +124,12 @@ class TFBlenderbotModelTester:
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -126,8 +141,14 @@ class TFBlenderbotModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
+            0
+        ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -137,7 +158,9 @@ class TFBlenderbotModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-3
+        )
 
 
 def prepare_blenderbot_inputs_dict(
@@ -151,21 +174,30 @@ def prepare_blenderbot_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+        attention_mask = tf.cast(
+            tf.math.not_equal(input_ids, config.pad_token_id), tf.int8
+        )
     if decoder_attention_mask is None:
         decoder_attention_mask = tf.concat(
             [
                 tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8),
-                tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8),
+                tf.cast(
+                    tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id),
+                    tf.int8,
+                ),
             ],
             axis=-1,
         )
     if head_mask is None:
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
-        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        decoder_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        cross_attn_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -179,8 +211,14 @@ def prepare_blenderbot_inputs_dict(
 
 @require_tf
 class TFBlenderbotModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBlenderbotForConditionalGeneration, TFBlenderbotModel) if is_tf_available() else ()
-    all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
+    all_model_classes = (
+        (TFBlenderbotForConditionalGeneration, TFBlenderbotModel)
+        if is_tf_available()
+        else ()
+    )
+    all_generative_model_classes = (
+        (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": TFBlenderbotModel,
@@ -228,7 +266,9 @@ class TFBlenderbot400MIntegrationTests(unittest.TestCase):
         generated_ids = self.model.generate(
             model_inputs.input_ids,
         )
-        generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)[0]
+        generated_words = self.tokenizer.batch_decode(
+            generated_ids.numpy(), skip_special_tokens=True
+        )[0]
         assert (
             generated_words
             == " That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?"

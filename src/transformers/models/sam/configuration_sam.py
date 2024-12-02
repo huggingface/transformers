@@ -289,8 +289,12 @@ class SamConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
-        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
-        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
+        prompt_encoder_config = (
+            prompt_encoder_config if prompt_encoder_config is not None else {}
+        )
+        mask_decoder_config = (
+            mask_decoder_config if mask_decoder_config is not None else {}
+        )
 
         if isinstance(vision_config, SamVisionConfig):
             vision_config = vision_config.to_dict()

@@ -62,7 +62,10 @@ def get_git_config(model_name):
 
     is_video = "vatex" in model_name or "msrvtt" in model_name
     num_image_with_embedding = 6 if is_video else None
-    config = GitConfig(vision_config=vision_config.to_dict(), num_image_with_embedding=num_image_with_embedding)
+    config = GitConfig(
+        vision_config=vision_config.to_dict(),
+        num_image_with_embedding=num_image_with_embedding,
+    )
 
     return config, image_size, is_video
 
@@ -74,7 +77,10 @@ def create_rename_keys(config, prefix=""):
     # image encoder
     # ftm: off
     rename_keys.append(
-        (f"{prefix}image_encoder.class_embedding", "git.image_encoder.vision_model.embeddings.class_embedding")
+        (
+            f"{prefix}image_encoder.class_embedding",
+            "git.image_encoder.vision_model.embeddings.class_embedding",
+        )
     )
     rename_keys.append(
         (
@@ -83,16 +89,39 @@ def create_rename_keys(config, prefix=""):
         )
     )
     rename_keys.append(
-        (f"{prefix}image_encoder.conv1.weight", "git.image_encoder.vision_model.embeddings.patch_embedding.weight")
+        (
+            f"{prefix}image_encoder.conv1.weight",
+            "git.image_encoder.vision_model.embeddings.patch_embedding.weight",
+        )
     )
-    rename_keys.append((f"{prefix}image_encoder.ln_pre.weight", "git.image_encoder.vision_model.pre_layrnorm.weight"))
-    rename_keys.append((f"{prefix}image_encoder.ln_pre.bias", "git.image_encoder.vision_model.pre_layrnorm.bias"))
     rename_keys.append(
-        (f"{prefix}image_encoder.ln_post.weight", "git.image_encoder.vision_model.post_layernorm.weight")
+        (
+            f"{prefix}image_encoder.ln_pre.weight",
+            "git.image_encoder.vision_model.pre_layrnorm.weight",
+        )
     )
-    rename_keys.append((f"{prefix}image_encoder.ln_post.bias", "git.image_encoder.vision_model.post_layernorm.bias"))
+    rename_keys.append(
+        (
+            f"{prefix}image_encoder.ln_pre.bias",
+            "git.image_encoder.vision_model.pre_layrnorm.bias",
+        )
+    )
+    rename_keys.append(
+        (
+            f"{prefix}image_encoder.ln_post.weight",
+            "git.image_encoder.vision_model.post_layernorm.weight",
+        )
+    )
+    rename_keys.append(
+        (
+            f"{prefix}image_encoder.ln_post.bias",
+            "git.image_encoder.vision_model.post_layernorm.bias",
+        )
+    )
     # fmt: on
-    rename_keys.append((f"{prefix}image_encoder.proj", "git.image_encoder.visual_projection.weight"))
+    rename_keys.append(
+        (f"{prefix}image_encoder.proj", "git.image_encoder.visual_projection.weight")
+    )
 
     # fmt: off
     for i in range(config.vision_config.num_hidden_layers):
@@ -162,29 +191,39 @@ def read_in_q_k_v(state_dict, config, prefix=""):
     dim = config.vision_config.hidden_size
     for i in range(config.vision_config.num_hidden_layers):
         # read in weights + bias of input projection layer (in the original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"{prefix}image_encoder.transformer.resblocks.{i}.attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}image_encoder.transformer.resblocks.{i}.attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"{prefix}image_encoder.transformer.resblocks.{i}.attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"{prefix}image_encoder.transformer.resblocks.{i}.attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[
-            :dim, :
-        ]
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:dim]
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
-            dim : dim * 2, :
-        ]
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
-            dim : dim * 2
-        ]
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[
-            -dim:, :
-        ]
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-dim:]
+        state_dict[
+            f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"
+        ] = in_proj_weight[:dim, :]
+        state_dict[
+            f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"
+        ] = in_proj_bias[:dim]
+        state_dict[
+            f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"
+        ] = in_proj_weight[dim : dim * 2, :]
+        state_dict[
+            f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"
+        ] = in_proj_bias[dim : dim * 2]
+        state_dict[
+            f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"
+        ] = in_proj_weight[-dim:, :]
+        state_dict[
+            f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"
+        ] = in_proj_bias[-dim:]
 
 
 # We will verify our results on an image
 def prepare_img(model_name):
     if "textvqa" in model_name:
-        filepath = hf_hub_download(repo_id="nielsr/textvqa-sample", filename="bus.png", repo_type="dataset")
+        filepath = hf_hub_download(
+            repo_id="nielsr/textvqa-sample", filename="bus.png", repo_type="dataset"
+        )
         image = Image.open(filepath).convert("RGB")
     else:
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -238,12 +277,18 @@ def prepare_video():
     # set seed for reproducibility
     np.random.seed(0)
 
-    file_path = hf_hub_download(repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset")
+    file_path = hf_hub_download(
+        repo_id="nielsr/video-demo",
+        filename="eating_spaghetti.mp4",
+        repo_type="dataset",
+    )
     with av.open(file_path) as container:
         # sample 6 frames
         num_frames = 6
         indices = sample_frame_indices(
-            clip_len=num_frames, frame_sample_rate=4, seg_len=container.streams.video[0].frames
+            clip_len=num_frames,
+            frame_sample_rate=4,
+            seg_len=container.streams.video[0].frames,
         )
         frames = read_video_pyav(container, indices)
 
@@ -300,9 +345,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     else:
         checkpoint_url = model_name_to_url[model_name]
-        state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[
-            "model"
-        ]
+        state_dict = torch.hub.load_state_dict_from_url(
+            checkpoint_url, map_location="cpu", file_name=model_name
+        )["model"]
     # rename keys
     prefix = "module." if model_name == "git-base" else ""
     rename_keys = create_rename_keys(config, prefix=prefix)
@@ -318,21 +363,27 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
 
-    assert missing_keys == ["git.embeddings.position_ids", "git.image_encoder.vision_model.embeddings.position_ids"]
+    assert missing_keys == [
+        "git.embeddings.position_ids",
+        "git.image_encoder.vision_model.embeddings.position_ids",
+    ]
     assert unexpected_keys == ["git.image_encoder.visual_projection.weight"]
 
     # verify results
     image_processor = (
         VideoMAEImageProcessor(
-            size={"shortest_edge": image_size}, crop_size={"height": image_size, "width": image_size}
+            size={"shortest_edge": image_size},
+            crop_size={"height": image_size, "width": image_size},
         )
         if is_video
         else CLIPImageProcessor(
-            size={"shortest_edge": image_size}, crop_size={"height": image_size, "width": image_size}
+            size={"shortest_edge": image_size},
+            crop_size={"height": image_size, "width": image_size},
         )
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        "google-bert/bert-base-uncased", model_input_names=["input_ids", "attention_mask"]
+        "google-bert/bert-base-uncased",
+        model_input_names=["input_ids", "attention_mask"],
     )
     processor = GitProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
@@ -346,7 +397,10 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
                 Resize(image_size, interpolation=Image.BICUBIC),
                 CenterCrop(image_size),
                 ToTensor(),
-                Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+                Normalize(
+                    (0.48145466, 0.4578275, 0.40821073),
+                    (0.26862954, 0.26130258, 0.27577711),
+                ),
             ]
         )
         original_pixel_values = image_transforms(image).unsqueeze(0)
@@ -408,12 +462,19 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     input_ids = [processor.tokenizer.cls_token_id] + input_ids
     input_ids = torch.tensor(input_ids).unsqueeze(0)
     print("Generating caption...")
-    generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
-    print("Generated caption:", processor.batch_decode(generated_ids, skip_special_tokens=True))
+    generated_ids = model.generate(
+        pixel_values=pixel_values, input_ids=input_ids, max_length=50
+    )
+    print(
+        "Generated caption:",
+        processor.batch_decode(generated_ids, skip_special_tokens=True),
+    )
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}")
+        print(
+            f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}"
+        )
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
@@ -445,4 +506,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_git_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_git_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

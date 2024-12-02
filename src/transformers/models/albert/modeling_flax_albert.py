@@ -41,7 +41,12 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_albert import AlbertConfig
 
 
@@ -159,22 +164,32 @@ class FlaxAlbertEmbeddings(nn.Module):
         self.word_embeddings = nn.Embed(
             self.config.vocab_size,
             self.config.embedding_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.embedding_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.embedding_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    def __call__(self, input_ids, token_type_ids, position_ids, deterministic: bool = True):
+    def __call__(
+        self, input_ids, token_type_ids, position_ids, deterministic: bool = True
+    ):
         # Embed
         inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
         position_embeds = self.position_embeddings(position_ids.astype("i4"))
@@ -220,10 +235,18 @@ class FlaxAlbertSelfAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic=True,
+        output_attentions: bool = False,
+    ):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
 
         query_states = self.query(hidden_states).reshape(
@@ -243,7 +266,9 @@ class FlaxAlbertSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(
+                    self.dtype
+                ),
             )
         else:
             attention_bias = None
@@ -268,9 +293,15 @@ class FlaxAlbertSelfAttention(nn.Module):
         attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
         projected_attn_output = self.dense(attn_output)
-        projected_attn_output = self.dropout(projected_attn_output, deterministic=deterministic)
+        projected_attn_output = self.dropout(
+            projected_attn_output, deterministic=deterministic
+        )
         layernormed_attn_output = self.LayerNorm(projected_attn_output + hidden_states)
-        outputs = (layernormed_attn_output, attn_weights) if output_attentions else (layernormed_attn_output,)
+        outputs = (
+            (layernormed_attn_output, attn_weights)
+            if output_attentions
+            else (layernormed_attn_output,)
+        )
         return outputs
 
 
@@ -291,7 +322,9 @@ class FlaxAlbertLayer(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.full_layer_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.full_layer_layer_norm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(
@@ -302,7 +335,10 @@ class FlaxAlbertLayer(nn.Module):
         output_attentions: bool = False,
     ):
         attention_outputs = self.attention(
-            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
         )
         attention_output = attention_outputs[0]
         ffn_output = self.ffn(attention_output)
@@ -324,7 +360,8 @@ class FlaxAlbertLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxAlbertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.inner_group_num)
+            FlaxAlbertLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.inner_group_num)
         ]
 
     def __call__(
@@ -393,7 +430,9 @@ class FlaxAlbertLayerGroups(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxAlbertLayerCollections(self.config, name=str(i), layer_index=str(i), dtype=self.dtype)
+            FlaxAlbertLayerCollections(
+                self.config, name=str(i), layer_index=str(i), dtype=self.dtype
+            )
             for i in range(self.config.num_hidden_groups)
         ]
 
@@ -411,7 +450,9 @@ class FlaxAlbertLayerGroups(nn.Module):
 
         for i in range(self.config.num_hidden_layers):
             # Index of the hidden group
-            group_idx = int(i / (self.config.num_hidden_layers / self.config.num_hidden_groups))
+            group_idx = int(
+                i / (self.config.num_hidden_layers / self.config.num_hidden_groups)
+            )
             layer_group_output = self.layers[group_idx](
                 hidden_states,
                 attention_mask,
@@ -428,9 +469,15 @@ class FlaxAlbertLayerGroups(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_attentions]
+                if v is not None
+            )
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
@@ -473,8 +520,12 @@ class FlaxAlbertOnlyMLMHead(nn.Module):
     def setup(self):
         self.dense = nn.Dense(self.config.embedding_size, dtype=self.dtype)
         self.activation = ACT2FN[self.config.hidden_act]
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
-        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
+        self.decoder = nn.Dense(
+            self.config.vocab_size, dtype=self.dtype, use_bias=False
+        )
         self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
     def __call__(self, hidden_states, shared_embedding=None):
@@ -483,7 +534,9 @@ class FlaxAlbertOnlyMLMHead(nn.Module):
         hidden_states = self.LayerNorm(hidden_states)
 
         if shared_embedding is not None:
-            hidden_states = self.decoder.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+            hidden_states = self.decoder.apply(
+                {"params": {"kernel": shared_embedding.T}}, hidden_states
+            )
         else:
             hidden_states = self.decoder(hidden_states)
 
@@ -525,20 +578,36 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape
+        )
         attention_mask = jnp.ones_like(input_ids)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         random_params = self.module.init(
-            rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False
+            rngs,
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            return_dict=False,
         )["params"]
 
         if params is not None:
@@ -551,7 +620,9 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     def __call__(
         self,
         input_ids,
@@ -565,18 +636,28 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         # init input tensors if not passed
         if token_type_ids is None:
             token_type_ids = jnp.zeros_like(input_ids)
 
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -637,9 +718,13 @@ class FlaxAlbertModule(nn.Module):
 
         # make sure `position_ids` is correctly initialized when not passed
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
-        hidden_states = self.embeddings(input_ids, token_type_ids, position_ids, deterministic=deterministic)
+        hidden_states = self.embeddings(
+            input_ids, token_type_ids, position_ids, deterministic=deterministic
+        )
 
         outputs = self.encoder(
             hidden_states,
@@ -678,7 +763,12 @@ class FlaxAlbertModel(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertModule
 
 
-append_call_sample_docstring(FlaxAlbertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxAlbertModel,
+    _CHECKPOINT_FOR_DOC,
+    FlaxBaseModelOutputWithPooling,
+    _CONFIG_FOR_DOC,
+)
 
 
 class FlaxAlbertForPreTrainingModule(nn.Module):
@@ -714,14 +804,18 @@ class FlaxAlbertForPreTrainingModule(nn.Module):
         )
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.albert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+            shared_embedding = self.albert.variables["params"]["embeddings"][
+                "word_embeddings"
+            ]["embedding"]
         else:
             shared_embedding = None
 
         hidden_states = outputs[0]
         pooled_output = outputs[1]
 
-        prediction_scores = self.predictions(hidden_states, shared_embedding=shared_embedding)
+        prediction_scores = self.predictions(
+            hidden_states, shared_embedding=shared_embedding
+        )
         sop_scores = self.sop_classifier(pooled_output, deterministic=deterministic)
 
         if not return_dict:
@@ -767,10 +861,13 @@ FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxAlbertForPreTraining,
-    ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length") + FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING,
+    ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    + FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING,
 )
 append_replace_return_docstrings(
-    FlaxAlbertForPreTraining, output_type=FlaxAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    FlaxAlbertForPreTraining,
+    output_type=FlaxAlbertForPreTrainingOutput,
+    config_class=_CONFIG_FOR_DOC,
 )
 
 
@@ -779,7 +876,9 @@ class FlaxAlbertForMaskedLMModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.albert = FlaxAlbertModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.albert = FlaxAlbertModule(
+            config=self.config, add_pooling_layer=False, dtype=self.dtype
+        )
         self.predictions = FlaxAlbertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -807,7 +906,9 @@ class FlaxAlbertForMaskedLMModule(nn.Module):
 
         hidden_states = outputs[0]
         if self.config.tie_word_embeddings:
-            shared_embedding = self.albert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+            shared_embedding = self.albert.variables["params"]["embeddings"][
+                "word_embeddings"
+            ]["embedding"]
         else:
             shared_embedding = None
 
@@ -824,13 +925,19 @@ class FlaxAlbertForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""Albert Model with a `language modeling` head on top.""", ALBERT_START_DOCSTRING)
+@add_start_docstrings(
+    """Albert Model with a `language modeling` head on top.""", ALBERT_START_DOCSTRING
+)
 class FlaxAlbertForMaskedLM(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForMaskedLMModule
 
 
 append_call_sample_docstring(
-    FlaxAlbertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC, revision="refs/pr/11"
+    FlaxAlbertForMaskedLM,
+    _CHECKPOINT_FOR_DOC,
+    FlaxMaskedLMOutput,
+    _CONFIG_FOR_DOC,
+    revision="refs/pr/11",
 )
 
 
@@ -928,10 +1035,26 @@ class FlaxAlbertForMultipleChoiceModule(nn.Module):
         return_dict: bool = True,
     ):
         num_choices = input_ids.shape[1]
-        input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
-        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
-        token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1]) if token_type_ids is not None else None
-        position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
+        input_ids = (
+            input_ids.reshape(-1, input_ids.shape[-1])
+            if input_ids is not None
+            else None
+        )
+        attention_mask = (
+            attention_mask.reshape(-1, attention_mask.shape[-1])
+            if attention_mask is not None
+            else None
+        )
+        token_type_ids = (
+            token_type_ids.reshape(-1, token_type_ids.shape[-1])
+            if token_type_ids is not None
+            else None
+        )
+        position_ids = (
+            position_ids.reshape(-1, position_ids.shape[-1])
+            if position_ids is not None
+            else None
+        )
 
         # Model
         outputs = self.albert(
@@ -973,7 +1096,8 @@ class FlaxAlbertForMultipleChoice(FlaxAlbertPreTrainedModel):
 
 
 overwrite_call_docstring(
-    FlaxAlbertForMultipleChoice, ALBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    FlaxAlbertForMultipleChoice,
+    ALBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"),
 )
 append_call_sample_docstring(
     FlaxAlbertForMultipleChoice,
@@ -988,7 +1112,9 @@ class FlaxAlbertForTokenClassificationModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.albert = FlaxAlbertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.albert = FlaxAlbertModule(
+            config=self.config, dtype=self.dtype, add_pooling_layer=False
+        )
         classifier_dropout = (
             self.config.classifier_dropout_prob
             if self.config.classifier_dropout_prob is not None
@@ -1058,7 +1184,9 @@ class FlaxAlbertForQuestionAnsweringModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.albert = FlaxAlbertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.albert = FlaxAlbertModule(
+            config=self.config, dtype=self.dtype, add_pooling_layer=False
+        )
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(

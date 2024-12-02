@@ -74,7 +74,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             max_cache_len=self.model.generation_config.cache_config.max_cache_len,
             dtype=self.model.dtype,
         )
-        self.is_causal = any("CausalLM" in arch for arch in self.model.config.architectures)
+        self.is_causal = any(
+            "CausalLM" in arch for arch in self.model.config.architectures
+        )
         if self.is_causal:
             causal_mask = torch.tril(
                 torch.ones(
@@ -120,7 +122,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
     @staticmethod
     def generate(
-        exported_program: torch.export.ExportedProgram, prompt_token_ids: torch.Tensor, max_new_tokens: int
+        exported_program: torch.export.ExportedProgram,
+        prompt_token_ids: torch.Tensor,
+        max_new_tokens: int,
     ) -> torch.Tensor:
         """
         Generate a sequence of tokens using an exported program.
@@ -195,10 +199,14 @@ def convert_and_export_with_cache(
     with torch.no_grad():
         # TODO: The default inputs only work for text models. We need to add support for vision/audio models.
         example_input_ids = (
-            example_input_ids if example_input_ids is not None else torch.tensor([[1]], dtype=torch.long)
+            example_input_ids
+            if example_input_ids is not None
+            else torch.tensor([[1]], dtype=torch.long)
         )
         example_cache_position = (
-            example_cache_position if example_cache_position is not None else torch.tensor([0], dtype=torch.long)
+            example_cache_position
+            if example_cache_position is not None
+            else torch.tensor([0], dtype=torch.long)
         )
 
         # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal

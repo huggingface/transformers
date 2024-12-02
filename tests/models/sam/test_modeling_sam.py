@@ -18,7 +18,13 @@ import unittest
 
 import requests
 
-from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
+from transformers import (
+    SamConfig,
+    SamMaskDecoderConfig,
+    SamPromptEncoderConfig,
+    SamVisionConfig,
+    pipeline,
+)
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -186,7 +192,9 @@ class SamModelTester:
         self.mask_decoder_tester = SamMaskDecoderTester()
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -288,7 +296,9 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (SamModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
+        {"feature-extraction": SamModel, "mask-generation": SamModel}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = False
     test_pruning = False
@@ -311,7 +321,9 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SamModelTester(self)
-        self.vision_config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
+        self.vision_config_tester = ConfigTester(
+            self, config_class=SamVisionConfig, has_text_modality=False
+        )
         self.prompt_encoder_config_tester = ConfigTester(
             self,
             config_class=SamPromptEncoderConfig,
@@ -362,7 +374,12 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             196,
             196,
         )
-        expected_mask_decoder_attention_shape = (self.model_tester.batch_size, 1, 144, 32)
+        expected_mask_decoder_attention_shape = (
+            self.model_tester.batch_size,
+            1,
+            144,
+            32,
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -375,10 +392,15 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             vision_attentions = outputs.vision_attentions
-            self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(vision_attentions), self.model_tester.num_hidden_layers
+            )
 
             mask_decoder_attentions = outputs.mask_decoder_attentions
-            self.assertEqual(len(mask_decoder_attentions), self.model_tester.mask_decoder_tester.num_hidden_layers)
+            self.assertEqual(
+                len(mask_decoder_attentions),
+                self.model_tester.mask_decoder_tester.num_hidden_layers,
+            )
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -389,10 +411,15 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             vision_attentions = outputs.vision_attentions
-            self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(vision_attentions), self.model_tester.num_hidden_layers
+            )
 
             mask_decoder_attentions = outputs.mask_decoder_attentions
-            self.assertEqual(len(mask_decoder_attentions), self.model_tester.mask_decoder_tester.num_hidden_layers)
+            self.assertEqual(
+                len(mask_decoder_attentions),
+                self.model_tester.mask_decoder_tester.num_hidden_layers,
+            )
 
             self.assertListEqual(
                 list(vision_attentions[0].shape[-4:]),
@@ -424,11 +451,15 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="SamModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="SamModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -440,9 +471,24 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
+    def check_pt_tf_outputs(
+        self,
+        tf_outputs,
+        pt_outputs,
+        model_class,
+        tol=5e-5,
+        name="outputs",
+        attributes=None,
+    ):
         # Use a slightly higher default tol to make the tests non-flaky
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol=tol, name=name, attributes=attributes)
+        super().check_pt_tf_outputs(
+            tf_outputs,
+            pt_outputs,
+            model_class,
+            tol=tol,
+            name=name,
+            attributes=attributes,
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -452,7 +498,9 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 def prepare_image():
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    img_url = (
+        "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    )
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -485,7 +533,13 @@ class SamModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4515), atol=2e-4))
-        self.assertTrue(torch.allclose(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), atol=2e-4))
+        self.assertTrue(
+            torch.allclose(
+                masks,
+                torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device),
+                atol=2e-4,
+            )
+        )
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -499,7 +553,10 @@ class SamModelIntegrationTest(unittest.TestCase):
         input_points = [[[820, 1080]]]
 
         inputs = processor(
-            images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
+            images=raw_image,
+            input_boxes=input_boxes,
+            input_points=input_points,
+            return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
@@ -508,7 +565,11 @@ class SamModelIntegrationTest(unittest.TestCase):
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
         self.assertTrue(
-            torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
+            torch.allclose(
+                masks,
+                torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device),
+                atol=2e-4,
+            )
         )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
@@ -524,9 +585,11 @@ class SamModelIntegrationTest(unittest.TestCase):
             [[[510, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]],
         ]
 
-        inputs = processor(images=[raw_image, raw_image], input_points=input_points, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(
+            images=[raw_image, raw_image],
+            input_points=input_points,
+            return_tensors="pt",
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -592,7 +655,10 @@ class SamModelIntegrationTest(unittest.TestCase):
         input_labels = [[1]]
 
         inputs = processor(
-            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
+            images=raw_image,
+            input_points=input_points,
+            input_labels=input_labels,
+            return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
@@ -603,7 +669,9 @@ class SamModelIntegrationTest(unittest.TestCase):
         # With no label
         input_points = [[[400, 650]]]
 
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            images=raw_image, input_points=input_points, return_tensors="pt"
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -623,7 +691,10 @@ class SamModelIntegrationTest(unittest.TestCase):
         input_labels = [[1, 1]]
 
         inputs = processor(
-            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
+            images=raw_image,
+            input_points=input_points,
+            input_labels=input_labels,
+            return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
@@ -632,7 +703,9 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9762), atol=1e-4))
 
         # no labels
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            images=raw_image, input_points=input_points, return_tensors="pt"
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -653,7 +726,10 @@ class SamModelIntegrationTest(unittest.TestCase):
         input_labels = [[1, 1], [1]]
 
         inputs = processor(
-            images=[raw_image, raw_image], input_points=input_points, input_labels=input_labels, return_tensors="pt"
+            images=[raw_image, raw_image],
+            input_points=input_points,
+            input_labels=input_labels,
+            return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
@@ -673,7 +749,9 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         input_boxes = [[[75, 275, 1725, 850]]]
 
-        inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            images=raw_image, input_boxes=input_boxes, return_tensors="pt"
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -692,9 +770,11 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         input_points = [[[820, 1080]], [[220, 470]]]
 
-        inputs = processor(images=[raw_image, raw_dog_image], input_points=input_points, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(
+            images=[raw_image, raw_dog_image],
+            input_points=input_points,
+            return_tensors="pt",
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -702,7 +782,9 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         input_points = [[[220, 470]]]
 
-        inputs = processor(images=raw_dog_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            images=raw_dog_image, input_points=input_points, return_tensors="pt"
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -722,7 +804,9 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         input_points = input_points.unsqueeze(0)
 
-        inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            raw_image, input_points=input_points, return_tensors="pt"
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -730,7 +814,10 @@ class SamModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         torch.testing.assert_close(
-            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
+            iou_scores,
+            torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]),
+            atol=1e-4,
+            rtol=1e-4,
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
@@ -750,7 +837,9 @@ class SamModelIntegrationTest(unittest.TestCase):
         # fmt: on
         input_boxes = input_boxes.unsqueeze(0)
 
-        inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
+        inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(
+            torch_device
+        )
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -760,7 +849,9 @@ class SamModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="facebook/sam-vit-base", device=torch_device)
+        generator = pipeline(
+            "mask-generation", model="facebook/sam-vit-base", device=torch_device
+        )
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

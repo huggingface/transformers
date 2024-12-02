@@ -51,7 +51,11 @@ logger = logging.get_logger(__name__)
 
 
 def make_batched(videos) -> List[List[ImageInput]]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+    if (
+        isinstance(videos, (list, tuple))
+        and isinstance(videos[0], (list, tuple))
+        and is_valid_image(videos[0][0])
+    ):
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
@@ -124,7 +128,9 @@ class VivitImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 256}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 224, "width": 224}
+        )
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         self.do_resize = do_resize
@@ -136,7 +142,9 @@ class VivitImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.offset = offset
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def resize(
@@ -168,12 +176,17 @@ class VivitImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size:
             output_size = get_resize_output_image_size(
-                image, size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+                image,
+                size["shortest_edge"],
+                default_to_square=False,
+                input_data_format=input_data_format,
             )
         elif "height" in size and "width" in size:
             output_size = (size["height"], size["width"])
         else:
-            raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
+            raise ValueError(
+                f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}"
+            )
         return resize(
             image,
             size=output_size,
@@ -216,7 +229,11 @@ class VivitImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         rescaled_image = rescale(
-            image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs
+            image,
+            scale=scale,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
 
         if offset:
@@ -272,18 +289,37 @@ class VivitImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(image)
 
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+            image = self.resize(
+                image=image,
+                size=size,
+                resample=resample,
+                input_data_format=input_data_format,
+            )
 
         if do_center_crop:
-            image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
+            image = self.center_crop(
+                image, size=crop_size, input_data_format=input_data_format
+            )
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, offset=offset, input_data_format=input_data_format)
+            image = self.rescale(
+                image=image,
+                scale=rescale_factor,
+                offset=offset,
+                input_data_format=input_data_format,
+            )
 
         if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            image = self.normalize(
+                image=image,
+                mean=image_mean,
+                std=image_std,
+                input_data_format=input_data_format,
+            )
 
-        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        image = to_channel_dimension_format(
+            image, data_format, input_channel_dim=input_data_format
+        )
         return image
 
     @filter_out_non_signature_kwargs()
@@ -356,9 +392,13 @@ class VivitImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         offset = offset if offset is not None else self.offset
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean

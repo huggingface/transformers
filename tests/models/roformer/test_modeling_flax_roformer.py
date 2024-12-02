@@ -19,7 +19,11 @@ import numpy as np
 from transformers import RoFormerConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import (
+    FlaxModelTesterMixin,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_flax_available():
@@ -90,7 +94,9 @@ class FlaxRoFormerModelTester(unittest.TestCase):
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         config = RoFormerConfig(
             vocab_size=self.vocab_size,
@@ -112,7 +118,11 @@ class FlaxRoFormerModelTester(unittest.TestCase):
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, token_type_ids, attention_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": attention_mask,
+        }
         return config, inputs_dict
 
 
@@ -139,7 +149,9 @@ class FlaxRoFormerModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("junnyu/roformer_chinese_small", from_pt=True)
+            model = model_class_name.from_pretrained(
+                "junnyu/roformer_chinese_small", from_pt=True
+            )
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
@@ -158,7 +170,13 @@ class FlaxRoFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = jnp.array(
-            [[[-0.1205, -1.0265, 0.2922], [-1.5134, 0.1974, 0.1519], [-5.0135, -3.9003, -0.8404]]]
+            [
+                [
+                    [-0.1205, -1.0265, 0.2922],
+                    [-1.5134, 0.1974, 0.1519],
+                    [-5.0135, -3.9003, -0.8404],
+                ]
+            ]
         )
 
         self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

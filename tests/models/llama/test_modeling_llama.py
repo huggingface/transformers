@@ -21,7 +21,13 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import (
+    AutoTokenizer,
+    LlamaConfig,
+    StaticCache,
+    is_torch_available,
+    set_seed,
+)
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     cleanup,
@@ -51,7 +57,10 @@ if is_torch_available():
         LlamaModel,
         LlamaTokenizer,
     )
-    from transformers.models.llama.modeling_llama import LlamaLinearScalingRotaryEmbedding, LlamaRotaryEmbedding
+    from transformers.models.llama.modeling_llama import (
+        LlamaLinearScalingRotaryEmbedding,
+        LlamaRotaryEmbedding,
+    )
 
 
 class LlamaModelTester:
@@ -114,19 +123,33 @@ class LlamaModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return LlamaConfig(
@@ -146,14 +169,24 @@ class LlamaModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = LlamaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -183,7 +216,10 @@ class LlamaModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -201,7 +237,9 @@ class LlamaModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -257,13 +295,17 @@ class LlamaModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -281,7 +323,9 @@ class LlamaModelTester:
 
 
 @require_torch
-class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class LlamaModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             LlamaModel,
@@ -319,7 +363,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=LlamaConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -339,12 +385,17 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = LlamaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_llama_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -352,12 +403,17 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = LlamaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_llama_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -366,30 +422,43 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+            [self.model_tester.batch_size, config.num_labels],
+            self.model_tester.type_sequence_label_size,
         ).to(torch.float)
         model = LlamaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_llama_token_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        token_labels = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.seq_length],
+            config.num_labels,
+        )
         model = LlamaForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
         self.assertEqual(
             result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+            (
+                self.model_tester.batch_size,
+                self.model_tester.seq_length,
+                self.model_tester.num_labels,
+            ),
         )
 
-    @unittest.skip(reason="Llama buffers include complex numbers, which breaks this test")
+    @unittest.skip(
+        reason="Llama buffers include complex numbers, which breaks this test"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -397,16 +466,22 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = LlamaModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = LlamaModel(config)
         scaled_model.to(torch_device)
@@ -417,12 +492,18 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertTrue(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -431,18 +512,28 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(
+            short_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = torch.arange(
+            long_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
         original_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            original_cos_short, original_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            original_sin_short, original_sin_long[:, :short_input_length, :]
+        )
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
@@ -450,12 +541,22 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         linear_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            linear_cos_short, linear_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            linear_sin_short, linear_sin_long[:, :short_input_length, :]
+        )
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+            torch.testing.assert_close(
+                linear_cos_long[:, new_position, :],
+                original_cos_long[:, original_position, :],
+            )
+            torch.testing.assert_close(
+                linear_sin_long[:, new_position, :],
+                original_sin_long[:, original_position, :],
+            )
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
@@ -478,8 +579,12 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         yarn_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            yarn_cos_short, yarn_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            yarn_sin_short, yarn_sin_long[:, :short_input_length, :]
+        )
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_cos_short, original_cos_short)
         with self.assertRaises(AssertionError):
@@ -498,10 +603,16 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config.rope_scaling = {"type": "linear", "factor": 10}
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(
+            short_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = torch.arange(
+            long_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Old API -- under the hood, "type": "linear" is set and `LlamaRotaryEmbedding` is called
@@ -531,27 +642,36 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
             # steps.
             base_config_dict = base_config.to_dict()
-            new_config = LlamaConfig.from_dict(config_dict={**base_config_dict, **new_kwargs})
+            new_config = LlamaConfig.from_dict(
+                config_dict={**base_config_dict, **new_kwargs}
+            )
             return new_config
 
         # from untouched config -> ✅
-        base_config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        base_config, model_inputs = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
         original_model = LlamaForCausalLM(base_config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with the expected rope configuration -> ✅
-        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
+        config = _reinitialize_config(
+            base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}}
+        )
         original_model = LlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
-        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
+        config = _reinitialize_config(
+            base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}}
+        )
         original_model = LlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
         config = _reinitialize_config(
-            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
+            base_config,
+            {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}},
         )
         self.assertTrue(config.rope_scaling["type"] == "linear")
         self.assertTrue(config.rope_scaling["rope_type"] == "linear")
@@ -559,17 +679,24 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         original_model(**model_inputs)
 
         # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
+        with self.assertLogs(
+            "transformers.modeling_rope_utils", level="WARNING"
+        ) as logs:
+            config = _reinitialize_config(
+                base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}}
+            )
             original_model = LlamaForCausalLM(config).to(torch_device)
             original_model(**model_inputs)
             self.assertEqual(len(logs.output), 1)
             self.assertIn("factor field", logs.output[0])
 
         # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+        with self.assertLogs(
+            "transformers.modeling_rope_utils", level="WARNING"
+        ) as logs:
             config = _reinitialize_config(
-                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
+                base_config,
+                {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}},
             )
             original_model = LlamaForCausalLM(config).to(torch_device)
             original_model(**model_inputs)
@@ -578,7 +705,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
         with self.assertRaises(KeyError):
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
+            config = _reinitialize_config(
+                base_config, {"rope_scaling": {"rope_type": "linear"}}
+            )  # missing "factor"
 
     @require_flash_attn
     @require_torch_gpu
@@ -598,7 +727,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
                 ).to("cuda")
 
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
+                self.assertTrue(
+                    new_model.config._attn_implementation == "flash_attention_2"
+                )
 
                 has_flash = False
                 for name, submodule in new_model.named_modules():
@@ -606,7 +737,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                         has_flash = True
                         break
                 if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
+                    raise ValueError(
+                        "The flash model should have flash attention layers"
+                    )
 
     @unittest.skip("Broken by the loss update will fix soon @ArthurZucker")
     def test_torch_fx_output_loss(self, *args, **kwargs):
@@ -623,7 +756,9 @@ class LlamaIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = (
+                torch.cuda.get_device_capability()[0]
+            )
 
     @slow
     @require_read_token
@@ -644,14 +779,20 @@ class LlamaIntegrationTest(unittest.TestCase):
             "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Meta-Llama-3.1-8B-Instruct"
+        )
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Meta-Llama-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+            "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
         )
         input_text = ["Tell me about the french revolution."]
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
+        generated_ids = model.generate(
+            **model_inputs, max_new_tokens=128, do_sample=False
+        )
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(generated_text, EXPECTED_TEXT)
 
@@ -661,7 +802,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "meta-llama/Llama-2-7b-hf",
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
         )
 
         with torch.no_grad():
@@ -692,7 +836,9 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         self.assertTrue(
             torch.allclose(
-                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
+                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(
+                    torch_device
+                ),
                 out.logits[0, 0, :15].float(),
                 atol=1e-2,
                 rtol=1e-2,
@@ -736,7 +882,9 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         self.assertTrue(
             torch.allclose(
-                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
+                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(
+                    torch_device
+                ),
                 out.logits[0, 0, :15].float(),
                 atol=1e-2,
                 rtol=1e-2,
@@ -755,13 +903,20 @@ class LlamaIntegrationTest(unittest.TestCase):
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-chat-hf",
+            device_map="sequential",
+            torch_dtype=torch.float16,
         )
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(
-            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
+            **model_inputs,
+            max_new_tokens=64,
+            top_p=None,
+            temperature=1,
+            do_sample=False,
+            dola_layers="low"
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -790,31 +945,47 @@ class LlamaIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
+        tokenizer = LlamaTokenizer.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right"
+        )
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-hf",
+            device_map=torch_device,
+            torch_dtype=torch.float16,
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False
+        )
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
         generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="static"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
         model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        model.forward = torch.compile(
+            model.forward, mode="reduce-overhead", fullgraph=True
         )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = model.generate(
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
     @slow
@@ -845,10 +1016,12 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         for llama_model_ckp, EXPECTED_TEXT_COMPLETION in llama_models.items():
             # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(llama_model_ckp, pad_token="</s>", padding_side="right")
-            max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-                "input_ids"
-            ].shape[-1]
+            tokenizer = AutoTokenizer.from_pretrained(
+                llama_model_ckp, pad_token="</s>", padding_side="right"
+            )
+            max_generation_length = tokenizer(
+                EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True
+            )["input_ids"].shape[-1]
 
             # Load model
             device = "cpu"
@@ -873,16 +1046,22 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
 
             prompts = ["Simply put, the theory of relativity states that "]
-            prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+            prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(
+                model.device
+            )
             prompt_token_ids = prompt_tokens["input_ids"]
             max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
             # Static Cache + export
             exported_program = convert_and_export_with_cache(model)
             ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-                exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
+                exported_program=exported_program,
+                prompt_token_ids=prompt_token_ids,
+                max_new_tokens=max_new_tokens,
             )
-            ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+            ep_generated_text = tokenizer.batch_decode(
+                ep_generated_ids, skip_special_tokens=True
+            )
             self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
 
@@ -896,17 +1075,29 @@ class Mask4DTestHard(unittest.TestCase):
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self.model_dtype = torch.float32
         self.tokenizer = LlamaTokenizer.from_pretrained(model_name)
-        self.model = LlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.model = LlamaForCausalLM.from_pretrained(
+            model_name, torch_dtype=self.model_dtype
+        ).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"
-        items = ("pet is a", "artist plays a", "name is L")  # same number of tokens in each item
+        items = (
+            "pet is a",
+            "artist plays a",
+            "name is L",
+        )  # same number of tokens in each item
 
         batch_separate = [template.format(x) for x in items]  # 3 separate lines
-        batch_shared_prefix = template.format(" ".join(items))  # 1 line with options concatenated
+        batch_shared_prefix = template.format(
+            " ".join(items)
+        )  # 1 line with options concatenated
 
-        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(torch_device)
-        input_ids_shared_prefix = self.tokenizer(batch_shared_prefix, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(
+            torch_device
+        )
+        input_ids_shared_prefix = self.tokenizer(
+            batch_shared_prefix, return_tensors="pt"
+        ).input_ids.to(torch_device)
 
         mask_shared_prefix = torch.tensor(
             [
@@ -930,7 +1121,11 @@ class Mask4DTestHard(unittest.TestCase):
             device=torch_device,
         )
 
-        position_ids = torch.arange(input_ids.shape[1]).tile(input_ids.shape[0], 1).to(torch_device)
+        position_ids = (
+            torch.arange(input_ids.shape[1])
+            .tile(input_ids.shape[0], 1)
+            .to(torch_device)
+        )
 
         # building custom positions ids based on custom mask
         position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)
@@ -938,9 +1133,17 @@ class Mask4DTestHard(unittest.TestCase):
 
         # inverting the mask
         min_dtype = torch.finfo(self.model_dtype).min
-        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(
+            dtype=self.model_dtype
+        ) * min_dtype
 
-        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
+        return (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        )
 
     def test_stacked_causal_mask(self):
         (
@@ -958,12 +1161,20 @@ class Mask4DTestHard(unittest.TestCase):
 
         # single forward run with 4D custom mask
         logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
+            input_ids_shared_prefix,
+            attention_mask=mask_shared_prefix,
+            position_ids=position_ids_shared_prefix,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
+            0,
+            torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[
+                1
+            ],
+            :,
         ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
+        decoded_shared_prefix = [
+            self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)
+        ]
 
         self.assertEqual(decoded, decoded_shared_prefix)
 
@@ -990,7 +1201,9 @@ class Mask4DTestHard(unittest.TestCase):
         position_ids_1a = position_ids_shared_prefix[:, :part_a]
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
-        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
+        outs_1a = self.model.forward(
+            input_1a, attention_mask=mask_1a, position_ids=position_ids_1a
+        )
         past_key_values_a = outs_1a["past_key_values"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
@@ -1006,7 +1219,11 @@ class Mask4DTestHard(unittest.TestCase):
         decoded_1b = [
             self.tokenizer.decode(t)
             for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
+                0,
+                torch.where(
+                    position_ids_shared_prefix == position_ids_shared_prefix.max()
+                )[1]
+                - part_a,
             ]
         ]
         self.assertEqual(decoded, decoded_1b)
@@ -1027,7 +1244,9 @@ class Mask4DTestHard(unittest.TestCase):
         decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
 
         # upgrade the model with StaticCache
-        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
+        max_cache_len = (
+            16  # note that max_cache_len is greater than the attention_mask.shape[-1]
+        )
         past_key_values = StaticCache(
             config=self.model.config,
             batch_size=1,
@@ -1048,13 +1267,21 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
+            cache_position=torch.arange(
+                input_ids_shared_prefix.shape[-1], device=torch_device
+            ),
             past_key_values=past_key_values,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
+            0,
+            torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[
+                1
+            ],
+            :,
         ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
+        decoded_shared_prefix = [
+            self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)
+        ]
 
         self.assertEqual(decoded, decoded_shared_prefix)
 
@@ -1075,7 +1302,9 @@ class Mask4DTestHard(unittest.TestCase):
         decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
 
         # upgrade the model with StaticCache
-        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
+        max_cache_len = (
+            16  # note that max_cache_len is greater than the attention_mask.shape[-1]
+        )
         past_key_values = StaticCache(
             config=self.model.config,
             batch_size=1,
@@ -1112,7 +1341,10 @@ class Mask4DTestHard(unittest.TestCase):
         mask_1b = mask_shared_prefix[:, :, part_a:, :]
 
         padded_mask_1b = torch.nn.functional.pad(
-            input=mask_1b, pad=(0, max_cache_len - mask_1b.shape[-1]), mode="constant", value=0
+            input=mask_1b,
+            pad=(0, max_cache_len - mask_1b.shape[-1]),
+            mode="constant",
+            value=0,
         )
 
         outs_1b = self.model.forward(
@@ -1129,7 +1361,11 @@ class Mask4DTestHard(unittest.TestCase):
         decoded_1b = [
             self.tokenizer.decode(t)
             for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
+                0,
+                torch.where(
+                    position_ids_shared_prefix == position_ids_shared_prefix.max()
+                )[1]
+                - part_a,
             ]
         ]
         self.assertEqual(decoded, decoded_1b)

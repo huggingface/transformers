@@ -5,10 +5,21 @@ import unittest
 import numpy as np
 
 import transformers
-from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, is_flax_available, is_torch_available
+from transformers import (
+    CLIPConfig,
+    CLIPTextConfig,
+    CLIPVisionConfig,
+    is_flax_available,
+    is_torch_available,
+)
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
-from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import (
+    FlaxModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_flax_available():
@@ -64,7 +75,9 @@ class FlaxCLIPVisionModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = CLIPVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
@@ -141,12 +154,16 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.hidden_states
 
-            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+            self.assertEqual(
+                len(hidden_states), self.model_tester.num_hidden_layers + 1
+            )
 
             # CLIP has a different seq_length
             image_size = (self.model_tester.image_size, self.model_tester.image_size)
             patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+            num_patches = (image_size[1] // patch_size[1]) * (
+                image_size[0] // patch_size[0]
+            )
             seq_length = num_patches + 1
 
             self.assertListEqual(
@@ -173,7 +190,9 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
         # in CLIP, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.model_tester.image_size, self.model_tester.image_size)
         patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         seq_length = num_patches + 1
 
         for model_class in self.all_model_classes:
@@ -207,7 +226,11 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
             added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
@@ -241,7 +264,9 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("openai/clip-vit-base-patch32", from_pt=True)
+            model = model_class_name.from_pretrained(
+                "openai/clip-vit-base-patch32", from_pt=True
+            )
             outputs = model(np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)
 
@@ -320,7 +345,11 @@ class FlaxCLIPTextModelTester:
 
 @require_flax
 class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxCLIPTextModel, FlaxCLIPTextModelWithProjection) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxCLIPTextModel, FlaxCLIPTextModelWithProjection)
+        if is_flax_available()
+        else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxCLIPTextModelTester(self)
@@ -351,7 +380,9 @@ class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("openai/clip-vit-base-patch32", from_pt=True)
+            model = model_class_name.from_pretrained(
+                "openai/clip-vit-base-patch32", from_pt=True
+            )
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
@@ -364,10 +395,16 @@ class FlaxCLIPModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
-        config = CLIPConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
+        config = CLIPConfig.from_text_vision_configs(
+            text_config, vision_config, projection_dim=64
+        )
 
         return config, input_ids, attention_mask, pixel_values
 
@@ -404,7 +441,9 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 @jax.jit
                 def model_jitted(input_ids, pixel_values, **kwargs):
-                    return model(input_ids=input_ids, pixel_values=pixel_values, **kwargs).to_tuple()
+                    return model(
+                        input_ids=input_ids, pixel_values=pixel_values, **kwargs
+                    ).to_tuple()
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
@@ -426,7 +465,12 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_ids", "pixel_values", "attention_mask", "position_ids"]
+            expected_arg_names = [
+                "input_ids",
+                "pixel_values",
+                "attention_mask",
+                "position_ids",
+            ]
             self.assertListEqual(arg_names[:4], expected_arg_names)
 
     def test_get_image_features(self):
@@ -453,7 +497,9 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
         @jax.jit
         def model_jitted(input_ids, attention_mask, **kwargs):
-            return model.get_text_features(input_ids=input_ids, attention_mask=attention_mask)
+            return model.get_text_features(
+                input_ids=input_ids, attention_mask=attention_mask
+            )
 
         with self.subTest("JIT Enabled"):
             jitted_output = model_jitted(**inputs_dict)
@@ -468,8 +514,12 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("openai/clip-vit-base-patch32", from_pt=True)
-            outputs = model(input_ids=np.ones((1, 1)), pixel_values=np.ones((1, 3, 224, 224)))
+            model = model_class_name.from_pretrained(
+                "openai/clip-vit-base-patch32", from_pt=True
+            )
+            outputs = model(
+                input_ids=np.ones((1, 1)), pixel_values=np.ones((1, 3, 224, 224))
+            )
             self.assertIsNotNone(outputs)
 
     # overwrite from common since FlaxCLIPModel returns nested output
@@ -482,35 +532,51 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = {
+                    k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()
+                }
 
                 # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class_name = model_class.__name__[
+                    4:
+                ]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
                 fx_model = model_class(config, dtype=jnp.float32)
 
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_state = convert_pytorch_state_dict_to_flax(
+                    pt_model.state_dict(), fx_model
+                )
                 fx_model.params = fx_state
 
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
+                )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
+                    fx_model_loaded = model_class.from_pretrained(
+                        tmpdirname, from_pt=True
+                    )
 
                 fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                    len(fx_outputs_loaded),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
                 )
-                for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
+                for fx_output_loaded, pt_output in zip(
+                    fx_outputs_loaded[:4], pt_outputs[:4]
+                ):
                     self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
 
     # overwrite from common since FlaxCLIPModel returns nested output
@@ -523,10 +589,14 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = {
+                    k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()
+                }
 
                 # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class_name = model_class.__name__[
+                    4:
+                ]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
@@ -541,19 +611,27 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
+                )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = pt_model_class.from_pretrained(
+                        tmpdirname, from_flax=True
+                    )
 
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
                 self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                    len(fx_outputs),
+                    len(pt_outputs_loaded),
+                    "Output lengths differ between Flax and PyTorch",
                 )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)

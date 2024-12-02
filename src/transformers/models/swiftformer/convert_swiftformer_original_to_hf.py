@@ -49,13 +49,19 @@ def get_expected_output(swiftformer_name):
         return torch.tensor([-2.1703e00, 2.1107e00, -2.0811e00, 8.8685e-01, 2.4360e-01])
 
     elif swiftformer_name == "swiftformer_s":
-        return torch.tensor([3.9636e-01, 2.3478e-01, -1.6963e00, -1.7381e00, -8.6337e-01])
+        return torch.tensor(
+            [3.9636e-01, 2.3478e-01, -1.6963e00, -1.7381e00, -8.6337e-01]
+        )
 
     elif swiftformer_name == "swiftformer_l1":
-        return torch.tensor([-4.2768e-01, -4.7429e-01, -1.0897e00, -1.0248e00, 3.5523e-02])
+        return torch.tensor(
+            [-4.2768e-01, -4.7429e-01, -1.0897e00, -1.0248e00, 3.5523e-02]
+        )
 
     elif swiftformer_name == "swiftformer_l3":
-        return torch.tensor([-2.5330e-01, 2.4211e-01, -6.0185e-01, -8.2789e-01, -6.0446e-02])
+        return torch.tensor(
+            [-2.5330e-01, 2.4211e-01, -6.0185e-01, -8.2789e-01, -6.0446e-02]
+        )
 
 
 def rename_key(dct, old, new):
@@ -74,11 +80,20 @@ def create_rename_keys(state_dict):
         if ".Proj." in k:
             k_new = k_new.replace(".Proj.", ".proj.")
         if "patch_embed" in k_new:
-            k_new = k_new.replace("patch_embed", "swiftformer.patch_embed.patch_embedding")
+            k_new = k_new.replace(
+                "patch_embed", "swiftformer.patch_embed.patch_embedding"
+            )
         if "network" in k_new:
             ls = k_new.split(".")
             if ls[2].isdigit():
-                k_new = "swiftformer.encoder.network." + ls[1] + ".blocks." + ls[2] + "." + ".".join(ls[3:])
+                k_new = (
+                    "swiftformer.encoder.network."
+                    + ls[1]
+                    + ".blocks."
+                    + ls[2]
+                    + "."
+                    + ".".join(ls[3:])
+                )
             else:
                 k_new = k_new.replace("network", "swiftformer.encoder.network")
         rename_keys.append((k, k_new))
@@ -86,7 +101,9 @@ def create_rename_keys(state_dict):
 
 
 @torch.no_grad()
-def convert_swiftformer_checkpoint(swiftformer_name, pytorch_dump_folder_path, original_ckpt):
+def convert_swiftformer_checkpoint(
+    swiftformer_name, pytorch_dump_folder_path, original_ckpt
+):
     """
     Copy/paste/tweak model's weights to our SwiftFormer structure.
     """
@@ -98,7 +115,9 @@ def convert_swiftformer_checkpoint(swiftformer_name, pytorch_dump_folder_path, o
     config.num_labels = 1000
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -123,7 +142,9 @@ def convert_swiftformer_checkpoint(swiftformer_name, pytorch_dump_folder_path, o
     # load state_dict of original model, remove and rename some keys
     if original_ckpt:
         if original_ckpt.startswith("https"):
-            checkpoint = torch.hub.load_state_dict_from_url(original_ckpt, map_location="cpu", check_hash=True)
+            checkpoint = torch.hub.load_state_dict_from_url(
+                original_ckpt, map_location="cpu", check_hash=True
+            )
         else:
             checkpoint = torch.load(original_ckpt, map_location="cpu")
     state_dict = checkpoint
@@ -169,7 +190,14 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--original_ckpt", default=None, type=str, help="Path to the original model checkpoint.")
+    parser.add_argument(
+        "--original_ckpt",
+        default=None,
+        type=str,
+        help="Path to the original model checkpoint.",
+    )
 
     args = parser.parse_args()
-    convert_swiftformer_checkpoint(args.swiftformer_name, args.pytorch_dump_folder_path, args.original_ckpt)
+    convert_swiftformer_checkpoint(
+        args.swiftformer_name, args.pytorch_dump_folder_path, args.original_ckpt
+    )

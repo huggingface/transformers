@@ -27,10 +27,19 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    CausalLMOutput,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import softmax_backward_data
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_sew_d import SEWDConfig
 
 
@@ -147,7 +156,11 @@ def _compute_mask_indices(
             dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32)
+                * dummy_mask_idx,
+            ]
         )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
@@ -157,18 +170,22 @@ def _compute_mask_indices(
     spec_aug_mask_idxs = np.broadcast_to(
         spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
     )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(
+        batch_size, max_num_masked_span * mask_length
+    )
 
     # add offset to the starting indexes so that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
+    offsets = np.broadcast_to(
+        offsets, (batch_size, max_num_masked_span, mask_length)
+    ).reshape(batch_size, max_num_masked_span * mask_length)
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # ensure that we cannot have indices larger than sequence_length
     if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = (
+            sequence_length - 1
+        )
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -186,14 +203,23 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
         torch.abs(relative_pos),
     )
     log_pos = (
-        torch.ceil(torch.log(abs_pos / mid) / torch.log(torch.tensor((max_position - 1) / mid)) * (mid - 1)) + mid
+        torch.ceil(
+            torch.log(abs_pos / mid)
+            / torch.log(torch.tensor((max_position - 1) / mid))
+            * (mid - 1)
+        )
+        + mid
     )
-    bucket_pos = torch.where(abs_pos <= mid, relative_pos.type_as(log_pos), log_pos * sign)
+    bucket_pos = torch.where(
+        abs_pos <= mid, relative_pos.type_as(log_pos), log_pos * sign
+    )
     return bucket_pos
 
 
 # Copied from transformers.models.deberta_v2.modeling_deberta_v2.build_relative_position
-def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
+def build_relative_position(
+    query_size, key_size, bucket_size=-1, max_position=-1, device=None
+):
     """
     Build relative position according to the query and key
 
@@ -226,19 +252,35 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
 @torch.jit.script
 # Copied from transformers.models.deberta.modeling_deberta.c2p_dynamic_expand
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
-    return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
+    return c2p_pos.expand(
+        [
+            query_layer.size(0),
+            query_layer.size(1),
+            query_layer.size(2),
+            relative_pos.size(-1),
+        ]
+    )
 
 
 @torch.jit.script
 # Copied from transformers.models.deberta.modeling_deberta.p2c_dynamic_expand
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
-    return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
+    return c2p_pos.expand(
+        [
+            query_layer.size(0),
+            query_layer.size(1),
+            key_layer.size(-2),
+            key_layer.size(-2),
+        ]
+    )
 
 
 @torch.jit.script
 # Copied from transformers.models.deberta.modeling_deberta.pos_dynamic_expand
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
-    return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
+    return pos_index.expand(
+        p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2))
+    )
 
 
 # Copied from transformers.models.deberta.modeling_deberta.get_mask
@@ -327,7 +369,9 @@ class SEWDGroupNormConvLayer(nn.Module):
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
+        self.layer_norm = nn.GroupNorm(
+            num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
@@ -396,7 +440,9 @@ class SEWDSamePadLayer(nn.Module):
 class SEWDUpsampling(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.projection = nn.Linear(config.hidden_size, config.hidden_size * config.squeeze_factor)
+        self.projection = nn.Linear(
+            config.hidden_size, config.hidden_size * config.squeeze_factor
+        )
         self.activation = ACT2FN[config.feat_extract_activation]
         self.squeeze_factor = config.squeeze_factor
 
@@ -409,7 +455,9 @@ class SEWDUpsampling(nn.Module):
             bsz, src_len, src_embed_dim = hidden_states.size()
             tgt_len = src_len * self.squeeze_factor
             tgt_embed_dim = src_embed_dim // self.squeeze_factor
-            hidden_states = hidden_states.reshape(bsz, src_len, self.squeeze_factor, tgt_embed_dim)
+            hidden_states = hidden_states.reshape(
+                bsz, src_len, self.squeeze_factor, tgt_embed_dim
+            )
             hidden_states = hidden_states.reshape(bsz, tgt_len, tgt_embed_dim)
 
         return hidden_states
@@ -424,10 +472,14 @@ class SEWDFeatureEncoder(nn.Module):
 
         if config.feat_extract_norm == "group":
             conv_layers = [SEWDGroupNormConvLayer(config, layer_id=0)] + [
-                SEWDNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+                SEWDNoLayerNormConvLayer(config, layer_id=i + 1)
+                for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
-            conv_layers = [SEWDLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+            conv_layers = [
+                SEWDLayerNormConvLayer(config, layer_id=i)
+                for i in range(config.num_feat_extract_layers)
+            ]
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
@@ -548,14 +600,28 @@ class XSoftmax(torch.autograd.Function):
         mask_cast_value = g.op("Cast", mask, to_i=sym_help.cast_pytorch_to_onnx["Long"])
         r_mask = g.op(
             "Cast",
-            g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
+            g.op(
+                "Sub",
+                g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)),
+                mask_cast_value,
+            ),
             to_i=sym_help.cast_pytorch_to_onnx["Bool"],
         )
         output = masked_fill(
-            g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
+            g,
+            self,
+            r_mask,
+            g.op(
+                "Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min)
+            ),
         )
         output = softmax(g, output, dim)
-        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
+        return masked_fill(
+            g,
+            output,
+            r_mask,
+            g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)),
+        )
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DropoutContext
@@ -590,7 +656,11 @@ class XDropout(torch.autograd.Function):
             return grad_output, None
 
     @staticmethod
-    def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
+    def symbolic(
+        g: torch._C.Graph,
+        input: torch._C.Value,
+        local_ctx: Union[float, DropoutContext],
+    ) -> torch._C.Value:
         from torch.onnx import symbolic_opset12
 
         dropout_p = local_ctx
@@ -693,14 +763,18 @@ class DisentangledSelfAttention(nn.Module):
             )
         self.num_attention_heads = config.num_attention_heads
         _attention_head_size = config.hidden_size // config.num_attention_heads
-        self.attention_head_size = getattr(config, "attention_head_size", _attention_head_size)
+        self.attention_head_size = getattr(
+            config, "attention_head_size", _attention_head_size
+        )
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
         self.key_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
         self.value_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
 
         self.share_att_key = getattr(config, "share_att_key", False)
-        self.pos_att_type = config.pos_att_type if config.pos_att_type is not None else []
+        self.pos_att_type = (
+            config.pos_att_type if config.pos_att_type is not None else []
+        )
         self.relative_attention = getattr(config, "relative_attention", False)
 
         if self.relative_attention:
@@ -716,9 +790,13 @@ class DisentangledSelfAttention(nn.Module):
 
             if not self.share_att_key:
                 if "c2p" in self.pos_att_type:
-                    self.pos_key_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
+                    self.pos_key_proj = nn.Linear(
+                        config.hidden_size, self.all_head_size, bias=True
+                    )
                 if "p2c" in self.pos_att_type:
-                    self.pos_query_proj = nn.Linear(config.hidden_size, self.all_head_size)
+                    self.pos_query_proj = nn.Linear(
+                        config.hidden_size, self.all_head_size
+                    )
 
         self.dropout = StableDropout(config.attention_dropout)
 
@@ -767,9 +845,15 @@ class DisentangledSelfAttention(nn.Module):
         """
         if query_states is None:
             query_states = hidden_states
-        query_layer = self.transpose_for_scores(self.query_proj(query_states), self.num_attention_heads)
-        key_layer = self.transpose_for_scores(self.key_proj(hidden_states), self.num_attention_heads)
-        value_layer = self.transpose_for_scores(self.value_proj(hidden_states), self.num_attention_heads)
+        query_layer = self.transpose_for_scores(
+            self.query_proj(query_states), self.num_attention_heads
+        )
+        key_layer = self.transpose_for_scores(
+            self.key_proj(hidden_states), self.num_attention_heads
+        )
+        value_layer = self.transpose_for_scores(
+            self.value_proj(hidden_states), self.num_attention_heads
+        )
 
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -778,8 +862,12 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
-        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
-        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) / scale.to(dtype=query_layer.dtype))
+        scale = torch.sqrt(
+            torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor
+        )
+        attention_scores = torch.bmm(
+            query_layer, key_layer.transpose(-1, -2) / scale.to(dtype=query_layer.dtype)
+        )
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -790,17 +878,28 @@ class DisentangledSelfAttention(nn.Module):
             attention_scores = attention_scores + rel_att
         attention_scores = attention_scores
         attention_scores = attention_scores.view(
-            -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
+            -1,
+            self.num_attention_heads,
+            attention_scores.size(-2),
+            attention_scores.size(-1),
         )
 
         # bsz x height x length x dimension
         attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
         attention_probs = self.dropout(attention_probs)
         context_layer = torch.bmm(
-            attention_probs.view(-1, attention_probs.size(-2), attention_probs.size(-1)), value_layer
+            attention_probs.view(
+                -1, attention_probs.size(-2), attention_probs.size(-1)
+            ),
+            value_layer,
         )
         context_layer = (
-            context_layer.view(-1, self.num_attention_heads, context_layer.size(-2), context_layer.size(-1))
+            context_layer.view(
+                -1,
+                self.num_attention_heads,
+                context_layer.size(-2),
+                context_layer.size(-1),
+            )
             .permute(0, 2, 1, 3)
             .contiguous()
         )
@@ -811,7 +910,9 @@ class DisentangledSelfAttention(nn.Module):
         else:
             return context_layer
 
-    def disentangled_attention_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
+    def disentangled_attention_bias(
+        self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor
+    ):
         if relative_pos is None:
             q = query_layer.size(-2)
             relative_pos = build_relative_position(
@@ -827,7 +928,9 @@ class DisentangledSelfAttention(nn.Module):
             relative_pos = relative_pos.unsqueeze(1)
         # bsz x height x query x key
         elif relative_pos.dim() != 4:
-            raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
+            raise ValueError(
+                f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}"
+            )
 
         att_span = self.pos_ebd_size
         relative_pos = relative_pos.long().to(query_layer.device)
@@ -837,35 +940,45 @@ class DisentangledSelfAttention(nn.Module):
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
             ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)
-            pos_key_layer = self.transpose_for_scores(self.key_proj(rel_embeddings), self.num_attention_heads).repeat(
-                query_layer.size(0) // self.num_attention_heads, 1, 1
-            )
+            pos_key_layer = self.transpose_for_scores(
+                self.key_proj(rel_embeddings), self.num_attention_heads
+            ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)
         else:
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
+                ).repeat(
+                    query_layer.size(0) // self.num_attention_heads, 1, 1
+                )  # .split(self.all_head_size, dim=-1)
             if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
+                ).repeat(
+                    query_layer.size(0) // self.num_attention_heads, 1, 1
+                )  # .split(self.all_head_size, dim=-1)
 
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
+            scale = torch.sqrt(
+                torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor
+            )
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
                 c2p_att,
                 dim=-1,
-                index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
+                index=c2p_pos.squeeze(0).expand(
+                    [query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]
+                ),
             )
             score += c2p_att / scale.to(dtype=c2p_att.dtype)
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
+            scale = torch.sqrt(
+                torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor
+            )
             if key_layer.size(-2) != query_layer.size(-2):
                 r_pos = build_relative_position(
                     key_layer.size(-2),
@@ -883,7 +996,9 @@ class DisentangledSelfAttention(nn.Module):
             p2c_att = torch.gather(
                 p2c_att,
                 dim=-1,
-                index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
+                index=p2c_pos.squeeze(0).expand(
+                    [query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]
+                ),
             ).transpose(-1, -2)
             score += p2c_att / scale.to(dtype=p2c_att.dtype)
 
@@ -1002,14 +1117,22 @@ class ConvLayer(nn.Module):
         groups = getattr(config, "conv_groups", 1)
         self.conv_act = getattr(config, "conv_act", "tanh")
         self.conv = nn.Conv1d(
-            config.hidden_size, config.hidden_size, kernel_size, padding=(kernel_size - 1) // 2, groups=groups
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size,
+            padding=(kernel_size - 1) // 2,
+            groups=groups,
         )
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
         self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
     def forward(self, hidden_states, residual_states, input_mask):
-        out = self.conv(hidden_states.permute(0, 2, 1).contiguous()).permute(0, 2, 1).contiguous()
+        out = (
+            self.conv(hidden_states.permute(0, 2, 1).contiguous())
+            .permute(0, 2, 1)
+            .contiguous()
+        )
         rmask = (1 - input_mask).bool()
         out.masked_fill_(rmask.unsqueeze(-1).expand(out.size()), 0)
         out = ACT2FN[self.conv_act](self.dropout(out))
@@ -1038,7 +1161,9 @@ class SEWDTransformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.layer = nn.ModuleList([SEWDLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [SEWDLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.relative_attention = getattr(config, "relative_attention", False)
 
         if self.relative_attention:
@@ -1054,12 +1179,19 @@ class SEWDTransformerEncoder(nn.Module):
 
             self.rel_embeddings = nn.Embedding(pos_ebd_size, config.hidden_size)
 
-        self.norm_rel_ebd = [x.strip() for x in getattr(config, "norm_rel_ebd", "none").lower().split("|")]
+        self.norm_rel_ebd = [
+            x.strip()
+            for x in getattr(config, "norm_rel_ebd", "none").lower().split("|")
+        ]
 
         if "layer_norm" in self.norm_rel_ebd:
-            self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps, elementwise_affine=True)
+            self.LayerNorm = LayerNorm(
+                config.hidden_size, config.layer_norm_eps, elementwise_affine=True
+            )
 
-        self.conv = ConvLayer(config) if getattr(config, "conv_kernel_size", 0) > 0 else None
+        self.conv = (
+            ConvLayer(config) if getattr(config, "conv_kernel_size", 0) > 0 else None
+        )
         self.gradient_checkpointing = False
 
     def get_rel_embedding(self):
@@ -1071,7 +1203,9 @@ class SEWDTransformerEncoder(nn.Module):
     def get_attention_mask(self, attention_mask):
         if attention_mask.dim() <= 2:
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-            attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
+            attention_mask = extended_attention_mask * extended_attention_mask.squeeze(
+                -2
+            ).unsqueeze(-1)
         elif attention_mask.dim() == 3:
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -1079,7 +1213,11 @@ class SEWDTransformerEncoder(nn.Module):
 
     def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
         if self.relative_attention and relative_pos is None:
-            q = query_states.size(-2) if query_states is not None else hidden_states.size(-2)
+            q = (
+                query_states.size(-2)
+                if query_states is not None
+                else hidden_states.size(-2)
+            )
             relative_pos = build_relative_position(
                 q,
                 hidden_states.size(-2),
@@ -1159,9 +1297,15 @@ class SEWDTransformerEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (output_states,)
 
         if not return_dict:
-            return tuple(v for v in [output_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [output_states, all_hidden_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=output_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=output_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
@@ -1186,7 +1330,9 @@ class SEWDEncoder(nn.Module):
         max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
         if attention_mask is None:
             attention_mask = torch.ones(
-                (hidden_states.shape[0], max_encoder_length), dtype=torch.long, device=hidden_states.device
+                (hidden_states.shape[0], max_encoder_length),
+                dtype=torch.long,
+                device=hidden_states.device,
             )
         else:
             # make sure padded tokens output 0
@@ -1208,18 +1354,31 @@ class SEWDEncoder(nn.Module):
         position_embeddings = self.pos_conv_embed(hidden_states)
         pooled_hidden_states = self.pool(hidden_states)
         min_length = min(position_embeddings.size(-1), pooled_hidden_states.size(-1))
-        hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
+        hidden_states = (
+            pooled_hidden_states[..., :min_length]
+            + position_embeddings[..., :min_length]
+        )
         hidden_states = hidden_states.transpose(1, 2)
 
-        encoder_outputs = self.encoder(hidden_states, attention_mask, output_hidden_states, output_attentions)
+        encoder_outputs = self.encoder(
+            hidden_states, attention_mask, output_hidden_states, output_attentions
+        )
 
         hidden_states = self.upsample(encoder_outputs.last_hidden_state)
         if hidden_states.shape[1] < n_input_timesteps:
-            hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, n_input_timesteps - hidden_states.shape[1]))
+            hidden_states = nn.functional.pad(
+                hidden_states, (0, 0, 0, n_input_timesteps - hidden_states.shape[1])
+            )
 
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, encoder_outputs.hidden_states, encoder_outputs.attentions] if v is not None
+                v
+                for v in [
+                    hidden_states,
+                    encoder_outputs.hidden_states,
+                    encoder_outputs.attentions,
+                ]
+                if v is not None
             )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -1245,7 +1404,8 @@ class SEWDPreTrainedModel(PreTrainedModel):
             nn.init.normal_(
                 module.conv.weight,
                 mean=0,
-                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+                std=2
+                * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
@@ -1260,10 +1420,14 @@ class SEWDPreTrainedModel(PreTrainedModel):
                 import deepspeed
 
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
-                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
+                    with deepspeed.zero.GatheredParameters(
+                        [module.weight_v, module.weight_g], modifier_rank=0
+                    ):
                         nn.init.kaiming_normal_(module.weight.data)
                 else:
-                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                    with deepspeed.zero.GatheredParameters(
+                        module.weight, modifier_rank=0
+                    ):
                         nn.init.kaiming_normal_(module.weight.data)
             else:
                 nn.init.kaiming_normal_(module.weight.data)
@@ -1275,7 +1439,9 @@ class SEWDPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int]
+    ):
         """
         Computes the output length of the convolutional layers
         """
@@ -1283,22 +1449,37 @@ class SEWDPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            return (
+                torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            )
 
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+        for kernel_size, stride in zip(
+            self.config.conv_kernel, self.config.conv_stride
+        ):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
         return input_lengths
 
-    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor
+    ):
+        output_lengths = self._get_feat_extract_output_lengths(
+            attention_mask.sum(-1)
+        ).to(torch.long)
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+            (batch_size, feature_vector_length),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
         )
         # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask[
+            (
+                torch.arange(attention_mask.shape[0], device=attention_mask.device),
+                output_lengths - 1,
+            )
+        ] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
@@ -1359,7 +1540,9 @@ class SEWDModel(SEWDPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.feature_extractor = SEWDFeatureEncoder(config)
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.feature_layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(
+            config.conv_dim[-1], eps=config.feature_layer_norm_eps
+        )
 
         self.project_features = config.conv_dim[-1] != config.hidden_size
         if self.project_features:
@@ -1367,7 +1550,9 @@ class SEWDModel(SEWDPreTrainedModel):
         self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
 
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(
+                torch.Tensor(config.hidden_size).uniform_()
+            )
 
         self.encoder = SEWDEncoder(config)
 
@@ -1395,7 +1580,9 @@ class SEWDModel(SEWDPreTrainedModel):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
         elif self.config.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
@@ -1404,8 +1591,12 @@ class SEWDModel(SEWDPreTrainedModel):
                 attention_mask=attention_mask,
                 min_masks=self.config.mask_time_min_masks,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            mask_time_indices = torch.tensor(
+                mask_time_indices, device=hidden_states.device, dtype=torch.bool
+            )
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
 
         if self.config.mask_feature_prob > 0 and self.training:
             # generate indices & apply SpecAugment along feature axis
@@ -1415,8 +1606,12 @@ class SEWDModel(SEWDPreTrainedModel):
                 mask_length=self.config.mask_feature_length,
                 min_masks=self.config.mask_feature_min_masks,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
-            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(
+                mask_feature_indices, device=hidden_states.device, dtype=torch.bool
+            )
+            mask_feature_indices = mask_feature_indices[:, None].expand(
+                -1, sequence_length, -1
+            )
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
@@ -1438,11 +1633,19 @@ class SEWDModel(SEWDPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
@@ -1454,9 +1657,13 @@ class SEWDModel(SEWDPreTrainedModel):
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            attention_mask = self._get_feature_vector_attention_mask(
+                hidden_states.shape[1], attention_mask
+            )
 
-        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices
+        )
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -1500,7 +1707,9 @@ class SEWDForCTC(SEWDPreTrainedModel):
                 "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = (
-            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+            config.output_hidden_size
+            if hasattr(config, "add_adapter") and config.add_adapter
+            else config.hidden_size
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
@@ -1521,9 +1730,17 @@ class SEWDForCTC(SEWDPreTrainedModel):
         # ok to repurpose this function here.
         target_lang = self.target_lang
 
-        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
-            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
-        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
+        if (
+            target_lang is not None
+            and getattr(self.config, "adapter_attn_dim", None) is None
+        ):
+            raise ValueError(
+                f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined."
+            )
+        elif (
+            target_lang is None
+            and getattr(self.config, "adapter_attn_dim", None) is not None
+        ):
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
@@ -1579,10 +1796,14 @@ class SEWDForCTC(SEWDPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None and labels.max() >= self.config.vocab_size:
-            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+            raise ValueError(
+                f"Label values must be <= vocab_size: {self.config.vocab_size}"
+            )
 
         outputs = self.sew_d(
             input_values,
@@ -1601,9 +1822,13 @@ class SEWDForCTC(SEWDPreTrainedModel):
         if labels is not None:
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+                attention_mask
+                if attention_mask is not None
+                else torch.ones_like(input_values, dtype=torch.long)
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self._get_feat_extract_output_lengths(
+                attention_mask.sum(-1)
+            ).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
@@ -1612,7 +1837,9 @@ class SEWDForCTC(SEWDPreTrainedModel):
             flattened_targets = labels.masked_select(labels_mask)
 
             # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+            log_probs = nn.functional.log_softmax(
+                logits, dim=-1, dtype=torch.float32
+            ).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = nn.functional.ctc_loss(
@@ -1630,7 +1857,10 @@ class SEWDForCTC(SEWDPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1651,7 +1881,9 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
                 "Sequence classification does not support the use of SEWD adapters (config.add_adapter=True)"
             )
         self.sew_d = SEWDModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        num_layers = (
+            config.num_hidden_layers + 1
+        )  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
@@ -1712,8 +1944,12 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        output_hidden_states = (
+            True if self.config.use_weighted_layer_sum else output_hidden_states
+        )
 
         outputs = self.sew_d(
             input_values,
@@ -1735,9 +1971,13 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            padding_mask = self._get_feature_vector_attention_mask(
+                hidden_states.shape[1], attention_mask
+            )
             hidden_states[~padding_mask] = 0.0
-            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
+            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(
+                -1, 1
+            )
 
         logits = self.classifier(pooled_output)
 

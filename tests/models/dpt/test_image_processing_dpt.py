@@ -21,7 +21,10 @@ import numpy as np
 from transformers.file_utils import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_vision_available():
@@ -69,7 +72,9 @@ class DPTImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -107,10 +112,14 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "size_divisor"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_padding(self):
@@ -124,14 +133,21 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # test by calling
         pixel_values = image_processing.preprocess(
-            image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
+            image,
+            do_rescale=False,
+            do_resize=False,
+            do_pad=True,
+            size_divisor=4,
+            return_tensors="pt",
         ).pixel_values
         self.assertTrue(pixel_values.shape[2] % 4 == 0)
         self.assertTrue(pixel_values.shape[3] % 4 == 0)
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
-        image_processor = DPTImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        image_processor = DPTImageProcessor(
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=32
+        )
 
         image = np.zeros((489, 640, 3))
 

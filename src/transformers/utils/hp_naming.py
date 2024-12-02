@@ -33,7 +33,9 @@ class TrialShortNamer:
             return ""
         short_word = None
         if any(char.isdigit() for char in word):
-            raise Exception(f"Parameters should not contain numbers: '{word}' contains a number")
+            raise Exception(
+                f"Parameters should not contain numbers: '{word}' contains a number"
+            )
         if word in info["short_word"]:
             return info["short_word"][word]
         for prefix_len in range(1, len(word) + 1):
@@ -70,7 +72,9 @@ class TrialShortNamer:
     def shortname_for_key(info, param_name):
         words = param_name.split("_")
 
-        shortname_parts = [TrialShortNamer.shortname_for_word(info, word) for word in words]
+        shortname_parts = [
+            TrialShortNamer.shortname_for_word(info, word) for word in words
+        ]
 
         # We try to create a separatorless short name, but if there is a collision we have to fallback
         # to a separated short name
@@ -118,7 +122,9 @@ class TrialShortNamer:
 
         for k, v in params.items():
             if k not in cls.DEFAULTS:
-                raise Exception(f"You should provide a default value for the param name {k} with value {v}")
+                raise Exception(
+                    f"You should provide a default value for the param name {k} with value {v}"
+                )
             if v == cls.DEFAULTS[k]:
                 # The default value is not added to the name
                 continue

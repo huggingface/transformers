@@ -92,7 +92,10 @@ class RwkvModelTester:
         return RwkvConfig.from_pretrained("sgugger/rwkv-4-pile-7b")
 
     def prepare_config_and_inputs(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -102,18 +105,26 @@ class RwkvModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         mc_token_ids = None
         if self.use_mc_token_ids:
-            mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
+            mc_token_ids = ids_tensor(
+                [self.batch_size, self.num_choices], self.seq_length
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config(
@@ -135,7 +146,10 @@ class RwkvModelTester:
         )
 
     def get_config(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
     ):
         return RwkvConfig(
             vocab_size=self.vocab_size,
@@ -161,7 +175,9 @@ class RwkvModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_rwkv_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_rwkv_model(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         config.output_hidden_states = True
         model = RwkvModel(config=config)
         model.to(torch_device)
@@ -169,19 +185,28 @@ class RwkvModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
-    def create_and_check_causl_lm(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_causl_lm(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = RwkvForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
-    def create_and_check_state_equivalency(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_state_equivalency(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = RwkvModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -196,10 +221,21 @@ class RwkvModelTester:
         outputs = model(input_ids[:, 2:], state=outputs.state)
         output_two = outputs.last_hidden_state
 
-        self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
+        self.parent.assertTrue(
+            torch.allclose(
+                torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5
+            )
+        )
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        token_type_ids,
+        *args,
+        gradient_checkpointing=False,
     ):
         model = RwkvForCausalLM(config)
         model.to(torch_device)
@@ -208,7 +244,9 @@ class RwkvModelTester:
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         result.loss.backward()
 
     def prepare_config_and_inputs_for_common(self):
@@ -232,13 +270,18 @@ class RwkvModelTester:
 
 
 @unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
+    not is_torch_greater_or_equal_than_2_0,
+    reason="See https://github.com/huggingface/transformers/pull/24204",
 )
 @require_torch
-class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RwkvModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (RwkvModel, RwkvForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM}
+        if is_torch_available()
+        else {}
     )
     all_generative_model_classes = (RwkvForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
@@ -250,7 +293,10 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=RwkvConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+            self,
+            config_class=RwkvConfig,
+            n_embd=37,
+            common_properties=["hidden_size", "num_hidden_layers"],
         )
 
     def assertInterval(self, member, container, msg=None):
@@ -272,7 +318,10 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         is_inside_interval = (min_value >= expected_min) and (max_value <= expected_max)
 
         if not is_inside_interval:
-            standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
+            standardMsg = "%s not found in %s" % (
+                safe_repr(member),
+                safe_repr(container),
+            )
             self.fail(self._formatMessage(msg, standardMsg))
 
     def test_config(self):
@@ -303,7 +352,14 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 elif "time_first" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        self.assertTrue(
+                            torch.allclose(
+                                param.data,
+                                torch.ones_like(param.data),
+                                atol=1e-5,
+                                rtol=1e-5,
+                            )
+                        )
                 elif any(x in name for x in ["time_mix_key", "time_mix_receptance"]):
                     if param.requires_grad:
                         self.assertInterval(
@@ -441,7 +497,8 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 
 @unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
+    not is_torch_greater_or_equal_than_2_0,
+    reason="See https://github.com/huggingface/transformers/pull/24204",
 )
 @slow
 class RWKVIntegrationTests(unittest.TestCase):
@@ -453,7 +510,9 @@ class RWKVIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
         model = RwkvForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        input_ids = self.tokenizer(
+            "Hello my name is", return_tensors="pt"
+        ).input_ids.to(torch_device)
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
@@ -462,8 +521,12 @@ class RWKVIntegrationTests(unittest.TestCase):
     def test_simple_generate_bf16(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = RwkvForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        input_ids = self.tokenizer(
+            "Hello my name is", return_tensors="pt"
+        ).input_ids.to(torch_device)
+        model = RwkvForCausalLM.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16
+        ).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())

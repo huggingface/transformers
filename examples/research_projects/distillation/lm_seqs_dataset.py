@@ -58,7 +58,9 @@ class LmSeqsDataset(Dataset):
         Some sanity checks
         """
         assert len(self.token_ids) == len(self.lengths)
-        assert all(self.lengths[i] == len(self.token_ids[i]) for i in range(len(self.lengths)))
+        assert all(
+            self.lengths[i] == len(self.token_ids[i]) for i in range(len(self.lengths))
+        )
 
     def remove_long_sequences(self):
         """
@@ -74,9 +76,15 @@ class LmSeqsDataset(Dataset):
         new_tok_ids = []
         new_lengths = []
         if self.params.mlm:
-            cls_id, sep_id = self.params.special_tok_ids["cls_token"], self.params.special_tok_ids["sep_token"]
+            cls_id, sep_id = (
+                self.params.special_tok_ids["cls_token"],
+                self.params.special_tok_ids["sep_token"],
+            )
         else:
-            cls_id, sep_id = self.params.special_tok_ids["bos_token"], self.params.special_tok_ids["eos_token"]
+            cls_id, sep_id = (
+                self.params.special_tok_ids["bos_token"],
+                self.params.special_tok_ids["eos_token"],
+            )
 
         for seq_, len_ in zip(self.token_ids, self.lengths):
             assert (seq_[0] == cls_id) and (seq_[-1] == sep_id), seq_
@@ -120,12 +128,16 @@ class LmSeqsDataset(Dataset):
         else:
             unk_token_id = self.params.special_tok_ids["unk_token"]
         init_size = len(self)
-        unk_occs = np.array([np.count_nonzero(a == unk_token_id) for a in self.token_ids])
+        unk_occs = np.array(
+            [np.count_nonzero(a == unk_token_id) for a in self.token_ids]
+        )
         indices = (unk_occs / self.lengths) < 0.5
         self.token_ids = self.token_ids[indices]
         self.lengths = self.lengths[indices]
         new_size = len(self)
-        logger.info(f"Remove {init_size - new_size} sequences with a high level of unknown tokens (50%).")
+        logger.info(
+            f"Remove {init_size - new_size} sequences with a high level of unknown tokens (50%)."
+        )
 
     def print_statistics(self):
         """
@@ -158,7 +170,9 @@ class LmSeqsDataset(Dataset):
             pad_idx = self.params.special_tok_ids["pad_token"]
         else:
             pad_idx = self.params.special_tok_ids["unk_token"]
-        tk_ = [list(t.astype(int)) + [pad_idx] * (max_seq_len_ - len(t)) for t in token_ids]
+        tk_ = [
+            list(t.astype(int)) + [pad_idx] * (max_seq_len_ - len(t)) for t in token_ids
+        ]
         assert len(tk_) == len(token_ids)
         assert all(len(t) == max_seq_len_ for t in tk_)
 

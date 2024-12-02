@@ -100,7 +100,10 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
     @classmethod
     def from_encoder_decoder_configs(
-        cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
+        cls,
+        encoder_config: PretrainedConfig,
+        decoder_config: PretrainedConfig,
+        **kwargs,
     ) -> PretrainedConfig:
         r"""
         Instantiate a [`VisionEncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
@@ -109,11 +112,15 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
         Returns:
             [`VisionEncoderDecoderConfig`]: An instance of a configuration object
         """
-        logger.info("Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config")
+        logger.info(
+            "Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config"
+        )
         decoder_config.is_decoder = True
         decoder_config.add_cross_attention = True
 
-        return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
+        return cls(
+            encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs
+        )
 
 
 class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
@@ -123,7 +130,10 @@ class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                (
+                    "pixel_values",
+                    {0: "batch", 1: "num_channels", 2: "height", 3: "width"},
+                ),
             ]
         )
 
@@ -141,7 +151,10 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict()
         common_inputs["input_ids"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        common_inputs["attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+        common_inputs["attention_mask"] = {
+            0: "batch",
+            1: "past_decoder_sequence + sequence",
+        }
         common_inputs["encoder_hidden_states"] = {0: "batch", 1: "encoder_sequence"}
 
         return common_inputs
@@ -159,14 +172,24 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
         common_inputs = OrderedDict()
 
         dummy_input = super().generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
+            framework=framework,
         )
 
         batch, encoder_sequence = dummy_input["input_ids"].shape
-        encoder_hidden_states_shape = (batch, encoder_sequence, self._config.encoder_hidden_size)
+        encoder_hidden_states_shape = (
+            batch,
+            encoder_sequence,
+            self._config.encoder_hidden_size,
+        )
         common_inputs["input_ids"] = dummy_input.pop("input_ids")
         common_inputs["attention_mask"] = dummy_input.pop("attention_mask")
-        common_inputs["encoder_hidden_states"] = torch.zeros(encoder_hidden_states_shape)
+        common_inputs["encoder_hidden_states"] = torch.zeros(
+            encoder_hidden_states_shape
+        )
 
         return common_inputs
 
@@ -190,7 +213,10 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         return VisionEncoderDecoderEncoderOnnxConfig(encoder_config)
 
     def get_decoder_config(
-        self, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, feature: str = "default"
+        self,
+        encoder_config: PretrainedConfig,
+        decoder_config: PretrainedConfig,
+        feature: str = "default",
     ) -> OnnxConfig:
         r"""
         Returns ONNX decoder config for `VisionEncoderDecoder` model.

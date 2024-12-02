@@ -31,10 +31,22 @@ def write_model_card(model_card_dir, src_lang, tgt_lang):
     # BLUE scores as follows:
     # "pair": [fairseq, transformers]
     scores = {
-        "ru-en": ["[41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937)", "39.20"],
-        "en-ru": ["[36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)", "33.47"],
-        "en-de": ["[43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862)", "42.83"],
-        "de-en": ["[42.3](http://matrix.statmt.org/matrix/output/1902?run_id=6750)", "41.35"],
+        "ru-en": [
+            "[41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937)",
+            "39.20",
+        ],
+        "en-ru": [
+            "[36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)",
+            "33.47",
+        ],
+        "en-de": [
+            "[43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862)",
+            "42.83",
+        ],
+        "de-en": [
+            "[42.3](http://matrix.statmt.org/matrix/output/1902?run_id=6750)",
+            "41.35",
+        ],
     }
     pair = f"{src_lang}-{tgt_lang}"
 
@@ -154,6 +166,7 @@ note: fairseq reports using a beam of 50, so you should get a slightly higher sc
     print(f"Generating {path}")
     with open(path, "w", encoding="utf-8") as f:
         f.write(readme)
+
 
 # make sure we are under the root of the project
 repo_dir = Path(__file__).resolve().parent.parent.parent

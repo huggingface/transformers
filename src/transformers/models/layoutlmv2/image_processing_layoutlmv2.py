@@ -19,7 +19,12 @@ from typing import Dict, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format, to_pil_image
+from ...image_transforms import (
+    flip_channel_order,
+    resize,
+    to_channel_dimension_format,
+    to_pil_image,
+)
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -71,8 +76,16 @@ def apply_tesseract(
     # apply OCR
     pil_image = to_pil_image(image, input_data_format=input_data_format)
     image_width, image_height = pil_image.size
-    data = pytesseract.image_to_data(pil_image, lang=lang, output_type="dict", config=tesseract_config)
-    words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
+    data = pytesseract.image_to_data(
+        pil_image, lang=lang, output_type="dict", config=tesseract_config
+    )
+    words, left, top, width, height = (
+        data["text"],
+        data["left"],
+        data["top"],
+        data["width"],
+        data["height"],
+    )
 
     # filter empty words and corresponding coordinates
     irrelevant_indices = [idx for idx, word in enumerate(words) if not word.strip()]
@@ -80,7 +93,9 @@ def apply_tesseract(
     left = [coord for idx, coord in enumerate(left) if idx not in irrelevant_indices]
     top = [coord for idx, coord in enumerate(top) if idx not in irrelevant_indices]
     width = [coord for idx, coord in enumerate(width) if idx not in irrelevant_indices]
-    height = [coord for idx, coord in enumerate(height) if idx not in irrelevant_indices]
+    height = [
+        coord for idx, coord in enumerate(height) if idx not in irrelevant_indices
+    ]
 
     # turn coordinates into (left, top, left+width, top+height) format
     actual_boxes = []
@@ -93,7 +108,9 @@ def apply_tesseract(
     for box in actual_boxes:
         normalized_boxes.append(normalize_box(box, image_width, image_height))
 
-    assert len(words) == len(normalized_boxes), "Not as many words as there are bounding boxes"
+    assert len(words) == len(
+        normalized_boxes
+    ), "Not as many words as there are bounding boxes"
 
     return words, normalized_boxes
 
@@ -183,7 +200,9 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+            )
         output_size = (size["height"], size["width"])
         return resize(
             image,
@@ -247,7 +266,9 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         resample = resample if resample is not None else self.resample
         apply_ocr = apply_ocr if apply_ocr is not None else self.apply_ocr
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
-        tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
+        tesseract_config = (
+            tesseract_config if tesseract_config is not None else self.tesseract_config
+        )
 
         images = make_list_of_images(images)
 
@@ -274,20 +295,36 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(image, ocr_lang, tesseract_config, input_data_format=input_data_format)
+                words, boxes = apply_tesseract(
+                    image,
+                    ocr_lang,
+                    tesseract_config,
+                    input_data_format=input_data_format,
+                )
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         # flip color channels from RGB to BGR (as Detectron2 requires this)
-        images = [flip_channel_order(image, input_data_format=input_data_format) for image in images]
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            flip_channel_order(image, input_data_format=input_data_format)
+            for image in images
+        ]
+        images = [
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)

@@ -62,7 +62,9 @@ if has_tensorboard:
         from flax.metrics.tensorboard import SummaryWriter
     except ImportError as ie:
         has_tensorboard = False
-        print(f"Unable to display metrics through TensorBoard because some package are not installed: {ie}")
+        print(
+            f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+        )
 
 else:
     print(
@@ -82,7 +84,9 @@ class WandbArguments:
 
     wandb_user_name: Optional[str] = field(
         default=None,
-        metadata={"help": "The WandB user name for potential logging. If left None, no logging"},
+        metadata={
+            "help": "The WandB user name for potential logging. If left None, no logging"
+        },
     )
     wandb_project_name: Optional[str] = field(
         default="performer-experiments",
@@ -113,14 +117,22 @@ class ModelArguments:
         metadata={"help": "Whether to use a blank model without pretraining"},
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from s3"
+        },
     )
 
 
@@ -131,26 +143,39 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a text file)."}
+    )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."
+        },
     )
     train_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
+        metadata={
+            "help": "An optional input train ref data file for whole word masking in Chinese."
+        },
     )
     validation_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input validation ref data file for whole word masking in Chinese."},
+        metadata={
+            "help": "An optional input validation ref data file for whole word masking in Chinese."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     validation_split_percentage: Optional[int] = field(
         default=5,
@@ -172,7 +197,8 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     mlm_probability: float = field(
-        default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
+        default=0.15,
+        metadata={"help": "Ratio of tokens to mask for masked language modeling loss"},
     )
     pad_to_max_length: bool = field(
         default=False,
@@ -185,15 +211,29 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+                assert extension in [
+                    "csv",
+                    "json",
+                    "txt",
+                ], "`train_file` should be a csv, a json or a txt file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+                assert extension in [
+                    "csv",
+                    "json",
+                    "txt",
+                ], "`validation_file` should be a csv, a json or a txt file."
 
 
 # Adapted from transformers/data/data_collator.py
@@ -233,9 +273,15 @@ class FlaxDataCollatorForLanguageModeling:
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]], pad_to_multiple_of: int) -> Dict[str, np.ndarray]:
+    def __call__(
+        self, examples: List[Dict[str, np.ndarray]], pad_to_multiple_of: int
+    ) -> Dict[str, np.ndarray]:
         # Handle dict or lists with proper padding and conversion to tensor.
-        batch = self.tokenizer.pad(examples, pad_to_multiple_of=pad_to_multiple_of, return_tensors=TensorType.NUMPY)
+        batch = self.tokenizer.pad(
+            examples,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=TensorType.NUMPY,
+        )
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
@@ -266,14 +312,23 @@ class FlaxDataCollatorForLanguageModeling:
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = np.random.binomial(1, np.full(labels.shape, 0.8)).astype("bool") & masked_indices
-        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+        indices_replaced = (
+            np.random.binomial(1, np.full(labels.shape, 0.8)).astype("bool")
+            & masked_indices
+        )
+        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(
+            self.tokenizer.mask_token
+        )
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = np.random.binomial(1, np.full(labels.shape, 0.5)).astype("bool")
+        indices_random = np.random.binomial(1, np.full(labels.shape, 0.5)).astype(
+            "bool"
+        )
         indices_random &= masked_indices & ~indices_replaced
 
-        random_words = np.random.randint(self.tokenizer.vocab_size, size=labels.shape, dtype="i4")
+        random_words = np.random.randint(
+            self.tokenizer.vocab_size, size=labels.shape, dtype="i4"
+        )
         inputs[indices_random] = random_words[indices_random]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
@@ -325,8 +380,12 @@ def create_learning_rate_scheduler(
             elif name == "decay_every":
                 ret *= decay_factor ** (step // steps_per_decay)
             elif name == "cosine_decay":
-                progress = jnp.maximum(0.0, (step - warmup_steps) / float(steps_per_cycle))
-                ret *= jnp.maximum(0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
+                progress = jnp.maximum(
+                    0.0, (step - warmup_steps) / float(steps_per_cycle)
+                )
+                ret *= jnp.maximum(
+                    0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0)))
+                )
             else:
                 raise ValueError("Unknown factor %s." % name)
         return jnp.asarray(ret, dtype=jnp.float32)
@@ -354,7 +413,8 @@ def accuracy(logits, targets, weights=None):
     """
     if logits.ndim != targets.ndim + 1:
         raise ValueError(
-            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
+            "Incorrect shapes. Got shape %s logits and %s targets"
+            % (str(logits.shape), str(targets.shape))
         )
 
     loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
@@ -375,16 +435,20 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     """
     if logits.ndim != targets.ndim + 1:
         raise ValueError(
-            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
+            "Incorrect shapes. Got shape %s logits and %s targets"
+            % (str(logits.shape), str(targets.shape))
         )
 
     vocab_size = logits.shape[-1]
     confidence = 1.0 - label_smoothing
     low_confidence = (1.0 - confidence) / (vocab_size - 1)
     normalizing_constant = -(
-        confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+        confidence * jnp.log(confidence)
+        + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
     )
-    soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
+    soft_targets = common_utils.onehot(
+        targets, vocab_size, on_value=confidence, off_value=low_confidence
+    )
 
     loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
     loss = loss - normalizing_constant
@@ -450,7 +514,9 @@ if __name__ == "__main__":
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments, WandbArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments, WandbArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -458,7 +524,9 @@ if __name__ == "__main__":
             json_file=os.path.abspath(sys.argv[1])
         )
     else:
-        model_args, data_args, training_args, wandb_args = parser.parse_args_into_dataclasses()
+        model_args, data_args, training_args, wandb_args = (
+            parser.parse_args_into_dataclasses()
+        )
 
     if (
         os.path.exists(training_args.output_dir)
@@ -537,26 +605,37 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    config = BertConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    config = BertConfig.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+    )
     lm_class = FlaxPerformerForMaskedLM if model_args.performer else FlaxBertForMaskedLM
     if model_args.reinitialize:
-        model = lm_class(config=BertConfig.from_pretrained(model_args.model_name_or_path))
+        model = lm_class(
+            config=BertConfig.from_pretrained(model_args.model_name_or_path)
+        )
     else:
         model = lm_class.from_pretrained(
             model_args.model_name_or_path,
             dtype=jnp.float32,
-            input_shape=(training_args.train_batch_size, config.max_position_embeddings),
+            input_shape=(
+                training_args.train_batch_size,
+                config.max_position_embeddings,
+            ),
             seed=training_args.seed,
             dropout_rate=0.1,
         )
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.tokenizer_name,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
         )
     else:
         raise ValueError(
@@ -596,11 +675,15 @@ if __name__ == "__main__":
 
     # Enable tensorboard only on the master node
     if has_tensorboard and jax.host_id() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        summary_writer = SummaryWriter(
+            log_dir=Path(training_args.output_dir).joinpath("logs").as_posix()
+        )
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
+    data_collator = FlaxDataCollatorForLanguageModeling(
+        tokenizer=tokenizer, mlm_probability=data_args.mlm_probability
+    )
 
     # Setup optimizer
     optimizer = Adam(
@@ -612,7 +695,8 @@ if __name__ == "__main__":
 
     # Create learning rate scheduler
     lr_scheduler_fn = create_learning_rate_scheduler(
-        base_learning_rate=training_args.learning_rate, warmup_steps=max(training_args.warmup_steps, 1)
+        base_learning_rate=training_args.learning_rate,
+        warmup_steps=max(training_args.warmup_steps, 1),
     )
 
     # Create parallel version of the training and evaluation steps
@@ -630,7 +714,9 @@ if __name__ == "__main__":
     if wandb_args.wandb_user_name is not None:
         import wandb
 
-        wandb.init(project=wandb_args.wandb_project_name, entity=wandb_args.wandb_user_name)
+        wandb.init(
+            project=wandb_args.wandb_project_name, entity=wandb_args.wandb_user_name
+        )
 
     epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
     for epoch in epochs:
@@ -651,7 +737,9 @@ if __name__ == "__main__":
 
             # Model forward
             model_inputs = common_utils.shard(model_inputs.data)
-            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
+            loss, optimizer, dropout_rngs = p_training_step(
+                optimizer, model_inputs, dropout_rngs
+            )
 
             if wandb_args.wandb_user_name is not None:
                 wandb.log({"Training loss": np.array(loss).mean()})
@@ -665,7 +753,9 @@ if __name__ == "__main__":
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []
-        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+        for i, batch_idx in enumerate(
+            tqdm(eval_batch_idx, desc="Evaluating ...", position=2)
+        ):
             samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
@@ -677,12 +767,12 @@ if __name__ == "__main__":
         eval_metrics_np = get_metrics(eval_metrics)
         eval_metrics_np = jax.tree_util.tree_map(jnp.sum, eval_metrics_np)
         eval_normalizer = eval_metrics_np.pop("normalizer")
-        eval_summary = jax.tree_util.tree_map(lambda x: x / eval_normalizer, eval_metrics_np)
+        eval_summary = jax.tree_util.tree_map(
+            lambda x: x / eval_normalizer, eval_metrics_np
+        )
 
         # Update progress bar
-        epochs.desc = (
-            f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
-        )
+        epochs.desc = f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
 
         if wandb_args.wandb_user_name is not None:
             wandb.log({"Eval loss": np.array(eval_summary["loss"]).mean()})

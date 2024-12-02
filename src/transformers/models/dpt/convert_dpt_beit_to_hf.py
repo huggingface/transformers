@@ -34,14 +34,24 @@ def get_dpt_config(model_name):
     num_hidden_layers = 12
     num_attention_heads = 12
     intermediate_size = 3072
-    out_features = ["stage3", "stage6", "stage9", "stage12"]  # beit-base-384 uses [2, 5, 8, 11]
+    out_features = [
+        "stage3",
+        "stage6",
+        "stage9",
+        "stage12",
+    ]  # beit-base-384 uses [2, 5, 8, 11]
 
     if "large" in model_name:
         hidden_size = 1024
         num_hidden_layers = 24
         num_attention_heads = 16
         intermediate_size = 4096
-        out_features = ["stage6", "stage12", "stage18", "stage24"]  # beit-large-512 uses [5, 11, 17, 23]
+        out_features = [
+            "stage6",
+            "stage12",
+            "stage18",
+            "stage24",
+        ]  # beit-large-512 uses [5, 11, 17, 23]
 
     if "512" in model_name:
         image_size = 512
@@ -61,8 +71,12 @@ def get_dpt_config(model_name):
         out_features=out_features,
     )
 
-    neck_hidden_sizes = [256, 512, 1024, 1024] if "large" in model_name else [96, 192, 384, 768]
-    config = DPTConfig(backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes)
+    neck_hidden_sizes = (
+        [256, 512, 1024, 1024] if "large" in model_name else [96, 192, 384, 768]
+    )
+    config = DPTConfig(
+        backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes
+    )
 
     return config, image_size
 
@@ -149,13 +163,21 @@ def read_in_q_k_v(state_dict, config):
         q_bias = state_dict.pop(f"pretrained.model.blocks.{i}.attn.q_bias")
         v_bias = state_dict.pop(f"pretrained.model.blocks.{i}.attn.v_bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = (
+            q_bias
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[hidden_size : hidden_size * 2, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = (
+            v_bias
+        )
 
 
 def rename_key(dct, old, new):
@@ -208,7 +230,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # Check outputs on an image
     # We set `keep_aspect_ratio=False` as our current BEiT does not support arbitrary window sizes
     processor = DPTImageProcessor(
-        size={"height": image_size, "width": image_size}, keep_aspect_ratio=False, ensure_multiple_of=32
+        size={"height": image_size, "width": image_size},
+        keep_aspect_ratio=False,
+        ensure_multiple_of=32,
     )
 
     image = prepare_img()
@@ -248,19 +272,31 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         # OK, checked
         expected_shape = torch.Size([1, 512, 512])
         expected_slice = torch.tensor(
-            [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
+            [
+                [2804.6260, 2792.5708, 2812.9263],
+                [2772.0288, 2780.1118, 2796.2529],
+                [2748.1094, 2766.6558, 2766.9834],
+            ]
         )
     elif model_name == "dpt-beit-large-384":
         # OK, checked
         expected_shape = torch.Size([1, 384, 384])
         expected_slice = torch.tensor(
-            [[1783.2273, 1780.5729, 1792.6453], [1759.9817, 1765.5359, 1778.5002], [1739.1633, 1754.7903, 1757.1990]],
+            [
+                [1783.2273, 1780.5729, 1792.6453],
+                [1759.9817, 1765.5359, 1778.5002],
+                [1739.1633, 1754.7903, 1757.1990],
+            ],
         )
     elif model_name == "dpt-beit-base-384":
         # OK, checked
         expected_shape = torch.Size([1, 384, 384])
         expected_slice = torch.tensor(
-            [[2898.4482, 2891.3750, 2904.8079], [2858.6685, 2877.2615, 2894.4507], [2842.1235, 2854.1023, 2861.6328]],
+            [
+                [2898.4482, 2891.3750, 2904.8079],
+                [2858.6685, 2877.2615, 2894.4507],
+                [2842.1235, 2854.1023, 2861.6328],
+            ],
         )
 
     assert predicted_depth.shape == torch.Size(expected_shape)
@@ -302,4 +338,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_dpt_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

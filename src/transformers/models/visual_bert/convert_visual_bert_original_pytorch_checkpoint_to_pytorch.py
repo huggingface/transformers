@@ -62,7 +62,9 @@ def load_state_dict(checkpoint_path):
 
 def get_new_dict(d, config, rename_keys_prefix=rename_keys_prefix):
     new_d = OrderedDict()
-    new_d["visual_bert.embeddings.position_ids"] = torch.arange(config.max_position_embeddings).expand((1, -1))
+    new_d["visual_bert.embeddings.position_ids"] = torch.arange(
+        config.max_position_embeddings
+    ).expand((1, -1))
     # detector_d = OrderedDict()
     for key in d:
         if "detector" in key:
@@ -100,7 +102,9 @@ def convert_visual_bert_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         elif "nlvr" in checkpoint_path:
             config_params = {"visual_embedding_dim": 1024}
         else:
-            raise NotImplementedError(f"No implementation found for `{checkpoint_path}`.")
+            raise NotImplementedError(
+                f"No implementation found for `{checkpoint_path}`."
+            )
     else:
         if "vcr" in checkpoint_path:
             config_params = {"visual_embedding_dim": 512}
@@ -143,7 +147,13 @@ def convert_visual_bert_checkpoint(checkpoint_path, pytorch_dump_folder_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("orig_checkpoint_path", type=str, help="A path to .th on local filesystem.")
-    parser.add_argument("pytorch_dump_folder_path", type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "orig_checkpoint_path", type=str, help="A path to .th on local filesystem."
+    )
+    parser.add_argument(
+        "pytorch_dump_folder_path", type=str, help="Path to the output PyTorch model."
+    )
     args = parser.parse_args()
-    convert_visual_bert_checkpoint(args.orig_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_visual_bert_checkpoint(
+        args.orig_checkpoint_path, args.pytorch_dump_folder_path
+    )

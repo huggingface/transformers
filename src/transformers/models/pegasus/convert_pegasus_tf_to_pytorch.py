@@ -22,8 +22,15 @@ import tensorflow as tf
 import torch
 from tqdm import tqdm
 
-from transformers import PegasusConfig, PegasusForConditionalGeneration, PegasusTokenizer
-from transformers.models.pegasus.configuration_pegasus import DEFAULTS, task_specific_params
+from transformers import (
+    PegasusConfig,
+    PegasusForConditionalGeneration,
+    PegasusTokenizer,
+)
+from transformers.models.pegasus.configuration_pegasus import (
+    DEFAULTS,
+    task_specific_params,
+)
 
 
 PATTERNS = [
@@ -54,7 +61,9 @@ def rename_state_dict_key(k):
 # See appendix C of paper for all hyperparams
 
 
-def convert_pegasus(tf_weights: dict, cfg_updates: dict) -> PegasusForConditionalGeneration:
+def convert_pegasus(
+    tf_weights: dict, cfg_updates: dict
+) -> PegasusForConditionalGeneration:
     cfg_kwargs = DEFAULTS.copy()
     cfg_kwargs.update(cfg_updates)
     cfg = PegasusConfig(**cfg_kwargs)
@@ -64,23 +73,35 @@ def convert_pegasus(tf_weights: dict, cfg_updates: dict) -> PegasusForConditiona
     for k, v in tf_weights.items():
         new_k = rename_state_dict_key(k)
         if new_k not in sd:
-            raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
+            raise ValueError(
+                f"could not find new key {new_k} in state dict. (converted from {k})"
+            )
 
         if "dense" in k or "proj" in new_k:
             v = v.T
         mapping[new_k] = torch.tensor(v, dtype=sd[new_k].dtype)
         assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
     # make sure embedding.padding_idx is respected
-    mapping["shared.weight"][cfg.pad_token_id] = torch.zeros_like(mapping["shared.weight"][cfg.pad_token_id + 1])
+    mapping["shared.weight"][cfg.pad_token_id] = torch.zeros_like(
+        mapping["shared.weight"][cfg.pad_token_id + 1]
+    )
     mapping["encoder.embed_tokens.weight"] = mapping["shared.weight"]
     mapping["decoder.embed_tokens.weight"] = mapping["shared.weight"]
-    empty_biases = {k: torch.zeros_like(v) for k, v in sd.items() if k.endswith("bias") and k not in mapping}
+    empty_biases = {
+        k: torch.zeros_like(v)
+        for k, v in sd.items()
+        if k.endswith("bias") and k not in mapping
+    }
     mapping.update(**empty_biases)
     missing, extra = torch_model.model.load_state_dict(mapping, strict=False)
     unexpected_missing = [
-        k for k in missing if k not in ["encoder.embed_positions.weight", "decoder.embed_positions.weight"]
+        k
+        for k in missing
+        if k not in ["encoder.embed_positions.weight", "decoder.embed_positions.weight"]
     ]
-    assert unexpected_missing == [], f"no matches found for the following torch keys {unexpected_missing}"
+    assert (
+        unexpected_missing == []
+    ), f"no matches found for the following torch keys {unexpected_missing}"
     assert extra == [], f"no matches found for the following tf keys {extra}"
     return torch_model
 
@@ -101,8 +122,12 @@ def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
 def convert_pegasus_ckpt_to_pytorch(ckpt_path: str, save_dir: str):
     # save tokenizer first
     dataset = Path(ckpt_path).parent.name
-    desired_max_model_length = task_specific_params[f"summarization_{dataset}"]["max_position_embeddings"]
-    tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus", model_max_length=desired_max_model_length)
+    desired_max_model_length = task_specific_params[f"summarization_{dataset}"][
+        "max_position_embeddings"
+    ]
+    tok = PegasusTokenizer.from_pretrained(
+        "sshleifer/pegasus", model_max_length=desired_max_model_length
+    )
     assert tok.model_max_length == desired_max_model_length
     tok.save_pretrained(save_dir)
 
@@ -122,8 +147,12 @@ def convert_pegasus_ckpt_to_pytorch(ckpt_path: str, save_dir: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("tf_ckpt_path", type=str, help="passed to tf.train.list_variables")
-    parser.add_argument("save_dir", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "tf_ckpt_path", type=str, help="passed to tf.train.list_variables"
+    )
+    parser.add_argument(
+        "save_dir", default=None, type=str, help="Path to the output PyTorch model."
+    )
     args = parser.parse_args()
     if args.save_dir is None:
         dataset = Path(args.tf_ckpt_path).parent.name

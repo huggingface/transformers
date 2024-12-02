@@ -62,13 +62,25 @@ def print_2d_tensor(tensor):
     logger.info("lv, h >\t" + "\t".join(f"{x + 1}" for x in range(len(tensor))))
     for row in range(len(tensor)):
         if tensor.dtype != torch.long:
-            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:.5f}" for x in tensor[row].cpu().data))
+            logger.info(
+                f"layer {row + 1}:\t"
+                + "\t".join(f"{x:.5f}" for x in tensor[row].cpu().data)
+            )
         else:
-            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:d}" for x in tensor[row].cpu().data))
+            logger.info(
+                f"layer {row + 1}:\t"
+                + "\t".join(f"{x:d}" for x in tensor[row].cpu().data)
+            )
 
 
 def compute_heads_importance(
-    args, model, eval_dataloader, compute_entropy=True, compute_importance=True, head_mask=None, actually_pruned=False
+    args,
+    model,
+    eval_dataloader,
+    compute_entropy=True,
+    compute_importance=True,
+    head_mask=None,
+    actually_pruned=False,
 ):
     """This method shows how to compute:
     - head attention entropy
@@ -91,7 +103,9 @@ def compute_heads_importance(
     labels = None
     tot_tokens = 0.0
 
-    for step, inputs in enumerate(tqdm(eval_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
+    for step, inputs in enumerate(
+        tqdm(eval_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+    ):
         for k, v in inputs.items():
             inputs[k] = v.to(args.device)
 
@@ -106,7 +120,9 @@ def compute_heads_importance(
 
         if compute_entropy:
             for layer, attn in enumerate(all_attentions):
-                masked_entropy = entropy(attn.detach()) * inputs["attention_mask"].float().unsqueeze(1)
+                masked_entropy = entropy(attn.detach()) * inputs[
+                    "attention_mask"
+                ].float().unsqueeze(1)
                 attn_entropy[layer] += masked_entropy.sum(-1).sum(0).detach()
 
         if compute_importance:
@@ -128,22 +144,34 @@ def compute_heads_importance(
     # Layerwise importance normalization
     if not args.dont_normalize_importance_by_layer:
         exponent = 2
-        norm_by_layer = torch.pow(torch.pow(head_importance, exponent).sum(-1), 1 / exponent)
+        norm_by_layer = torch.pow(
+            torch.pow(head_importance, exponent).sum(-1), 1 / exponent
+        )
         head_importance /= norm_by_layer.unsqueeze(-1) + 1e-20
 
     if not args.dont_normalize_global_importance:
-        head_importance = (head_importance - head_importance.min()) / (head_importance.max() - head_importance.min())
+        head_importance = (head_importance - head_importance.min()) / (
+            head_importance.max() - head_importance.min()
+        )
 
     # Print/save matrices
-    np.save(os.path.join(args.output_dir, "attn_entropy.npy"), attn_entropy.detach().cpu().numpy())
-    np.save(os.path.join(args.output_dir, "head_importance.npy"), head_importance.detach().cpu().numpy())
+    np.save(
+        os.path.join(args.output_dir, "attn_entropy.npy"),
+        attn_entropy.detach().cpu().numpy(),
+    )
+    np.save(
+        os.path.join(args.output_dir, "head_importance.npy"),
+        head_importance.detach().cpu().numpy(),
+    )
 
     logger.info("Attention entropies")
     print_2d_tensor(attn_entropy)
     logger.info("Head importance scores")
     print_2d_tensor(head_importance)
     logger.info("Head ranked by importance scores")
-    head_ranks = torch.zeros(head_importance.numel(), dtype=torch.long, device=args.device)
+    head_ranks = torch.zeros(
+        head_importance.numel(), dtype=torch.long, device=args.device
+    )
     head_ranks[head_importance.view(-1).sort(descending=True)[1]] = torch.arange(
         head_importance.numel(), device=args.device
     )
@@ -157,10 +185,22 @@ def mask_heads(args, model, eval_dataloader):
     """This method shows how to mask head (set some heads to zero), to test the effect on the network,
     based on the head importance scores, as described in Michel et al. (http://arxiv.org/abs/1905.10650)
     """
-    _, head_importance, preds, labels = compute_heads_importance(args, model, eval_dataloader, compute_entropy=False)
-    preds = np.argmax(preds, axis=1) if args.output_mode == "classification" else np.squeeze(preds)
-    original_score = glue_compute_metrics(args.task_name, preds, labels)[args.metric_name]
-    logger.info("Pruning: original score: %f, threshold: %f", original_score, original_score * args.masking_threshold)
+    _, head_importance, preds, labels = compute_heads_importance(
+        args, model, eval_dataloader, compute_entropy=False
+    )
+    preds = (
+        np.argmax(preds, axis=1)
+        if args.output_mode == "classification"
+        else np.squeeze(preds)
+    )
+    original_score = glue_compute_metrics(args.task_name, preds, labels)[
+        args.metric_name
+    ]
+    logger.info(
+        "Pruning: original score: %f, threshold: %f",
+        original_score,
+        original_score * args.masking_threshold,
+    )
 
     new_head_mask = torch.ones_like(head_importance)
     num_to_mask = max(1, int(new_head_mask.numel() * args.masking_amount))
@@ -188,8 +228,14 @@ def mask_heads(args, model, eval_dataloader):
         _, head_importance, preds, labels = compute_heads_importance(
             args, model, eval_dataloader, compute_entropy=False, head_mask=new_head_mask
         )
-        preds = np.argmax(preds, axis=1) if args.output_mode == "classification" else np.squeeze(preds)
-        current_score = glue_compute_metrics(args.task_name, preds, labels)[args.metric_name]
+        preds = (
+            np.argmax(preds, axis=1)
+            if args.output_mode == "classification"
+            else np.squeeze(preds)
+        )
+        current_score = glue_compute_metrics(args.task_name, preds, labels)[
+            args.metric_name
+        ]
         logger.info(
             "Masking: current score: %f, remaining heads %d (%.1f percents)",
             current_score,
@@ -199,7 +245,9 @@ def mask_heads(args, model, eval_dataloader):
 
     logger.info("Final head mask")
     print_2d_tensor(head_mask)
-    np.save(os.path.join(args.output_dir, "head_mask.npy"), head_mask.detach().cpu().numpy())
+    np.save(
+        os.path.join(args.output_dir, "head_mask.npy"), head_mask.detach().cpu().numpy()
+    )
 
     return head_mask
 
@@ -212,18 +260,33 @@ def prune_heads(args, model, eval_dataloader, head_mask):
     # Pruning is like masking but we actually remove the masked weights
     before_time = datetime.now()
     _, _, preds, labels = compute_heads_importance(
-        args, model, eval_dataloader, compute_entropy=False, compute_importance=False, head_mask=head_mask
+        args,
+        model,
+        eval_dataloader,
+        compute_entropy=False,
+        compute_importance=False,
+        head_mask=head_mask,
     )
-    preds = np.argmax(preds, axis=1) if args.output_mode == "classification" else np.squeeze(preds)
-    score_masking = glue_compute_metrics(args.task_name, preds, labels)[args.metric_name]
+    preds = (
+        np.argmax(preds, axis=1)
+        if args.output_mode == "classification"
+        else np.squeeze(preds)
+    )
+    score_masking = glue_compute_metrics(args.task_name, preds, labels)[
+        args.metric_name
+    ]
     original_time = datetime.now() - before_time
 
     original_num_params = sum(p.numel() for p in model.parameters())
     heads_to_prune = {
-        layer: (1 - head_mask[layer].long()).nonzero().squeeze().tolist() for layer in range(len(head_mask))
+        layer: (1 - head_mask[layer].long()).nonzero().squeeze().tolist()
+        for layer in range(len(head_mask))
     }
 
-    assert sum(len(h) for h in heads_to_prune.values()) == (1 - head_mask.long()).sum().item()
+    assert (
+        sum(len(h) for h in heads_to_prune.values())
+        == (1 - head_mask.long()).sum().item()
+    )
     model.prune_heads(heads_to_prune)
     pruned_num_params = sum(p.numel() for p in model.parameters())
 
@@ -237,8 +300,14 @@ def prune_heads(args, model, eval_dataloader, head_mask):
         head_mask=None,
         actually_pruned=True,
     )
-    preds = np.argmax(preds, axis=1) if args.output_mode == "classification" else np.squeeze(preds)
-    score_pruning = glue_compute_metrics(args.task_name, preds, labels)[args.metric_name]
+    preds = (
+        np.argmax(preds, axis=1)
+        if args.output_mode == "classification"
+        else np.squeeze(preds)
+    )
+    score_pruning = glue_compute_metrics(args.task_name, preds, labels)[
+        args.metric_name
+    ]
     new_time = datetime.now() - before_time
 
     logger.info(
@@ -247,8 +316,15 @@ def prune_heads(args, model, eval_dataloader, head_mask):
         pruned_num_params,
         pruned_num_params / original_num_params * 100,
     )
-    logger.info("Pruning: score with masking: %f score with pruning: %f", score_masking, score_pruning)
-    logger.info("Pruning: speed ratio (new timing / original timing): %f percents", original_time / new_time * 100)
+    logger.info(
+        "Pruning: score with masking: %f score with pruning: %f",
+        score_masking,
+        score_pruning,
+    )
+    logger.info(
+        "Pruning: speed ratio (new timing / original timing): %f percents",
+        original_time / new_time * 100,
+    )
 
 
 def main():
@@ -273,7 +349,8 @@ def main():
         default=None,
         type=str,
         required=True,
-        help="The name of the task to train selected in the list: " + ", ".join(glue_processors.keys()),
+        help="The name of the task to train selected in the list: "
+        + ", ".join(glue_processors.keys()),
     )
     parser.add_argument(
         "--output_dir",
@@ -303,17 +380,26 @@ def main():
         help="Where do you want to store the pre-trained models downloaded from huggingface.co",
     )
     parser.add_argument(
-        "--data_subset", type=int, default=-1, help="If > 0: limit the data to a subset of data_subset instances."
+        "--data_subset",
+        type=int,
+        default=-1,
+        help="If > 0: limit the data to a subset of data_subset instances.",
     )
     parser.add_argument(
-        "--overwrite_output_dir", action="store_true", help="Whether to overwrite data in output directory"
+        "--overwrite_output_dir",
+        action="store_true",
+        help="Whether to overwrite data in output directory",
     )
     parser.add_argument(
-        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache",
+        action="store_true",
+        help="Overwrite the cached training and evaluation sets",
     )
 
     parser.add_argument(
-        "--dont_normalize_importance_by_layer", action="store_true", help="Don't normalize importance score by layers"
+        "--dont_normalize_importance_by_layer",
+        action="store_true",
+        help="Don't normalize importance score by layers",
     )
     parser.add_argument(
         "--dont_normalize_global_importance",
@@ -322,7 +408,9 @@ def main():
     )
 
     parser.add_argument(
-        "--try_masking", action="store_true", help="Whether to try to mask head until a threshold of accuracy."
+        "--try_masking",
+        action="store_true",
+        help="Whether to try to mask head until a threshold of accuracy.",
     )
     parser.add_argument(
         "--masking_threshold",
@@ -331,9 +419,14 @@ def main():
         help="masking threshold in term of metrics (stop masking when metric < threshold * original metric value).",
     )
     parser.add_argument(
-        "--masking_amount", default=0.1, type=float, help="Amount to heads to masking at each masking step."
+        "--masking_amount",
+        default=0.1,
+        type=float,
+        help="Amount to heads to masking at each masking step.",
     )
-    parser.add_argument("--metric_name", default="acc", type=str, help="Metric to use for head masking.")
+    parser.add_argument(
+        "--metric_name", default="acc", type=str, help="Metric to use for head masking."
+    )
 
     parser.add_argument(
         "--max_seq_length",
@@ -347,10 +440,21 @@ def main():
     parser.add_argument("--batch_size", default=1, type=int, help="Batch size.")
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for distributed training on gpus")
-    parser.add_argument("--no_cuda", action="store_true", help="Whether not to use CUDA when available")
-    parser.add_argument("--server_ip", type=str, default="", help="Can be used for distant debugging.")
-    parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
+    parser.add_argument(
+        "--local_rank",
+        type=int,
+        default=-1,
+        help="local_rank for distributed training on gpus",
+    )
+    parser.add_argument(
+        "--no_cuda", action="store_true", help="Whether not to use CUDA when available"
+    )
+    parser.add_argument(
+        "--server_ip", type=str, default="", help="Can be used for distant debugging."
+    )
+    parser.add_argument(
+        "--server_port", type=str, default="", help="Can be used for distant debugging."
+    )
     args = parser.parse_args()
 
     if args.server_ip and args.server_port:
@@ -358,22 +462,34 @@ def main():
         import ptvsd
 
         print("Waiting for debugger attach")
-        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
+        ptvsd.enable_attach(
+            address=(args.server_ip, args.server_port), redirect_output=True
+        )
         ptvsd.wait_for_attach()
 
     # Setup devices and distributed training
     if args.local_rank == -1 or args.no_cuda:
-        args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        args.device = torch.device(
+            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+        )
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:
         torch.cuda.set_device(args.local_rank)
         args.device = torch.device("cuda", args.local_rank)
         args.n_gpu = 1
-        torch.distributed.init_process_group(backend="nccl")  # Initializes the distributed backend
+        torch.distributed.init_process_group(
+            backend="nccl"
+        )  # Initializes the distributed backend
 
     # Setup logging
-    logging.basicConfig(level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
-    logger.info("device: {} n_gpu: {}, distributed: {}".format(args.device, args.n_gpu, bool(args.local_rank != -1)))
+    logging.basicConfig(
+        level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN
+    )
+    logger.info(
+        "device: {} n_gpu: {}, distributed: {}".format(
+            args.device, args.n_gpu, bool(args.local_rank != -1)
+        )
+    )
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(args.local_rank):
         transformers.utils.logging.set_verbosity_info()
@@ -420,7 +536,10 @@ def main():
     model.to(args.device)
     if args.local_rank != -1:
         model = nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
+            model,
+            device_ids=[args.local_rank],
+            output_device=args.local_rank,
+            find_unused_parameters=True,
         )
     elif args.n_gpu > 1:
         model = nn.DataParallel(model)
@@ -433,10 +552,19 @@ def main():
     # Prepare dataset for the GLUE task
     eval_dataset = GlueDataset(args, tokenizer=tokenizer, mode="dev")
     if args.data_subset > 0:
-        eval_dataset = Subset(eval_dataset, list(range(min(args.data_subset, len(eval_dataset)))))
-    eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+        eval_dataset = Subset(
+            eval_dataset, list(range(min(args.data_subset, len(eval_dataset))))
+        )
+    eval_sampler = (
+        SequentialSampler(eval_dataset)
+        if args.local_rank == -1
+        else DistributedSampler(eval_dataset)
+    )
     eval_dataloader = DataLoader(
-        eval_dataset, sampler=eval_sampler, batch_size=args.batch_size, collate_fn=default_data_collator
+        eval_dataset,
+        sampler=eval_sampler,
+        batch_size=args.batch_size,
+        collate_fn=default_data_collator,
     )
 
     # Compute head entropy and importance score
@@ -444,7 +572,11 @@ def main():
 
     # Try head masking (set heads to zero until the score goes under a threshole)
     # and head pruning (remove masked heads and see the effect on the network)
-    if args.try_masking and args.masking_threshold > 0.0 and args.masking_threshold < 1.0:
+    if (
+        args.try_masking
+        and args.masking_threshold > 0.0
+        and args.masking_threshold < 1.0
+    ):
         head_mask = mask_heads(args, model, eval_dataloader)
         prune_heads(args, model, eval_dataloader, head_mask)
 

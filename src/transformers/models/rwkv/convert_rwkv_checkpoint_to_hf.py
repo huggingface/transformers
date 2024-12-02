@@ -23,7 +23,12 @@ import re
 import torch
 from huggingface_hub import hf_hub_download, split_torch_state_dict_into_shards
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerFast, RwkvConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    PreTrainedTokenizerFast,
+    RwkvConfig,
+)
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME
 
 
@@ -78,7 +83,13 @@ def convert_state_dict(state_dict):
 
 
 def convert_rmkv_checkpoint_to_hf_format(
-    repo_id, checkpoint_file, output_dir, size=None, tokenizer_file=None, push_to_hub=False, model_name=None
+    repo_id,
+    checkpoint_file,
+    output_dir,
+    size=None,
+    tokenizer_file=None,
+    push_to_hub=False,
+    model_name=None,
 ):
     # 1. If possible, build the tokenizer.
     if tokenizer_file is None:
@@ -99,7 +110,9 @@ def convert_rmkv_checkpoint_to_hf_format(
                 size = candidate
                 break
         if size is None:
-            raise ValueError("Could not infer the size, please provide it with the `--size` argument.")
+            raise ValueError(
+                "Could not infer the size, please provide it with the `--size` argument."
+            )
     if size not in possible_sizes:
         raise ValueError(f"`size` should be one of {possible_sizes}, got {size}.")
 
@@ -148,14 +161,19 @@ def convert_rmkv_checkpoint_to_hf_format(
 
         for shard_file in shard_files:
             state_dict = torch.load(os.path.join(output_dir, shard_file))
-            torch.save({k: v.cpu().clone() for k, v in state_dict.items()}, os.path.join(output_dir, shard_file))
+            torch.save(
+                {k: v.cpu().clone() for k, v in state_dict.items()},
+                os.path.join(output_dir, shard_file),
+            )
 
     del state_dict
     gc.collect()
 
     if push_to_hub:
         if model_name is None:
-            raise ValueError("Please provide a `model_name` to push the model to the Hub.")
+            raise ValueError(
+                "Please provide a `model_name` to push the model to the Hub."
+            )
         model = AutoModelForCausalLM.from_pretrained(output_dir)
         model.push_to_hub(model_name, max_shard_size="2GB")
         tokenizer.push_to_hub(model_name)
@@ -165,13 +183,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--repo_id", default=None, type=str, required=True, help="Repo ID from which to pull the checkpoint."
+        "--repo_id",
+        default=None,
+        type=str,
+        required=True,
+        help="Repo ID from which to pull the checkpoint.",
     )
     parser.add_argument(
-        "--checkpoint_file", default=None, type=str, required=True, help="Name of the checkpoint file in the repo."
+        "--checkpoint_file",
+        default=None,
+        type=str,
+        required=True,
+        help="Name of the checkpoint file in the repo.",
     )
     parser.add_argument(
-        "--output_dir", default=None, type=str, required=True, help="Where to save the converted model."
+        "--output_dir",
+        default=None,
+        type=str,
+        required=True,
+        help="Where to save the converted model.",
     )
     parser.add_argument(
         "--tokenizer_file",

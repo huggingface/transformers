@@ -20,7 +20,13 @@ import warnings
 from typing import List, Optional, Union
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (
+    BatchEncoding,
+    PaddingStrategy,
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 from ...utils import TensorType
 
 
@@ -57,7 +63,9 @@ class LayoutXLMProcessor(ProcessorMixin):
             )
             feature_extractor = kwargs.pop("feature_extractor")
 
-        image_processor = image_processor if image_processor is not None else feature_extractor
+        image_processor = (
+            image_processor if image_processor is not None else feature_extractor
+        )
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -68,7 +76,9 @@ class LayoutXLMProcessor(ProcessorMixin):
     def __call__(
         self,
         images,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -111,7 +121,9 @@ class LayoutXLMProcessor(ProcessorMixin):
             )
 
         if return_overflowing_tokens is True and return_offsets_mapping is False:
-            raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
+            raise ValueError(
+                "You cannot return overflowing tokens without returning the offsets mapping."
+            )
 
         # first, apply the image processor
         features = self.image_processor(images=images, return_tensors=return_tensors)
@@ -119,7 +131,9 @@ class LayoutXLMProcessor(ProcessorMixin):
         # second, apply the tokenizer
         if text is not None and self.image_processor.apply_ocr and text_pair is None:
             if isinstance(text, str):
-                text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
+                text = [
+                    text
+                ]  # add batch dimension (as the image processor always adds a batch dimension)
             text_pair = features["words"]
 
         encoded_inputs = self.tokenizer(
@@ -147,7 +161,9 @@ class LayoutXLMProcessor(ProcessorMixin):
         # add pixel values
         images = features.pop("pixel_values")
         if return_overflowing_tokens is True:
-            images = self.get_overflowing_images(images, encoded_inputs["overflow_to_sample_mapping"])
+            images = self.get_overflowing_images(
+                images, encoded_inputs["overflow_to_sample_mapping"]
+            )
         encoded_inputs["image"] = images
 
         return encoded_inputs

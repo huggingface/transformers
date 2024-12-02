@@ -47,7 +47,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_musicgen_melody"] = ["MusicgenMelodyFeatureExtractor"]
+    _import_structure["feature_extraction_musicgen_melody"] = [
+        "MusicgenMelodyFeatureExtractor"
+    ]
     _import_structure["processing_musicgen_melody"] = ["MusicgenMelodyProcessor"]
 
 
@@ -83,4 +85,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

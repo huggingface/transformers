@@ -145,7 +145,9 @@ class LlavaNextVideoConfig(PretrainedConfig):
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
+                vision_config["model_type"]
+                if "model_type" in vision_config
+                else "clip_vision_model"
             )
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
@@ -163,7 +165,9 @@ class LlavaNextVideoConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = (
+                text_config["model_type"] if "model_type" in text_config else "llama"
+            )
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
@@ -190,8 +194,12 @@ class LlavaNextVideoPooler(nn.Module):
 
         mode = config.spatial_pool_mode
         stride = config.spatial_pool_stride
-        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
+        out_channels = getattr(
+            config, "spatial_pool_out_channels", config.vision_config.hidden_size
+        )
+        self.image_size = (
+            config.vision_config.image_size // config.vision_config.patch_size
+        ) ** 2
 
         if mode == "average":
             self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
@@ -205,14 +213,20 @@ class LlavaNextVideoPooler(nn.Module):
                 stride=stride,
             )
         else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
+            raise ValueError(
+                f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]"
+            )
 
     def forward(self, image_features):
-        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
+        ori_width = int(
+            math.sqrt(image_features.shape[1] * self.image_size // self.image_size)
+        )
         ori_height = int(ori_width * self.image_size // self.image_size)
 
         batch_size, _, dim = image_features.shape
-        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
+        image_features_spatial = image_features.view(
+            batch_size, ori_height, ori_height, dim
+        ).permute(0, 3, 1, 2)
         image_features_spatial_pool = self.pool(image_features_spatial)
 
         return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
@@ -259,11 +273,16 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         ]
         if pixel_values.dim() == 5:
             # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
+            _pixel_values_list = [
+                pix_val[:num_patch]
+                for pix_val, num_patch in zip(pixel_values, image_num_patches)
+            ]
             pixel_values = torch.cat(_pixel_values_list, dim=0)
         elif pixel_values.dim() != 4:
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
+            raise ValueError(
+                f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions"
+            )
 
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.hidden_states[vision_feature_layer]
@@ -276,7 +295,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         return image_features
 
     def get_video_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layer: int, vision_feature_select_strategy: str
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: int,
+        vision_feature_select_strategy: str,
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
@@ -294,7 +316,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             and are of shape `(num_videos, video_length, embed_dim)`).
         """
         batch_size, frames, channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
+        pixel_values = pixel_values.reshape(
+            batch_size * frames, channels, height, width
+        )
         video_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_video_features = video_features.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
@@ -403,13 +427,23 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         "USER: \nWhat's the content of the image? ASSISTANT: The image shows a red stop sign on a pole, with a traditional Chinese archway (...)"
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         self.vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+            vision_feature_layer
+            if vision_feature_layer is not None
+            else self.config.vision_feature_layer
         )
         self.vision_feature_select_strategy = (
             vision_feature_select_strategy
@@ -418,9 +452,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
-        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
+        if (
+            pixel_values is not None or pixel_values_videos is not None
+        ) and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
                 "and must specify either one"
@@ -438,10 +476,12 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             video_token_not_enough = (input_ids == self.config.video_token_index).sum(
                 1
             ).max() < self.config.video_seq_length
-            inputs_not_expanded = (img_token_not_enough and pixel_values is not None) or (
-                video_token_not_enough and pixel_values_videos is not None
+            inputs_not_expanded = (
+                img_token_not_enough and pixel_values is not None
+            ) or (video_token_not_enough and pixel_values_videos is not None)
+            pixels_present = input_ids.shape[-1] == 1 and (
+                pixel_values is not None or pixel_values_videos is not None
             )
-            pixels_present = input_ids.shape[-1] == 1 and (pixel_values is not None or pixel_values_videos is not None)
             legacy_processing = inputs_not_expanded or pixels_present
 
         image_features = feature_lens = None
@@ -469,7 +509,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
-            video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
+            video_feature_lens = torch.tensor(
+                video_feature_lens, dtype=torch.long, device=video_features.device
+            )
 
         if legacy_processing:
             logger.warning_once(
@@ -501,12 +543,16 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
                             labels=labels,
                             image_token_index=special_token,
                         )
-                cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)
+                cache_position = torch.arange(
+                    attention_mask.shape[1], device=attention_mask.device
+                )
             else:
                 # Retrieve the first layer to inspect the logits and mask out the hidden states that are set to 0
                 first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
                 # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+                batch_index, non_attended_tokens = torch.where(
+                    first_layer_past_key_value.float().sum(-2) == 0
+                )
                 # Get the target length
                 target_length = input_ids.shape[1]
                 past_length = first_layer_past_key_value.shape[-1]
@@ -523,14 +569,20 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
                 new_non_attended_tokens = non_attended_tokens[valid_indices]
                 # Zero-out the places where we don't need to attend
                 extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
-                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
+                attention_mask = torch.cat(
+                    (extended_attention_mask, attention_mask[:, -target_length:]), dim=1
+                )
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-                cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[-target_length:]
+                cache_position = torch.arange(
+                    attention_mask.shape[1], device=attention_mask.device
+                )[-target_length:]
 
         # TODO: @raushan retain only the new behavior after v4.47
         else:
             if image_features is not None:
-                n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+                n_image_tokens = (
+                    (input_ids == self.config.image_token_index).sum().item()
+                )
                 n_image_features = image_features.shape[0]
 
                 if n_image_tokens != n_image_features:
@@ -543,10 +595,16 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
                 )
-                image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+                image_features = image_features.to(
+                    inputs_embeds.device, inputs_embeds.dtype
+                )
+                inputs_embeds = inputs_embeds.masked_scatter(
+                    special_image_mask, image_features
+                )
             if video_features is not None:
-                n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+                n_video_tokens = (
+                    (input_ids == self.config.video_token_index).sum().item()
+                )
                 n_video_features = video_features.shape[0]
                 if n_video_tokens != n_video_features:
                     raise ValueError(
@@ -558,8 +616,12 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
                     .expand_as(inputs_embeds)
                     .to(inputs_embeds.device)
                 )
-                video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+                video_features = video_features.to(
+                    inputs_embeds.device, inputs_embeds.dtype
+                )
+                inputs_embeds = inputs_embeds.masked_scatter(
+                    special_image_mask, video_features
+                )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -582,16 +644,23 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:
@@ -605,7 +674,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
+            video_hidden_states=(
+                video_features if pixel_values_videos is not None else None
+            ),
         )
 
     def prepare_inputs_for_generation(

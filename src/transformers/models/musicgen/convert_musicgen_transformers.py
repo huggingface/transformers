@@ -63,7 +63,9 @@ def rename_keys(name):
     if "linears" in name:
         name = name.replace("linears", "lm_heads")
     if "condition_provider.conditioners.description.output_proj" in name:
-        name = name.replace("condition_provider.conditioners.description.output_proj", "enc_to_dec_proj")
+        name = name.replace(
+            "condition_provider.conditioners.description.output_proj", "enc_to_dec_proj"
+        )
     return name
 
 
@@ -78,9 +80,15 @@ def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> Tuple[Dict, 
         key = rename_keys(key)
         if "in_proj_weight" in key:
             # split fused qkv proj
-            state_dict[key.replace("in_proj_weight", "q_proj.weight")] = val[:hidden_size, :]
-            state_dict[key.replace("in_proj_weight", "k_proj.weight")] = val[hidden_size : 2 * hidden_size, :]
-            state_dict[key.replace("in_proj_weight", "v_proj.weight")] = val[-hidden_size:, :]
+            state_dict[key.replace("in_proj_weight", "q_proj.weight")] = val[
+                :hidden_size, :
+            ]
+            state_dict[key.replace("in_proj_weight", "k_proj.weight")] = val[
+                hidden_size : 2 * hidden_size, :
+            ]
+            state_dict[key.replace("in_proj_weight", "v_proj.weight")] = val[
+                -hidden_size:, :
+            ]
         elif "enc_to_dec_proj" in key:
             enc_dec_proj_state_dict[key[len("enc_to_dec_proj.") :]] = val
         else:
@@ -129,7 +137,11 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
 
 @torch.no_grad()
 def convert_musicgen_checkpoint(
-    checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu", safe_serialization=False
+    checkpoint,
+    pytorch_dump_folder=None,
+    repo_id=None,
+    device="cpu",
+    safe_serialization=False,
 ):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
@@ -144,10 +156,15 @@ def convert_musicgen_checkpoint(
     decoder = MusicgenForCausalLM(decoder_config).eval()
 
     # load all decoder weights - expect that we'll be missing embeddings and enc-dec projection
-    missing_keys, unexpected_keys = decoder.load_state_dict(decoder_state_dict, strict=False)
+    missing_keys, unexpected_keys = decoder.load_state_dict(
+        decoder_state_dict, strict=False
+    )
 
     for key in missing_keys.copy():
-        if key.startswith(("text_encoder", "audio_encoder")) or key in EXPECTED_MISSING_KEYS:
+        if (
+            key.startswith(("text_encoder", "audio_encoder"))
+            or key in EXPECTED_MISSING_KEYS
+        ):
             missing_keys.remove(key)
 
     if len(missing_keys) > 0:
@@ -157,13 +174,17 @@ def convert_musicgen_checkpoint(
         raise ValueError(f"Unexpected key(s) in state_dict: {unexpected_keys}")
 
     # init the composite model
-    model = MusicgenForConditionalGeneration(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder)
+    model = MusicgenForConditionalGeneration(
+        text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder
+    )
 
     # load the pre-trained enc-dec projection (from the decoder state dict)
     model.enc_to_dec_proj.load_state_dict(enc_dec_proj_state_dict)
 
     # check we can do a forward pass
-    input_ids = torch.arange(0, 2 * decoder_config.num_codebooks, dtype=torch.long).reshape(2, -1)
+    input_ids = torch.arange(
+        0, 2 * decoder_config.num_codebooks, dtype=torch.long
+    ).reshape(2, -1)
     decoder_input_ids = input_ids.reshape(2 * decoder_config.num_codebooks, -1)
 
     with torch.no_grad():
@@ -175,10 +196,14 @@ def convert_musicgen_checkpoint(
     # now construct the processor
     tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        "facebook/encodec_32khz", padding_side="left", feature_size=decoder_config.audio_channels
+        "facebook/encodec_32khz",
+        padding_side="left",
+        feature_size=decoder_config.audio_channels,
     )
 
-    processor = MusicgenProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    processor = MusicgenProcessor(
+        feature_extractor=feature_extractor, tokenizer=tokenizer
+    )
 
     # set the appropriate bos/pad token ids
     model.generation_config.decoder_start_token_id = 2048
@@ -192,7 +217,9 @@ def convert_musicgen_checkpoint(
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
         logger.info(f"Saving model {checkpoint} to {pytorch_dump_folder}")
-        model.save_pretrained(pytorch_dump_folder, safe_serialization=safe_serialization)
+        model.save_pretrained(
+            pytorch_dump_folder, safe_serialization=safe_serialization
+        )
         processor.save_pretrained(pytorch_dump_folder)
 
     if repo_id:
@@ -221,10 +248,16 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
     parser.add_argument(
-        "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+        "--device",
+        default="cpu",
+        type=str,
+        help="Torch device to run the conversion, either cpu or cuda.",
     )
     parser.add_argument(
         "--safe_serialization",
@@ -233,4 +266,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_musicgen_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub)
+    convert_musicgen_checkpoint(
+        args.checkpoint, args.pytorch_dump_folder, args.push_to_hub
+    )

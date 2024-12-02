@@ -115,7 +115,11 @@ class Dictionary:
             except FileNotFoundError as fnfe:
                 raise fnfe
             except UnicodeError:
-                raise Exception("Incorrect encoding detected in {}, please rebuild the dataset".format(f))
+                raise Exception(
+                    "Incorrect encoding detected in {}, please rebuild the dataset".format(
+                        f
+                    )
+                )
             return
 
         lines = f.readlines()
@@ -141,13 +145,18 @@ class Dictionary:
                     )
                 self.add_symbol(word, n=count, overwrite=overwrite)
             except ValueError:
-                raise ValueError("Incorrect dictionary format, expected '<token> <cnt> [flags]'")
+                raise ValueError(
+                    "Incorrect dictionary format, expected '<token> <cnt> [flags]'"
+                )
 
 
 def rewrite_dict_keys(d):
     # (1) remove word breaking symbol, (2) add word ending symbol where the word is not broken up,
     # e.g.: d = {'le@@': 5, 'tt@@': 6, 'er': 7} => {'le': 5, 'tt': 6, 'er</w>': 7}
-    d2 = dict((re.sub(r"@@$", "", k), v) if k.endswith("@@") else (re.sub(r"$", "</w>", k), v) for k, v in d.items())
+    d2 = dict(
+        (re.sub(r"@@$", "", k), v) if k.endswith("@@") else (re.sub(r"$", "</w>", k), v)
+        for k, v in d.items()
+    )
     keep_keys = "<s> <pad> </s> <unk>".split()
     # restore the special tokens
     for k in keep_keys:
@@ -156,7 +165,9 @@ def rewrite_dict_keys(d):
     return d2
 
 
-def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_folder_path):
+def convert_biogpt_checkpoint_to_pytorch(
+    biogpt_checkpoint_path, pytorch_dump_folder_path
+):
     # prep
     if not os.path.exists(biogpt_checkpoint_path):
         raise ValueError(f"path {biogpt_checkpoint_path} does not exist!")
@@ -179,7 +190,9 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
     src_dict = Dictionary.load(dict_file)
     src_vocab = rewrite_dict_keys(src_dict.indices)
     src_vocab_size = len(src_vocab)
-    src_vocab_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["vocab_file"])
+    src_vocab_file = os.path.join(
+        pytorch_dump_folder_path, VOCAB_FILES_NAMES["vocab_file"]
+    )
     print(f"Generating {src_vocab_file} of {src_vocab_size} records")
     with open(src_vocab_file, "w", encoding="utf-8") as f:
         f.write(json.dumps(src_vocab, ensure_ascii=False, indent=json_indent))
@@ -189,7 +202,9 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
     if not os.path.isfile(bpecodes_file):
         raise ValueError(f"path to the file {bpecodes_file} does not exist!")
 
-    merges_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
+    merges_file = os.path.join(
+        pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"]
+    )
     shutil.copyfile(bpecodes_file, merges_file)
 
     # model config
@@ -225,7 +240,9 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
         f.write(json.dumps(model_conf, ensure_ascii=False, indent=json_indent))
 
     # tokenizer config
-    biogpt_tokenizer_config_file = os.path.join(pytorch_dump_folder_path, TOKENIZER_CONFIG_FILE)
+    biogpt_tokenizer_config_file = os.path.join(
+        pytorch_dump_folder_path, TOKENIZER_CONFIG_FILE
+    )
 
     tokenizer_conf = {
         "bos_token": "<s>",
@@ -254,9 +271,13 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
     layer_names = list(model_state_dict.keys())
     for layer_name in layer_names:
         if layer_name.endswith("output_projection.weight"):
-            model_state_dict[layer_name.replace("decoder.", "")] = model_state_dict.pop(layer_name)
+            model_state_dict[layer_name.replace("decoder.", "")] = model_state_dict.pop(
+                layer_name
+            )
         else:
-            model_state_dict[layer_name.replace("decoder", "biogpt")] = model_state_dict.pop(layer_name)
+            model_state_dict[layer_name.replace("decoder", "biogpt")] = (
+                model_state_dict.pop(layer_name)
+            )
 
     config = BioGptConfig.from_pretrained(pytorch_dump_folder_path)
     model_new = BioGptForCausalLM(config)
@@ -286,7 +307,13 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_biogpt_checkpoint_to_pytorch(args.biogpt_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_biogpt_checkpoint_to_pytorch(
+        args.biogpt_checkpoint_path, args.pytorch_dump_folder_path
+    )

@@ -41,14 +41,21 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     freeze_feature_extractor: Optional[bool] = field(
-        default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+        default=True,
+        metadata={
+            "help": "Whether to freeze the feature extractor layers of the model."
+        },
     )
     verbose_logging: Optional[bool] = field(
         default=False,
@@ -61,7 +68,8 @@ class ModelArguments:
         default=0.5, metadata={"help": "Minimum temperature for gumbel softmax."}
     )
     gumbel_temperature_decay: Optional[float] = field(
-        default=0.999995, metadata={"help": "Decay of gumbel temperature during training."}
+        default=0.999995,
+        metadata={"help": "Decay of gumbel temperature during training."},
     )
 
 
@@ -90,10 +98,14 @@ class DataTrainingArguments:
     """
 
     dataset_name: str = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     train_split_name: Optional[str] = field(
         default="train",
@@ -111,10 +123,13 @@ class DataTrainingArguments:
     )
     speech_file_column: Optional[str] = field(
         default="file",
-        metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
+        metadata={
+            "help": "Column in the dataset that contains speech file path. Defaults to 'file'"
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
+        default=False,
+        metadata={"help": "Overwrite the cached preprocessed datasets or not."},
     )
     validation_split_percentage: Optional[int] = field(
         default=1,
@@ -127,7 +142,10 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_duration_in_seconds: Optional[float] = field(
-        default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
+        default=20.0,
+        metadata={
+            "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"
+        },
     )
 
 
@@ -166,7 +184,9 @@ class DataCollatorForWav2Vec2Pretraining:
     pad_to_multiple_of: Optional[int] = None
     max_length: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(
+        self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
+    ) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
@@ -175,25 +195,34 @@ class DataCollatorForWav2Vec2Pretraining:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
+        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(
+            batch["input_values"].shape[-1]
+        )
 
         batch_size = batch["input_values"].shape[0]
 
         # make sure that no loss is computed on padded inputs
         if batch["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
-            output_lengths = self.model._get_feat_extract_output_lengths(batch["attention_mask"].sum(-1)).to(
-                torch.long
-            )
+            output_lengths = self.model._get_feat_extract_output_lengths(
+                batch["attention_mask"].sum(-1)
+            ).to(torch.long)
 
             attention_mask = torch.zeros(
-                (batch_size, mask_indices_seq_length), dtype=torch.long, device=batch["input_values"].device
+                (batch_size, mask_indices_seq_length),
+                dtype=torch.long,
+                device=batch["input_values"].device,
             )
 
             # these two operations makes sure that all values
             # before the output lengths indices are attended to
             attention_mask[
-                (torch.arange(attention_mask.shape[0], device=batch["input_values"].device), output_lengths - 1)
+                (
+                    torch.arange(
+                        attention_mask.shape[0], device=batch["input_values"].device
+                    ),
+                    output_lengths - 1,
+                )
             ] = 1
             attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
@@ -214,14 +243,23 @@ class Wav2Vec2PreTrainer(Trainer):
     Subclassed :class:`~transformers.Trainer` for Wav2Vec2-like pretraining. Trainer can decay gumbel softmax temperature during training.
     """
 
-    def __init__(self, *args, max_gumbel_temp=1, min_gumbel_temp=0, gumbel_temp_decay=1.0, **kwargs):
+    def __init__(
+        self,
+        *args,
+        max_gumbel_temp=1,
+        min_gumbel_temp=0,
+        gumbel_temp_decay=1.0,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.num_update_step = 0
         self.max_gumbel_temp = max_gumbel_temp
         self.min_gumbel_temp = min_gumbel_temp
         self.gumbel_temp_decay = gumbel_temp_decay
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
+    ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -255,7 +293,9 @@ class Wav2Vec2PreTrainer(Trainer):
             elif model.module.config.ctc_loss_reduction == "sum":
                 loss = loss.sum() / (inputs["mask_time_indices"]).sum()
             else:
-                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
+                raise ValueError(
+                    f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']"
+                )
 
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
@@ -274,11 +314,17 @@ class Wav2Vec2PreTrainer(Trainer):
         # make sure gumbel softmax temperature is decayed
         if self.args.n_gpu > 1 or self.deepspeed:
             model.module.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step, self.min_gumbel_temp)
+                max(
+                    self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step,
+                    self.min_gumbel_temp,
+                )
             )
         else:
             model.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step, self.min_gumbel_temp)
+                max(
+                    self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step,
+                    self.min_gumbel_temp,
+                )
             )
 
         return loss.detach()
@@ -289,13 +335,19 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
 
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     configure_logger(model_args, training_args)
 
     # Downloading and loading a dataset from the hub.
-    datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+    datasets = load_dataset(
+        data_args.dataset_name,
+        data_args.dataset_config_name,
+        cache_dir=model_args.cache_dir,
+    )
 
     if "validation" not in datasets.keys():
         # make sure only "validation" and "train" keys remain"
@@ -335,21 +387,28 @@ def main():
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
-        batch["speech"], _ = librosa.load(batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate)
+        batch["speech"], _ = librosa.load(
+            batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate
+        )
         return batch
 
     # load audio files into numpy arrays
     vectorized_datasets = datasets.map(
-        prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=datasets["train"].column_names
+        prepare_dataset,
+        num_proc=data_args.preprocessing_num_workers,
+        remove_columns=datasets["train"].column_names,
     )
 
     # filter audio files that are too long
     vectorized_datasets = vectorized_datasets.filter(
-        lambda data: len(data["speech"]) < int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
+        lambda data: len(data["speech"])
+        < int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
     )
 
     def normalize(batch):
-        return feature_extractor(batch["speech"], sampling_rate=feature_extractor.sampling_rate)
+        return feature_extractor(
+            batch["speech"], sampling_rate=feature_extractor.sampling_rate
+        )
 
     # normalize and transform to `BatchFeatures`
     vectorized_datasets = vectorized_datasets.map(
@@ -376,7 +435,9 @@ def main():
 
     model = Wav2Vec2ForPreTraining(config)
 
-    data_collator = DataCollatorForWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
+    data_collator = DataCollatorForWav2Vec2Pretraining(
+        model=model, feature_extractor=feature_extractor
+    )
 
     trainer = Wav2Vec2PreTrainer(
         model=model,

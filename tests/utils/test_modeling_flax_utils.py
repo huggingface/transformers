@@ -68,7 +68,11 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             try:
                 tmp_repo = f"{USER}/test-model-flax-{Path(tmp_dir).name}"
                 config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                    vocab_size=99,
+                    hidden_size=32,
+                    num_hidden_layers=5,
+                    num_attention_heads=4,
+                    intermediate_size=37,
                 )
                 model = FlaxBertModel(config)
                 model.push_to_hub(tmp_repo, token=self._token)
@@ -90,11 +94,17 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             try:
                 tmp_repo = f"{USER}/test-model-flax-{Path(tmp_dir).name}"
                 config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                    vocab_size=99,
+                    hidden_size=32,
+                    num_hidden_layers=5,
+                    num_attention_heads=4,
+                    intermediate_size=37,
                 )
                 model = FlaxBertModel(config)
                 # Push to hub via save_pretrained
-                model.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+                model.save_pretrained(
+                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
+                )
 
                 new_model = FlaxBertModel.from_pretrained(tmp_repo)
 
@@ -113,7 +123,11 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             try:
                 tmp_repo = f"valid_org/test-model-flax-org-{Path(tmp_dir).name}"
                 config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                    vocab_size=99,
+                    hidden_size=32,
+                    num_hidden_layers=5,
+                    num_attention_heads=4,
+                    intermediate_size=37,
                 )
                 model = FlaxBertModel(config)
                 model.push_to_hub(tmp_repo, token=self._token)
@@ -135,11 +149,17 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             try:
                 tmp_repo = f"valid_org/test-model-flax-org-{Path(tmp_dir).name}"
                 config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                    vocab_size=99,
+                    hidden_size=32,
+                    num_hidden_layers=5,
+                    num_attention_heads=4,
+                    intermediate_size=37,
                 )
                 model = FlaxBertModel(config)
                 # Push to hub via save_pretrained
-                model.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+                model.save_pretrained(
+                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
+                )
 
                 new_model = FlaxBertModel.from_pretrained(tmp_repo)
 
@@ -188,7 +208,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
 
         subfolder = "bert"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(os.path.join(tmp_dir, subfolder), max_shard_size="10KB")
+            model.save_pretrained(
+                os.path.join(tmp_dir, subfolder), max_shard_size="10KB"
+            )
 
             with self.assertRaises(OSError):
                 _ = FlaxBertModel.from_pretrained(tmp_dir)
@@ -236,7 +258,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
     @require_torch
     @is_pt_flax_cross_test
     def test_safetensors_save_and_load_pt_to_flax(self):
-        model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert", from_pt=True)
+        model = FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", from_pt=True
+        )
         pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
             pt_model.save_pretrained(tmp_dir)
@@ -254,10 +278,14 @@ class FlaxModelUtilsTest(unittest.TestCase):
         """
         This test checks that we can load safetensors from a checkpoint that only has those on the Hub
         """
-        flax_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+        flax_model = FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-flax-only"
+        )
 
         # Can load from the Flax-formatted checkpoint
-        safetensors_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-safetensors-only")
+        safetensors_model = FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-flax-safetensors-only"
+        )
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
 
     @require_safetensors
@@ -266,11 +294,15 @@ class FlaxModelUtilsTest(unittest.TestCase):
         This test checks that we can load safetensors from a checkpoint that only has those on the Hub
         """
         with tempfile.TemporaryDirectory() as tmp:
-            location = snapshot_download("hf-internal-testing/tiny-bert-flax-only", cache_dir=tmp)
+            location = snapshot_download(
+                "hf-internal-testing/tiny-bert-flax-only", cache_dir=tmp
+            )
             flax_model = FlaxBertModel.from_pretrained(location)
 
         with tempfile.TemporaryDirectory() as tmp:
-            location = snapshot_download("hf-internal-testing/tiny-bert-flax-safetensors-only", cache_dir=tmp)
+            location = snapshot_download(
+                "hf-internal-testing/tiny-bert-flax-safetensors-only", cache_dir=tmp
+            )
             safetensors_model = FlaxBertModel.from_pretrained(location)
 
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
@@ -282,10 +314,14 @@ class FlaxModelUtilsTest(unittest.TestCase):
         This test checks that we can load safetensors from a checkpoint that only has those on the Hub.
         saved in the "pt" format.
         """
-        flax_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-msgpack")
+        flax_model = FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-msgpack"
+        )
 
         # Can load from the PyTorch-formatted checkpoint
-        safetensors_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors")
+        safetensors_model = FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-pt-safetensors"
+        )
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
 
     @require_safetensors
@@ -298,7 +334,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
         """
         import torch
 
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors")
+        model = BertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-pt-safetensors"
+        )
         model.to(torch.bfloat16)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -306,7 +344,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
             flax_model = FlaxBertModel.from_pretrained(tmp)
 
         # Can load from the PyTorch-formatted checkpoint
-        safetensors_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+        safetensors_model = FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-pt-safetensors-bf16"
+        )
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
 
     @require_safetensors
@@ -317,12 +357,16 @@ class FlaxModelUtilsTest(unittest.TestCase):
         saved in the "pt" format.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            location = snapshot_download("hf-internal-testing/tiny-bert-msgpack", cache_dir=tmp)
+            location = snapshot_download(
+                "hf-internal-testing/tiny-bert-msgpack", cache_dir=tmp
+            )
             flax_model = FlaxBertModel.from_pretrained(location)
 
         # Can load from the PyTorch-formatted checkpoint
         with tempfile.TemporaryDirectory() as tmp:
-            location = snapshot_download("hf-internal-testing/tiny-bert-pt-safetensors", cache_dir=tmp)
+            location = snapshot_download(
+                "hf-internal-testing/tiny-bert-pt-safetensors", cache_dir=tmp
+            )
             safetensors_model = FlaxBertModel.from_pretrained(location)
 
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
@@ -333,7 +377,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
         This test checks that we'll first download msgpack weights before safetensors
         The safetensors file on that repo is a pt safetensors and therefore cannot be loaded without PyTorch
         """
-        FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-msgpack")
+        FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-pt-safetensors-msgpack"
+        )
 
     @require_safetensors
     def test_safetensors_load_from_local_msgpack_before_safetensors(self):
@@ -342,7 +388,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
         The safetensors file on that repo is a pt safetensors and therefore cannot be loaded without PyTorch
         """
         with tempfile.TemporaryDirectory() as tmp:
-            location = snapshot_download("hf-internal-testing/tiny-bert-pt-safetensors-msgpack", cache_dir=tmp)
+            location = snapshot_download(
+                "hf-internal-testing/tiny-bert-pt-safetensors-msgpack", cache_dir=tmp
+            )
             FlaxBertModel.from_pretrained(location)
 
     @require_safetensors
@@ -359,7 +407,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
     @require_torch
     @is_pt_flax_cross_test
     def test_safetensors_flax_from_torch(self):
-        hub_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+        hub_model = FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-flax-only"
+        )
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -372,7 +422,8 @@ class FlaxModelUtilsTest(unittest.TestCase):
     def test_safetensors_flax_from_sharded_msgpack_with_sharded_safetensors_local(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = snapshot_download(
-                "hf-internal-testing/tiny-bert-flax-safetensors-msgpack-sharded", cache_dir=tmp_dir
+                "hf-internal-testing/tiny-bert-flax-safetensors-msgpack-sharded",
+                cache_dir=tmp_dir,
             )
 
             # This should not raise even if there are two types of sharded weights
@@ -382,7 +433,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
     def test_safetensors_flax_from_sharded_msgpack_with_sharded_safetensors_hub(self):
         # This should not raise even if there are two types of sharded weights
         # This should discard the safetensors weights in favor of the msgpack sharded weights
-        FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-safetensors-msgpack-sharded")
+        FlaxBertModel.from_pretrained(
+            "hf-internal-testing/tiny-bert-flax-safetensors-msgpack-sharded"
+        )
 
     @require_safetensors
     def test_safetensors_from_pt_bf16(self):
@@ -391,7 +444,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
         logger = logging.get_logger("transformers.modeling_flax_utils")
 
         with CaptureLogger(logger) as cl:
-            FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+            FlaxBertModel.from_pretrained(
+                "hf-internal-testing/tiny-bert-pt-safetensors-bf16"
+            )
 
         self.assertTrue(
             "Some of the weights of FlaxBertModel were initialized in bfloat16 precision from the model checkpoint"
@@ -411,7 +466,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
             logger = logging.get_logger("transformers.modeling_flax_utils")
 
             with CaptureLogger(logger) as cl:
-                new_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+                new_model = FlaxBertModel.from_pretrained(
+                    "hf-internal-testing/tiny-bert-pt-safetensors-bf16"
+                )
 
             self.assertTrue(
                 "Some of the weights of FlaxBertModel were initialized in bfloat16 precision from the model checkpoint"

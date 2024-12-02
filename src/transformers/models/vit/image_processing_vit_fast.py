@@ -20,7 +20,12 @@ from typing import Dict, List, Optional, Union
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
-from ...image_transforms import FusedRescaleNormalize, NumpyToTensor, Rescale, convert_to_rgb
+from ...image_transforms import (
+    FusedRescaleNormalize,
+    NumpyToTensor,
+    Rescale,
+    convert_to_rgb,
+)
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -115,7 +120,9 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         self.size = size
         self.resample = resample
         self.rescale_factor = rescale_factor
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_convert_rgb = do_convert_rgb
 
@@ -146,12 +153,19 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
 
         if do_resize:
             transforms.append(
-                Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
+                Resize(
+                    (size["height"], size["width"]),
+                    interpolation=pil_torch_interpolation_mapping[resample],
+                )
             )
 
         # We can combine rescale and normalize into a single operation for speed
         if do_rescale and do_normalize:
-            transforms.append(FusedRescaleNormalize(image_mean, image_std, rescale_factor=rescale_factor))
+            transforms.append(
+                FusedRescaleNormalize(
+                    image_mean, image_std, rescale_factor=rescale_factor
+                )
+            )
         elif do_rescale:
             transforms.append(Rescale(rescale_factor=rescale_factor))
         elif do_normalize:
@@ -181,13 +195,17 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("Only channel first data format is currently supported.")
 
         if do_resize and None in (size, resample):
-            raise ValueError("Size and resample must be specified if do_resize is True.")
+            raise ValueError(
+                "Size and resample must be specified if do_resize is True."
+            )
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
         if do_normalize and None in (image_mean, image_std):
-            raise ValueError("Image mean and standard deviation must be specified if do_normalize is True.")
+            raise ValueError(
+                "Image mean and standard deviation must be specified if do_normalize is True."
+            )
 
     def preprocess(
         self,
@@ -249,11 +267,15 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         size = size if size is not None else self.size
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         # Make hashable for cache
         size = SizeDict(**size)
         image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean

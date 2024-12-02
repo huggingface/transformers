@@ -72,7 +72,14 @@ def load_tf_weights_in_trajectory_transformer(model, config, tf_checkpoint_path)
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            n
+            in [
+                "adam_v",
+                "adam_m",
+                "AdamWeightDecayOptimizer",
+                "AdamWeightDecayOptimizer_1",
+                "global_step",
+            ]
             for n in name
         ):
             logger.info(f"Skipping {'/'.join(name)}")
@@ -106,7 +113,9 @@ def load_tf_weights_in_trajectory_transformer(model, config, tf_checkpoint_path)
             array = np.transpose(array)
         try:
             if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+                raise ValueError(
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                )
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -168,7 +177,10 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, EinLinear):
             for i in range(module.n_models):
-                nn.init.kaiming_uniform_(module.weight[i], a=math.sqrt(5) / self.config.kaiming_initializer_range)
+                nn.init.kaiming_uniform_(
+                    module.weight[i],
+                    a=math.sqrt(5) / self.config.kaiming_initializer_range,
+                )
                 if module.bias is not None:
                     fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight[i])
                     bound = (1 / math.sqrt(fan_in)) * self.config.initializer_range
@@ -255,7 +267,9 @@ class CausalSelfAttention(nn.Module):
         super().__init__()
 
         if config.n_embd % config.n_head != 0:
-            raise ValueError(f"n_head ({config.n_head}) should be a divisor of n_embd ({config.n_embd})")
+            raise ValueError(
+                f"n_head ({config.n_head}) should be a divisor of n_embd ({config.n_embd})"
+            )
 
         # key, query, value projections for all heads
         self.key = nn.Linear(config.n_embd, config.n_embd)
@@ -297,17 +311,23 @@ class CausalSelfAttention(nn.Module):
         # [ batch_size x n_heads x sequence_length x head_dim ]
         key = (
             self.key(hidden_states)
-            .view(batch_size, sequence_length, self.n_head, embedding_dim // self.n_head)
+            .view(
+                batch_size, sequence_length, self.n_head, embedding_dim // self.n_head
+            )
             .transpose(1, 2)
         )
         query = (
             self.query(hidden_states)
-            .view(batch_size, sequence_length, self.n_head, embedding_dim // self.n_head)
+            .view(
+                batch_size, sequence_length, self.n_head, embedding_dim // self.n_head
+            )
             .transpose(1, 2)
         )
         value = (
             self.value(hidden_states)
-            .view(batch_size, sequence_length, self.n_head, embedding_dim // self.n_head)
+            .view(
+                batch_size, sequence_length, self.n_head, embedding_dim // self.n_head
+            )
             .transpose(1, 2)
         )
 
@@ -323,9 +343,12 @@ class CausalSelfAttention(nn.Module):
 
         # causal self-attention
         # [ batch_size x n_heads x sequence_length x sequence_length ]
-        attn_weights = (torch.matmul(query, key.transpose(-2, -1))) * (1.0 / math.sqrt(key.size(-1)))
+        attn_weights = (torch.matmul(query, key.transpose(-2, -1))) * (
+            1.0 / math.sqrt(key.size(-1))
+        )
         attn_weights = attn_weights.masked_fill(
-            self.mask[:, :, :sequence_length, :sequence_length] == 0, torch.finfo(attn_weights.dtype).min
+            self.mask[:, :, :sequence_length, :sequence_length] == 0,
+            torch.finfo(attn_weights.dtype).min,
         )
         attn_weights = F.softmax(attn_weights, dim=-1)
         self._attn_map = attn_weights.clone()
@@ -334,7 +357,11 @@ class CausalSelfAttention(nn.Module):
         output = torch.matmul(attn_weights, value)
         # [ batch_size x sequence_length x embedding_dim ]
         # re-assemble all head outputs side by side
-        output = output.transpose(1, 2).contiguous().view(batch_size, sequence_length, embedding_dim)
+        output = (
+            output.transpose(1, 2)
+            .contiguous()
+            .view(batch_size, sequence_length, embedding_dim)
+        )
 
         # output projection
         output = self.resid_drop(self.proj(output))
@@ -370,7 +397,10 @@ class Block(nn.Module):
         hidden_states = self.ln1(hidden_states)
 
         attn_outputs = self.attn(
-            hidden_states, layer_past=layer_past, use_cache=use_cache, output_attentions=output_attentions
+            hidden_states,
+            layer_past=layer_past,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
         outputs = attn_outputs[1:]
@@ -402,7 +432,9 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         super().__init__(config)
 
         # input embedding stem (+1 for stop token)
-        self.tok_emb = nn.Embedding(config.vocab_size * config.transition_dim + 1, config.n_embd)
+        self.tok_emb = nn.Embedding(
+            config.vocab_size * config.transition_dim + 1, config.n_embd
+        )
 
         self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
         self.drop = nn.Dropout(config.embd_pdrop)
@@ -410,7 +442,9 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         self.blocks = nn.ModuleList([Block(config) for _ in range(config.n_layer)])
         # decoder head
         self.ln_f = nn.LayerNorm(config.n_embd)
-        self.head = EinLinear(config.transition_dim, config.n_embd, config.vocab_size + 1, bias=False)
+        self.head = EinLinear(
+            config.transition_dim, config.n_embd, config.vocab_size + 1, bias=False
+        )
 
         self.vocab_size = config.vocab_size
         self.stop_token = config.vocab_size * config.transition_dim
@@ -447,19 +481,27 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
     def pad_to_full_observation(self, hidden_states):
         batch_size, sequence_length, _ = hidden_states.shape
 
-        n_pad = (self.transition_dim - sequence_length % self.transition_dim) % self.transition_dim
-        padding = torch.zeros(batch_size, n_pad, self.embedding_dim, device=hidden_states.device)
+        n_pad = (
+            self.transition_dim - sequence_length % self.transition_dim
+        ) % self.transition_dim
+        padding = torch.zeros(
+            batch_size, n_pad, self.embedding_dim, device=hidden_states.device
+        )
 
         # [ batch_size x padded_sequence_length' x embedding_dim ]
         hidden_states_pad = torch.cat([hidden_states, padding], dim=1)
-        hidden_states_pad = hidden_states_pad.view(-1, self.transition_dim, self.embedding_dim)
+        hidden_states_pad = hidden_states_pad.view(
+            -1, self.transition_dim, self.embedding_dim
+        )
 
         return hidden_states_pad, n_pad
 
     @add_start_docstrings_to_model_forward(
         TRAJECTORY_TRANSFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
     )
-    @replace_return_docstrings(output_type=TrajectoryTransformerOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TrajectoryTransformerOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         trajectories: Optional[torch.LongTensor] = None,
@@ -504,9 +546,15 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         ... )
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         if past_key_values is None:
@@ -520,8 +568,12 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         offset_trajectories = self.offset_tokens(trajectories)
         # [ batch_size x sequence_length x embedding_dim ]
         # forward the GPT model
-        token_embeddings = self.tok_emb(offset_trajectories)  # each index maps to a (learnable) vector
-        position_embeddings = self.pos_emb[:, :sequence_length, :]  # each position maps to a (learnable) vector
+        token_embeddings = self.tok_emb(
+            offset_trajectories
+        )  # each index maps to a (learnable) vector
+        position_embeddings = self.pos_emb[
+            :, :sequence_length, :
+        ]  # each position maps to a (learnable) vector
 
         hidden_states = self.drop(token_embeddings + position_embeddings)
 
@@ -556,7 +608,9 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
                 presents = presents + (outputs[1],)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (
+                    outputs[2 if use_cache else 1],
+                )
 
         # [ batch_size x sequence_length x embedding_dim ]
         hidden_state = self.ln_f(hidden_states)
@@ -567,19 +621,28 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         hidden_states_pad, n_pad = self.pad_to_full_observation(hidden_state)
 
         logits = self.head(hidden_states_pad)
-        logits = logits.reshape(batch_size, sequence_length + n_pad, self.vocab_size + 1)
+        logits = logits.reshape(
+            batch_size, sequence_length + n_pad, self.vocab_size + 1
+        )
         logits = logits[:, :sequence_length]
 
         # if we are given some desired targets also calculate the loss
         if targets is not None:
-            loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.view(-1), reduction="none")
-            if self.action_weight != 1 or self.reward_weight != 1 or self.value_weight != 1:
+            loss = F.cross_entropy(
+                logits.reshape(-1, logits.size(-1)), targets.view(-1), reduction="none"
+            )
+            if (
+                self.action_weight != 1
+                or self.reward_weight != 1
+                or self.value_weight != 1
+            ):
                 # make weights
                 n_states = int(np.ceil(sequence_length / self.transition_dim))
                 weights = torch.cat(
                     [
                         torch.ones(self.observation_dim, device=trajectories.device),
-                        torch.ones(self.action_dim, device=trajectories.device) * self.action_weight,
+                        torch.ones(self.action_dim, device=trajectories.device)
+                        * self.action_weight,
                         torch.ones(1, device=trajectories.device) * self.reward_weight,
                         torch.ones(1, device=trajectories.device) * self.value_weight,
                     ]
@@ -592,7 +655,17 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
             loss = None
 
         if not return_dict:
-            return tuple(v for v in [loss, logits, presents, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [
+                    loss,
+                    logits,
+                    presents,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
 
         return TrajectoryTransformerOutput(
             loss=loss,

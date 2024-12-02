@@ -65,7 +65,9 @@ def recursive_print(name, val, spaces=0):
         print(msg, ":", val)
 
 
-def fix_query_key_value_ordering(param, checkpoint_version, num_splits, num_heads, hidden_size):
+def fix_query_key_value_ordering(
+    param, checkpoint_version, num_splits, num_heads, hidden_size
+):
     # Permutes layout of param tensor to [num_splits * num_heads * hidden_size, :]
     # for compatibility with later versions of NVIDIA Megatron-LM.
     # The inverse operation is performed inside Megatron-LM to read checkpoints:
@@ -184,19 +186,22 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
 
         # Transpose the QKV matrix.
         elif (
-            op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
+            op_name == "attention.query_key_value"
+            or op_name == "self_attention.query_key_value"
         ) and weight_or_bias == "weight":
             # Insert a tensor of 1x1xDxD bias.
-            causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.float16)).view(
-                1, 1, n_positions, n_positions
-            )
+            causal_mask = torch.tril(
+                torch.ones((n_positions, n_positions), dtype=torch.float16)
+            ).view(1, 1, n_positions, n_positions)
             output_state_dict[layer_name + ".attn.bias"] = causal_mask
 
             # Insert a "dummy" tensor for masked_bias.
             masked_bias = torch.tensor(-1e4, dtype=torch.float16)
             output_state_dict[layer_name + ".attn.masked_bias"] = masked_bias
 
-            out_val = fix_query_key_value_ordering(val, checkpoint_version, 3, heads, hidden_size_per_head)
+            out_val = fix_query_key_value_ordering(
+                val, checkpoint_version, 3, heads, hidden_size_per_head
+            )
             # Megatron stores (3*D) x D but transformers-GPT2 expects D x 3*D.
             out_val = out_val.transpose(0, 1).contiguous()
             # Store.
@@ -204,9 +209,12 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
 
         # Transpose the bias.
         elif (
-            op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
+            op_name == "attention.query_key_value"
+            or op_name == "self_attention.query_key_value"
         ) and weight_or_bias == "bias":
-            out_val = fix_query_key_value_ordering(val, checkpoint_version, 3, heads, hidden_size_per_head)
+            out_val = fix_query_key_value_ordering(
+                val, checkpoint_version, 3, heads, hidden_size_per_head
+            )
             # Store. No change of shape.
             output_state_dict[layer_name + ".attn.c_attn.bias"] = out_val
 
@@ -262,7 +270,9 @@ def main():
     print(f"Extracting PyTorch state dictionary from {args.path_to_checkpoint}")
     if args.path_to_checkpoint.endswith(".zip"):
         with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
-            with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
+            with checkpoint.open(
+                "release/mp_rank_00/model_optim_rng.pt"
+            ) as pytorch_dict:
                 input_state_dict = torch.load(pytorch_dict, map_location="cpu")
     else:
         input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")

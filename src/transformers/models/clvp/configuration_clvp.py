@@ -134,24 +134,34 @@ class ClvpEncoderConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], config_type: str = "text_config", **kwargs
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        config_type: str = "text_config",
+        **kwargs,
     ) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
 
         # make sure to have the config_type be either "text_config" or "speech_config"
         # this is to make sure that we can load only text or speech configs from the nested ClvpConfig.
         if config_type not in cls.base_config_key:
             raise ValueError(
-                f"We can only load either 'text_config' or 'speech_config' but you are trying to load" f"{config_type}"
+                f"We can only load either 'text_config' or 'speech_config' but you are trying to load"
+                f"{config_type}"
             )
 
         # get the text config dict if we are loading from ClvpConfig
         if config_dict.get("model_type") == "clvp":
             config_dict = config_dict[config_type]
 
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+        if (
+            "model_type" in config_dict
+            and hasattr(cls, "model_type")
+            and config_dict["model_type"] != cls.model_type
+        ):
             logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
@@ -390,15 +400,21 @@ class ClvpConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `ClvpEncoderConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `ClvpEncoderConfig` with default values."
+            )
 
         if speech_config is None:
             speech_config = {}
-            logger.info("`speech_config` is `None`. initializing the `ClvpEncoderConfig` with default values.")
+            logger.info(
+                "`speech_config` is `None`. initializing the `ClvpEncoderConfig` with default values."
+            )
 
         if decoder_config is None:
             decoder_config = {}
-            logger.info("`decoder_config` is `None`. initializing the `ClvpDecoderConfig` with default values.")
+            logger.info(
+                "`decoder_config` is `None`. initializing the `ClvpDecoderConfig` with default values."
+            )
 
         self.text_config = ClvpEncoderConfig(**text_config)
         self.speech_config = ClvpEncoderConfig(**speech_config)

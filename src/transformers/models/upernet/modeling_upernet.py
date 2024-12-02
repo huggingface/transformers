@@ -22,7 +22,11 @@ from torch.nn import CrossEntropyLoss
 
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...utils.backbone_utils import load_backbone
 from .configuration_upernet import UperNetConfig
 
@@ -98,7 +102,13 @@ class UperNetPyramidPoolingModule(nn.Module):
             align_corners argument of F.interpolate.
     """
 
-    def __init__(self, pool_scales: Tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
+    def __init__(
+        self,
+        pool_scales: Tuple[int, ...],
+        in_channels: int,
+        channels: int,
+        align_corners: bool,
+    ) -> None:
         super().__init__()
         self.pool_scales = pool_scales
         self.align_corners = align_corners
@@ -106,7 +116,9 @@ class UperNetPyramidPoolingModule(nn.Module):
         self.channels = channels
         self.blocks = []
         for i, pool_scale in enumerate(pool_scales):
-            block = UperNetPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
+            block = UperNetPyramidPoolingBlock(
+                pool_scale=pool_scale, in_channels=in_channels, channels=channels
+            )
             self.blocks.append(block)
             self.add_module(str(i), block)
 
@@ -115,7 +127,10 @@ class UperNetPyramidPoolingModule(nn.Module):
         for ppm in self.blocks:
             ppm_out = ppm(x)
             upsampled_ppm_out = nn.functional.interpolate(
-                ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
+                ppm_out,
+                size=x.size()[2:],
+                mode="bilinear",
+                align_corners=self.align_corners,
             )
             ppm_outs.append(upsampled_ppm_out)
         return ppm_outs
@@ -155,7 +170,9 @@ class UperNetHead(nn.Module):
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
             l_conv = UperNetConvModule(in_channels, self.channels, kernel_size=1)
-            fpn_conv = UperNetConvModule(self.channels, self.channels, kernel_size=3, padding=1)
+            fpn_conv = UperNetConvModule(
+                self.channels, self.channels, kernel_size=3, padding=1
+            )
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
@@ -186,7 +203,10 @@ class UperNetHead(nn.Module):
 
     def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
         # build laterals
-        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+        laterals = [
+            lateral_conv(encoder_hidden_states[i])
+            for i, lateral_conv in enumerate(self.lateral_convs)
+        ]
 
         laterals.append(self.psp_forward(encoder_hidden_states))
 
@@ -195,17 +215,25 @@ class UperNetHead(nn.Module):
         for i in range(used_backbone_levels - 1, 0, -1):
             prev_shape = laterals[i - 1].shape[2:]
             laterals[i - 1] = laterals[i - 1] + nn.functional.interpolate(
-                laterals[i], size=prev_shape, mode="bilinear", align_corners=self.align_corners
+                laterals[i],
+                size=prev_shape,
+                mode="bilinear",
+                align_corners=self.align_corners,
             )
 
         # build outputs
-        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
+        fpn_outs = [
+            self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)
+        ]
         # append psp feature
         fpn_outs.append(laterals[-1])
 
         for i in range(used_backbone_levels - 1, 0, -1):
             fpn_outs[i] = nn.functional.interpolate(
-                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=self.align_corners
+                fpn_outs[i],
+                size=fpn_outs[0].shape[2:],
+                mode="bilinear",
+                align_corners=self.align_corners,
             )
         fpn_outs = torch.cat(fpn_outs, dim=1)
         output = self.fpn_bottleneck(fpn_outs)
@@ -231,7 +259,11 @@ class UperNetFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
+        self,
+        config,
+        in_index: int = 2,
+        kernel_size: int = 3,
+        dilation: Union[int, Tuple[int, int]] = 1,
     ) -> None:
         super().__init__()
 
@@ -246,13 +278,21 @@ class UperNetFCNHead(nn.Module):
         convs = []
         convs.append(
             UperNetConvModule(
-                self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+                self.in_channels,
+                self.channels,
+                kernel_size=kernel_size,
+                padding=conv_padding,
+                dilation=dilation,
             )
         )
         for i in range(self.num_convs - 1):
             convs.append(
                 UperNetConvModule(
-                    self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+                    self.channels,
+                    self.channels,
+                    kernel_size=kernel_size,
+                    padding=conv_padding,
+                    dilation=dilation,
                 )
             )
         if self.num_convs == 0:
@@ -261,7 +301,10 @@ class UperNetFCNHead(nn.Module):
             self.convs = nn.Sequential(*convs)
         if self.concat_input:
             self.conv_cat = UperNetConvModule(
-                self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
+                self.in_channels + self.channels,
+                self.channels,
+                kernel_size=kernel_size,
+                padding=kernel_size // 2,
             )
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
@@ -348,13 +391,19 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         # Semantic segmentation head(s)
         self.decode_head = UperNetHead(config, in_channels=self.backbone.channels)
-        self.auxiliary_head = UperNetFCNHead(config) if config.use_auxiliary_head else None
+        self.auxiliary_head = (
+            UperNetFCNHead(config) if config.use_auxiliary_head else None
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(UPERNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        UPERNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -395,25 +444,40 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
 
         outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
         features = outputs.feature_maps
 
         logits = self.decode_head(features)
-        logits = nn.functional.interpolate(logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False)
+        logits = nn.functional.interpolate(
+            logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False
+        )
 
         auxiliary_logits = None
         if self.auxiliary_head is not None:
             auxiliary_logits = self.auxiliary_head(features)
             auxiliary_logits = nn.functional.interpolate(
-                auxiliary_logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False
+                auxiliary_logits,
+                size=pixel_values.shape[2:],
+                mode="bilinear",
+                align_corners=False,
             )
 
         loss = None

@@ -70,5 +70,7 @@ def load_model(config, ckpt, gpu, eval_mode):
     else:
         pl_sd = {"state_dict": None}
         global_step = None
-    model = load_model_from_config(config.model, pl_sd["state_dict"], gpu=gpu, eval_mode=eval_mode)["model"]
+    model = load_model_from_config(
+        config.model, pl_sd["state_dict"], gpu=gpu, eval_mode=eval_mode
+    )["model"]
     return model, global_step

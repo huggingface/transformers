@@ -64,7 +64,9 @@ NUM_SHARDS = {"7B": 1}
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
-    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
+    return multiple_of * (
+        (int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of
+    )
 
 
 def read_json(path):
@@ -77,7 +79,14 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, tokenizer_path=None, safe_serialization=True, is_v3=False):
+def write_model(
+    model_path,
+    input_base_path,
+    model_size,
+    tokenizer_path=None,
+    safe_serialization=True,
+    is_v3=False,
+):
     # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
     if not os.path.isfile(os.path.join(input_base_path, "params.json")):
         input_base_path = os.path.join(input_base_path, model_size)
@@ -101,7 +110,9 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     dim = params["dim"]
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head)
+    )
     max_position_embeddings = 4096 * 8
 
     if tokenizer_path is not None:
@@ -120,16 +131,25 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
 
     # permute for sliced rotary
     def permute(w, n_heads=n_heads, dim1=dim, dim2=dim):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+        return (
+            w.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+            .transpose(1, 2)
+            .reshape(dim1, dim2)
+        )
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
 
     # Load weights - for v3 models the consolidated weights are in a single file format in safetensors
     if is_v3:
-        loaded = [safe_load_file(os.path.join(input_base_path, "consolidated.safetensors"))]
+        loaded = [
+            safe_load_file(os.path.join(input_base_path, "consolidated.safetensors"))
+        ]
     else:
         loaded = [
-            torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
+            torch.load(
+                os.path.join(input_base_path, f"consolidated.{i:02d}.pth"),
+                map_location="cpu",
+            )
             for i in range(num_shards)
         ]
     param_count = 0
@@ -153,7 +173,9 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
         state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
             torch.cat(
                 [
-                    loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                    loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(
+                        n_heads_per_shard, dims_per_head, dim
+                    )
                     for i in range(num_shards)
                 ],
                 dim=0,
@@ -175,23 +197,41 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
         )
         state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
             [
-                loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(num_local_key_value_heads, dims_per_head, dim)
+                loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(
+                    num_local_key_value_heads, dims_per_head, dim
+                )
                 for i in range(num_shards)
             ],
             dim=0,
         ).reshape(key_value_dim, dim)
 
         state_dict[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
-            [loaded[i][f"layers.{layer_i}.attention.wo.weight"] for i in range(num_shards)], dim=1
+            [
+                loaded[i][f"layers.{layer_i}.attention.wo.weight"]
+                for i in range(num_shards)
+            ],
+            dim=1,
         )
         state_dict[f"model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
-            [loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"] for i in range(num_shards)], dim=0
+            [
+                loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"]
+                for i in range(num_shards)
+            ],
+            dim=0,
         )
         state_dict[f"model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
-            [loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"] for i in range(num_shards)], dim=1
+            [
+                loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"]
+                for i in range(num_shards)
+            ],
+            dim=1,
         )
         state_dict[f"model.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
-            [loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
+            [
+                loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"]
+                for i in range(num_shards)
+            ],
+            dim=0,
         )
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
@@ -203,8 +243,12 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 1}.bin"
     state_dict = {
         "model.norm.weight": loaded[0]["norm.weight"],
-        "model.embed_tokens.weight": torch.cat([loaded[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1),
-        "lm_head.weight": torch.cat([loaded[i]["output.weight"] for i in range(num_shards)], dim=0),
+        "model.embed_tokens.weight": torch.cat(
+            [loaded[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1
+        ),
+        "lm_head.weight": torch.cat(
+            [loaded[i]["output.weight"] for i in range(num_shards)], dim=0
+        ),
     }
 
     for k, v in state_dict.items():
@@ -235,7 +279,9 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     gc.collect()
 
     print("Loading the checkpoint in a Mistral model.")
-    model = MistralForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+    model = MistralForCausalLM.from_pretrained(
+        tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+    )
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     model.config.torch_dtype = torch.float16
@@ -267,9 +313,15 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     parser.add_argument(
-        "--is_v3", action="store_true", help="Whether the checkpoints correspond to the 3rd version or not."
+        "--safe_serialization",
+        type=bool,
+        help="Whether or not to save using `safetensors`.",
+    )
+    parser.add_argument(
+        "--is_v3",
+        action="store_true",
+        help="Whether the checkpoints correspond to the 3rd version or not.",
     )
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "tokenizer.model")

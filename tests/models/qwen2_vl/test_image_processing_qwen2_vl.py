@@ -22,7 +22,10 @@ from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -83,7 +86,9 @@ class Qwen2VLImageProcessingTester(unittest.TestCase):
             "merge_size": self.merge_size,
         }
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         images = prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -123,7 +128,9 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "merge_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
         self.assertEqual(image_processor.min_pixels, 56 * 56)
         self.assertEqual(image_processor.max_pixels, 28 * 28 * 1280)
 
@@ -142,7 +149,9 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True
+        )
         for image in image_inputs:
             self.assertIsInstance(image[0], Image.Image)
 
@@ -168,7 +177,9 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, numpify=True
+        )
         for image in image_inputs:
             self.assertIsInstance(image[0], np.ndarray)
 
@@ -194,7 +205,9 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, torchify=True
+        )
 
         for image in image_inputs:
             self.assertIsInstance(image[0], torch.Tensor)
@@ -217,13 +230,17 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
         self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
-    @unittest.skip(reason="Qwen2VLImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
+    @unittest.skip(
+        reason="Qwen2VLImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
+    )
     def test_call_numpy_4_channels(self):
         pass
 
     def test_nested_input(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True
+        )
 
         # Test batched as a list of images
         prcocess_out = image_processing(image_inputs, return_tensors="pt")
@@ -241,7 +258,9 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_grid_thws_nested = prcocess_out.image_grid_thw
         expected_output_image_shape = (34300, 1176)
         expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
-        self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
+        self.assertEqual(
+            tuple(encoded_images_nested.shape), expected_output_image_shape
+        )
         self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
         # Image processor should return same pixel values, independently of ipnut format

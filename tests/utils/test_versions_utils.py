@@ -67,7 +67,10 @@ class DependencyVersionCheckTest(TestCasePlus):
             try:
                 require_version_core(req)
             except importlib.metadata.PackageNotFoundError as e:
-                self.assertIn(f"The '{req}' distribution was not found and is required by this application", str(e))
+                self.assertIn(
+                    f"The '{req}' distribution was not found and is required by this application",
+                    str(e),
+                )
                 self.assertIn("Try: `pip install transformers -U`", str(e))
 
         # bogus requirements formats:
@@ -76,9 +79,17 @@ class DependencyVersionCheckTest(TestCasePlus):
             try:
                 require_version_core(req)
             except ValueError as e:
-                self.assertIn("requirement needs to be in the pip package format", str(e))
+                self.assertIn(
+                    "requirement needs to be in the pip package format", str(e)
+                )
         # 2. only operators
-        for req in ["numpy=1.0.0", "numpy == 1.00", "numpy<>1.0.0", "numpy><1.00", "numpy>>1.0.0"]:
+        for req in [
+            "numpy=1.0.0",
+            "numpy == 1.00",
+            "numpy<>1.0.0",
+            "numpy><1.00",
+            "numpy>>1.0.0",
+        ]:
             try:
                 require_version_core(req)
             except ValueError as e:

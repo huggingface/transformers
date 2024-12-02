@@ -29,7 +29,9 @@ if is_flax_available():
     from jax import jit
 
     from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
-    from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
+    from transformers.modeling_flax_pytorch_utils import (
+        load_flax_weights_in_pytorch_model,
+    )
 
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
 
@@ -96,7 +98,9 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             flax_model = model_class(config)
 
-            pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+            pt_model_class_name = model_class.__name__[
+                4:
+            ]  # Skip the "Flax" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
             pt_model = pt_model_class(config).eval()
             pt_model = load_flax_weights_in_pytorch_model(pt_model, flax_model.params)
@@ -106,12 +110,18 @@ class FlaxGenerationTesterMixin:
             flax_model.generation_config.max_length = 5
 
             flax_generation_outputs = flax_model.generate(input_ids).sequences
-            pt_generation_outputs = pt_model.generate(torch.tensor(input_ids, dtype=torch.long))
+            pt_generation_outputs = pt_model.generate(
+                torch.tensor(input_ids, dtype=torch.long)
+            )
 
             if flax_generation_outputs.shape[-1] > pt_generation_outputs.shape[-1]:
-                flax_generation_outputs = flax_generation_outputs[:, : pt_generation_outputs.shape[-1]]
+                flax_generation_outputs = flax_generation_outputs[
+                    :, : pt_generation_outputs.shape[-1]
+                ]
 
-            self.assertListEqual(pt_generation_outputs.numpy().tolist(), flax_generation_outputs.tolist())
+            self.assertListEqual(
+                pt_generation_outputs.numpy().tolist(), flax_generation_outputs.tolist()
+            )
 
     def test_greedy_generate(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
@@ -127,7 +137,9 @@ class FlaxGenerationTesterMixin:
             jit_generate = jit(model.generate)
             jit_generation_outputs = jit_generate(input_ids).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_sample_generate(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
@@ -143,7 +155,9 @@ class FlaxGenerationTesterMixin:
             jit_generate = jit(model.generate)
             jit_generation_outputs = jit_generate(input_ids).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_beam_search_generate(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
@@ -160,7 +174,9 @@ class FlaxGenerationTesterMixin:
             jit_generate = jit(model.generate)
             jit_generation_outputs = jit_generate(input_ids).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_beam_search_generate_num_return_sequences(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
@@ -173,7 +189,10 @@ class FlaxGenerationTesterMixin:
             model = model_class(config)
 
             generation_outputs = model.generate(input_ids).sequences
-            self.assertEqual(generation_outputs.shape[0], input_ids.shape[0] * config.num_return_sequences)
+            self.assertEqual(
+                generation_outputs.shape[0],
+                input_ids.shape[0] * config.num_return_sequences,
+            )
 
     def test_sample_generate_logits_warper(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
@@ -195,7 +214,9 @@ class FlaxGenerationTesterMixin:
             jit_generate = jit(model.generate)
             jit_generation_outputs = jit_generate(input_ids).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_greedy_generate_logits_warper(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
@@ -213,7 +234,9 @@ class FlaxGenerationTesterMixin:
             jit_generate = jit(model.generate)
             jit_generation_outputs = jit_generate(input_ids).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_beam_search_generate_logits_warper(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
@@ -232,7 +255,9 @@ class FlaxGenerationTesterMixin:
             jit_generate = jit(model.generate)
             jit_generation_outputs = jit_generate(input_ids).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_greedy_generate_attn_mask(self):
         config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -246,13 +271,19 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids, attention_mask=attention_mask).sequences
+            generation_outputs = model.generate(
+                input_ids, attention_mask=attention_mask
+            ).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids, attention_mask=attention_mask).sequences
+            jit_generation_outputs = jit_generate(
+                input_ids, attention_mask=attention_mask
+            ).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_sample_generate_attn_mask(self):
         config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -266,13 +297,19 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids, attention_mask=attention_mask).sequences
+            generation_outputs = model.generate(
+                input_ids, attention_mask=attention_mask
+            ).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids, attention_mask=attention_mask).sequences
+            jit_generation_outputs = jit_generate(
+                input_ids, attention_mask=attention_mask
+            ).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
     def test_beam_search_generate_attn_mask(self):
         config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -286,20 +323,28 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids, attention_mask=attention_mask).sequences
+            generation_outputs = model.generate(
+                input_ids, attention_mask=attention_mask
+            ).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids, attention_mask=attention_mask).sequences
+            jit_generation_outputs = jit_generate(
+                input_ids, attention_mask=attention_mask
+            ).sequences
 
-            self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+            self.assertListEqual(
+                generation_outputs.tolist(), jit_generation_outputs.tolist()
+            )
 
 
 @require_flax
 class FlaxGenerationIntegrationTests(unittest.TestCase):
     def test_validate_generation_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-bert")
-        model = FlaxAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+        model = FlaxAutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-bert-flax-only"
+        )
 
         encoder_input_str = "Hello world"
         input_ids = tokenizer(encoder_input_str, return_tensors="np").input_ids

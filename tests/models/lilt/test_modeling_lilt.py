@@ -107,17 +107,31 @@ class LiltModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
 
         config = self.get_config()
 
-        return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels
+        return (
+            config,
+            input_ids,
+            bbox,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+        )
 
     def get_config(self):
         return LiltConfig(
@@ -147,12 +161,22 @@ class LiltModelTester:
         model = LiltModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, bbox=bbox, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids,
+            bbox=bbox,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+        )
         result = model(input_ids, bbox=bbox, token_type_ids=token_type_ids)
         result = model(input_ids, bbox=bbox)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_token_classification(
         self,
@@ -169,9 +193,15 @@ class LiltModelTester:
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, bbox=bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
+            input_ids,
+            bbox=bbox,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_question_answering(
         self,
@@ -194,8 +224,12 @@ class LiltModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -218,7 +252,9 @@ class LiltModelTester:
 
 
 @require_torch
-class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class LiltModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             LiltModel,
@@ -310,7 +346,9 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @slow
 class LiltModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = LiltModel.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base").to(torch_device)
+        model = LiltModel.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base").to(
+            torch_device
+        )
 
         input_ids = torch.tensor([[1, 2]], device=torch_device)
         bbox = torch.tensor([[[1, 2, 3, 4], [5, 6, 7, 8]]], device=torch_device)
@@ -326,4 +364,8 @@ class LiltModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(outputs.last_hidden_state.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :, :3], expected_slice, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(
+                outputs.last_hidden_state[0, :, :3], expected_slice, atol=1e-3
+            )
+        )

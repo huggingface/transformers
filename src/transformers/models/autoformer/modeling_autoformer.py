@@ -35,7 +35,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_autoformer import AutoformerConfig
 
 
@@ -183,7 +188,9 @@ class AutoformerFeatureEmbedder(nn.Module):
         super().__init__()
 
         self.num_features = len(cardinalities)
-        self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
+        self.embedders = nn.ModuleList(
+            [nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)]
+        )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         if self.num_features > 1:
@@ -213,7 +220,9 @@ class AutoformerStdScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -231,9 +240,13 @@ class AutoformerStdScaler(nn.Module):
         """
         denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
 
-        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
         return (data - loc) / scale, loc, scale
 
@@ -249,8 +262,12 @@ class AutoformerMeanScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
-        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        )
+        self.default_scale = (
+            config.default_scale if hasattr(config, "default_scale") else None
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -316,13 +333,19 @@ class AutoformerNOPScaler(nn.Module):
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
                 `(batch_size, 1, num_input_channels)`)
         """
-        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
-        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        scale = torch.ones_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
+        loc = torch.zeros_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
         return data, loc, scale
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
-def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def weighted_average(
+    input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None
+) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
@@ -339,9 +362,15 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
-        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
-        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
-        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+        weighted_tensor = torch.where(
+            weights != 0, input_tensor * weights, torch.zeros_like(input_tensor)
+        )
+        sum_weights = torch.clamp(
+            weights.sum(dim=dim) if dim else weights.sum(), min=1.0
+        )
+        return (
+            weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()
+        ) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
 
@@ -358,7 +387,9 @@ def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.
 class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
+    def __init__(
+        self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None
+    ) -> None:
         super().__init__(num_positions, embedding_dim)
         self.weight = self._init_weight(self.weight)
 
@@ -370,7 +401,10 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
         """
         n_pos, dim = out.shape
         position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+            [
+                [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
+                for pos in range(n_pos)
+            ]
         )
         out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
@@ -380,11 +414,16 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
         return out
 
     @torch.no_grad()
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
+    def forward(
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0
+    ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+            past_key_values_length,
+            past_key_values_length + seq_len,
+            dtype=torch.long,
+            device=self.weight.device,
         )
         return super().forward(positions)
 
@@ -393,7 +432,9 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
 class AutoformerValueEmbedding(nn.Module):
     def __init__(self, feature_size, d_model):
         super().__init__()
-        self.value_projection = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
+        self.value_projection = nn.Linear(
+            in_features=feature_size, out_features=d_model, bias=False
+        )
 
     def forward(self, x):
         return self.value_projection(x)
@@ -485,7 +526,11 @@ class AutoformerAttention(nn.Module):
         self.autocorrelation_factor = autocorrelation_factor
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -553,7 +598,9 @@ class AutoformerAttention(nn.Module):
         queries_time_length = query_states.size(1)
         values_time_length = value_states.size(1)
         if queries_time_length > values_time_length:
-            query_states = query_states[:, : (queries_time_length - values_time_length), :]
+            query_states = query_states[
+                :, : (queries_time_length - values_time_length), :
+            ]
             zeros = torch.zeros_like(query_states).float()
             value_states = torch.cat([value_states, zeros], dim=1)
             key_states = torch.cat([key_states, zeros], dim=1)
@@ -564,7 +611,9 @@ class AutoformerAttention(nn.Module):
         query_states_fft = torch.fft.rfft(query_states, n=tgt_len, dim=1)
         key_states_fft = torch.fft.rfft(key_states, n=tgt_len, dim=1)
         attn_weights = query_states_fft * torch.conj(key_states_fft)
-        attn_weights = torch.fft.irfft(attn_weights, n=tgt_len, dim=1)  # Autocorrelation(Q,K)
+        attn_weights = torch.fft.irfft(
+            attn_weights, n=tgt_len, dim=1
+        )  # Autocorrelation(Q,K)
 
         src_len = key_states.size(1)
         channel = key_states.size(2)
@@ -580,7 +629,10 @@ class AutoformerAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if layer_head_mask is not None:
@@ -589,7 +641,9 @@ class AutoformerAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, channel)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, channel
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, channel)
 
         if output_attentions:
@@ -597,8 +651,12 @@ class AutoformerAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, channel)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, channel)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, channel
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, channel
+            )
         else:
             attn_weights_reshaped = None
 
@@ -608,19 +666,29 @@ class AutoformerAttention(nn.Module):
 
         # find top k autocorrelations delays
         top_k = int(self.autocorrelation_factor * math.log(time_length))
-        autocorrelations_mean_on_head_channel = torch.mean(autocorrelations, dim=(1, -1))  # bsz x tgt_len
+        autocorrelations_mean_on_head_channel = torch.mean(
+            autocorrelations, dim=(1, -1)
+        )  # bsz x tgt_len
         if self.training:
-            autocorrelations_mean_on_bsz = torch.mean(autocorrelations_mean_on_head_channel, dim=0)
+            autocorrelations_mean_on_bsz = torch.mean(
+                autocorrelations_mean_on_head_channel, dim=0
+            )
             _, top_k_delays_index = torch.topk(autocorrelations_mean_on_bsz, top_k)
             top_k_autocorrelations = torch.stack(
-                [autocorrelations_mean_on_head_channel[:, top_k_delays_index[i]] for i in range(top_k)], dim=-1
+                [
+                    autocorrelations_mean_on_head_channel[:, top_k_delays_index[i]]
+                    for i in range(top_k)
+                ],
+                dim=-1,
             )
         else:
             top_k_autocorrelations, top_k_delays_index = torch.topk(
                 autocorrelations_mean_on_head_channel, top_k, dim=1
             )
 
-        top_k_autocorrelations = torch.softmax(top_k_autocorrelations, dim=-1)  # bsz x top_k
+        top_k_autocorrelations = torch.softmax(
+            top_k_autocorrelations, dim=-1
+        )  # bsz x top_k
 
         # compute aggregation: value_states.roll(delay) * top_k_autocorrelations(delay)
         if not self.training:
@@ -633,20 +701,28 @@ class AutoformerAttention(nn.Module):
                 .to(value_states.device)
             )
 
-        delays_agg = torch.zeros_like(value_states).float()  # bsz x time_length x channel
+        delays_agg = torch.zeros_like(
+            value_states
+        ).float()  # bsz x time_length x channel
         for i in range(top_k):
             # compute value_states roll delay
             if not self.training:
                 tmp_delay = init_index + top_k_delays_index[:, i].view(-1, 1, 1).repeat(
                     self.num_heads, tgt_len, channel
                 )
-                value_states_roll_delay = torch.gather(tmp_values, dim=1, index=tmp_delay)
+                value_states_roll_delay = torch.gather(
+                    tmp_values, dim=1, index=tmp_delay
+                )
             else:
-                value_states_roll_delay = value_states.roll(shifts=-int(top_k_delays_index[i]), dims=1)
+                value_states_roll_delay = value_states.roll(
+                    shifts=-int(top_k_delays_index[i]), dims=1
+                )
 
             # aggregation
             top_k_autocorrelations_at_delay = (
-                top_k_autocorrelations[:, i].view(-1, 1, 1).repeat(self.num_heads, tgt_len, channel)
+                top_k_autocorrelations[:, i]
+                .view(-1, 1, 1)
+                .repeat(self.num_heads, tgt_len, channel)
             )
             delays_agg += value_states_roll_delay * top_k_autocorrelations_at_delay
 
@@ -715,7 +791,9 @@ class AutoformerEncoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         # added layer norm here as an improvement
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -723,9 +801,13 @@ class AutoformerEncoderLayer(nn.Module):
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states, _ = self.decomp2(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
@@ -734,7 +816,9 @@ class AutoformerEncoderLayer(nn.Module):
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
         ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+            hidden_states = torch.clamp(
+                hidden_states, min=-clamp_value, max=clamp_value
+            )
 
         outputs = (hidden_states,)
 
@@ -799,7 +883,9 @@ class AutoformerDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -825,7 +911,9 @@ class AutoformerDecoderLayer(nn.Module):
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = (
+            past_key_value[:2] if past_key_value is not None else None
+        )
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -834,7 +922,9 @@ class AutoformerDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states, trend1 = self.decomp1(hidden_states)
         # added layer norm here as an improvement
@@ -847,16 +937,22 @@ class AutoformerDecoderLayer(nn.Module):
             residual = hidden_states
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
-                hidden_states=hidden_states,
-                key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
-                output_attentions=output_attentions,
+            cross_attn_past_key_value = (
+                past_key_value[-2:] if past_key_value is not None else None
             )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states, cross_attn_weights, cross_attn_present_key_value = (
+                self.encoder_attn(
+                    hidden_states=hidden_states,
+                    key_value_states=encoder_hidden_states,
+                    attention_mask=encoder_attention_mask,
+                    layer_head_mask=cross_attn_layer_head_mask,
+                    past_key_value=cross_attn_past_key_value,
+                    output_attentions=output_attentions,
+                )
+            )
+            hidden_states = nn.functional.dropout(
+                hidden_states, p=self.dropout, training=self.training
+            )
             hidden_states = residual + hidden_states
             hidden_states, trend2 = self.decomp2(hidden_states)
             # added layer norm here as an improvement
@@ -868,9 +964,13 @@ class AutoformerDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states, trend3 = self.decomp3(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
@@ -879,7 +979,9 @@ class AutoformerDecoderLayer(nn.Module):
             residual_trend = trend1 + trend2 + trend3
         else:
             residual_trend = trend1 + trend3
-        residual_trend = self.trend_projection(residual_trend.permute(0, 2, 1)).transpose(1, 2)
+        residual_trend = self.trend_projection(
+            residual_trend.permute(0, 2, 1)
+        ).transpose(1, 2)
         outputs = ((hidden_states, residual_trend),)
 
         if output_attentions:
@@ -1077,11 +1179,15 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         if config.prediction_length is None:
             raise ValueError("The `prediction_length` config needs to be specified.")
 
-        self.value_embedding = AutoformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.value_embedding = AutoformerValueEmbedding(
+            feature_size=config.feature_size, d_model=config.d_model
+        )
         self.embed_positions = AutoformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        self.layers = nn.ModuleList([AutoformerEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList(
+            [AutoformerEncoderLayer(config) for _ in range(config.encoder_layers)]
+        )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -1125,22 +1231,34 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         hidden_states = self.value_embedding(inputs_embeds)
         embed_pos = self.embed_positions(inputs_embeds.size())
 
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, inputs_embeds.dtype
+            )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1178,7 +1296,9 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
                     layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                        layer_head_mask=(
+                            head_mask[idx] if head_mask is not None else None
+                        ),
                         output_attentions=output_attentions,
                     )
 
@@ -1191,9 +1311,15 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
             encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, encoder_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
 
@@ -1212,11 +1338,15 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         if config.prediction_length is None:
             raise ValueError("The `prediction_length` config needs to be specified.")
 
-        self.value_embedding = AutoformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.value_embedding = AutoformerValueEmbedding(
+            feature_size=config.feature_size, d_model=config.d_model
+        )
         self.embed_positions = AutoformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        self.layers = nn.ModuleList([AutoformerDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [AutoformerDecoderLayer(config) for _ in range(config.decoder_layers)]
+        )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         # https://github.com/thuml/Autoformer/blob/e6371e24f2ae2dd53e472edefdd5814c5176f864/models/Autoformer.py#L74
@@ -1303,12 +1433,20 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         input_shape = inputs_embeds.size()[:-1]
 
@@ -1321,19 +1459,27 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
 
         hidden_states = self.value_embedding(inputs_embeds)
         embed_pos = self.embed_positions(
-            inputs_embeds.size(), past_key_values_length=self.config.context_length - self.config.label_length
+            inputs_embeds.size(),
+            past_key_values_length=self.config.context_length
+            - self.config.label_length,
         )
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attentions = (
+            () if (output_attentions and encoder_hidden_states is not None) else None
+        )
         next_decoder_cache = () if use_cache else None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
+        for attn_mask, mask_name in zip(
+            [head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]
+        ):
             if attn_mask is not None:
                 if attn_mask.size()[0] != (len(self.layers)):
                     raise ValueError(
@@ -1350,7 +1496,9 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            past_key_value = (
+                past_key_values[idx] if past_key_values is not None else None
+            )
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
@@ -1365,7 +1513,11 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                    (
+                        cross_attn_head_mask[idx]
+                        if cross_attn_head_mask is not None
+                        else None
+                    ),
                     None,
                     output_attentions,
                     use_cache,
@@ -1378,7 +1530,9 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
+                        cross_attn_head_mask[idx]
+                        if cross_attn_head_mask is not None
+                        else None
                     ),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
@@ -1407,7 +1561,14 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, trend, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [
+                    hidden_states,
+                    trend,
+                    next_cache,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
         return AutoFormerDecoderOutput(
@@ -1437,7 +1598,8 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
         if config.num_static_categorical_features > 0:
             self.embedder = AutoformerFeatureEmbedder(
-                cardinalities=config.cardinality, embedding_dims=config.embedding_dimension
+                cardinalities=config.cardinality,
+                embedding_dims=config.embedding_dimension,
             )
 
         # transformer encoder-decoder and mask initializer
@@ -1538,13 +1700,17 @@ class AutoformerModel(AutoformerPreTrainedModel):
         time_feat = (
             torch.cat(
                 (
-                    past_time_features[:, self._past_length - self.config.context_length :, ...],
+                    past_time_features[
+                        :, self._past_length - self.config.context_length :, ...
+                    ],
                     future_time_features,
                 ),
                 dim=1,
             )
             if future_values is not None
-            else past_time_features[:, self._past_length - self.config.context_length :, ...]
+            else past_time_features[
+                :, self._past_length - self.config.context_length :, ...
+            ]
         )
 
         # target
@@ -1562,8 +1728,14 @@ class AutoformerModel(AutoformerPreTrainedModel):
         )
 
         # static features
-        log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
-        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        log_abs_loc = (
+            loc.abs().log1p()
+            if self.config.input_size == 1
+            else loc.squeeze(1).abs().log1p()
+        )
+        log_scale = (
+            scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        )
         static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
 
         if static_real_features is not None:
@@ -1571,7 +1743,9 @@ class AutoformerModel(AutoformerPreTrainedModel):
         if static_categorical_features is not None:
             embedded_cat = self.embedder(static_categorical_features)
             static_feat = torch.cat((embedded_cat, static_feat), dim=1)
-        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
+        expanded_static_feat = static_feat.unsqueeze(1).expand(
+            -1, time_feat.shape[1], -1
+        )
 
         # all features
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
@@ -1582,9 +1756,13 @@ class AutoformerModel(AutoformerPreTrainedModel):
             if future_values is not None
             else self.config.context_length
         )
-        lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
+        lagged_sequence = self.get_lagged_subsequences(
+            sequence=inputs, subsequences_length=subsequences_length
+        )
         lags_shape = lagged_sequence.shape
-        reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+        reshaped_lagged_sequence = lagged_sequence.reshape(
+            lags_shape[0], lags_shape[1], -1
+        )
 
         if reshaped_lagged_sequence.shape[1] != time_feat.shape[1]:
             raise ValueError(
@@ -1599,7 +1777,9 @@ class AutoformerModel(AutoformerPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(AUTOFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=AutoformerModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=AutoformerModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1650,21 +1830,31 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        transformer_inputs, temporal_features, loc, scale, static_feat = self.create_network_inputs(
-            past_values=past_values,
-            past_time_features=past_time_features,
-            past_observed_mask=past_observed_mask,
-            static_categorical_features=static_categorical_features,
-            static_real_features=static_real_features,
-            future_values=future_values,
-            future_time_features=future_time_features,
+        transformer_inputs, temporal_features, loc, scale, static_feat = (
+            self.create_network_inputs(
+                past_values=past_values,
+                past_time_features=past_time_features,
+                past_observed_mask=past_observed_mask,
+                static_categorical_features=static_categorical_features,
+                static_real_features=static_real_features,
+                future_values=future_values,
+                future_time_features=future_time_features,
+            )
         )
 
         if encoder_outputs is None:
@@ -1697,26 +1887,41 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 transformer_inputs[:, : self.config.context_length, ...]
             )
             mean = (
-                torch.mean(transformer_inputs[:, : self.config.context_length, ...], dim=1)
+                torch.mean(
+                    transformer_inputs[:, : self.config.context_length, ...], dim=1
+                )
                 .unsqueeze(1)
                 .repeat(1, self.config.prediction_length, 1)
             )
             zeros = torch.zeros(
-                [transformer_inputs.shape[0], self.config.prediction_length, transformer_inputs.shape[2]],
+                [
+                    transformer_inputs.shape[0],
+                    self.config.prediction_length,
+                    transformer_inputs.shape[2],
+                ],
                 device=enc_input.device,
             )
 
             decoder_input = torch.cat(
                 (
-                    torch.cat((seasonal_input[:, -self.config.label_length :, ...], zeros), dim=1),
-                    temporal_features[:, self.config.context_length - self.config.label_length :, ...],
+                    torch.cat(
+                        (seasonal_input[:, -self.config.label_length :, ...], zeros),
+                        dim=1,
+                    ),
+                    temporal_features[
+                        :, self.config.context_length - self.config.label_length :, ...
+                    ],
                 ),
                 dim=-1,
             )
             trend_init = torch.cat(
                 (
-                    torch.cat((trend_input[:, -self.config.label_length :, ...], mean), dim=1),
-                    temporal_features[:, self.config.context_length - self.config.label_length :, ...],
+                    torch.cat(
+                        (trend_input[:, -self.config.label_length :, ...], mean), dim=1
+                    ),
+                    temporal_features[
+                        :, self.config.context_length - self.config.label_length :, ...
+                    ],
                 ),
                 dim=-1,
             )
@@ -1771,9 +1976,13 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         elif config.distribution_output == "negative_binomial":
             self.distribution_output = NegativeBinomialOutput(dim=config.input_size)
         else:
-            raise ValueError(f"Unknown distribution output {config.distribution_output}")
+            raise ValueError(
+                f"Unknown distribution output {config.distribution_output}"
+            )
 
-        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.feature_size)
+        self.parameter_projection = self.distribution_output.get_parameter_projection(
+            self.model.config.feature_size
+        )
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
@@ -1785,7 +1994,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         self.post_init()
 
     def output_params(self, decoder_output):
-        return self.parameter_projection(decoder_output[:, -self.config.prediction_length :, :])
+        return self.parameter_projection(
+            decoder_output[:, -self.config.prediction_length :, :]
+        )
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1794,14 +2005,20 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         return self.model.get_decoder()
 
     @torch.jit.ignore
-    def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+    def output_distribution(
+        self, params, loc=None, scale=None, trailing_n=None
+    ) -> torch.distributions.Distribution:
         sliced_params = params
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
-        return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
+        return self.distribution_output.distribution(
+            sliced_params, loc=loc, scale=scale
+        )
 
     @add_start_docstrings_to_model_forward(AUTOFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTSPredictionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=Seq2SeqTSPredictionOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1911,7 +2128,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         </Tip>
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         if future_values is not None:
             use_cache = False
 
@@ -1941,7 +2160,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             # outputs.last_hidden_state and trend
             # loc is 4rd last and scale is 3rd last output
             params = self.output_params(outputs[0] + outputs[1])
-            distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
+            distribution = self.output_distribution(
+                params, loc=outputs[-3], scale=outputs[-2]
+            )
 
             loss = self.loss(distribution, future_values)
 
@@ -1957,7 +2178,11 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
 
         if not return_dict:
             outputs = ((params,) + outputs[2:]) if params is not None else outputs[2:]
-            return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
+            return (
+                ((prediction_loss,) + outputs)
+                if prediction_loss is not None
+                else outputs
+            )
 
         return Seq2SeqTSPredictionOutput(
             loss=prediction_loss,
@@ -2098,46 +2323,76 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
         repeated_past_values = (
-            past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) - repeated_loc
+            past_values.repeat_interleave(repeats=num_parallel_samples, dim=0)
+            - repeated_loc
         ) / repeated_scale
 
         time_features = torch.cat((past_time_features, future_time_features), dim=1)
 
-        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_features.shape[1], -1)
+        expanded_static_feat = static_feat.unsqueeze(1).expand(
+            -1, time_features.shape[1], -1
+        )
         features = torch.cat((expanded_static_feat, time_features), dim=-1)
-        repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
+        repeated_features = features.repeat_interleave(
+            repeats=num_parallel_samples, dim=0
+        )
 
-        repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
+        repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(
+            repeats=num_parallel_samples, dim=0
+        )
 
         lagged_sequence = self.model.get_lagged_subsequences(
-            sequence=repeated_past_values, subsequences_length=self.config.context_length
+            sequence=repeated_past_values,
+            subsequences_length=self.config.context_length,
         )
         lags_shape = lagged_sequence.shape
-        reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
-        seasonal_input, trend_input = self.model.decomposition_layer(reshaped_lagged_sequence)
+        reshaped_lagged_sequence = lagged_sequence.reshape(
+            lags_shape[0], lags_shape[1], -1
+        )
+        seasonal_input, trend_input = self.model.decomposition_layer(
+            reshaped_lagged_sequence
+        )
 
-        mean = torch.mean(reshaped_lagged_sequence, dim=1).unsqueeze(1).repeat(1, self.config.prediction_length, 1)
+        mean = (
+            torch.mean(reshaped_lagged_sequence, dim=1)
+            .unsqueeze(1)
+            .repeat(1, self.config.prediction_length, 1)
+        )
         zeros = torch.zeros(
-            [reshaped_lagged_sequence.shape[0], self.config.prediction_length, reshaped_lagged_sequence.shape[2]],
+            [
+                reshaped_lagged_sequence.shape[0],
+                self.config.prediction_length,
+                reshaped_lagged_sequence.shape[2],
+            ],
             device=reshaped_lagged_sequence.device,
         )
 
         decoder_input = torch.cat(
             (
-                torch.cat((seasonal_input[:, -self.config.label_length :, ...], zeros), dim=1),
-                repeated_features[:, -self.config.prediction_length - self.config.label_length :, ...],
+                torch.cat(
+                    (seasonal_input[:, -self.config.label_length :, ...], zeros), dim=1
+                ),
+                repeated_features[
+                    :, -self.config.prediction_length - self.config.label_length :, ...
+                ],
             ),
             dim=-1,
         )
         trend_init = torch.cat(
             (
-                torch.cat((trend_input[:, -self.config.label_length :, ...], mean), dim=1),
-                repeated_features[:, -self.config.prediction_length - self.config.label_length :, ...],
+                torch.cat(
+                    (trend_input[:, -self.config.label_length :, ...], mean), dim=1
+                ),
+                repeated_features[
+                    :, -self.config.prediction_length - self.config.label_length :, ...
+                ],
             ),
             dim=-1,
         )
         decoder_outputs = decoder(
-            trend=trend_init, inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden
+            trend=trend_init,
+            inputs_embeds=decoder_input,
+            encoder_hidden_states=repeated_enc_last_hidden,
         )
         decoder_last_hidden = decoder_outputs.last_hidden_state
         trend = decoder_outputs.trend
@@ -2147,6 +2402,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
 
         return SampleTSPredictionOutput(
             sequences=future_samples.reshape(
-                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
+                (-1, num_parallel_samples, self.config.prediction_length)
+                + self.target_shape,
             )
         )

@@ -107,7 +107,9 @@ class BlipProcessor(ProcessorMixin):
         if text is not None:
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
         if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+            encoding_image_processor = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
 
             if text_encoding is not None:
                 encoding_image_processor.update(text_encoding)

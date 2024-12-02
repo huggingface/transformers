@@ -106,7 +106,9 @@ def read_in_q_v_bias(state_dict, config):
         v_bias = state_dict.pop(f"visual_encoder.blocks.{i}.attn.v_bias")
 
         # next, set bias in the state dict
-        qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
+        qkv_bias = torch.cat(
+            (q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias)
+        )
         state_dict[f"vision_model.encoder.layers.{i}.self_attn.qkv.bias"] = qkv_bias
 
 
@@ -117,13 +119,21 @@ def get_blip2_config(model_name, eos_token_id):
     # make sure the models have proper bos_token_id and eos_token_id set (important for generation)
     # seems like flan-T5 models don't have bos_token_id properly set?
     if "opt-2.7b" in model_name:
-        text_config = OPTConfig.from_pretrained("facebook/opt-2.7b", eos_token_id=eos_token_id).to_dict()
+        text_config = OPTConfig.from_pretrained(
+            "facebook/opt-2.7b", eos_token_id=eos_token_id
+        ).to_dict()
     elif "opt-6.7b" in model_name:
-        text_config = OPTConfig.from_pretrained("facebook/opt-6.7b", eos_token_id=eos_token_id).to_dict()
+        text_config = OPTConfig.from_pretrained(
+            "facebook/opt-6.7b", eos_token_id=eos_token_id
+        ).to_dict()
     elif "t5-xl" in model_name:
-        text_config = T5Config.from_pretrained("google/flan-t5-xl", dense_act_fn="gelu", bos_token_id=1).to_dict()
+        text_config = T5Config.from_pretrained(
+            "google/flan-t5-xl", dense_act_fn="gelu", bos_token_id=1
+        ).to_dict()
     elif "t5-xxl" in model_name:
-        text_config = T5Config.from_pretrained("google/flan-t5-xxl", dense_act_fn="gelu", bos_token_id=1).to_dict()
+        text_config = T5Config.from_pretrained(
+            "google/flan-t5-xxl", dense_act_fn="gelu", bos_token_id=1
+        ).to_dict()
     elif "itm" in model_name:
         text_config = {}
     else:
@@ -132,7 +142,9 @@ def get_blip2_config(model_name, eos_token_id):
     if "itm" in model_name:
         config = Blip2Config(
             vision_config=vision_config,
-            qformer_config=Blip2QFormerConfig(vocab_size=30523, use_qformer_text_input=True).to_dict(),
+            qformer_config=Blip2QFormerConfig(
+                vocab_size=30523, use_qformer_text_input=True
+            ).to_dict(),
         )
     else:
         config = Blip2Config(vision_config=vision_config, text_config=text_config)
@@ -142,7 +154,11 @@ def get_blip2_config(model_name, eos_token_id):
 
 @torch.no_grad()
 def convert_blip2_checkpoint(
-    model_name, pytorch_dump_folder_path=None, push_to_hub=False, lavis_device="cpu", hf_model_device="cpu"
+    model_name,
+    pytorch_dump_folder_path=None,
+    push_to_hub=False,
+    lavis_device="cpu",
+    hf_model_device="cpu",
 ):
     """
     Copy/paste/tweak model's weights to Transformers design.
@@ -150,7 +166,9 @@ def convert_blip2_checkpoint(
     if "opt" in model_name:
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b")
     elif "itm" in model_name:
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
+        tokenizer = BertTokenizer.from_pretrained(
+            "bert-base-uncased", truncation_side="right"
+        )
         tokenizer.add_special_tokens({"bos_token": "[DEC]"})
     else:
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-xl")
@@ -218,7 +236,9 @@ def convert_blip2_checkpoint(
     assert len(missing_keys) == 0
 
     if "itm" in model_name:
-        unexpected_keys = list(filter(lambda x: not x.startswith("Qformer.cls"), unexpected_keys))
+        unexpected_keys = list(
+            filter(lambda x: not x.startswith("Qformer.cls"), unexpected_keys)
+        )
         assert unexpected_keys == ["temp", "qformer.embeddings.position_ids"]
     else:
         assert unexpected_keys == ["qformer.embeddings.position_ids"]
@@ -228,10 +248,14 @@ def convert_blip2_checkpoint(
 
     # create processor
     image_processor = BlipImageProcessor(
-        size={"height": image_size, "width": image_size}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
+        size={"height": image_size, "width": image_size},
+        image_mean=OPENAI_CLIP_MEAN,
+        image_std=OPENAI_CLIP_STD,
     )
     processor = Blip2Processor(image_processor=image_processor, tokenizer=tokenizer)
-    pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(hf_model_device)
+    pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(
+        hf_model_device
+    )
 
     # make sure processor creates exact same pixel values
     assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))
@@ -241,12 +265,17 @@ def convert_blip2_checkpoint(
 
     if "itm" in model_name:
         caption = "a large fountain spewing water into the air"
-        input_ids = tokenizer([caption], return_tensors="pt").input_ids.to(hf_model_device)
-        attention_mask = processor(text=caption, return_tensors="pt").attention_mask.to(hf_model_device)
+        input_ids = tokenizer([caption], return_tensors="pt").input_ids.to(
+            hf_model_device
+        )
+        attention_mask = processor(text=caption, return_tensors="pt").attention_mask.to(
+            hf_model_device
+        )
 
         with torch.no_grad():
             original_logits = original_model(
-                {"image": original_pixel_values, "text_input": [caption]}, match_head="itm"
+                {"image": original_pixel_values, "text_input": [caption]},
+                match_head="itm",
             )
             logits = hf_model(
                 pixel_values=pixel_values,
@@ -262,16 +291,21 @@ def convert_blip2_checkpoint(
         # assert values
         # cast to same type
         target_dtype = logits.logits_per_image.dtype
-        assert torch.allclose(original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4)
+        assert torch.allclose(
+            original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4
+        )
 
         original_itm_scores = torch.nn.functional.softmax(original_logits, dim=1)
         itm_scores = torch.nn.functional.softmax(logits.logits_per_image, dim=1)
-        assert torch.allclose(original_itm_scores.to(target_dtype), itm_scores, atol=1e-4)
+        assert torch.allclose(
+            original_itm_scores.to(target_dtype), itm_scores, atol=1e-4
+        )
         print("Looks ok!")
 
         with torch.no_grad():
             original_logits = original_model(
-                {"image": original_pixel_values, "text_input": [caption]}, match_head="itc"
+                {"image": original_pixel_values, "text_input": [caption]},
+                match_head="itc",
             )
             logits = hf_model(
                 pixel_values=pixel_values,
@@ -287,7 +321,9 @@ def convert_blip2_checkpoint(
         # assert values
         # cast to same type
         target_dtype = logits.logits_per_image.dtype
-        assert torch.allclose(original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4)
+        assert torch.allclose(
+            original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4
+        )
         print("Looks ok!")
 
     else:
@@ -295,13 +331,21 @@ def convert_blip2_checkpoint(
 
         with torch.no_grad():
             if "opt" in model_name:
-                original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
+                original_logits = original_model(
+                    {"image": original_pixel_values, "text_input": [""]}
+                ).logits
                 logits = hf_model(pixel_values, input_ids).logits
             else:
                 original_logits = original_model(
-                    {"image": original_pixel_values, "text_input": ["\n"], "text_output": ["\n"]}
+                    {
+                        "image": original_pixel_values,
+                        "text_input": ["\n"],
+                        "text_output": ["\n"],
+                    }
                 ).logits
-                labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
+                labels = input_ids.masked_fill(
+                    input_ids == tokenizer.pad_token_id, -100
+                )
                 logits = hf_model(pixel_values, input_ids, labels=labels).logits
 
         assert original_logits.shape == logits.shape
@@ -319,7 +363,9 @@ def convert_blip2_checkpoint(
         set_seed(42)
 
         original_outputs = original_model.generate(
-            {"image": original_pixel_values, "prompt": prompt}, use_nucleus_sampling=True, max_length=50
+            {"image": original_pixel_values, "prompt": prompt},
+            use_nucleus_sampling=True,
+            max_length=50,
         )
         outputs = hf_model.generate(
             pixel_values,
@@ -367,7 +413,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf config.json of model to convert",
     )
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
@@ -377,14 +428,24 @@ if __name__ == "__main__":
     # which requires quite some memory. Hence loading both on a
     # separate device is the easiest to compare
     parser.add_argument(
-        "--lavis_device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+        "--lavis_device",
+        default="cpu",
+        type=str,
+        help="Torch device to run the conversion, either cpu or cuda.",
     )
     parser.add_argument(
-        "--hf_model_device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+        "--hf_model_device",
+        default="cpu",
+        type=str,
+        help="Torch device to run the conversion, either cpu or cuda.",
     )
 
     args = parser.parse_args()
 
     convert_blip2_checkpoint(
-        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.lavis_device, args.hf_model_device
+        args.model_name,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+        args.lavis_device,
+        args.hf_model_device,
     )

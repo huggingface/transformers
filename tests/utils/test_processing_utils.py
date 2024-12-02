@@ -36,11 +36,15 @@ class ProcessingUtilTester(unittest.TestCase):
         images = PIL.Image.new("RGB", (224, 224))
         text = "text"
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
 
@@ -48,11 +52,15 @@ class ProcessingUtilTester(unittest.TestCase):
         images = np.random.rand(224, 224, 3)
         text = ["text1", "text2"]
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertTrue(np.array_equal(valid_images, images))
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertTrue(np.array_equal(valid_images, images))
         self.assertEqual(valid_text, text)
 
@@ -60,11 +68,15 @@ class ProcessingUtilTester(unittest.TestCase):
         images = [PIL.Image.new("RGB", (224, 224)), PIL.Image.new("RGB", (224, 224))]
         text = [["text1", "text2, text3"], ["text3", "text4"]]
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
 
@@ -72,11 +84,15 @@ class ProcessingUtilTester(unittest.TestCase):
         images = [np.random.rand(224, 224, 3), np.random.rand(224, 224, 3)]
         text = ["text1", "text2"]
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertTrue(np.array_equal(valid_images[0], images[0]))
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertTrue(np.array_equal(valid_images[0], images[0]))
         self.assertEqual(valid_text, text)
 
@@ -84,23 +100,34 @@ class ProcessingUtilTester(unittest.TestCase):
         images = ["https://url1", "https://url2"]
         text = ["text1", "text2"]
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
 
         # list of strings and nested list of numpy images inputs
-        images = [[np.random.rand(224, 224, 3), np.random.rand(224, 224, 3)], [np.random.rand(224, 224, 3)]]
+        images = [
+            [np.random.rand(224, 224, 3), np.random.rand(224, 224, 3)],
+            [np.random.rand(224, 224, 3)],
+        ]
         text = ["text1", "text2"]
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertTrue(np.array_equal(valid_images[0][0], images[0][0]))
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertTrue(np.array_equal(valid_images[0][0], images[0][0]))
         self.assertEqual(valid_text, text)
 
@@ -111,11 +138,15 @@ class ProcessingUtilTester(unittest.TestCase):
         ]
         text = [["text1", "text2, text3"], ["text3", "text4"]]
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
 
@@ -123,11 +154,15 @@ class ProcessingUtilTester(unittest.TestCase):
         images = None
         text = "text"
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertEqual(images, None)
         self.assertEqual(text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertEqual(images, None)
         self.assertEqual(text, text)
 
@@ -135,11 +170,15 @@ class ProcessingUtilTester(unittest.TestCase):
         images = PIL.Image.new("RGB", (224, 224))
         text = None
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertEqual(images, images)
         self.assertEqual(text, None)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertEqual(images, images)
         self.assertEqual(text, None)
 
@@ -155,11 +194,15 @@ class ProcessingUtilTester(unittest.TestCase):
         images = torch.rand(224, 224, 3)
         text = "text"
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertTrue(torch.equal(valid_images, images))
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertTrue(torch.equal(valid_images, images))
         self.assertEqual(valid_text, text)
 
@@ -167,10 +210,14 @@ class ProcessingUtilTester(unittest.TestCase):
         images = [torch.rand(224, 224, 3), torch.rand(224, 224, 3)]
         text = ["text1", "text2"]
         # test correct text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=images, text=text
+        )
         self.assertTrue(torch.equal(valid_images[0], images[0]))
         self.assertEqual(valid_text, text)
         # test incorrect text and images order
-        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        valid_images, valid_text = _validate_images_text_input_order(
+            images=text, text=images
+        )
         self.assertTrue(torch.equal(valid_images[0], images[0]))
         self.assertEqual(valid_text, text)

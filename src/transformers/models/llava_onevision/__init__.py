@@ -13,7 +13,12 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -27,9 +32,13 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_llava_onevision"] = ["LlavaOnevisionImageProcessor"]
+    _import_structure["image_processing_llava_onevision"] = [
+        "LlavaOnevisionImageProcessor"
+    ]
 
-    _import_structure["video_processing_llava_onevision"] = ["LlavaOnevisionVideoProcessor"]
+    _import_structure["video_processing_llava_onevision"] = [
+        "LlavaOnevisionVideoProcessor"
+    ]
 
 try:
     if not is_torch_available():
@@ -69,4 +78,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure
+    )

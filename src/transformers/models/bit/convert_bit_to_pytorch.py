@@ -38,7 +38,9 @@ logger = logging.get_logger(__name__)
 def get_config(model_name):
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
@@ -118,7 +120,10 @@ def convert_bit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         size={"shortest_edge": timm_transforms[0].size},
         resample=pillow_resamplings[timm_transforms[0].interpolation.value],
         do_center_crop=True,
-        crop_size={"height": timm_transforms[1].size[0], "width": timm_transforms[1].size[1]},
+        crop_size={
+            "height": timm_transforms[1].size[0],
+            "width": timm_transforms[1].size[1],
+        },
         do_normalize=True,
         image_mean=timm_transforms[-1].mean.tolist(),
         image_std=timm_transforms[-1].std.tolist(),
@@ -165,7 +170,10 @@ if __name__ == "__main__":
         help="Name of the BiT timm model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--push_to_hub",
@@ -174,4 +182,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_bit_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_bit_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

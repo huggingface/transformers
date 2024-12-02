@@ -21,7 +21,12 @@ from typing import List, Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (
+    PaddingStrategy,
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 from ...utils import TensorType, logging
 
 
@@ -83,13 +88,19 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
-        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_token = (
+            tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        )
+        self.video_token = (
+            tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        )
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         images: ImageInput = None,
         videos: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -149,16 +160,22 @@ class VideoLlavaProcessor(ProcessorMixin):
         """
         data = {}
         if images is not None or videos is not None:
-            encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
+            encoded_images = self.image_processor(
+                images=images, videos=videos, return_tensors=return_tensors
+            )
             data.update(encoded_images)
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise ValueError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
 
         prompt_strings = text
-        if encoded_images is not None and (self.patch_size is None or self.vision_feature_select_strategy is None):
+        if encoded_images is not None and (
+            self.patch_size is None or self.vision_feature_select_strategy is None
+        ):
             logger.warning_once(
                 "Expanding inputs for image tokens in Video-LLaVa should be done in processing. "
                 "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set "
@@ -169,7 +186,9 @@ class VideoLlavaProcessor(ProcessorMixin):
         # Replace the image/video tokens with the expanded token sequence
         elif encoded_images is not None:
             if "pixel_values_images" in encoded_images.keys():
-                height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
+                height, width = get_image_size(
+                    to_numpy_array(encoded_images.get("pixel_values_images")[0])
+                )
                 num_frames = 1
 
             if "pixel_values_videos" in encoded_images.keys():
@@ -191,8 +210,12 @@ class VideoLlavaProcessor(ProcessorMixin):
 
             prompt_strings = []
             for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
+                sample = sample.replace(
+                    self.image_token, self.image_token * num_image_tokens
+                )
+                sample = sample.replace(
+                    self.video_token, self.video_token * num_video_tokens
+                )
                 prompt_strings.append(sample)
 
         text_inputs = self.tokenizer(

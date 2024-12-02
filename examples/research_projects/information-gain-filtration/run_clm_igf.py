@@ -90,7 +90,16 @@ def generate_n_pairs(
     print("perplexity on objective set:", orig_perp)
 
     # collect igf pairs and save to file demo.jbl
-    collect_objective_set(model, orig_perp, context_len, train_data, objective_set, max_steps, device, igf_data_file)
+    collect_objective_set(
+        model,
+        orig_perp,
+        context_len,
+        train_data,
+        objective_set,
+        max_steps,
+        device,
+        igf_data_file,
+    )
 
     # clean up, delete model and data we don't need anymore
     del model, train_data, objective_set
@@ -266,7 +275,9 @@ def finetune(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune a transformer model with IGF on a language modeling task")
+    parser = argparse.ArgumentParser(
+        description="Fine-tune a transformer model with IGF on a language modeling task"
+    )
 
     # Required parameters
     parser.add_argument(
@@ -314,7 +325,9 @@ def main():
         type=str,
         help="Pretrained tokenizer name or path if not the same as model_name",
     )
-    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
+    parser.add_argument(
+        "--seed", type=int, default=None, help="A seed for reproducible training."
+    )
 
     parser.add_argument(
         "--context_len",
@@ -333,10 +346,15 @@ def main():
         help="number of articles that are long enough to be used as our objective set",
     )
     parser.add_argument(
-        "--eval_freq", default=100, type=int, help="secondary model evaluation is triggered at eval_freq"
+        "--eval_freq",
+        default=100,
+        type=int,
+        help="secondary model evaluation is triggered at eval_freq",
     )
 
-    parser.add_argument("--max_steps", default=1000, type=int, help="To calculate training epochs")
+    parser.add_argument(
+        "--max_steps", default=1000, type=int, help="To calculate training epochs"
+    )
 
     parser.add_argument(
         "--secondary_learner_batch_size",
@@ -363,18 +381,32 @@ def main():
     )
 
     parser.add_argument(
-        "--number", default=100, type=int, help="The number of examples split to be used as objective_set/test_data"
+        "--number",
+        default=100,
+        type=int,
+        help="The number of examples split to be used as objective_set/test_data",
     )
 
     parser.add_argument(
-        "--min_len", default=1026, type=int, help="The minimum length of the article to be used as objective set"
+        "--min_len",
+        default=1026,
+        type=int,
+        help="The minimum length of the article to be used as objective set",
     )
 
     parser.add_argument(
-        "--secondary_learner_max_epochs", default=15, type=int, help="number of epochs to train secondary learner"
+        "--secondary_learner_max_epochs",
+        default=15,
+        type=int,
+        help="number of epochs to train secondary learner",
     )
 
-    parser.add_argument("--trim", default=True, type=bool, help="truncate the example if it exceeds context length")
+    parser.add_argument(
+        "--trim",
+        default=True,
+        type=bool,
+        help="truncate the example if it exceeds context length",
+    )
 
     parser.add_argument(
         "--threshold",
@@ -387,7 +419,10 @@ def main():
     )
 
     parser.add_argument(
-        "--finetuned_model_name", default="openai-community/gpt2_finetuned.pt", type=str, help="finetuned_model_name"
+        "--finetuned_model_name",
+        default="openai-community/gpt2_finetuned.pt",
+        type=str,
+        help="finetuned_model_name",
     )
 
     parser.add_argument(
@@ -427,7 +462,11 @@ def main():
 
     # Generate train and test data to train and evaluate openai-community/gpt2 model
     train_dataset, test_dataset = generate_datasets(
-        context_len=32, file="data/tokenized_stories_train_wikitext103.jbl", number=100, min_len=1026, trim=True
+        context_len=32,
+        file="data/tokenized_stories_train_wikitext103.jbl",
+        number=100,
+        min_len=1026,
+        trim=True,
     )
 
     # fine-tuning of the openai-community/gpt2 model using igf (Information Gain Filtration)

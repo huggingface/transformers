@@ -56,7 +56,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_led"] = ["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"]
+    _import_structure["modeling_tf_led"] = [
+        "TFLEDForConditionalGeneration",
+        "TFLEDModel",
+        "TFLEDPreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -91,9 +95,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
+        from .modeling_tf_led import (
+            TFLEDForConditionalGeneration,
+            TFLEDModel,
+            TFLEDPreTrainedModel,
+        )
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

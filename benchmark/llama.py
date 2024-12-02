@@ -1,20 +1,24 @@
 import argparse
-import json
 import logging
 import os
 import sys
-from statistics import mean
 from threading import Event, Thread
 from time import perf_counter, sleep
 from typing import Optional
+
 import gpustat
 import psutil
 import psycopg2
 import torch
-
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
-from psycopg2.extras import Json
 from psycopg2.extensions import register_adapter
+from psycopg2.extras import Json
+
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
+    StaticCache,
+)
 
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
@@ -37,7 +41,9 @@ def parse_arguments():
     """
     Parse command line arguments for the benchmarking CLI.
     """
-    parser = argparse.ArgumentParser(description="CLI for benchmarking the huggingface/transformers.")
+    parser = argparse.ArgumentParser(
+        description="CLI for benchmarking the huggingface/transformers."
+    )
 
     parser.add_argument(
         "branch",
@@ -82,7 +88,9 @@ def collect_metrics(benchmark_id, continue_metric_collection):
     conn.close()
 
 
-def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
+def run_benchmark(
+    branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100
+):
     continue_metric_collection = Event()
     metrics_thread = None
     try:
@@ -97,11 +105,15 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         conn.commit()
         benchmark_id = cur.fetchone()[0]
         logger.info(f"running benchmark #{benchmark_id} on {gpu_name}")
-        metrics_thread = Thread(target=collect_metrics, args=[benchmark_id, continue_metric_collection])
+        metrics_thread = Thread(
+            target=collect_metrics, args=[benchmark_id, continue_metric_collection]
+        )
         metrics_thread.start()
         logger.info("started background thread to fetch device metrics")
 
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"  # silence warnings when compiling
+        os.environ["TOKENIZERS_PARALLELISM"] = (
+            "false"  # silence warnings when compiling
+        )
 
         device = "cuda"
         ckpt = "meta-llama/Llama-2-7b-hf"
@@ -134,11 +146,17 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
         batch_size = inputs["input_ids"].shape[0]
 
         # Copied from the gpt-fast repo
-        def multinomial_sample_one_no_sync(probs_sort):  # Does multinomial sampling without a cuda synchronization
+        def multinomial_sample_one_no_sync(
+            probs_sort,
+        ):  # Does multinomial sampling without a cuda synchronization
             q = torch.empty_like(probs_sort).exponential_(1)
-            return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
+            return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(
+                dtype=torch.int
+            )
 
-        def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+        def logits_to_probs(
+            logits, temperature: float = 1.0, top_k: Optional[int] = None
+        ):
             logits = logits / max(temperature, 1e-5)
 
             if top_k is not None:
@@ -186,12 +204,16 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             )
             end = perf_counter()
             first_eager_fwd_pass_time = end - start
-            logger.info(f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s")
+            logger.info(
+                f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s"
+            )
             start = perf_counter()
             output = model.generate(**inputs, do_sample=False)
             end = perf_counter()
             first_eager_generate_time = end - start
-            logger.info(f"completed first eager generation in: {first_eager_generate_time}s")
+            logger.info(
+                f"completed first eager generation in: {first_eager_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -212,12 +234,16 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             )
             end = perf_counter()
             second_eager_fwd_pass_time = end - start
-            logger.info(f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s")
+            logger.info(
+                f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s"
+            )
             start = perf_counter()
             model.generate(**inputs, do_sample=False)
             end = perf_counter()
             second_eager_generate_time = end - start
-            logger.info(f"completed second eager generation in: {second_eager_generate_time}s")
+            logger.info(
+                f"completed second eager generation in: {second_eager_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             torch.compiler.reset()
@@ -230,11 +256,15 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             # and full generate. We recommend compiling only the forward for now.
             # "reduce-overhead" will use cudagraphs.
             generated_ids = torch.zeros(
-                (batch_size, num_tokens_to_generate + seq_length), dtype=torch.int, device=device
+                (batch_size, num_tokens_to_generate + seq_length),
+                dtype=torch.int,
+                device=device,
             )
 
             generated_ids[:, :seq_length] = inputs["input_ids"]
-            decode_one_token = torch.compile(decode_one_token, mode="reduce-overhead", fullgraph=True)
+            decode_one_token = torch.compile(
+                decode_one_token, mode="reduce-overhead", fullgraph=True
+            )
             # model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
             # TODO use  decode_one_token(model, input_id.clone(), cache_position) for verification
             past_key_values = StaticCache(
@@ -249,12 +279,17 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             ### First compile, prefill
             start = perf_counter()
             next_token = decode_one_token(
-                model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values
+                model,
+                inputs["input_ids"],
+                cache_position=cache_position,
+                past_key_values=past_key_values,
             )
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_first_token = end - start
-            logger.info(f"completed first compile generation in: {time_to_first_token}s")
+            logger.info(
+                f"completed first compile generation in: {time_to_first_token}s"
+            )
             cache_position += 1
             all_generated_tokens += next_token.clone().detach().cpu().tolist()
 
@@ -262,19 +297,27 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             ### First compile, decoding
             start = perf_counter()
             next_token = decode_one_token(
-                model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values
+                model,
+                next_token.clone(),
+                cache_position=cache_position,
+                past_key_values=past_key_values,
             )
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_second_token = end - start
-            logger.info(f"completed second compile generation in: {time_to_first_token}s")
+            logger.info(
+                f"completed second compile generation in: {time_to_first_token}s"
+            )
             cache_position += 1
             all_generated_tokens += next_token.clone().detach().cpu().tolist()
 
             ### Second compile, decoding
             start = perf_counter()
             next_token = decode_one_token(
-                model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values
+                model,
+                next_token.clone(),
+                cache_position=cache_position,
+                past_key_values=past_key_values,
             )
             torch.cuda.synchronize()
             end = perf_counter()
@@ -289,13 +332,18 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             for _ in range(1, num_tokens_to_generate):
                 all_generated_tokens += next_token.clone().detach().cpu().tolist()
                 next_token = decode_one_token(
-                    model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values
+                    model,
+                    next_token.clone(),
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
                 )
                 cache_position += 1
             torch.cuda.synchronize()
             end = perf_counter()
             mean_time_to_next_token = (end - start) / num_tokens_to_generate
-            logger.info(f"completed next compile generation in: {mean_time_to_next_token}s")
+            logger.info(
+                f"completed next compile generation in: {mean_time_to_next_token}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(all_generated_tokens)}")
 
             ####################
@@ -318,7 +366,9 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             torch.cuda.synchronize()
             end = perf_counter()
             first_compile_generate_time = end - start
-            logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
+            logger.info(
+                f"completed first compile generation in: {first_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -334,7 +384,9 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             torch.cuda.synchronize()
             end = perf_counter()
             second_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
+            logger.info(
+                f"completed second compile generation in: {second_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -350,7 +402,9 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             third_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
+            logger.info(
+                f"completed second compile generation in: {third_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -365,7 +419,9 @@ def run_benchmark(branch: str, commit_id: str, commit_msg: str, num_tokens_to_ge
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             fourth_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
+            logger.info(
+                f"completed second compile generation in: {fourth_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         cur.execute(

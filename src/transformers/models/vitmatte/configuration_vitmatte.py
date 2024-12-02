@@ -96,7 +96,9 @@ class VitMatteConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone."
+            )
             backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")

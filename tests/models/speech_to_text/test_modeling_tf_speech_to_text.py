@@ -20,7 +20,12 @@ import inspect
 import unittest
 
 from transformers import Speech2TextConfig
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tf,
+    require_tokenizers,
+    slow,
+)
 from transformers.utils import cached_property, is_tf_available
 
 from ...test_configuration_common import ConfigTester
@@ -31,7 +36,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration, TFSpeech2TextModel
+    from transformers import (
+        Speech2TextProcessor,
+        TFSpeech2TextForConditionalGeneration,
+        TFSpeech2TextModel,
+    )
 
 
 def prepare_speech_to_text_inputs_dict(
@@ -47,13 +56,19 @@ def prepare_speech_to_text_inputs_dict(
     if attention_mask is None:
         attention_mask = tf.math.not_equal(input_features, 0)
     if decoder_attention_mask is None:
-        decoder_attention_mask = tf.math.not_equal(decoder_input_ids, config.pad_token_id)
+        decoder_attention_mask = tf.math.not_equal(
+            decoder_input_ids, config.pad_token_id
+        )
     if head_mask is None:
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
-        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        decoder_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        cross_attn_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     return {
         "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
@@ -123,10 +138,13 @@ class TFSpeech2TextModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
-            [self.batch_size, self.seq_length, self.input_feat_per_channel], self.vocab_size
+            [self.batch_size, self.seq_length, self.input_feat_per_channel],
+            self.vocab_size,
         )
         attention_mask = tf.ones([self.batch_size, self.seq_length], dtype=tf.int64)
-        decoder_input_ids = tf.math.maximum(ids_tensor([self.batch_size, self.seq_length], self.vocab_size), 2)
+        decoder_input_ids = tf.math.maximum(
+            ids_tensor([self.batch_size, self.seq_length], self.vocab_size), 2
+        )
 
         config = self.get_config()
         inputs_dict = prepare_speech_to_text_inputs_dict(
@@ -188,17 +206,23 @@ class TFSpeech2TextModelTester:
         _, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = tf.math.maximum(ids_tensor((self.batch_size, 3), config.vocab_size), 2)
+        next_tokens = tf.math.maximum(
+            ids_tensor((self.batch_size, 3), config.vocab_size), 2
+        )
         next_attn_mask = ids_tensor((self.batch_size, 3), 2, dtype=tf.int64)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
@@ -208,14 +232,26 @@ class TFSpeech2TextModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-2
+        )
 
 
 @require_tf
-class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TFSpeech2TextModel, TFSpeech2TextForConditionalGeneration) if is_tf_available() else ()
-    all_generative_model_classes = (TFSpeech2TextForConditionalGeneration,) if is_tf_available() else ()
-    pipeline_model_mapping = {"feature-extraction": TFSpeech2TextModel} if is_tf_available() else {}
+class TFSpeech2TextModelTest(
+    TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (TFSpeech2TextModel, TFSpeech2TextForConditionalGeneration)
+        if is_tf_available()
+        else ()
+    )
+    all_generative_model_classes = (
+        (TFSpeech2TextForConditionalGeneration,) if is_tf_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TFSpeech2TextModel} if is_tf_available() else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
@@ -233,7 +269,9 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     # not implemented currently
     def test_inputs_embeds(self):
@@ -266,10 +304,16 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -291,7 +335,9 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+                decoder_seq_length = getattr(
+                    self.model_tester, "decoder_seq_length", seq_len
+                )
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -317,8 +363,12 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        decoder_key_length = getattr(
+            self.model_tester, "decoder_key_length", decoder_seq_length
+        )
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -326,11 +376,19 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             config.return_dict = True
             model = model_class(config)
 
-            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(encoder_seq_length)
-            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(encoder_key_length)
+            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(
+                encoder_seq_length
+            )
+            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(
+                encoder_key_length
+            )
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -339,12 +397,20 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             model = model_class(config)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -361,10 +427,16 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    decoder_key_length,
+                ],
             )
 
             # cross attentions
@@ -390,12 +462,20 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
 
     def test_resize_token_embeddings(self):
@@ -416,16 +496,24 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_generate_without_input_ids(self):
         pass
 
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
+    def _check_outputs(
+        self, output, input_ids, config, use_cache=False, num_return_sequences=1
+    ):
         batch_size, seq_length = input_ids.shape[:2]
-        subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
+        subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(
+            seq_length
+        )
         num_sequences_in_output = batch_size * num_return_sequences
         gen_len = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
+            output.sequences.shape[-1] - 1
+            if config.is_encoder_decoder
+            else output.sequences.shape[-1] - seq_length
         )
 
         # scores
-        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
+        self._check_scores(
+            num_sequences_in_output, output.scores, length=gen_len, config=config
+        )
 
         # Attentions
         # encoder
@@ -473,7 +561,9 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                 with self.assertRaises(AssertionError):
                     model.generate(do_sample=True, max_length=5)
                 # num_return_sequences = 1
-                self._check_generated_ids(model.generate(input_features, do_sample=True))
+                self._check_generated_ids(
+                    model.generate(input_features, do_sample=True)
+                )
 
             with self.assertRaises(ValueError):
                 # generating multiple sequences when no beam search generation
@@ -481,17 +571,27 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                 model.generate(input_features, do_sample=False, num_return_sequences=2)
 
             # num_return_sequences > 1, sample
-            self._check_generated_ids(model.generate(input_features, do_sample=True, num_return_sequences=2))
+            self._check_generated_ids(
+                model.generate(input_features, do_sample=True, num_return_sequences=2)
+            )
 
             # check bad words tokens language generation
             # create list of 1-seq bad token and list of 2-seq of bad tokens
-            bad_words_ids = [self._generate_random_bad_tokens(1, model), self._generate_random_bad_tokens(2, model)]
+            bad_words_ids = [
+                self._generate_random_bad_tokens(1, model),
+                self._generate_random_bad_tokens(2, model),
+            ]
             output_tokens = model.generate(
-                input_features, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=2
+                input_features,
+                do_sample=True,
+                bad_words_ids=bad_words_ids,
+                num_return_sequences=2,
             )
             # only count generated tokens
             generated_ids = output_tokens[:, input_features.shape[-1] :]
-            self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+            self.assertFalse(
+                self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids)
+            )
 
     # overwritten from parent due to the inability to work when non-text inputs are not passed AND because the input is
     # `input_features`
@@ -504,11 +604,15 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 
             if config.bos_token_id is None:
                 # if bos token id is not defined model needs input_ids, num_return_sequences = 1
-                self._check_generated_ids(model.generate(input_features, do_sample=True, num_beams=2))
+                self._check_generated_ids(
+                    model.generate(input_features, do_sample=True, num_beams=2)
+                )
 
             with self.assertRaises(ValueError):
                 # generating more sequences than having beams leads is not possible
-                model.generate(input_features, do_sample=False, num_return_sequences=3, num_beams=2)
+                model.generate(
+                    input_features, do_sample=False, num_return_sequences=3, num_beams=2
+                )
 
             # num_return_sequences > 1, sample
             self._check_generated_ids(
@@ -521,18 +625,29 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             )
             # num_return_sequences > 1, greedy
             self._check_generated_ids(
-                model.generate(input_features, do_sample=False, num_beams=2, num_return_sequences=2)
+                model.generate(
+                    input_features, do_sample=False, num_beams=2, num_return_sequences=2
+                )
             )
 
             # check bad words tokens language generation
             # create list of 1-seq bad token and list of 2-seq of bad tokens
-            bad_words_ids = [self._generate_random_bad_tokens(1, model), self._generate_random_bad_tokens(2, model)]
+            bad_words_ids = [
+                self._generate_random_bad_tokens(1, model),
+                self._generate_random_bad_tokens(2, model),
+            ]
             output_tokens = model.generate(
-                input_features, do_sample=False, bad_words_ids=bad_words_ids, num_beams=2, num_return_sequences=2
+                input_features,
+                do_sample=False,
+                bad_words_ids=bad_words_ids,
+                num_beams=2,
+                num_return_sequences=2,
             )
             # only count generated tokens
             generated_ids = output_tokens[:, input_features.shape[-1] :]
-            self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+            self.assertFalse(
+                self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids)
+            )
 
     # overwritten from parent -- the input is `input_features`, not `input_ids`
     def test_forward_signature(self):
@@ -550,7 +665,9 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
@@ -564,19 +681,25 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 class TFSpeech2TextModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+        return Speech2TextProcessor.from_pretrained(
+            "facebook/s2t-small-librispeech-asr"
+        )
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
     def test_generation_librispeech(self):
-        model = TFSpeech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        model = TFSpeech2TextForConditionalGeneration.from_pretrained(
+            "facebook/s2t-small-librispeech-asr"
+        )
         processor = self.default_processor
 
         input_speech = self._load_datasamples(1)
@@ -584,7 +707,9 @@ class TFSpeech2TextModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="tf").input_features
 
         generated_ids = model.generate(input_features)
-        generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_transcript = processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
@@ -592,14 +717,20 @@ class TFSpeech2TextModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
 
     def test_generation_librispeech_batched(self):
-        model = TFSpeech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        model = TFSpeech2TextForConditionalGeneration.from_pretrained(
+            "facebook/s2t-small-librispeech-asr"
+        )
         processor = self.default_processor
 
         input_speech = self._load_datasamples(4)
 
         inputs = processor(input_speech, return_tensors="tf", padding=True)
-        generated_ids = model.generate(inputs.input_features, attention_mask=inputs.attention_mask)
-        generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = model.generate(
+            inputs.input_features, attention_mask=inputs.attention_mask
+        )
+        generated_transcripts = processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",

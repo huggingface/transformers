@@ -103,7 +103,9 @@ class GPTNeoXModelTester:
 
         token_labels = None
         if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -139,7 +141,10 @@ class GPTNeoXModelTester:
         model.eval()
         _ = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(self, config, input_ids, input_mask):
         config.add_cross_attention = True
@@ -147,25 +152,40 @@ class GPTNeoXModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
-    def create_and_check_for_causal_lm(self, config, input_ids, input_mask, token_labels):
+    def create_and_check_for_causal_lm(
+        self, config, input_ids, input_mask, token_labels
+    ):
         model = GPTNeoXForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
-    def create_and_check_for_question_answering(self, config, input_ids, input_mask, token_labels):
+    def create_and_check_for_question_answering(
+        self, config, input_ids, input_mask, token_labels
+    ):
         config.num_labels = self.num_labels
         model = GPTNeoXForQuestionAnswering(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
-    def create_and_check_for_sequence_classification(self, config, input_ids, input_mask, token_labels):
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, input_mask, token_labels
+    ):
         config.num_labels = self.num_labels
         model = GPTNeoXForSequenceClassification(config)
         model.to(torch_device)
@@ -174,15 +194,21 @@ class GPTNeoXModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_token_classification(self, config, input_ids, input_mask, token_labels):
+    def create_and_check_for_token_classification(
+        self, config, input_ids, input_mask, token_labels
+    ):
         config.num_labels = self.num_labels
         model = GPTNeoXForTokenClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
-    def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask):
+    def create_and_check_decoder_model_past_large_inputs(
+        self, config, input_ids, input_mask
+    ):
         config.is_decoder = True
         model = GPTNeoXForCausalLM(config=config)
         model.to(torch_device)
@@ -200,7 +226,11 @@ class GPTNeoXModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_hidden_states=True)
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            output_hidden_states=True,
+        )
         output_from_no_past = output_from_no_past["hidden_states"][0]
         output_from_past = model(
             next_tokens,
@@ -211,15 +241,21 @@ class GPTNeoXModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
-    def create_and_check_cached_forward_with_and_without_attention_mask(self, config, input_ids, *args):
+    def create_and_check_cached_forward_with_and_without_attention_mask(
+        self, config, input_ids, *args
+    ):
         # Relevant issue: https://github.com/huggingface/transformers/issues/31943
         model = GPTNeoXModel(config)
         model.to(torch_device)
@@ -233,8 +269,14 @@ class GPTNeoXModelTester:
         # Prepare cache and non_cache input, needs a full attention mask
         cached_len = input_ids.shape[-1] // 2
         input_mask = torch.ones(size=input_ids.size()).to(torch_device)
-        cache_inputs = {"input_ids": input_ids[:, :cached_len], "attention_mask": input_mask[:, :cached_len]}
-        non_cache_inputs = {"input_ids": input_ids[:, cached_len:], "attention_mask": input_mask}
+        cache_inputs = {
+            "input_ids": input_ids[:, :cached_len],
+            "attention_mask": input_mask[:, :cached_len],
+        }
+        non_cache_inputs = {
+            "input_ids": input_ids[:, cached_len:],
+            "attention_mask": input_mask,
+        }
 
         # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
         cache_outputs = model(**cache_inputs)
@@ -246,7 +288,11 @@ class GPTNeoXModelTester:
         ).last_hidden_state
 
         self.parent.assertTrue(
-            torch.allclose(full_outputs_with_attention_mask, full_outputs_without_attention_mask, atol=1e-5)
+            torch.allclose(
+                full_outputs_with_attention_mask,
+                full_outputs_without_attention_mask,
+                atol=1e-5,
+            )
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -257,7 +303,9 @@ class GPTNeoXModelTester:
 
 
 @require_torch
-class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTNeoXModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             GPTNeoXModel,
@@ -289,30 +337,46 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = GPTNeoXModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoXConfig, hidden_size=64, num_attention_heads=8)
+        self.config_tester = ConfigTester(
+            self, config_class=GPTNeoXConfig, hidden_size=64, num_attention_heads=8
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
         self.model_tester.create_and_check_model(config, input_ids, input_mask)
 
     def test_model_as_decoder(self):
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs_for_decoder()
+        )
+        self.model_tester.create_and_check_model_as_decoder(
+            config, input_ids, input_mask
+        )
 
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs_for_decoder()
+        )
 
         input_mask = None
 
-        self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
+        self.model_tester.create_and_check_model_as_decoder(
+            config, input_ids, input_mask
+        )
 
     def test_decoder_model_past_large_inputs(self):
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(config, input_ids, input_mask)
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            config, input_ids, input_mask
+        )
 
     def test_model_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -324,7 +388,9 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_model_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_model_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -332,7 +398,9 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_cached_forward_with_and_without_attention_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_cached_forward_with_and_without_attention_mask(*config_and_inputs)
+        self.model_tester.create_and_check_cached_forward_with_and_without_attention_mask(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
@@ -343,16 +411,22 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = GPTNeoXModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = GPTNeoXModel(config)
         scaled_model.to(torch_device)
@@ -363,12 +437,18 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertTrue(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
     # Copied from tests.models.falcon.test_modeling_falcon.FalconModelTest.test_model_rope_scaling with Falcon->GPTNeoX, rope_theta->rotary_emb_base
     def test_model_rope_scaling(self):
@@ -381,10 +461,16 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(
+            short_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = torch.arange(
+            long_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
@@ -395,8 +481,12 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         ).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            original_cos_short, original_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            original_sin_short, original_sin_long[:, :short_input_length, :]
+        )
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
@@ -408,12 +498,22 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         ).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            linear_cos_short, linear_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            linear_sin_short, linear_sin_long[:, :short_input_length, :]
+        )
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+            torch.testing.assert_close(
+                linear_cos_long[:, new_position, :],
+                original_cos_long[:, original_position, :],
+            )
+            torch.testing.assert_close(
+                linear_sin_long[:, new_position, :],
+                original_sin_long[:, original_position, :],
+            )
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
@@ -449,7 +549,9 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
 
-            inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+            inputs = tokenizer("My favorite food is", return_tensors="pt").to(
+                torch_device
+            )
             # The hub repo. is updated on 2023-04-04, resulting in poor outputs.
             # See: https://github.com/huggingface/transformers/pull/24193
             expected_output = "My favorite food is a good old-fashioned, old-fashioned, old-fashioned.\n\nI'm not sure"
@@ -461,7 +563,9 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
 
     def pythia_integration_test(self):
         model_name_or_path = "EleutherAI/pythia-70m"
-        model = GPTNeoXForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float16).to(torch_device)
+        model = GPTNeoXForCausalLM.from_pretrained(
+            model_name_or_path, torch_dtype=torch.float16
+        ).to(torch_device)
         EXPECTED_LOGITS = torch.tensor([1069.0000,  228.7500, 1072.0000, 1072.0000, 1069.0000, 1068.0000, 1068.0000, 1071.0000, 1071.0000, 1071.0000, 1073.0000, 1070.0000, 1071.0000, 1075.0000, 1073.0000, 1075.0000, 1074.0000, 1069.0000, 1072.0000, 1071.0000, 1071.0000, 1071.0000, 1070.0000, 1069.0000, 1069.0000, 1069.0000, 1070.0000, 1075.0000, 1073.0000, 1074.0000])  # fmt: skip
         input_ids = [29, 93, 303, 64, 5478, 49651, 10394, 187, 34, 12939, 875]
         # alternative: tokenizer('<|im_start|>system\nA chat between')

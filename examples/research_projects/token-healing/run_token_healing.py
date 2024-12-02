@@ -4,7 +4,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 
 def generate(inputs, model, tokenizer, token_healing):
-    input_ids = tokenizer(inputs, return_tensors="pt", padding=True, device_map="auto").input_ids
+    input_ids = tokenizer(
+        inputs, return_tensors="pt", padding=True, device_map="auto"
+    ).input_ids
     generation_config = GenerationConfig(
         max_new_tokens=8,
         token_healing=token_healing,
@@ -18,7 +20,9 @@ def generate(inputs, model, tokenizer, token_healing):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", type=str)
-    parser.add_argument("--model_name_or_path", type=str, default="TheBloke/deepseek-llm-7B-base-GPTQ")
+    parser.add_argument(
+        "--model_name_or_path", type=str, default="TheBloke/deepseek-llm-7B-base-GPTQ"
+    )
     args = parser.parse_args()
 
     prompts = (

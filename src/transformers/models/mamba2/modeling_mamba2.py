@@ -42,7 +42,10 @@ logger = logging.get_logger(__name__)
 
 if is_mamba_2_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+    from mamba_ssm.ops.triton.ssd_combined import (
+        mamba_chunk_scan_combined,
+        mamba_split_conv1d_scan_combined,
+    )
 else:
     selective_state_update = None
 
@@ -51,7 +54,9 @@ if is_causal_conv1d_available():
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
+is_fast_path_available = all(
+    (selective_state_update, causal_conv1d_fn, causal_conv1d_update)
+)
 
 _CHECKPOINT_FOR_DOC = "mistralai/mamba-codestral-7B-v0.1"
 _CONFIG_FOR_DOC = "Mamba2Config"
@@ -66,7 +71,11 @@ def pad_tensor_by_size(input_tensor: torch.Tensor, pad_size: int):
 
     Assumes that we only have tensors of either size 4 or 3
     """
-    pad_shape = (0, 0, 0, 0, 0, pad_size, 0, 0) if len(input_tensor.shape) == 4 else (0, 0, 0, pad_size, 0, 0)
+    pad_shape = (
+        (0, 0, 0, 0, 0, pad_size, 0, 0)
+        if len(input_tensor.shape) == 4
+        else (0, 0, 0, pad_size, 0, 0)
+    )
 
     return torch.nn.functional.pad(input_tensor, pad_shape, mode="constant", value=0)
 
@@ -83,11 +92,17 @@ def reshape_into_chunks(input_tensor, pad_size, chunk_size):
 
     if len(input_tensor.shape) == 3:
         # [bsz, seq_len multiple of chunk_size, num_heads] -> [bsz, -1, chunk_size, num_heads]
-        return input_tensor.reshape(input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2])
+        return input_tensor.reshape(
+            input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2]
+        )
     else:
         # [bsz, seq_len multiple of chunk_size, num_heads, head_dim or state_size] -> [bsz, -1, chunk_size, num_heads, head_dim or state_size]
         return input_tensor.reshape(
-            input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2], input_tensor.shape[3]
+            input_tensor.shape[0],
+            -1,
+            chunk_size,
+            input_tensor.shape[2],
+            input_tensor.shape[3],
         )
 
 
@@ -100,13 +115,23 @@ def segment_sum(input_tensor):
     # [..., chunk_size] -> [..., chunk_size, chunk_size]
     input_tensor = input_tensor[..., None].expand(*input_tensor.size(), chunk_size)
     # 2. create a lower triangular mask with the diagonal set to 0 to 0 out elements above diag
-    mask = torch.tril(torch.ones(chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool), diagonal=-1)
+    mask = torch.tril(
+        torch.ones(
+            chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool
+        ),
+        diagonal=-1,
+    )
     input_tensor = input_tensor.masked_fill(~mask, 0)
     # 3. compute actual cumsum
     tensor_segsum = torch.cumsum(input_tensor, dim=-2)
 
     # 4. apply mask to keep only the lower triangular part of the cumulative sum result (incl diagonal this time)
-    mask = torch.tril(torch.ones(chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool), diagonal=0)
+    mask = torch.tril(
+        torch.ones(
+            chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool
+        ),
+        diagonal=0,
+    )
     tensor_segsum = tensor_segsum.masked_fill(~mask, -torch.inf)
     return tensor_segsum
 
@@ -127,7 +152,11 @@ class Mamba2Cache:
     """
 
     def __init__(
-        self, config: Mamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+        self,
+        config: Mamba2Config,
+        batch_size: int,
+        dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None,
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
@@ -146,7 +175,12 @@ class Mamba2Cache:
         }
         self.ssm_states = {
             i: torch.zeros(
-                batch_size, config.num_heads, config.head_dim, config.state_size, device=device, dtype=dtype
+                batch_size,
+                config.num_heads,
+                config.head_dim,
+                config.state_size,
+                device=device,
+                dtype=dtype,
             )
             for i in range(config.num_hidden_layers)
         }
@@ -154,7 +188,10 @@ class Mamba2Cache:
         self.act = ACT2FN[config.hidden_act]
 
     def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
+        self,
+        layer_idx: int,
+        new_conv_state: torch.Tensor,
+        cache_position: torch.LongTensor,
     ) -> torch.Tensor:
         conv_state = self.conv_states[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
@@ -248,11 +285,15 @@ class Mamba2Mixer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = MambaRMSNormGated(
+            self.intermediate_size, eps=self.layer_norm_epsilon
+        )
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
-        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.out_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=config.use_bias
+        )
         self.use_bias = config.use_bias
 
         if not is_fast_path_available:
@@ -273,14 +314,26 @@ class Mamba2Mixer(nn.Module):
 
         batch_size, seq_len, _ = hidden_states.shape
         groups_time_state_size = self.n_groups * self.ssm_state_size
-        d_to_remove = 2 * self.intermediate_size + 2 * self.n_groups * self.ssm_state_size + self.num_heads
+        d_to_remove = (
+            2 * self.intermediate_size
+            + 2 * self.n_groups * self.ssm_state_size
+            + self.num_heads
+        )
 
         # getting projected states from cache if it exists
         if cache_params is not None and cache_params.seqlen_offset > 0:
             in_projected_states = self.in_proj(hidden_states.squeeze(1))  # (B 2D)
             d_mlp = (in_projected_states.shape[-1] - d_to_remove) // 2
-            split_projection_dim = [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads]
-            _, _, gate, hidden_states_B_C, dt = torch.split(in_projected_states, split_projection_dim, dim=-1)
+            split_projection_dim = [
+                d_mlp,
+                d_mlp,
+                self.intermediate_size,
+                self.conv_dim,
+                self.num_heads,
+            ]
+            _, _, gate, hidden_states_B_C, dt = torch.split(
+                in_projected_states, split_projection_dim, dim=-1
+            )
 
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
@@ -292,18 +345,28 @@ class Mamba2Mixer(nn.Module):
 
             hidden_states, B, C = torch.split(
                 hidden_states_B_C,
-                [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                [
+                    self.intermediate_size,
+                    groups_time_state_size,
+                    groups_time_state_size,
+                ],
                 dim=-1,
             )
             A = -torch.exp(self.A_log.float())  # (nheads,)
 
-            A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+            A = (
+                A[:, None, ...][:, :, None]
+                .expand(-1, self.head_dim, self.ssm_state_size)
+                .to(dtype=torch.float32)
+            )
             dt = dt[:, :, None].expand(-1, -1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
             D = self.D[:, None, ...].expand(-1, self.head_dim)
             B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
-            hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
+            hidden_states_reshaped = hidden_states.view(
+                batch_size, self.num_heads, self.head_dim
+            )
             hidden_states = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states_reshaped,
@@ -316,19 +379,31 @@ class Mamba2Mixer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
+            hidden_states = hidden_states.view(
+                batch_size, self.num_heads * self.head_dim
+            )
             hidden_states = self.norm(hidden_states, gate)
             out = self.out_proj(hidden_states)[:, None, ...]
         # if no cache is found, calling the kernel
         else:
-            if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+            if (
+                attention_mask is not None
+                and attention_mask.shape[1] > 1
+                and attention_mask.shape[0] > 1
+            ):
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                 dtype = hidden_states.dtype
                 hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
             # 1. Gated MLP's linear projection
             projected_states = self.in_proj(hidden_states)
-            A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
-            dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+            A = -torch.exp(
+                self.A_log.float()
+            )  # (num_heads) or (intermediate_size, state_size)
+            dt_limit_kwargs = (
+                {}
+                if self.time_step_limit == (0.0, float("inf"))
+                else {"dt_limit": self.time_step_limit}
+            )
 
             if self.training and cache_params is None:
                 out, ssm_state = mamba_split_conv1d_scan_combined(
@@ -362,7 +437,9 @@ class Mamba2Mixer(nn.Module):
                 # 1D Convolution
                 if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
                     hidden_states_B_C = self.act(
-                        self.conv1d(hidden_states_B_C.transpose(1, 2)).transpose(1, 2)[:, :seq_len]
+                        self.conv1d(hidden_states_B_C.transpose(1, 2)).transpose(1, 2)[
+                            :, :seq_len
+                        ]
                     )  # (B, L, self.d_inner + 2 * ngroups * d_state)
                 else:
                     hidden_states_B_C = causal_conv1d_fn(
@@ -373,13 +450,23 @@ class Mamba2Mixer(nn.Module):
                     ).transpose(1, 2)[:, :seq_len]
                 hidden_states, B, C = torch.split(
                     hidden_states_B_C,
-                    [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                    [
+                        self.intermediate_size,
+                        groups_time_state_size,
+                        groups_time_state_size,
+                    ],
                     dim=-1,
                 )
-                if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+                if (
+                    attention_mask is not None
+                    and attention_mask.shape[1] > 1
+                    and attention_mask.shape[0] > 1
+                ):
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(
+                        dtype
+                    )
                 scan_output, ssm_state = mamba_chunk_scan_combined(
                     hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                     time_step,
@@ -599,13 +686,21 @@ class Mamba2Mixer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+            return self.cuda_kernels_forward(
+                hidden_states, cache_params, cache_position, attention_mask
+            )
         dtype = hidden_states.dtype
-        if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        if (
+            attention_mask is not None
+            and attention_mask.shape[1] > 1
+            and attention_mask.shape[0] > 1
+        ):
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
-        return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
+        return self.torch_forward(
+            hidden_states, cache_params, cache_position, attention_mask
+        )
 
 
 class Mamba2RMSNorm(nn.Module):
@@ -647,7 +742,10 @@ class Mamba2Block(nn.Module):
             residual = residual.to(torch.float32)
 
         hidden_states = self.mixer(
-            hidden_states, cache_params=cache_params, cache_position=cache_position, attention_mask=attention_mask
+            hidden_states,
+            cache_params=cache_params,
+            cache_position=cache_position,
+            attention_mask=attention_mask,
         )
         hidden_states = residual + hidden_states
         return hidden_states
@@ -673,7 +771,10 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 
             dt = torch.exp(
                 torch.rand(self.config.num_heads)
-                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                * (
+                    math.log(self.config.time_step_max)
+                    - math.log(self.config.time_step_min)
+                )
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
 
@@ -827,7 +928,12 @@ class Mamba2Model(Mamba2PreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([Mamba2Block(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [
+                Mamba2Block(config, layer_idx=idx)
+                for idx in range(config.num_hidden_layers)
+            ]
+        )
 
         self.gradient_checkpointing = False
         self.norm_f = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
@@ -866,13 +972,23 @@ class Mamba2Model(Mamba2PreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, Mamba2Output]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        use_cache = (
+            use_cache
+            if use_cache is not None
+            else (self.config.use_cache if not self.training else False)
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
@@ -883,9 +999,14 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if use_cache:
             if cache_params is None:
                 cache_params = Mamba2Cache(
-                    self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
+                    self.config,
+                    inputs_embeds.size(0),
+                    device=inputs_embeds.device,
+                    dtype=inputs_embeds.dtype,
                 )
-                cache_position = torch.arange(0, self.config.conv_kernel, device=inputs_embeds.device)
+                cache_position = torch.arange(
+                    0, self.config.conv_kernel, device=inputs_embeds.device
+                )
             elif cache_position is None:
                 # cases when we do manual forward instead of using `model.generate` which will initiate
                 # `cache_position` and makes sure it is not None, throw error here instead of doing some
@@ -903,7 +1024,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
         for mixer_block in self.layers:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, cache_params, cache_position, attention_mask
+                    mixer_block.__call__,
+                    hidden_states,
+                    cache_params,
+                    cache_position,
+                    attention_mask,
                 )
             else:
                 hidden_states = mixer_block(
@@ -925,7 +1050,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, cache_params, all_hidden_states]
+                if v is not None
+            )
 
         return Mamba2Output(
             last_hidden_state=hidden_states,
@@ -1000,7 +1129,9 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
                 # if the cache is not used, we also do have to extend the attention mask here
                 # TODO there is likely a cleverer way to do this
                 extended_mask = torch.ones(
-                    attention_mask.size(0), past_len - attention_mask.shape[1], device=attention_mask.device
+                    attention_mask.size(0),
+                    past_len - attention_mask.shape[1],
+                    device=attention_mask.device,
                 )
                 attention_mask = torch.cat([attention_mask, extended_mask], dim=1)
                 cache_params = None
@@ -1011,7 +1142,9 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             # and we don't have position_ids here
             # TODO but we should be able to use cache_position though at a later time
             extended_mask = torch.ones(
-                attention_mask.size(0), past_len - attention_mask.shape[1], device=attention_mask.device
+                attention_mask.size(0),
+                past_len - attention_mask.shape[1],
+                device=attention_mask.device,
             )
             attention_mask = torch.cat([attention_mask, extended_mask], dim=1)
         if inputs_embeds is not None and cache_params is None:
@@ -1054,7 +1187,9 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         mamba2_outputs = self.backbone(
             input_ids,
@@ -1079,7 +1214,9 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+            )
 
         if not return_dict:
             output = (logits,) + mamba2_outputs[1:]

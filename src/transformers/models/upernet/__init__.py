@@ -41,10 +41,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
+        from .modeling_upernet import (
+            UperNetForSemanticSegmentation,
+            UperNetPreTrainedModel,
+        )
 
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

@@ -33,7 +33,11 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers import TFSegformerForImageClassification, TFSegformerForSemanticSegmentation, TFSegformerModel
+    from transformers import (
+        TFSegformerForImageClassification,
+        TFSegformerForSemanticSegmentation,
+        TFSegformerModel,
+    )
 
 if is_vision_available():
     from PIL import Image
@@ -91,11 +95,15 @@ class TFSegformerModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
         return config, pixel_values, labels
@@ -118,9 +126,12 @@ class TFSegformerModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFSegformerModel(config=config)
         result = model(pixel_values, training=False)
-        expected_height = expected_width = self.image_size // (self.downsampling_rates[-1] * 2)
+        expected_height = expected_width = self.image_size // (
+            self.downsampling_rates[-1] * 2
+        )
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width),
         )
 
     def create_and_check_for_image_segmentation(self, config, pixel_values, labels):
@@ -128,11 +139,23 @@ class TFSegformerModelTester:
         model = TFSegformerForSemanticSegmentation(config)
         result = model(pixel_values, training=False)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size // 4,
+                self.image_size // 4,
+            ),
         )
         result = model(pixel_values, labels=labels, training=False)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size // 4,
+                self.image_size // 4,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -147,19 +170,29 @@ class TFSegformerModelTester:
         if for_segmentation:
             inputs_dict = {"pixel_values": pixel_values, "labels": seg_labels}
         else:
-            inputs_dict = {"pixel_values": pixel_values, "labels": tf.zeros((self.batch_size))}
+            inputs_dict = {
+                "pixel_values": pixel_values,
+                "labels": tf.zeros((self.batch_size)),
+            }
         return config, inputs_dict
 
 
 @require_tf
 class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TFSegformerModel, TFSegformerForImageClassification, TFSegformerForSemanticSegmentation)
+        (
+            TFSegformerModel,
+            TFSegformerForImageClassification,
+            TFSegformerForSemanticSegmentation,
+        )
         if is_tf_available()
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": TFSegformerModel, "image-classification": TFSegformerForImageClassification}
+        {
+            "feature-extraction": TFSegformerModel,
+            "image-classification": TFSegformerForImageClassification,
+        }
         if is_tf_available()
         else {}
     )
@@ -171,7 +204,9 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = TFSegformerModelTester(self)
-        self.config_tester = TFSegformerConfigTester(self, config_class=SegformerConfig, has_text_modality=False)
+        self.config_tester = TFSegformerConfigTester(
+            self, config_class=SegformerConfig, has_text_modality=False
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -181,7 +216,9 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(
+        "SegFormer does not have get_input_embeddings method and get_output_embeddings methods"
+    )
     def test_model_common_attributes(self):
         pass
 
@@ -223,18 +260,30 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
             # verify the first attentions (first block, first layer)
             expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])) ** 2
+            expected_reduced_seq_len = (
+                self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])
+            ) ** 2
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads[0], expected_seq_len, expected_reduced_seq_len],
+                [
+                    self.model_tester.num_attention_heads[0],
+                    expected_seq_len,
+                    expected_reduced_seq_len,
+                ],
             )
 
             # verify the last attentions (last block, last layer)
             expected_seq_len = (self.model_tester.image_size // 32) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (32 * self.model_tester.sr_ratios[-1])) ** 2
+            expected_reduced_seq_len = (
+                self.model_tester.image_size // (32 * self.model_tester.sr_ratios[-1])
+            ) ** 2
             self.assertListEqual(
                 list(attentions[-1].shape[-3:]),
-                [self.model_tester.num_attention_heads[-1], expected_seq_len, expected_reduced_seq_len],
+                [
+                    self.model_tester.num_attention_heads[-1],
+                    expected_seq_len,
+                    expected_reduced_seq_len,
+                ],
             )
             out_len = len(outputs)
 
@@ -251,10 +300,16 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
             self.assertEqual(len(self_attentions), expected_num_attentions)
             # verify the first attentions (first block, first layer)
             expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])) ** 2
+            expected_reduced_seq_len = (
+                self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])
+            ) ** 2
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads[0], expected_seq_len, expected_reduced_seq_len],
+                [
+                    self.model_tester.num_attention_heads[0],
+                    expected_seq_len,
+                    expected_reduced_seq_len,
+                ],
             )
 
     def test_hidden_states_output(self):
@@ -295,11 +350,15 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             tuple_output = model(tuple_inputs, return_dict=False, **additional_kwargs)
-            dict_output = model(dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+            dict_output = model(
+                dict_inputs, return_dict=True, **additional_kwargs
+            ).to_tuple()
 
             def recursive_check(tuple_object, dict_object):
                 if isinstance(tuple_object, (List, Tuple)):
-                    for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                    for tuple_iterable_value, dict_iterable_value in zip(
+                        tuple_object, dict_object
+                    ):
                         recursive_check(tuple_iterable_value, dict_iterable_value)
                 elif tuple_object is None:
                     return
@@ -323,12 +382,16 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
             if self.has_attentions:
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_attentions": True}
+                )
 
             # todo: incorporate label support for semantic segmentation in `test_modeling_tf_common.py`.
 
@@ -361,17 +424,27 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def apply(model):
-            for_segmentation = True if model_class.__name__ == "TFSegformerForSemanticSegmentation" else False
-            # The number of elements in the loss should be the same as the number of elements in the label
-            _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit(
-                for_segmentation=for_segmentation
+            for_segmentation = (
+                True
+                if model_class.__name__ == "TFSegformerForSemanticSegmentation"
+                else False
             )
-            added_label = prepared_for_class[sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]]
+            # The number of elements in the loss should be the same as the number of elements in the label
+            _, prepared_for_class = (
+                self.model_tester.prepare_config_and_inputs_for_keras_fit(
+                    for_segmentation=for_segmentation
+                )
+            )
+            added_label = prepared_for_class[
+                sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
+            ]
             loss_size = tf.size(added_label)
 
             # Test that model correctly compute the loss with kwargs
             possible_input_names = {"input_ids", "pixel_values", "input_features"}
-            input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
+            input_name = possible_input_names.intersection(
+                set(prepared_for_class)
+            ).pop()
             model_input = prepared_for_class.pop(input_name)
 
             loss = model(model_input, **prepared_for_class)[0]
@@ -384,8 +457,10 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 self.assertEqual(loss.shape, [loss_size])
 
             # Test that model correctly compute the loss with a dict
-            _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit(
-                for_segmentation=for_segmentation
+            _, prepared_for_class = (
+                self.model_tester.prepare_config_and_inputs_for_keras_fit(
+                    for_segmentation=for_segmentation
+                )
             )
             loss = model(**prepared_for_class)[0]
 
@@ -431,9 +506,19 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 model = model_class(config)
                 apply(model)
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
+    def check_pt_tf_outputs(
+        self,
+        tf_outputs,
+        pt_outputs,
+        model_class,
+        tol=2e-4,
+        name="outputs",
+        attributes=None,
+    ):
         # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
+        super().check_pt_tf_outputs(
+            tf_outputs, pt_outputs, model_class, tol, name, attributes
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -456,7 +541,9 @@ class TFSegformerModelIntegrationTest(unittest.TestCase):
         image_processor = SegformerImageProcessor(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
-        model = TFSegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        model = TFSegformerForSemanticSegmentation.from_pretrained(
+            "nvidia/segformer-b0-finetuned-ade-512-512"
+        )
 
         image = prepare_img()
         encoded_inputs = image_processor(images=image, return_tensors="tf")
@@ -469,12 +556,26 @@ class TFSegformerModelIntegrationTest(unittest.TestCase):
 
         expected_slice = tf.constant(
             [
-                [[-4.6310, -5.5232, -6.2356], [-5.1921, -6.1444, -6.5996], [-5.4424, -6.2790, -6.7574]],
-                [[-12.1391, -13.3122, -13.9554], [-12.8732, -13.9352, -14.3563], [-12.9438, -13.8226, -14.2513]],
-                [[-12.5134, -13.4686, -14.4915], [-12.8669, -14.4343, -14.7758], [-13.2523, -14.5819, -15.0694]],
+                [
+                    [-4.6310, -5.5232, -6.2356],
+                    [-5.1921, -6.1444, -6.5996],
+                    [-5.4424, -6.2790, -6.7574],
+                ],
+                [
+                    [-12.1391, -13.3122, -13.9554],
+                    [-12.8732, -13.9352, -14.3563],
+                    [-12.9438, -13.8226, -14.2513],
+                ],
+                [
+                    [-12.5134, -13.4686, -14.4915],
+                    [-12.8669, -14.4343, -14.7758],
+                    [-13.2523, -14.5819, -15.0694],
+                ],
             ]
         )
-        tf.debugging.assert_near(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4)
+        tf.debugging.assert_near(
+            outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4
+        )
 
     @slow
     def test_inference_image_segmentation_city(self):
@@ -497,9 +598,23 @@ class TFSegformerModelIntegrationTest(unittest.TestCase):
 
         expected_slice = tf.constant(
             [
-                [[-13.5748, -13.9111, -12.6500], [-14.3500, -15.3683, -14.2328], [-14.7532, -16.0424, -15.6087]],
-                [[-17.1651, -15.8725, -12.9653], [-17.2580, -17.3718, -14.8223], [-16.6058, -16.8783, -16.7452]],
-                [[-3.6456, -3.0209, -1.4203], [-3.0797, -3.1959, -2.0000], [-1.8757, -1.9217, -1.6997]],
+                [
+                    [-13.5748, -13.9111, -12.6500],
+                    [-14.3500, -15.3683, -14.2328],
+                    [-14.7532, -16.0424, -15.6087],
+                ],
+                [
+                    [-17.1651, -15.8725, -12.9653],
+                    [-17.2580, -17.3718, -14.8223],
+                    [-16.6058, -16.8783, -16.7452],
+                ],
+                [
+                    [-3.6456, -3.0209, -1.4203],
+                    [-3.0797, -3.1959, -2.0000],
+                    [-1.8757, -1.9217, -1.6997],
+                ],
             ]
         )
-        tf.debugging.assert_near(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-1)
+        tf.debugging.assert_near(
+            outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-1
+        )

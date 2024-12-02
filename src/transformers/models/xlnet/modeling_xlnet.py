@@ -27,7 +27,13 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
+from ...modeling_utils import (
+    PoolerAnswerClass,
+    PoolerEndLogits,
+    PoolerStartLogits,
+    PreTrainedModel,
+    SequenceSummary,
+)
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
@@ -58,17 +64,28 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
         if hasattr(model, "lm_loss"):
             # We will load also the output bias
             tf_to_pt_map["model/lm_loss/bias"] = model.lm_loss.bias
-        if hasattr(model, "sequence_summary") and "model/sequnece_summary/summary/kernel" in tf_weights:
+        if (
+            hasattr(model, "sequence_summary")
+            and "model/sequnece_summary/summary/kernel" in tf_weights
+        ):
             # We will load also the sequence summary
-            tf_to_pt_map["model/sequnece_summary/summary/kernel"] = model.sequence_summary.summary.weight
-            tf_to_pt_map["model/sequnece_summary/summary/bias"] = model.sequence_summary.summary.bias
+            tf_to_pt_map["model/sequnece_summary/summary/kernel"] = (
+                model.sequence_summary.summary.weight
+            )
+            tf_to_pt_map["model/sequnece_summary/summary/bias"] = (
+                model.sequence_summary.summary.bias
+            )
         if (
             hasattr(model, "logits_proj")
             and config.finetuning_task is not None
             and f"model/regression_{config.finetuning_task}/logit/kernel" in tf_weights
         ):
-            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/kernel"] = model.logits_proj.weight
-            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/bias"] = model.logits_proj.bias
+            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/kernel"] = (
+                model.logits_proj.weight
+            )
+            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/bias"] = (
+                model.logits_proj.bias
+            )
 
         # Now load the rest of the transformer
         model = model.transformer
@@ -211,11 +228,21 @@ class XLNetRelativeAttention(nn.Module):
         self.d_model = config.d_model
         self.scale = 1 / (config.d_head**0.5)
 
-        self.q = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
-        self.k = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
-        self.v = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
-        self.o = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
-        self.r = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
+        self.q = nn.Parameter(
+            torch.FloatTensor(config.d_model, self.n_head, self.d_head)
+        )
+        self.k = nn.Parameter(
+            torch.FloatTensor(config.d_model, self.n_head, self.d_head)
+        )
+        self.v = nn.Parameter(
+            torch.FloatTensor(config.d_model, self.n_head, self.d_head)
+        )
+        self.o = nn.Parameter(
+            torch.FloatTensor(config.d_model, self.n_head, self.d_head)
+        )
+        self.r = nn.Parameter(
+            torch.FloatTensor(config.d_model, self.n_head, self.d_head)
+        )
 
         self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
         self.r_s_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
@@ -237,7 +264,9 @@ class XLNetRelativeAttention(nn.Module):
         x = x[1:, ...]
         x = x.reshape(x_size[0], x_size[1] - 1, x_size[2], x_size[3])
         # x = x[:, 0:klen, :, :]
-        x = torch.index_select(x, 1, torch.arange(klen, device=x.device, dtype=torch.long))
+        x = torch.index_select(
+            x, 1, torch.arange(klen, device=x.device, dtype=torch.long)
+        )
 
         return x
 
@@ -251,7 +280,9 @@ class XLNetRelativeAttention(nn.Module):
         # Note: the tensor-slice form was faster in my testing than torch.index_select
         #       However, tracing doesn't like the nature of the slice, and if klen changes
         #       during the run then it'll fail, whereas index_select will be fine.
-        x = torch.index_select(x, 3, torch.arange(klen, device=x.device, dtype=torch.long))
+        x = torch.index_select(
+            x, 3, torch.arange(klen, device=x.device, dtype=torch.long)
+        )
         # x = x[:, :, :, :klen]
 
         return x
@@ -519,9 +550,13 @@ class XLNetLayer(nn.Module):
             output_g = apply_chunking_to_forward(
                 self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, output_g
             )
-        output_h = apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, output_h)
+        output_h = apply_chunking_to_forward(
+            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, output_h
+        )
 
-        outputs = (output_h, output_g) + outputs[2:]  # Add again attentions if there are there
+        outputs = (output_h, output_g) + outputs[
+            2:
+        ]  # Add again attentions if there are there
         return outputs
 
     def ff_chunk(self, output_x):
@@ -1052,7 +1087,9 @@ class XLNetModel(XLNetPreTrainedModel):
 
         return pos_emb
 
-    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetModelOutput,
@@ -1075,11 +1112,19 @@ class XLNetModel(XLNetPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if "use_cache" in kwargs:
             warnings.warn(
@@ -1098,7 +1143,9 @@ class XLNetModel(XLNetPreTrainedModel):
         # but we want a unified interface in the library with the batch size on the first dimension
         # so we move here the first dimension (batch) to the end
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_ids = input_ids.transpose(0, 1).contiguous()
             qlen, bsz = input_ids.shape[0], input_ids.shape[1]
@@ -1108,11 +1155,27 @@ class XLNetModel(XLNetPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        token_type_ids = token_type_ids.transpose(0, 1).contiguous() if token_type_ids is not None else None
-        input_mask = input_mask.transpose(0, 1).contiguous() if input_mask is not None else None
-        attention_mask = attention_mask.transpose(0, 1).contiguous() if attention_mask is not None else None
-        perm_mask = perm_mask.permute(1, 2, 0).contiguous() if perm_mask is not None else None
-        target_mapping = target_mapping.permute(1, 2, 0).contiguous() if target_mapping is not None else None
+        token_type_ids = (
+            token_type_ids.transpose(0, 1).contiguous()
+            if token_type_ids is not None
+            else None
+        )
+        input_mask = (
+            input_mask.transpose(0, 1).contiguous() if input_mask is not None else None
+        )
+        attention_mask = (
+            attention_mask.transpose(0, 1).contiguous()
+            if attention_mask is not None
+            else None
+        )
+        perm_mask = (
+            perm_mask.permute(1, 2, 0).contiguous() if perm_mask is not None else None
+        )
+        target_mapping = (
+            target_mapping.permute(1, 2, 0).contiguous()
+            if target_mapping is not None
+            else None
+        )
 
         mlen = mems[0].shape[0] if mems is not None and mems[0] is not None else 0
         klen = mlen + qlen
@@ -1131,7 +1194,9 @@ class XLNetModel(XLNetPreTrainedModel):
             raise ValueError(f"Unsupported attention type: {self.attn_type}")
 
         # data mask: input mask & perm mask
-        assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "
+        assert (
+            input_mask is None or attention_mask is None
+        ), "You can only use one of input_mask (uses 1 for padding) "
         "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - attention_mask
@@ -1160,8 +1225,12 @@ class XLNetModel(XLNetPreTrainedModel):
         if attn_mask is not None:
             non_tgt_mask = -torch.eye(qlen).to(attn_mask)
             if mlen > 0:
-                non_tgt_mask = torch.cat([torch.zeros([qlen, mlen]).to(attn_mask), non_tgt_mask], dim=-1)
-            non_tgt_mask = ((attn_mask + non_tgt_mask[:, :, None, None]) > 0).to(attn_mask)
+                non_tgt_mask = torch.cat(
+                    [torch.zeros([qlen, mlen]).to(attn_mask), non_tgt_mask], dim=-1
+                )
+            non_tgt_mask = ((attn_mask + non_tgt_mask[:, :, None, None]) > 0).to(
+                attn_mask
+            )
         else:
             non_tgt_mask = None
 
@@ -1207,7 +1276,9 @@ class XLNetModel(XLNetPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x qlen x klen x bsz x n_head]
         if head_mask is not None:
             if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+                head_mask = (
+                    head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+                )
                 head_mask = head_mask.expand(self.n_layer, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
                 head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
@@ -1228,7 +1299,9 @@ class XLNetModel(XLNetPreTrainedModel):
                 # cache new mems
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if output_hidden_states:
-                hidden_states.append((output_h, output_g) if output_g is not None else output_h)
+                hidden_states.append(
+                    (output_h, output_g) if output_g is not None else output_h
+                )
 
             outputs = layer_module(
                 output_h,
@@ -1248,7 +1321,9 @@ class XLNetModel(XLNetPreTrainedModel):
 
         # Add last hidden state
         if output_hidden_states:
-            hidden_states.append((output_h, output_g) if output_g is not None else output_h)
+            hidden_states.append(
+                (output_h, output_g) if output_g is not None else output_h
+            )
 
         output = self.dropout(output_g if output_g is not None else output_h)
 
@@ -1260,24 +1335,40 @@ class XLNetModel(XLNetPreTrainedModel):
 
         if output_hidden_states:
             if output_g is not None:
-                hidden_states = tuple(h.permute(1, 0, 2).contiguous() for hs in hidden_states for h in hs)
+                hidden_states = tuple(
+                    h.permute(1, 0, 2).contiguous() for hs in hidden_states for h in hs
+                )
             else:
-                hidden_states = tuple(hs.permute(1, 0, 2).contiguous() for hs in hidden_states)
+                hidden_states = tuple(
+                    hs.permute(1, 0, 2).contiguous() for hs in hidden_states
+                )
 
         if output_attentions:
             if target_mapping is not None:
                 # when target_mapping is provided, there are 2-tuple of attentions
                 attentions = tuple(
-                    tuple(att_stream.permute(2, 3, 0, 1).contiguous() for att_stream in t) for t in attentions
+                    tuple(
+                        att_stream.permute(2, 3, 0, 1).contiguous() for att_stream in t
+                    )
+                    for t in attentions
                 )
             else:
-                attentions = tuple(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
+                attentions = tuple(
+                    t.permute(2, 3, 0, 1).contiguous() for t in attentions
+                )
 
         if not return_dict:
-            return tuple(v for v in [output, new_mems, hidden_states, attentions] if v is not None)
+            return tuple(
+                v
+                for v in [output, new_mems, hidden_states, attentions]
+                if v is not None
+            )
 
         return XLNetModelOutput(
-            last_hidden_state=output, mems=new_mems, hidden_states=hidden_states, attentions=attentions
+            last_hidden_state=output,
+            mems=new_mems,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1307,13 +1398,17 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_mems=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_mems=None, **kwargs
+    ):
         # Overwritten -- this model has unique input preparation
 
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
-        dummy_token = torch.zeros((effective_batch_size, 1), dtype=torch.long, device=input_ids.device)
+        dummy_token = torch.zeros(
+            (effective_batch_size, 1), dtype=torch.long, device=input_ids.device
+        )
 
         # At every pass, the attention values for the new token and the two last generated tokens
         # are computed, the rest is reloaded from the `past` cache. A purely auto-regressive model would have
@@ -1328,13 +1423,17 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         # Build permutation mask so that previous tokens don't see last token
         sequence_length = input_ids.shape[1]
         perm_mask = torch.zeros(
-            (effective_batch_size, sequence_length, sequence_length), dtype=torch.float, device=input_ids.device
+            (effective_batch_size, sequence_length, sequence_length),
+            dtype=torch.float,
+            device=input_ids.device,
         )
         perm_mask[:, :, -1] = 1.0
 
         # We'll only predict the last token
         target_mapping = torch.zeros(
-            (effective_batch_size, 1, sequence_length), dtype=torch.float, device=input_ids.device
+            (effective_batch_size, 1, sequence_length),
+            dtype=torch.float,
+            device=input_ids.device,
         )
         target_mapping[:, 0, -1] = 1.0
 
@@ -1347,12 +1446,18 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
 
         # if past is defined in model kwargs then use it for faster decoding
         if past_key_values:
-            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past_key_values)
+            inputs["mems"] = tuple(
+                layer_past[:-offset, :, :] for layer_past in past_key_values
+            )
 
         return inputs
 
-    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=XLNetLMHeadModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=XLNetLMHeadModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1439,7 +1544,9 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         ...     outputs.logits
         ... )  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1479,13 +1586,18 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         )
 
     @staticmethod
-    def _reorder_cache(mems: List[torch.Tensor], beam_idx: torch.Tensor) -> List[torch.Tensor]:
+    def _reorder_cache(
+        mems: List[torch.Tensor], beam_idx: torch.Tensor
+    ) -> List[torch.Tensor]:
         """
         This function is used to re-order the `mems` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `mems` with the correct beam_idx at every
         generation step.
         """
-        return [layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in mems]
+        return [
+            layer_past.index_select(1, beam_idx.to(layer_past.device))
+            for layer_past in mems
+        ]
 
 
 @add_start_docstrings(
@@ -1508,7 +1620,9 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForSequenceClassificationOutput,
@@ -1538,7 +1652,9 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1566,7 +1682,9 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1615,7 +1733,9 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForTokenClassificationOutput,
@@ -1644,7 +1764,9 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
             where *num_choices* is the size of the second dimension of the input tensors. (see *input_ids* above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.transformer(
             input_ids,
@@ -1702,7 +1824,9 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForMultipleChoiceOutput,
@@ -1732,14 +1856,30 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        num_choices = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
 
-        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        flat_input_mask = input_mask.view(-1, input_mask.size(-1)) if input_mask is not None else None
+        flat_input_ids = (
+            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        )
+        flat_token_type_ids = (
+            token_type_ids.view(-1, token_type_ids.size(-1))
+            if token_type_ids is not None
+            else None
+        )
+        flat_attention_mask = (
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
+        )
+        flat_input_mask = (
+            input_mask.view(-1, input_mask.size(-1)) if input_mask is not None else None
+        )
         flat_inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
@@ -1805,7 +1945,9 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForQuestionAnsweringSimpleOutput,
@@ -1840,7 +1982,9 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.transformer(
             input_ids,
@@ -1918,8 +2062,12 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=XLNetForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=XLNetForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1980,7 +2128,9 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -2001,7 +2151,9 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 
-        outputs = transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+        outputs = transformer_outputs[
+            1:
+        ]  # Keep mems, hidden states, attentions if there are in it
 
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, let's remove the dimension added by batch splitting
@@ -2010,7 +2162,9 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                     x.squeeze_(-1)
 
             # during training, compute the end logits based on the ground truth of the start position
-            end_logits = self.end_logits(hidden_states, start_positions=start_positions, p_mask=p_mask)
+            end_logits = self.end_logits(
+                hidden_states, start_positions=start_positions, p_mask=p_mask
+            )
 
             loss_fct = CrossEntropyLoss()
             start_loss = loss_fct(start_logits, start_positions)
@@ -2019,7 +2173,9 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
             if cls_index is not None and is_impossible is not None:
                 # Predict answerability from the representation of CLS and START
-                cls_logits = self.answer_class(hidden_states, start_positions=start_positions, cls_index=cls_index)
+                cls_logits = self.answer_class(
+                    hidden_states, start_positions=start_positions, cls_index=cls_index
+                )
                 loss_fct_cls = nn.BCEWithLogitsLoss()
                 cls_loss = loss_fct_cls(cls_logits, is_impossible)
 
@@ -2039,26 +2195,40 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         else:
             # during inference, compute the end logits based on beam search
             bsz, slen, hsz = hidden_states.size()
-            start_log_probs = nn.functional.softmax(start_logits, dim=-1)  # shape (bsz, slen)
+            start_log_probs = nn.functional.softmax(
+                start_logits, dim=-1
+            )  # shape (bsz, slen)
 
             start_top_log_probs, start_top_index = torch.topk(
                 start_log_probs, self.start_n_top, dim=-1
             )  # shape (bsz, start_n_top)
-            start_top_index_exp = start_top_index.unsqueeze(-1).expand(-1, -1, hsz)  # shape (bsz, start_n_top, hsz)
-            start_states = torch.gather(hidden_states, -2, start_top_index_exp)  # shape (bsz, start_n_top, hsz)
-            start_states = start_states.unsqueeze(1).expand(-1, slen, -1, -1)  # shape (bsz, slen, start_n_top, hsz)
+            start_top_index_exp = start_top_index.unsqueeze(-1).expand(
+                -1, -1, hsz
+            )  # shape (bsz, start_n_top, hsz)
+            start_states = torch.gather(
+                hidden_states, -2, start_top_index_exp
+            )  # shape (bsz, start_n_top, hsz)
+            start_states = start_states.unsqueeze(1).expand(
+                -1, slen, -1, -1
+            )  # shape (bsz, slen, start_n_top, hsz)
 
             hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(
                 start_states
             )  # shape (bsz, slen, start_n_top, hsz)
             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
-            end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-            end_log_probs = nn.functional.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
+            end_logits = self.end_logits(
+                hidden_states_expanded, start_states=start_states, p_mask=p_mask
+            )
+            end_log_probs = nn.functional.softmax(
+                end_logits, dim=1
+            )  # shape (bsz, slen, start_n_top)
 
             end_top_log_probs, end_top_index = torch.topk(
                 end_log_probs, self.end_n_top, dim=1
             )  # shape (bsz, end_n_top, start_n_top)
-            end_top_log_probs = end_top_log_probs.view(-1, self.start_n_top * self.end_n_top)
+            end_top_log_probs = end_top_log_probs.view(
+                -1, self.start_n_top * self.end_n_top
+            )
             end_top_index = end_top_index.view(-1, self.start_n_top * self.end_n_top)
 
             start_states = torch.einsum(
@@ -2069,7 +2239,13 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             )  # Shape (batch size,): one single `cls_logits` for each sample
 
             if not return_dict:
-                outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits)
+                outputs = (
+                    start_top_log_probs,
+                    start_top_index,
+                    end_top_log_probs,
+                    end_top_index,
+                    cls_logits,
+                )
                 return outputs + transformer_outputs[1:]
             else:
                 return XLNetForQuestionAnsweringOutput(

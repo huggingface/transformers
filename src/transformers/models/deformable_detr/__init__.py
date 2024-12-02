@@ -14,7 +14,12 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -27,9 +32,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_deformable_detr"] = ["DeformableDetrFeatureExtractor"]
-    _import_structure["image_processing_deformable_detr"] = ["DeformableDetrImageProcessor"]
-    _import_structure["image_processing_deformable_detr_fast"] = ["DeformableDetrImageProcessorFast"]
+    _import_structure["feature_extraction_deformable_detr"] = [
+        "DeformableDetrFeatureExtractor"
+    ]
+    _import_structure["image_processing_deformable_detr"] = [
+        "DeformableDetrImageProcessor"
+    ]
+    _import_structure["image_processing_deformable_detr_fast"] = [
+        "DeformableDetrImageProcessorFast"
+    ]
 
 try:
     if not is_torch_available():
@@ -55,7 +66,9 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_deformable_detr import DeformableDetrFeatureExtractor
         from .image_processing_deformable_detr import DeformableDetrImageProcessor
-        from .image_processing_deformable_detr_fast import DeformableDetrImageProcessorFast
+        from .image_processing_deformable_detr_fast import (
+            DeformableDetrImageProcessorFast,
+        )
 
     try:
         if not is_torch_available():
@@ -72,4 +85,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

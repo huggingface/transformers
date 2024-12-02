@@ -83,14 +83,18 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_pointer.data = value
 
-    logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+    logger.info(
+        f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}."
+    )
 
 
 def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.sew.feature_extractor if is_finetuned else hf_model.feature_extractor
+    feature_extractor = (
+        hf_model.sew.feature_extractor if is_finetuned else hf_model.feature_extractor
+    )
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -105,7 +109,11 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "sew." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
+                mapped_key = (
+                    "sew." + mapped_key
+                    if (is_finetuned and mapped_key != "lm_head")
+                    else mapped_key
+                )
 
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
@@ -130,7 +138,9 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
+def load_conv_layer(
+    full_name, value, feature_extractor, unused_weights, use_group_norm
+):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
     layer_id = int(items[0])
@@ -138,34 +148,56 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but"
                 f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
             )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but"
                 f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
             )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
+    elif (type_id == 2 and not use_group_norm) or (
+        type_id == 2 and layer_id == 0 and use_group_norm
+    ):
         if "bias" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was"
                 " found."
             )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but"
                 f" {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
             )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
     else:
         unused_weights.append(full_name)
 
@@ -183,7 +215,9 @@ def convert_config(model, is_finetuned):
     config.conv_kernel = [x[1] for x in conv_layers]
     config.conv_stride = [x[2] for x in conv_layers]
     config.feat_extract_activation = "gelu"
-    config.feat_extract_norm = "layer" if fs_config.extractor_mode == "layer_norm" else "group"
+    config.feat_extract_norm = (
+        "layer" if fs_config.extractor_mode == "layer_norm" else "group"
+    )
     config.final_dropout = 0.0
     config.hidden_act = fs_config.activation_fn.name
     config.hidden_size = fs_config.encoder_embed_dim
@@ -204,7 +238,9 @@ def convert_config(model, is_finetuned):
         config.final_dropout = fs_config.final_dropout
         config.layerdrop = fs_config.layerdrop
     config.activation_dropout = fs_config.activation_dropout
-    config.apply_spec_augment = fs_config.mask_prob > 0 or fs_config.mask_channel_prob > 0
+    config.apply_spec_augment = (
+        fs_config.mask_prob > 0 or fs_config.mask_channel_prob > 0
+    )
     config.attention_dropout = fs_config.attention_dropout
     config.feat_proj_dropout = fs_config.dropout_input
     config.hidden_dropout = fs_config.dropout
@@ -221,7 +257,11 @@ def convert_config(model, is_finetuned):
 
 @torch.no_grad()
 def convert_sew_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
+    checkpoint_path,
+    pytorch_dump_folder_path,
+    config_path=None,
+    dict_path=None,
+    is_finetuned=True,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -229,10 +269,13 @@ def convert_sew_checkpoint(
 
     if is_finetuned:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
+            [checkpoint_path],
+            arg_overrides={"data": "/".join(dict_path.split("/")[:-1])},
         )
     else:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+            [checkpoint_path]
+        )
 
     if config_path is not None:
         config = SEWConfig.from_pretrained(config_path)
@@ -263,7 +306,11 @@ def convert_sew_checkpoint(
             config.vocab_size = len(target_dict.symbols)
             vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
             if not os.path.isdir(pytorch_dump_folder_path):
-                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
+                logger.error(
+                    "--pytorch_dump_folder_path ({}) should be a directory".format(
+                        pytorch_dump_folder_path
+                    )
+                )
                 return
             os.makedirs(pytorch_dump_folder_path, exist_ok=True)
             with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
@@ -277,7 +324,9 @@ def convert_sew_checkpoint(
                 word_delimiter_token="|",
                 do_lower_case=False,
             )
-            processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = Wav2Vec2Processor(
+                feature_extractor=feature_extractor, tokenizer=tokenizer
+            )
             processor.save_pretrained(pytorch_dump_folder_path)
 
         hf_model = SEWForCTC(config)
@@ -292,14 +341,34 @@ def convert_sew_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--is_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint"
+    )
+    parser.add_argument(
+        "--dict_path", default=None, type=str, help="Path to dict of fine-tuned model"
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--is_finetuned",
+        action="store_true",
+        help="Whether the model to convert is a fine-tuned model or not",
     )
     args = parser.parse_args()
     convert_sew_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, args.is_finetuned
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.config_path,
+        args.dict_path,
+        args.is_finetuned,
     )

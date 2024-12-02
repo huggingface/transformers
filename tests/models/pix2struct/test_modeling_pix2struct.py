@@ -98,7 +98,9 @@ class Pix2StructVisionModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        flattened_patches = floats_tensor([self.batch_size, self.max_patches, self.patch_proj_dim])
+        flattened_patches = floats_tensor(
+            [self.batch_size, self.max_patches, self.patch_proj_dim]
+        )
         config = self.get_config()
 
         return config, flattened_patches
@@ -125,7 +127,10 @@ class Pix2StructVisionModelTester:
         model.eval()
         with torch.no_grad():
             result = model(flattened_patches)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -153,7 +158,10 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=Pix2StructVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -188,11 +196,15 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(
+        reason="Training is tested directly on `Pix2StructTextImageModelTest`"
+    )
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(
+        reason="Training is tested directly on `Pix2StructTextImageModelTest`"
+    )
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -208,15 +220,21 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(
+        reason="Training is tested directly on `Pix2StructTextImageModelTest`"
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -310,7 +328,9 @@ class Pix2StructTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -328,7 +348,9 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Pix2StructTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -337,11 +359,15 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(
+        reason="Training is tested directly on `Pix2StructTextImageModelTest`"
+    )
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(
+        reason="Training is tested directly on `Pix2StructTextImageModelTest`"
+    )
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -361,11 +387,15 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -386,21 +416,31 @@ class Pix2StructModelTester:
         self.parent = parent
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
+        self.seq_length = (
+            self.text_model_tester.seq_length
+        )  # need seq_length for common tests
         self.is_training = is_training
         self.max_patches = self.vision_model_tester.max_patches
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, flattened_patches = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, flattened_patches = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config(text_config, vision_config)
 
         return config, input_ids, attention_mask, flattened_patches
 
     def get_config(self, text_config, vision_config):
-        return Pix2StructConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
+        return Pix2StructConfig.from_text_vision_configs(
+            text_config, vision_config, projection_dim=64
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -419,11 +459,20 @@ class Pix2StructModelTester:
 
 
 @require_torch
-class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else {}
+class Pix2StructModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
+    )
+    all_generative_model_classes = (
+        (Pix2StructForConditionalGeneration,) if is_torch_available() else {}
+    )
     pipeline_model_mapping = (
-        {"image-to-text": Pix2StructForConditionalGeneration, "image-text-to-text": Pix2StructForConditionalGeneration}
+        {
+            "image-to-text": Pix2StructForConditionalGeneration,
+            "image-text-to-text": Pix2StructForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )
@@ -457,8 +506,12 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         for model_class in self.all_generative_model_classes:
             model = model_class(config).eval().to(torch_device)
 
-            output = model.generate(**input_dict, use_cache=False, min_new_tokens=10, max_new_tokens=10)
-            output_use_cache = model.generate(**input_dict, use_cache=True, min_new_tokens=10, max_new_tokens=10)
+            output = model.generate(
+                **input_dict, use_cache=False, min_new_tokens=10, max_new_tokens=10
+            )
+            output_use_cache = model.generate(
+                **input_dict, use_cache=True, min_new_tokens=10, max_new_tokens=10
+            )
 
             torch.testing.assert_close(output, output_use_cache)
 
@@ -502,20 +555,26 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 "use_cache",
             ]
 
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_training(self):
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.return_dict = True
 
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
@@ -528,7 +587,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.use_cache = False
             config.return_dict = True
 
@@ -536,7 +597,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             model.to(torch_device)
             model.gradient_checkpointing_enable()
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
@@ -570,7 +633,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
     def test_resize_tokens_embeddings(self):
-        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to False")
 
@@ -591,7 +656,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
             self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10
+            )
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -599,7 +666,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
             self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15
+            )
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Decoder input ids should be clamped to the maximum size of the vocabulary
@@ -617,7 +686,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
     def test_resize_embeddings_untied(self):
-        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to False")
 
@@ -681,7 +752,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                flattened_patches = inputs_dict["flattened_patches"]  # Pix2Struct needs flattened_patches
+                flattened_patches = inputs_dict[
+                    "flattened_patches"
+                ]  # Pix2Struct needs flattened_patches
                 traced_model = torch.jit.trace(model, (input_ids, flattened_patches))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -714,10 +787,14 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -745,7 +822,9 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = Pix2StructVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save Pix2StructConfig and check if we can load Pix2StructTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -753,17 +832,26 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             text_config = Pix2StructTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(
+        self, attentions, batch_size, config, seq_length
+    ):
         # overwrite because # pix2struct seq length depends on image inputs
         seq_length = self.model_tester.max_patches
-        encoder_expected_shape = (batch_size, config.num_attention_heads, seq_length, seq_length)
+        encoder_expected_shape = (
+            batch_size,
+            config.num_attention_heads,
+            seq_length,
+            seq_length,
+        )
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [layer_attentions.shape for layer_attentions in attentions],
             [encoder_expected_shape] * len(attentions),
         )
 
-    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, seq_length):
+    def _check_encoder_hidden_states_for_generate(
+        self, hidden_states, batch_size, config, seq_length
+    ):
         # overwrite because # pix2struct seq length depends on image inputs
         seq_length = self.model_tester.max_patches
         encoder_expected_shape = (batch_size, seq_length, config.hidden_size)
@@ -786,8 +874,12 @@ def prepare_img():
 @slow
 class Pix2StructIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
-        processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        model = Pix2StructForConditionalGeneration.from_pretrained(
+            "google/pix2struct-textcaps-base"
+        ).to(torch_device)
+        processor = Pix2StructProcessor.from_pretrained(
+            "google/pix2struct-textcaps-base"
+        )
         image = prepare_img()
 
         # image only
@@ -796,26 +888,32 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
 
         self.assertEqual(
-            processor.decode(predictions[0], skip_special_tokens=True), "A stop sign is on a street corner."
+            processor.decode(predictions[0], skip_special_tokens=True),
+            "A stop sign is on a street corner.",
         )
 
     def test_batched_inference_image_captioning(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
-        processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        model = Pix2StructForConditionalGeneration.from_pretrained(
+            "google/pix2struct-textcaps-base"
+        ).to(torch_device)
+        processor = Pix2StructProcessor.from_pretrained(
+            "google/pix2struct-textcaps-base"
+        )
         image_1 = prepare_img()
 
-        second_url = (
-            "https://www.connollycove.com/wp-content/uploads/2019/06/temple-bar-dublin-world-famous-irish-pub.jpg"
-        )
+        second_url = "https://www.connollycove.com/wp-content/uploads/2019/06/temple-bar-dublin-world-famous-irish-pub.jpg"
         image_2 = Image.open(requests.get(second_url, stream=True).raw)
 
         # image only
-        inputs = processor(images=[image_1, image_2], return_tensors="pt").to(torch_device)
+        inputs = processor(images=[image_1, image_2], return_tensors="pt").to(
+            torch_device
+        )
 
         predictions = model.generate(**inputs)
 
         self.assertEqual(
-            processor.decode(predictions[0], skip_special_tokens=True), "A stop sign is on a street corner."
+            processor.decode(predictions[0], skip_special_tokens=True),
+            "A stop sign is on a street corner.",
         )
 
         self.assertEqual(
@@ -824,8 +922,12 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         )
 
     def test_batched_inference_image_captioning_conditioned(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
-        processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        model = Pix2StructForConditionalGeneration.from_pretrained(
+            "google/pix2struct-textcaps-base"
+        ).to(torch_device)
+        processor = Pix2StructProcessor.from_pretrained(
+            "google/pix2struct-textcaps-base"
+        )
         image_1 = prepare_img()
 
         second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
@@ -833,9 +935,12 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         texts = ["A picture of", "An photography of"]
 
         # image only
-        inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt", add_special_tokens=False).to(
-            torch_device
-        )
+        inputs = processor(
+            images=[image_1, image_2],
+            text=texts,
+            return_tensors="pt",
+            add_special_tokens=False,
+        ).to(torch_device)
 
         predictions = model.generate(**inputs)
 
@@ -855,18 +960,22 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(image_url, stream=True).raw)
 
-        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16
+        ).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
         # image only
         text = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
 
-        inputs = processor(images=image, return_tensors="pt", text=text).to(torch_device, torch.bfloat16)
+        inputs = processor(images=image, return_tensors="pt", text=text).to(
+            torch_device, torch.bfloat16
+        )
 
         predictions = model.generate(**inputs)
-        self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "ash cloud")
+        self.assertEqual(
+            processor.decode(predictions[0], skip_special_tokens=True), "ash cloud"
+        )
 
     def test_vqa_model_batched(self):
         model_id = "google/pix2struct-ai2d-base"
@@ -876,20 +985,29 @@ class Pix2StructIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo-2.png",
         ]
 
-        images = [Image.open(requests.get(image_url, stream=True).raw) for image_url in image_urls]
+        images = [
+            Image.open(requests.get(image_url, stream=True).raw)
+            for image_url in image_urls
+        ]
 
         texts = [
             "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud",
             "What is the producer in the diagram? (1) Phytoplankton (2) Zooplankton (3) Large fish (4) Small fish",
         ]
 
-        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16
+        ).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
-        inputs = processor(images=images, return_tensors="pt", text=texts).to(torch_device, torch.bfloat16)
+        inputs = processor(images=images, return_tensors="pt", text=texts).to(
+            torch_device, torch.bfloat16
+        )
 
         predictions = model.generate(**inputs)
-        self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "ash cloud")
-        self.assertEqual(processor.decode(predictions[1], skip_special_tokens=True), "Phytoplankton")
+        self.assertEqual(
+            processor.decode(predictions[0], skip_special_tokens=True), "ash cloud"
+        )
+        self.assertEqual(
+            processor.decode(predictions[1], skip_special_tokens=True), "Phytoplankton"
+        )

@@ -14,7 +14,11 @@
 
 import unittest
 
-from transformers import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING, AutoTokenizer, is_vision_available
+from transformers import (
+    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
+    AutoTokenizer,
+    is_vision_available,
+)
 from transformers.pipelines import DocumentQuestionAnsweringPipeline, pipeline
 from transformers.pipelines.document_question_answering import apply_tesseract
 from transformers.testing_utils import (
@@ -48,9 +52,7 @@ else:
 
 # This is a pinned image from a specific revision of a document question answering space, hosted by HuggingFace,
 # so we can expect it to be available.
-INVOICE_URL = (
-    "https://huggingface.co/spaces/impira/docquery/resolve/2f6c96314dc84dfda62d40de9da55f2f5165d403/invoice.png"
-)
+INVOICE_URL = "https://huggingface.co/spaces/impira/docquery/resolve/2f6c96314dc84dfda62d40de9da55f2f5165d403/invoice.png"
 
 
 @is_pipeline_test
@@ -105,8 +107,18 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
             outputs,
             [
                 [
-                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
-                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
+                    {
+                        "score": ANY(float),
+                        "answer": ANY(str),
+                        "start": ANY(int),
+                        "end": ANY(int),
+                    },
+                    {
+                        "score": ANY(float),
+                        "answer": ANY(str),
+                        "start": ANY(int),
+                        "end": ANY(int),
+                    },
                 ]
             ]
             * 3,
@@ -117,7 +129,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_pytesseract
     def test_small_model_pt(self):
         dqa_pipeline = pipeline(
-            "document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test"
+            "document-question-answering",
+            model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test",
         )
         image = INVOICE_URL
         question = "How many cats are there?"
@@ -142,7 +155,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []
-        outputs = dqa_pipeline(image=image, question=question, words=words, boxes=boxes, top_k=2)
+        outputs = dqa_pipeline(
+            image=image, question=question, words=words, boxes=boxes, top_k=2
+        )
         self.assertEqual(outputs, [])
 
     # 	 TODO: Enable this once hf-internal-testing/tiny-random-donut is implemented
@@ -190,7 +205,11 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
         outputs = dqa_pipeline(
-            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
+            [
+                {"image": image, "question": question},
+                {"image": image, "question": question},
+            ],
+            top_k=2,
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -236,7 +255,11 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
         outputs = dqa_pipeline(
-            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
+            [
+                {"image": image, "question": question},
+                {"image": image, "question": question},
+            ],
+            top_k=2,
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -285,7 +308,11 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
         outputs = dqa_pipeline(
-            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
+            [
+                {"image": image, "question": question},
+                {"image": image, "question": question},
+            ],
+            top_k=2,
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=3),
@@ -301,7 +328,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         word_boxes = list(zip(*apply_tesseract(load_image(image), None, "")))
 
         # This model should also work if `image` is set to None
-        outputs = dqa_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
+        outputs = dqa_pipeline(
+            {"image": None, "word_boxes": word_boxes, "question": question}, top_k=2
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=3),
             [
@@ -338,7 +367,11 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
         outputs = dqa_pipeline(
-            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
+            [
+                {"image": image, "question": question},
+                {"image": image, "question": question},
+            ],
+            top_k=2,
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -354,7 +387,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         word_boxes = list(zip(*apply_tesseract(load_image(image), None, "")))
 
         # This model should also work if `image` is set to None
-        outputs = dqa_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
+        outputs = dqa_pipeline(
+            {"image": None, "word_boxes": word_boxes, "question": question}, top_k=2
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -369,7 +404,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         dqa_pipeline = pipeline(
             "document-question-answering",
             model="naver-clova-ix/donut-base-finetuned-docvqa",
-            tokenizer=AutoTokenizer.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa"),
+            tokenizer=AutoTokenizer.from_pretrained(
+                "naver-clova-ix/donut-base-finetuned-docvqa"
+            ),
             image_processor="naver-clova-ix/donut-base-finetuned-docvqa",
         )
 

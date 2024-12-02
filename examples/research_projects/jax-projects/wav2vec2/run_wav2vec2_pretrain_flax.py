@@ -26,7 +26,10 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     is_tensorboard_available,
 )
-from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices, _sample_negative_indices
+from transformers.models.wav2vec2.modeling_flax_wav2vec2 import (
+    _compute_mask_indices,
+    _sample_negative_indices,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -39,14 +42,21 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     freeze_feature_extractor: Optional[bool] = field(
-        default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+        default=True,
+        metadata={
+            "help": "Whether to freeze the feature extractor layers of the model."
+        },
     )
     verbose_logging: Optional[bool] = field(
         default=False,
@@ -59,7 +69,8 @@ class ModelArguments:
         default=0.1, metadata={"help": "Minimum temperature for gumbel softmax."}
     )
     gumbel_temperature_decay: Optional[float] = field(
-        default=0.999995, metadata={"help": "Decay of gumbel temperature during training."}
+        default=0.999995,
+        metadata={"help": "Decay of gumbel temperature during training."},
     )
     dtype: Optional[str] = field(
         default="float32",
@@ -83,10 +94,14 @@ class DataTrainingArguments:
     """
 
     dataset_name: str = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     train_split_name: Optional[str] = field(
         default="train",
@@ -104,10 +119,13 @@ class DataTrainingArguments:
     )
     speech_file_column: Optional[str] = field(
         default="file",
-        metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
+        metadata={
+            "help": "Column in the dataset that contains speech file path. Defaults to 'file'"
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
+        default=False,
+        metadata={"help": "Overwrite the cached preprocessed datasets or not."},
     )
     validation_split_percentage: Optional[int] = field(
         default=5,
@@ -120,7 +138,10 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_duration_in_seconds: Optional[float] = field(
-        default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
+        default=20.0,
+        metadata={
+            "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"
+        },
     )
     pad_to_multiple_of: Optional[int] = field(
         default=1024,
@@ -168,7 +189,9 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
     pad_to_multiple_of: Optional[int] = None
     max_length: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
+    def __call__(
+        self, features: List[Dict[str, Union[List[int], np.ndarray]]]
+    ) -> Dict[str, np.ndarray]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
@@ -177,19 +200,27 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="np",
         )
-        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
+        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(
+            batch["input_values"].shape[-1]
+        )
 
         batch_size = batch["input_values"].shape[0]
 
         attention_mask = None
         if batch["attention_mask"] is not None:
-            output_lengths = self.model._get_feat_extract_output_lengths(batch["attention_mask"].sum(-1))
-            attention_mask = np.zeros((batch_size, mask_indices_seq_length), dtype=np.int8)
+            output_lengths = self.model._get_feat_extract_output_lengths(
+                batch["attention_mask"].sum(-1)
+            )
+            attention_mask = np.zeros(
+                (batch_size, mask_indices_seq_length), dtype=np.int8
+            )
 
             # these two operations makes sure that all values
             # before the output lengths indices are attended to
             attention_mask[(np.arange(attention_mask.shape[0]), output_lengths - 1)] = 1
-            attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
+            attention_mask = jnp.flip(
+                jnp.flip(attention_mask, -1).cumsum(-1), -1
+            ).astype("bool")
 
         # sample randomly masked indices
         batch["mask_time_indices"] = _compute_mask_indices(
@@ -202,7 +233,10 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
 
         # sample indices to take for negative vectors
         batch["sampled_negative_indices"] = _sample_negative_indices(
-            (batch["mask_time_indices"].shape + (self.model.config.proj_codevector_dim,)),
+            (
+                batch["mask_time_indices"].shape
+                + (self.model.config.proj_codevector_dim,)
+            ),
             self.model.config.num_negatives,
             attention_mask=attention_mask,
         )
@@ -249,22 +283,33 @@ def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarra
 
 
 def compute_contrastive_loss(
-    quantized_features, transformer_features, negative_indices, mask_time_indices, logits_temp, num_negatives
+    quantized_features,
+    transformer_features,
+    negative_indices,
+    mask_time_indices,
+    logits_temp,
+    num_negatives,
 ):
     batch_size, sequence_length, hidden_size = quantized_features.shape
 
     # take negative vectors from sampled indices
-    quantized_negatives = quantized_features.reshape(-1, hidden_size)[negative_indices.reshape(-1)]
+    quantized_negatives = quantized_features.reshape(-1, hidden_size)[
+        negative_indices.reshape(-1)
+    ]
     quantized_negatives = quantized_negatives.reshape(
         batch_size, sequence_length, num_negatives, hidden_size
     ).transpose(2, 0, 1, 3)
 
-    target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
+    target_features = jnp.concatenate(
+        [quantized_features[None, :], quantized_negatives], axis=0
+    )
     loss_logits = optax.cosine_similarity(transformer_features, target_features)
     loss_logits = loss_logits / logits_temp
 
     neg_is_pos = (quantized_features == quantized_negatives).all(-1)
-    neg_is_pos = jnp.concatenate([jnp.full((1,) + loss_logits.shape[1:], False), neg_is_pos], axis=0)
+    neg_is_pos = jnp.concatenate(
+        [jnp.full((1,) + loss_logits.shape[1:], False), neg_is_pos], axis=0
+    )
 
     # make sure incorrectly sampled vectors don't contribute to loss
     loss_logits = jnp.where(neg_is_pos, -1e9, loss_logits)
@@ -273,7 +318,10 @@ def compute_contrastive_loss(
     targets = ((1 - mask_time_indices) * -100).transpose(1, 0).flatten()
 
     target_mask = jnp.where(targets >= 0, 1.0, 0.0)
-    contrastive_loss = optax.softmax_cross_entropy(predictions, onehot(targets, predictions.shape[-1])) * target_mask
+    contrastive_loss = (
+        optax.softmax_cross_entropy(predictions, onehot(targets, predictions.shape[-1]))
+        * target_mask
+    )
 
     contrastive_loss = contrastive_loss.sum()
 
@@ -285,13 +333,19 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
 
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     configure_logger(model_args, training_args)
 
     # Downloading and loading a dataset from the hub.
-    datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+    datasets = load_dataset(
+        data_args.dataset_name,
+        data_args.dataset_config_name,
+        cache_dir=model_args.cache_dir,
+    )
 
     if "validation" not in datasets.keys():
         # make sure only "validation" and "train" keys remain"
@@ -331,21 +385,28 @@ def main():
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
-        batch["speech"], _ = librosa.load(batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate)
+        batch["speech"], _ = librosa.load(
+            batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate
+        )
         return batch
 
     # load audio files into numpy arrays
     vectorized_datasets = datasets.map(
-        prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=datasets["train"].column_names
+        prepare_dataset,
+        num_proc=data_args.preprocessing_num_workers,
+        remove_columns=datasets["train"].column_names,
     )
 
     # filter audio files that are too long
     vectorized_datasets = vectorized_datasets.filter(
-        lambda data: len(data["speech"]) < int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
+        lambda data: len(data["speech"])
+        < int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
     )
 
     def normalize(batch):
-        return feature_extractor(batch["speech"], sampling_rate=feature_extractor.sampling_rate)
+        return feature_extractor(
+            batch["speech"], sampling_rate=feature_extractor.sampling_rate
+        )
 
     # normalize and transform to `BatchFeatures`
     vectorized_datasets = vectorized_datasets.map(
@@ -369,14 +430,18 @@ def main():
             " ``config.feat_extract_norm='layer'"
         )
 
-    model = FlaxWav2Vec2ForPreTraining(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+    model = FlaxWav2Vec2ForPreTraining(
+        config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+    )
 
     # Activate gradient checkpointing if needed
     if training_args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
 
     data_collator = FlaxDataCollatorForWav2Vec2Pretraining(
-        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=data_args.pad_to_multiple_of
+        model=model,
+        feature_extractor=feature_extractor,
+        pad_to_multiple_of=data_args.pad_to_multiple_of,
     )
 
     # Enable tensorboard only on the master node
@@ -403,14 +468,18 @@ def main():
     gumbel_rngs = jax.random.split(rng, jax.local_device_count())
 
     num_epochs = int(training_args.num_train_epochs)
-    train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
+    train_batch_size = (
+        int(training_args.per_device_train_batch_size) * jax.device_count()
+    )
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
 
     num_train_steps = len(vectorized_datasets["train"]) // train_batch_size * num_epochs
 
     # Create learning rate schedule
     warmup_fn = optax.linear_schedule(
-        init_value=0.0, end_value=training_args.learning_rate, transition_steps=training_args.warmup_steps
+        init_value=0.0,
+        end_value=training_args.learning_rate,
+        transition_steps=training_args.warmup_steps,
     )
     decay_fn = optax.linear_schedule(
         init_value=training_args.learning_rate,
@@ -428,7 +497,11 @@ def main():
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
         flat_mask = {
-            path: (path[-1] != "bias" and path[-2:] not in [("layer_norm", "scale"), ("final_layer_norm", "scale")])
+            path: (
+                path[-1] != "bias"
+                and path[-2:]
+                not in [("layer_norm", "scale"), ("final_layer_norm", "scale")]
+            )
             for path in flat_params
         }
         return traverse_util.unflatten_dict(flat_mask)
@@ -444,10 +517,14 @@ def main():
     )
 
     # Setup train state and define training hyper-parameters
-    state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
+    state = train_state.TrainState.create(
+        apply_fn=model.__call__, params=model.params, tx=adamw
+    )
     num_negatives = model.config.num_negatives
     contrastive_logits_temperature = model.config.contrastive_logits_temperature
-    num_codevectors = model.config.num_codevectors_per_group * model.config.num_codevector_groups
+    num_codevectors = (
+        model.config.num_codevectors_per_group * model.config.num_codevector_groups
+    )
     diversity_loss_weight = model.config.diversity_loss_weight
 
     # Define gradient update step fn
@@ -459,7 +536,8 @@ def main():
             negative_indices = batch.pop("sampled_negative_indices")
 
             gumbel_temperature = jnp.clip(
-                model_args.max_gumbel_temperature * model_args.gumbel_temperature_decay**state.step,
+                model_args.max_gumbel_temperature
+                * model_args.gumbel_temperature_decay**state.step,
                 a_min=model_args.min_gumbel_temperature,
             )
 
@@ -481,7 +559,9 @@ def main():
                 num_negatives,
             )
 
-            diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
+            diversity_loss = (
+                num_codevectors - outputs.codevector_perplexity
+            ) / num_codevectors
             loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
             return loss
@@ -492,7 +572,8 @@ def main():
         new_state = state.apply_gradients(grads=grad)
 
         metrics = jax.lax.pmean(
-            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
+            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)},
+            axis_name="batch",
         )
 
         return new_state, metrics, new_dropout_rng, new_gumbel_rng
@@ -515,11 +596,16 @@ def main():
             num_negatives,
         )
 
-        diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
+        diversity_loss = (
+            num_codevectors - outputs.codevector_perplexity
+        ) / num_codevectors
         loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
         # summarize metrics
-        metrics = {"loss": loss.mean(), "codevector_perplexity": outputs.codevector_perplexity}
+        metrics = {
+            "loss": loss.mean(),
+            "codevector_perplexity": outputs.codevector_perplexity,
+        }
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return metrics
@@ -546,7 +632,9 @@ def main():
         train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step
-        for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
+        for step, batch_idx in enumerate(
+            tqdm(train_batch_idx, desc="Training...", position=1)
+        ):
             samples = [vectorized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
             model_inputs = shard(model_inputs.data)
@@ -564,7 +652,9 @@ def main():
                 train_metric = jax_utils.unreplicate(train_metric)
                 train_time += time.time() - train_start
                 if has_tensorboard and jax.process_index() == 0:
-                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+                    write_train_metric(
+                        summary_writer, train_metrics, train_time, cur_step
+                    )
 
                 epochs.write(
                     f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate:"
@@ -580,7 +670,9 @@ def main():
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []
-        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+        for i, batch_idx in enumerate(
+            tqdm(eval_batch_idx, desc="Evaluating ...", position=2)
+        ):
             samples = [vectorized_datasets["validation"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
 
@@ -606,8 +698,14 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
-            model.save_pretrained(training_args.output_dir, params=params, push_to_hub=training_args.push_to_hub)
+            params = jax.device_get(
+                jax.tree_util.tree_map(lambda x: x[0], state.params)
+            )
+            model.save_pretrained(
+                training_args.output_dir,
+                params=params,
+                push_to_hub=training_args.push_to_hub,
+            )
 
 
 if __name__ == "__main__":

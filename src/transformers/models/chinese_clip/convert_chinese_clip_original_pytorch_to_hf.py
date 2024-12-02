@@ -22,7 +22,9 @@ from transformers import ChineseCLIPConfig, ChineseCLIPModel
 
 def copy_attn_layer(hf_attn_layer, pt_weights, prefix):
     q_proj, k_proj, v_proj = pt_weights[f"{prefix}.in_proj_weight"].chunk(3, dim=0)
-    q_proj_bias, k_proj_bias, v_proj_bias = pt_weights[f"{prefix}.in_proj_bias"].chunk(3, dim=0)
+    q_proj_bias, k_proj_bias, v_proj_bias = pt_weights[f"{prefix}.in_proj_bias"].chunk(
+        3, dim=0
+    )
 
     out_proj_weights = pt_weights[f"{prefix}.out_proj.weight"]
     out_proj_bias = pt_weights[f"{prefix}.out_proj.bias"]
@@ -85,27 +87,42 @@ def copy_vision_model_and_projection(hf_model, pt_weights):
     copy_linear(hf_model.vision_model.post_layernorm, pt_weights, "visual.ln_post")
 
     # copy embeddings
-    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_weights["visual.conv1.weight"].data
-    hf_model.vision_model.embeddings.class_embedding.data = pt_weights["visual.class_embedding"].data
-    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_weights["visual.positional_embedding"].data
+    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_weights[
+        "visual.conv1.weight"
+    ].data
+    hf_model.vision_model.embeddings.class_embedding.data = pt_weights[
+        "visual.class_embedding"
+    ].data
+    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_weights[
+        "visual.positional_embedding"
+    ].data
 
     # copy encoder
-    copy_layers(hf_model.vision_model.encoder.layers, pt_weights, "visual.transformer.resblocks")
+    copy_layers(
+        hf_model.vision_model.encoder.layers, pt_weights, "visual.transformer.resblocks"
+    )
 
 
 @torch.no_grad()
-def convert_chinese_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
+def convert_chinese_clip_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, config_path=None
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
 
-    assert config_path is not None, "Please specify the ChineseCLIP model config of the corresponding model size."
+    assert (
+        config_path is not None
+    ), "Please specify the ChineseCLIP model config of the corresponding model size."
     config = ChineseCLIPConfig.from_pretrained(config_path)
 
     hf_model = ChineseCLIPModel(config).eval()
 
     pt_weights = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
-    pt_weights = {(name[7:] if name.startswith("module.") else name): value for name, value in pt_weights.items()}
+    pt_weights = {
+        (name[7:] if name.startswith("module.") else name): value
+        for name, value in pt_weights.items()
+    }
 
     copy_text_model_and_projection(hf_model, pt_weights)
     copy_vision_model_and_projection(hf_model, pt_weights)
@@ -123,12 +140,21 @@ if __name__ == "__main__":
         help="Path to the output folder storing converted hf PyTorch model.",
     )
     parser.add_argument(
-        "--checkpoint_path", default=None, type=str, help="Path to original github format ChineseCLIP checkpoint."
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        help="Path to original github format ChineseCLIP checkpoint.",
     )
     parser.add_argument(
-        "--config_path", default=None, required=True, type=str, help="Path to hf config.json of model to convert."
+        "--config_path",
+        default=None,
+        required=True,
+        type=str,
+        help="Path to hf config.json of model to convert.",
     )
     args = parser.parse_args()
 
-    convert_chinese_clip_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_chinese_clip_checkpoint(
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path
+    )
     print("The conversion is finished!")

@@ -20,7 +20,13 @@ from typing import Dict, List, Tuple
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_read_token,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -99,7 +105,10 @@ class Mamba2ModelTester:
         return Mamba2Config.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
 
     def prepare_config_and_inputs(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -107,8 +116,12 @@ class Mamba2ModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config(
@@ -160,28 +173,38 @@ class Mamba2ModelTester:
 
 
 @unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
+    not is_torch_greater_or_equal_than_2_0,
+    reason="See https://github.com/huggingface/transformers/pull/24204",
 )
 @require_torch
-class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Mamba2ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Mamba2ForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @molbap
-    test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
+    test_torchscript = (
+        False  # FIXME I think this should be doable @molbap @ArthurZucker
+    )
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # Mamba does not have attention heads
 
     pipeline_model_mapping = (
-        {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM}
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
         self.model_tester = Mamba2ModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+            self,
+            config_class=Mamba2Config,
+            n_embd=37,
+            common_properties=["hidden_size", "num_hidden_layers"],
         )
 
     def test_initialization(self):
@@ -193,7 +216,14 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 if "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        self.assertTrue(
+                            torch.allclose(
+                                param.data,
+                                torch.ones_like(param.data),
+                                atol=1e-5,
+                                rtol=1e-5,
+                            )
+                        )
 
     @unittest.skip(reason="Mamba 2 weights are not tied")
     def test_tied_weights_keys(self):
@@ -212,7 +242,9 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
+    @unittest.skip(
+        reason="To fix, Mamba 2 cache slicing is interacting with beam search"
+    )
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
@@ -225,15 +257,23 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, Mamba2Cache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
+                        recursive_check(
+                            tuple_object.conv_states, dict_object.conv_states
+                        )
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -264,17 +304,29 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
 
 @require_torch
@@ -283,7 +335,9 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_id, from_slow=True, legacy=False
+        )
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
     @require_read_token
@@ -304,13 +358,17 @@ class Mamba2IntegrationTest(unittest.TestCase):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
-        model.to(device)
-        input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
-            device
+        model = Mamba2ForCausalLM.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16
         )
+        model.to(device)
+        input_ids = tokenizer(
+            "[INST]Write a hello world program in C++.[/INST]", return_tensors="pt"
+        )["input_ids"].to(device)
 
-        out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)
+        out = model.generate(
+            input_ids, do_sample=False, use_cache=True, max_new_tokens=30
+        )
         output_sentence = tokenizer.decode(out[0])
         ground_truth_sentence = """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
         self.assertEqual(output_sentence, ground_truth_sentence)
@@ -331,19 +389,29 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16
+        ).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
-        tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
-        batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
+        tokenized_prompts = tokenizer(
+            prompt, return_tensors="pt", padding="longest"
+        ).to(torch_device)
+        batched_gen = model.generate(
+            **tokenized_prompts, max_new_tokens=30, use_cache=True
+        )
         batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
 
         # individual generation
 
         for index_gen, individual_prompt in enumerate(prompt):
-            inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
+            inputs = tokenizer(
+                individual_prompt, return_tensors="pt", padding="longest"
+            ).to(torch_device)
             individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=True)
-            individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
+            individual_output = tokenizer.batch_decode(
+                individual_gen, skip_special_tokens=True
+            )[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
     @require_read_token
@@ -362,19 +430,29 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16
+        ).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
-        tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
-        batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
+        tokenized_prompts = tokenizer(
+            prompt, return_tensors="pt", padding="longest"
+        ).to(torch_device)
+        batched_gen = model.generate(
+            **tokenized_prompts, max_new_tokens=30, use_cache=True
+        )
         batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
 
         # individual generation
 
         for index_gen, individual_prompt in enumerate(prompt):
-            inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
+            inputs = tokenizer(
+                individual_prompt, return_tensors="pt", padding="longest"
+            ).to(torch_device)
             individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=True)
-            individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
+            individual_output = tokenizer.batch_decode(
+                individual_gen, skip_special_tokens=True
+            )[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
     @slow
@@ -385,7 +463,9 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
         B, T, D = 4, 512, 768
         dtype = torch.bfloat16
-        config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
+        config = Mamba2Config(
+            num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1
+        )
 
         torch.manual_seed(42)
         with torch.amp.autocast(device_type="cuda", dtype=dtype):

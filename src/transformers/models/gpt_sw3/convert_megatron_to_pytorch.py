@@ -68,44 +68,74 @@ def convert_megatron_checkpoint(sd_megatron, config):
     heads = config.n_head
     hidden_size_per_head = config.n_embd // config.n_head
 
-    word_embeddings = sd_megatron["model.language_model.embedding.word_embeddings.weight"][:vocab_size, :]
+    word_embeddings = sd_megatron[
+        "model.language_model.embedding.word_embeddings.weight"
+    ][:vocab_size, :]
     sd_hf = {
         "transformer.wte.weight": word_embeddings,
-        "transformer.wpe.weight": sd_megatron["model.language_model.embedding.position_embeddings.weight"],
-        "transformer.ln_f.weight": sd_megatron["model.language_model.encoder.final_layernorm.weight"],
-        "transformer.ln_f.bias": sd_megatron["model.language_model.encoder.final_layernorm.bias"],
+        "transformer.wpe.weight": sd_megatron[
+            "model.language_model.embedding.position_embeddings.weight"
+        ],
+        "transformer.ln_f.weight": sd_megatron[
+            "model.language_model.encoder.final_layernorm.weight"
+        ],
+        "transformer.ln_f.bias": sd_megatron[
+            "model.language_model.encoder.final_layernorm.bias"
+        ],
     }
 
     pf = "model.language_model.encoder.layers."
     for i in range(layers):
-        causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.bool))
+        causal_mask = torch.tril(
+            torch.ones((n_positions, n_positions), dtype=torch.bool)
+        )
         causal_mask = causal_mask.view(1, 1, n_positions, n_positions)
         sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
-        sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)
+        sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(
+            -1e4, dtype=torch.bfloat16
+        )
 
-        sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[f"{pf}{i}.input_layernorm.weight"]
-        sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[f"{pf}{i}.input_layernorm.bias"]
+        sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[
+            f"{pf}{i}.input_layernorm.weight"
+        ]
+        sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[
+            f"{pf}{i}.input_layernorm.bias"
+        ]
 
         val1 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
         val1 = fix_query_key_value_ordering(val1, 3, heads, hidden_size_per_head)
-        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1.transpose(0, 1).contiguous()
+        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1.transpose(
+            0, 1
+        ).contiguous()
 
         val2 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
         val2 = fix_query_key_value_ordering(val2, 3, heads, hidden_size_per_head)
         sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2
 
-        sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[f"{pf}{i}.self_attention.dense.weight"].transpose(
-            0, 1
-        )
-        sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
-        sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
-        sd_hf[f"transformer.h.{i}.ln_2.bias"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.bias"]
-        sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"].transpose(0, 1)
-        sd_hf[f"transformer.h.{i}.mlp.c_fc.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.bias"]
-        sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.weight"].transpose(
-            0, 1
-        )
-        sd_hf[f"transformer.h.{i}.mlp.c_proj.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.bias"]
+        sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[
+            f"{pf}{i}.self_attention.dense.weight"
+        ].transpose(0, 1)
+        sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[
+            f"{pf}{i}.self_attention.dense.bias"
+        ]
+        sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[
+            f"{pf}{i}.post_attention_layernorm.weight"
+        ]
+        sd_hf[f"transformer.h.{i}.ln_2.bias"] = sd_megatron[
+            f"{pf}{i}.post_attention_layernorm.bias"
+        ]
+        sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[
+            f"{pf}{i}.mlp.dense_h_to_4h.weight"
+        ].transpose(0, 1)
+        sd_hf[f"transformer.h.{i}.mlp.c_fc.bias"] = sd_megatron[
+            f"{pf}{i}.mlp.dense_h_to_4h.bias"
+        ]
+        sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[
+            f"{pf}{i}.mlp.dense_4h_to_h.weight"
+        ].transpose(0, 1)
+        sd_hf[f"transformer.h.{i}.mlp.c_proj.bias"] = sd_megatron[
+            f"{pf}{i}.mlp.dense_4h_to_h.bias"
+        ]
 
     # For LM head, transformers' wants the matrix to weight embeddings.
     sd_hf["lm_head.weight"] = word_embeddings
@@ -127,7 +157,9 @@ def copy_config(config_hf, config_megatron):
     config_hf.attn_pdrop = 0.1
     config_hf.layer_norm_epsilon = config_megatron["layernorm_epsilon"]  # 1e-5
     config_hf.initializer_range = config_megatron["init_method_std"]  # 0.02
-    config_hf.apply_query_key_layer_scaling = config_megatron["apply_query_key_layer_scaling"]  # True
+    config_hf.apply_query_key_layer_scaling = config_megatron[
+        "apply_query_key_layer_scaling"
+    ]  # True
     config_hf.normalize_attention_scores = True
     config_hf.use_cache = True
 
@@ -191,7 +223,9 @@ if __name__ == "__main__":
         required=True,
         help="e.g. megatron_gpt--val_loss=2.42-step=38000-consumed_samples=54720000",
     )
-    parser.add_argument("--save_path", type=str, required=True, help="e.g. /home/user/gpt-sw3/hf")
+    parser.add_argument(
+        "--save_path", type=str, required=True, help="e.g. /home/user/gpt-sw3/hf"
+    )
     parser.add_argument("--print-checkpoint-structure", action="store_true")
     _args = parser.parse_args()
     main(_args)

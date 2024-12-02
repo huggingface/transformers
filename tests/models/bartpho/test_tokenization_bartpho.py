@@ -16,7 +16,10 @@
 import os
 import unittest
 
-from transformers.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES, BartphoTokenizer
+from transformers.models.bartpho.tokenization_bartpho import (
+    VOCAB_FILES_NAMES,
+    BartphoTokenizer,
+)
 from transformers.testing_utils import get_tests_dir
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -38,12 +41,16 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         self.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.monolingual_vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["monolingual_vocab_file"])
+        self.monolingual_vocab_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["monolingual_vocab_file"]
+        )
         with open(self.monolingual_vocab_file, "w", encoding="utf-8") as fp:
             for token in vocab_tokens:
                 fp.write(f"{token} {vocab_tokens[token]}\n")
 
-        tokenizer = BartphoTokenizer(SAMPLE_VOCAB, self.monolingual_vocab_file, **self.special_tokens_map)
+        tokenizer = BartphoTokenizer(
+            SAMPLE_VOCAB, self.monolingual_vocab_file, **self.special_tokens_map
+        )
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -56,7 +63,9 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = BartphoTokenizer(SAMPLE_VOCAB, self.monolingual_vocab_file, **self.special_tokens_map)
+        tokenizer = BartphoTokenizer(
+            SAMPLE_VOCAB, self.monolingual_vocab_file, **self.special_tokens_map
+        )
         text = "This is a là test"
         bpe_tokens = "▁This ▁is ▁a ▁l à ▁t est".split()
         tokens = tokenizer.tokenize(text)
@@ -64,4 +73,6 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         input_tokens = tokens + [tokenizer.unk_token]
         input_bpe_tokens = [4, 5, 6, 3, 3, 7, 8, 3]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens
+        )

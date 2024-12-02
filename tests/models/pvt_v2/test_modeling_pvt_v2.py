@@ -18,7 +18,12 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
+from transformers import (
+    PvtV2Backbone,
+    PvtV2Config,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     require_accelerate,
@@ -96,11 +101,15 @@ class PvtV2ModelTester(ModelTesterMixin):
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
         return config, pixel_values, labels
@@ -136,7 +145,10 @@ class PvtV2ModelTester(ModelTesterMixin):
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[1], 4, 4],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
@@ -151,7 +163,10 @@ class PvtV2ModelTester(ModelTesterMixin):
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[-1], 1, 1],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
@@ -171,9 +186,13 @@ class PvtV2ModelTester(ModelTesterMixin):
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -190,9 +209,14 @@ def prepare_img():
 
 @require_torch
 class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PvtV2Model, PvtV2ForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (PvtV2Model, PvtV2ForImageClassification) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"feature-extraction": PvtV2Model, "image-classification": PvtV2ForImageClassification}
+        {
+            "feature-extraction": PvtV2Model,
+            "image-classification": PvtV2ForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -218,7 +242,9 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Pvt-V2 does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(
+        reason="Pvt-V2 does not have get_input_embeddings method and get_output_embeddings methods"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -231,7 +257,9 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant(self):
         # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
         # torch.utils.checkpoint.checkpoint
-        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
+        self.check_training_gradient_checkpointing(
+            gradient_checkpointing_kwargs={"use_reentrant": True}
+        )
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -263,8 +291,10 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(hidden_states[0].shape[-3:]),
                 [
                     self.model_tester.hidden_sizes[self.model_tester.out_indices[0]],
-                    self.model_tester.image_size // 2 ** (2 + self.model_tester.out_indices[0]),
-                    self.model_tester.image_size // 2 ** (2 + self.model_tester.out_indices[0]),
+                    self.model_tester.image_size
+                    // 2 ** (2 + self.model_tester.out_indices[0]),
+                    self.model_tester.image_size
+                    // 2 ** (2 + self.model_tester.out_indices[0]),
                 ],
             )
 
@@ -293,7 +323,9 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -322,7 +354,11 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification(self):
         # only resize + normalize
         image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
-        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0").to(torch_device).eval()
+        model = (
+            PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0")
+            .to(torch_device)
+            .eval()
+        )
 
         image = prepare_img()
         encoded_inputs = image_processor(images=image, return_tensors="pt")
@@ -336,11 +372,15 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.4192, -1.9158, -0.9702]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
+        )
 
     @slow
     def test_inference_model(self):
-        model = PvtV2Model.from_pretrained("OpenGVLab/pvt_v2_b0").to(torch_device).eval()
+        model = (
+            PvtV2Model.from_pretrained("OpenGVLab/pvt_v2_b0").to(torch_device).eval()
+        )
 
         image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
         image = prepare_img()
@@ -356,10 +396,18 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]]
+            [
+                [-0.3086, 1.0402, 1.1816],
+                [-0.2880, 0.5781, 0.6124],
+                [0.1480, 0.6129, -0.0590],
+            ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4
+            )
+        )
 
     @slow
     @require_accelerate
@@ -369,7 +417,9 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", torch_dtype=torch.float16)
+        model = PvtV2ForImageClassification.from_pretrained(
+            "OpenGVLab/pvt_v2_b0", torch_dtype=torch.float16
+        )
         model.to(torch_device)
         image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 
@@ -394,7 +444,11 @@ class PvtV2BackboneTest(BackboneTesterMixin, unittest.TestCase):
         # test default config
         config = config_class()
         self.assertIsNotNone(config)
-        num_stages = len(config.depths) if hasattr(config, "depths") else config.num_hidden_layers
+        num_stages = (
+            len(config.depths)
+            if hasattr(config, "depths")
+            else config.num_hidden_layers
+        )
         expected_stage_names = [f"stage{idx}" for idx in range(1, num_stages + 1)]
         self.assertEqual(config.stage_names, expected_stage_names)
         self.assertTrue(set(config.out_features).issubset(set(config.stage_names)))
@@ -417,7 +471,9 @@ class PvtV2BackboneTest(BackboneTesterMixin, unittest.TestCase):
 
         # Only out_indices set
         config = config_class(out_indices=[0, 2])
-        self.assertEqual(config.out_features, [config.stage_names[0], config.stage_names[2]])
+        self.assertEqual(
+            config.out_features, [config.stage_names[0], config.stage_names[2]]
+        )
         self.assertEqual(config.out_indices, [0, 2])
 
         # Error raised when out_indices do not correspond to out_features

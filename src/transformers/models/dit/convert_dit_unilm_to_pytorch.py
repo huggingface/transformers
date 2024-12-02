@@ -23,7 +23,12 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import BeitConfig, BeitForImageClassification, BeitForMaskedImageModeling, BeitImageProcessor
+from transformers import (
+    BeitConfig,
+    BeitForImageClassification,
+    BeitForMaskedImageModeling,
+    BeitImageProcessor,
+)
 from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
@@ -39,27 +44,79 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.weight", f"beit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm1.bias", f"beit.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.weight", f"beit.encoder.layer.{i}.attention.output.dense.weight")
+            (
+                f"{prefix}blocks.{i}.norm1.weight",
+                f"beit.encoder.layer.{i}.layernorm_before.weight",
+            )
         )
         rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.bias", f"beit.encoder.layer.{i}.attention.output.dense.bias")
+            (
+                f"{prefix}blocks.{i}.norm1.bias",
+                f"beit.encoder.layer.{i}.layernorm_before.bias",
+            )
         )
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.weight", f"beit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.norm2.bias", f"beit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.weight", f"beit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc1.bias", f"beit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.weight", f"beit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"{prefix}blocks.{i}.mlp.fc2.bias", f"beit.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.attn.proj.weight",
+                f"beit.encoder.layer.{i}.attention.output.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.attn.proj.bias",
+                f"beit.encoder.layer.{i}.attention.output.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.norm2.weight",
+                f"beit.encoder.layer.{i}.layernorm_after.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.norm2.bias",
+                f"beit.encoder.layer.{i}.layernorm_after.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.mlp.fc1.weight",
+                f"beit.encoder.layer.{i}.intermediate.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.mlp.fc1.bias",
+                f"beit.encoder.layer.{i}.intermediate.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.mlp.fc2.weight",
+                f"beit.encoder.layer.{i}.output.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{prefix}blocks.{i}.mlp.fc2.bias",
+                f"beit.encoder.layer.{i}.output.dense.bias",
+            )
+        )
 
     # projection layer + position embeddings
     rename_keys.extend(
         [
             (f"{prefix}cls_token", "beit.embeddings.cls_token"),
-            (f"{prefix}patch_embed.proj.weight", "beit.embeddings.patch_embeddings.projection.weight"),
-            (f"{prefix}patch_embed.proj.bias", "beit.embeddings.patch_embeddings.projection.bias"),
+            (
+                f"{prefix}patch_embed.proj.weight",
+                "beit.embeddings.patch_embeddings.projection.weight",
+            ),
+            (
+                f"{prefix}patch_embed.proj.bias",
+                "beit.embeddings.patch_embeddings.projection.bias",
+            ),
             (f"{prefix}pos_embed", "beit.embeddings.position_embeddings"),
         ]
     )
@@ -96,16 +153,16 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False, is_semantic=False):
         q_bias = state_dict.pop(f"{prefix}blocks.{i}.attn.q_bias")
         v_bias = state_dict.pop(f"{prefix}blocks.{i}.attn.v_bias")
 
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
         state_dict[f"beit.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"beit.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
+        state_dict[f"beit.encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
         state_dict[f"beit.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
 
         # gamma_1 and gamma_2
@@ -137,7 +194,9 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
     # define default BEiT configuration
     has_lm_head = False if "rvlcdip" in checkpoint_url else True
-    config = BeitConfig(use_absolute_position_embeddings=True, use_mask_token=has_lm_head)
+    config = BeitConfig(
+        use_absolute_position_embeddings=True, use_mask_token=has_lm_head
+    )
 
     # size of the architecture
     if "large" in checkpoint_url or "dit-l" in checkpoint_url:
@@ -151,13 +210,17 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         config.num_labels = 16
         repo_id = "huggingface/label-files"
         filename = "rvlcdip-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 
     # load state_dict of original model, remove and rename some keys
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")[
+        "model"
+    ]
 
     rename_keys = create_rename_keys(config, has_lm_head=has_lm_head)
     for src, dest in rename_keys:
@@ -165,13 +228,19 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     read_in_q_k_v(state_dict, config, has_lm_head=has_lm_head)
 
     # load HuggingFace model
-    model = BeitForMaskedImageModeling(config) if has_lm_head else BeitForImageClassification(config)
+    model = (
+        BeitForMaskedImageModeling(config)
+        if has_lm_head
+        else BeitForImageClassification(config)
+    )
     model.eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
     image_processor = BeitImageProcessor(
-        size=config.image_size, resample=PILImageResampling.BILINEAR, do_center_crop=False
+        size=config.image_size,
+        resample=PILImageResampling.BILINEAR,
+        do_center_crop=False,
     )
     image = prepare_img()
 
@@ -195,7 +264,11 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         if has_lm_head:
             model_name = "dit-base" if "base" in checkpoint_url else "dit-large"
         else:
-            model_name = "dit-base-finetuned-rvlcdip" if "dit-b" in checkpoint_url else "dit-large-finetuned-rvlcdip"
+            model_name = (
+                "dit-base-finetuned-rvlcdip"
+                if "dit-b" in checkpoint_url
+                else "dit-large-finetuned-rvlcdip"
+            )
         image_processor.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
@@ -220,11 +293,16 @@ if __name__ == "__main__":
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
     )
     args = parser.parse_args()
-    convert_dit_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_dit_checkpoint(
+        args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub
+    )

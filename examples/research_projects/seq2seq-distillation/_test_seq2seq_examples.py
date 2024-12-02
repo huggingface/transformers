@@ -18,7 +18,13 @@ from run_eval import generate_summaries_or_translations
 from torch import nn
 
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
-from transformers.testing_utils import CaptureStderr, CaptureStdout, TestCasePlus, require_torch_gpu, slow
+from transformers.testing_utils import (
+    CaptureStderr,
+    CaptureStdout,
+    TestCasePlus,
+    require_torch_gpu,
+    slow,
+)
 from utils import label_smoothed_nll_loss, lmap, load_json
 
 
@@ -98,7 +104,10 @@ def _dump_articles(path: Path, articles: list):
 
 
 ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
-SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+SUMMARIES = [
+    "A very interesting story about what I ate for lunch.",
+    "Avocado, celery, turkey, coffee",
+]
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 T5_TINIER = "sshleifer/t5-tinier-random"
 BART_TINY = "sshleifer/bart-tiny-random"
@@ -122,7 +131,9 @@ def make_test_data_dir(tmp_dir):
 class TestSummarizationDistiller(TestCasePlus):
     @classmethod
     def setUpClass(cls):
-        logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
+        logging.disable(
+            logging.CRITICAL
+        )  # remove noisy download output from tracebacks
         return cls
 
     @slow
@@ -142,10 +153,16 @@ class TestSummarizationDistiller(TestCasePlus):
                 AutoConfig.from_pretrained(m)
             except Exception:
                 failures.append(m)
-        assert not failures, f"The following models could not be loaded through AutoConfig: {failures}"
+        assert (
+            not failures
+        ), f"The following models could not be loaded through AutoConfig: {failures}"
 
     def test_distill_no_teacher(self):
-        updates = {"student_encoder_layers": 2, "student_decoder_layers": 1, "no_teacher": True}
+        updates = {
+            "student_encoder_layers": 2,
+            "student_decoder_layers": 1,
+            "no_teacher": True,
+        }
         self._test_distiller_cli(updates)
 
     def test_distill_checkpointing_with_teacher(self):
@@ -163,9 +180,14 @@ class TestSummarizationDistiller(TestCasePlus):
         self.assertEqual(1, len(ckpts))
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(transformer_ckpts), 2)
-        examples = lmap(str.strip, Path(model.hparams.data_dir).joinpath("test.source").open().readlines())
+        examples = lmap(
+            str.strip,
+            Path(model.hparams.data_dir).joinpath("test.source").open().readlines(),
+        )
         out_path = tempfile.mktemp()  # XXX: not being cleaned up
-        generate_summaries_or_translations(examples, out_path, str(model.output_dir / "best_tfmr"))
+        generate_summaries_or_translations(
+            examples, out_path, str(model.output_dir / "best_tfmr")
+        )
         self.assertTrue(Path(out_path).exists())
 
         out_path_new = self.get_auto_remove_tmp_dir()
@@ -174,15 +196,29 @@ class TestSummarizationDistiller(TestCasePlus):
 
     def test_loss_fn(self):
         model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY)
-        input_ids, mask = model.dummy_inputs["input_ids"], model.dummy_inputs["attention_mask"]
-        target_ids = torch.tensor([[0, 4, 8, 2], [0, 8, 2, 1]], dtype=torch.long, device=model.device)
+        input_ids, mask = (
+            model.dummy_inputs["input_ids"],
+            model.dummy_inputs["attention_mask"],
+        )
+        target_ids = torch.tensor(
+            [[0, 4, 8, 2], [0, 8, 2, 1]], dtype=torch.long, device=model.device
+        )
         decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
         lm_labels = target_ids[:, 1:].clone()  # why clone?
         model_computed_loss = model(
-            input_ids, attention_mask=mask, decoder_input_ids=decoder_input_ids, labels=lm_labels, use_cache=False
+            input_ids,
+            attention_mask=mask,
+            decoder_input_ids=decoder_input_ids,
+            labels=lm_labels,
+            use_cache=False,
         ).loss
 
-        logits = model(input_ids, attention_mask=mask, decoder_input_ids=decoder_input_ids, use_cache=False).logits
+        logits = model(
+            input_ids,
+            attention_mask=mask,
+            decoder_input_ids=decoder_input_ids,
+            use_cache=False,
+        ).logits
 
         lprobs = nn.functional.log_softmax(logits, dim=-1)
         smoothed_loss, nll_loss = label_smoothed_nll_loss(
@@ -272,7 +308,9 @@ class TestSummarizationDistiller(TestCasePlus):
         self.assertGreaterEqual(last_step_stats["val_avg_gen_time"], 0.01)
         self.assertGreaterEqual(1.0, last_step_stats["val_avg_gen_time"])
         self.assertIsInstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
-        desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) + 1)
+        desired_n_evals = int(
+            args_d["max_epochs"] * (1 / args_d["val_check_interval"]) + 1
+        )
         self.assertEqual(len(metrics["val"]), desired_n_evals)
         self.assertEqual(len(metrics["test"]), 1)
         return model
@@ -284,7 +322,11 @@ class TestTheRest(TestCasePlus):
     )
     def test_finetune(self, model):
         args_d: dict = CHEAP_ARGS.copy()
-        task = "translation" if model in [MBART_TINY, MARIAN_TINY, FSMT_TINY] else "summarization"
+        task = (
+            "translation"
+            if model in [MBART_TINY, MARIAN_TINY, FSMT_TINY]
+            else "summarization"
+        )
         args_d["label_smoothing"] = 0.1 if task == "translation" else 0
 
         tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
@@ -360,13 +402,20 @@ class TestTheRest(TestCasePlus):
             model_name_or_path=model,
             output_dir=output_dir,
         )
-        extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
+        extra_model_params = (
+            "encoder_layerdrop",
+            "decoder_layerdrop",
+            "dropout",
+            "attention_dropout",
+        )
         for p in extra_model_params:
             args_d1[p] = 0.5
         args = argparse.Namespace(**args_d1)
         model = main(args)
         for p in extra_model_params:
-            assert getattr(model.config, p) == 0.5, f"failed to override the model config for param {p}"
+            assert (
+                getattr(model.config, p) == 0.5
+            ), f"failed to override the model config for param {p}"
 
         # test models whose config doesn't include the extra_model_args
         model = T5_TINY
@@ -381,7 +430,10 @@ class TestTheRest(TestCasePlus):
         args = argparse.Namespace(**args_d2)
         with pytest.raises(Exception) as excinfo:
             model = main(args)
-        assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
+        assert (
+            str(excinfo.value)
+            == f"model config doesn't have a `{unsupported_param}` attribute"
+        )
 
     def test_finetune_lr_schedulers(self):
         args_d: dict = CHEAP_ARGS.copy()
@@ -431,7 +483,9 @@ class TestTheRest(TestCasePlus):
             assert False, "invalid argument is expected to sys.exit"
         assert excinfo.type is SystemExit
         expected = f"invalid choice: '{unsupported_param}'"
-        assert expected in cs.err, f"should have bailed on invalid choice of scheduler {unsupported_param}"
+        assert (
+            expected in cs.err
+        ), f"should have bailed on invalid choice of scheduler {unsupported_param}"
 
         # --lr_scheduler=existing_scheduler test
         supported_param = "cosine"

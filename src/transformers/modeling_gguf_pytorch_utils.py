@@ -44,7 +44,10 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
             "tensor_count": "tensor_count",
             "kv_count": "kv_count",
         },
-        "general": {"file_type": "file_type", "quantization_version": "quantization_version"},
+        "general": {
+            "file_type": "file_type",
+            "quantization_version": "quantization_version",
+        },
     },
     "config": GGUF_CONFIG_MAPPING,
     "tensors": GGUF_TENSOR_MAPPING,
@@ -83,7 +86,9 @@ class LlamaTensorProcessor(TensorProcessor):
             if ".attn_q." in name:
                 weights = self._reverse_permute_weights(weights, num_heads, num_heads)
             elif ".attn_k." in name:
-                weights = self._reverse_permute_weights(weights, num_heads, num_kv_heads)
+                weights = self._reverse_permute_weights(
+                    weights, num_heads, num_kv_heads
+                )
         return GGUFTensor(weights, name, {})
 
     def _reverse_permute_weights(
@@ -108,7 +113,9 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
             tensor_key_mapping = kwargs.get("tensor_key_mapping")
             parsed_parameters = kwargs.get("parsed_parameters")
             if tensor_key_mapping:
-                self._split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
+                self._split_moe_expert_tensor(
+                    weights, parsed_parameters, name, tensor_key_mapping
+                )
                 return GGUFTensor(weights, None, {})
         if "ffn_gate_inp_shexp" in name:
             # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
@@ -117,7 +124,11 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _split_moe_expert_tensor(
-        self, weights: np.ndarray, parsed_parameters: Dict[str, Dict], name: str, tensor_key_mapping: dict
+        self,
+        weights: np.ndarray,
+        parsed_parameters: Dict[str, Dict],
+        name: str,
+        tensor_key_mapping: dict,
     ):
         # Original merge implementation
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
@@ -129,7 +140,9 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         elif "ffn_up_exps" in name:
             exp_name = "up_proj"
         else:
-            raise ValueError(f"Cannot map expert tensor {name} in Qwen2Moe architecture.")
+            raise ValueError(
+                f"Cannot map expert tensor {name} in Qwen2Moe architecture."
+            )
         for tensor_name in tensor_key_mapping:
             if tensor_name in name:
                 name = name.replace(tensor_name, tensor_key_mapping[tensor_name])
@@ -137,7 +150,9 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         for i in range(0, w_counter):
             temp_name = name.replace(".weight", f".{i}.{exp_name}.weight")
             exp_weight = weights[i]
-            parsed_parameters["tensors"][temp_name] = torch.from_numpy(np.copy(exp_weight))
+            parsed_parameters["tensors"][temp_name] = torch.from_numpy(
+                np.copy(exp_weight)
+            )
 
 
 class BloomTensorProcessor(TensorProcessor):
@@ -251,7 +266,10 @@ TENSOR_PROCESSORS = {
 
 def read_field(reader, field):
     value = reader.fields[field]
-    return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
+    return [
+        _gguf_parse_value(value.parts[_data_index], value.types)
+        for _data_index in value.data
+    ]
 
 
 def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
@@ -273,7 +291,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
             "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
         )
-        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
+        raise ImportError(
+            "Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch."
+        )
 
     reader = GGUFReader(gguf_checkpoint_path)
     fields = reader.fields
@@ -306,8 +326,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     if "stablelm" in architecture:
         attn_bias_name = {"attn_q.bias", "attn_k.bias", "attn_v.bias"}
         ffn_norm_name = "ffn_norm"
-        qkv_bias = any(bias_name in tensor.name for tensor in reader.tensors for bias_name in attn_bias_name)
-        use_parallel_residual = any(ffn_norm_name in tensor.name for tensor in reader.tensors)
+        qkv_bias = any(
+            bias_name in tensor.name
+            for tensor in reader.tensors
+            for bias_name in attn_bias_name
+        )
+        use_parallel_residual = any(
+            ffn_norm_name in tensor.name for tensor in reader.tensors
+        )
         parsed_parameters["config"]["qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
@@ -333,7 +359,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         prefix = split[0]
         config_key = ".".join(split[1:])
 
-        value = [_gguf_parse_value(field.parts[_data_index], field.types) for _data_index in field.data]
+        value = [
+            _gguf_parse_value(field.parts[_data_index], field.types)
+            for _data_index in field.data
+        ]
 
         if len(value) == 1:
             value = value[0]
@@ -355,14 +384,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     reader_keys.remove(gguf_key)
 
         if gguf_key in reader_keys:
-            logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
+            logger.info(
+                f"Some keys were not parsed and added into account {gguf_key} | {value}"
+            )
 
     # retrieve config vocab_size from tokenizer
     # Pleas refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
         tokenizer_parameters = parsed_parameters["tokenizer"]
         if "tokens" in tokenizer_parameters:
-            parsed_parameters["config"]["vocab_size"] = len(tokenizer_parameters["tokens"])
+            parsed_parameters["config"]["vocab_size"] = len(
+                tokenizer_parameters["tokens"]
+            )
         else:
             logger.warning(
                 "Can't find a way to retrieve missing config vocab_size from tokenizer parameters. "
@@ -370,13 +403,17 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             )
 
     if return_tensors:
-        tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
+        tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][
+            architecture + model_size
+        ]
         config = parsed_parameters.get("config", {})
 
         ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
         processor = ProcessorClass(config=config)
 
-        for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
+        for tensor in tqdm(
+            reader.tensors, desc="Converting and de-quantizing GGUF tensors..."
+        ):
             name = tensor.name
             weights = dequantize(tensor.data, tensor.tensor_type)
 
@@ -396,7 +433,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name.format(bid=bid) in name:
-                    name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
+                    name = name.replace(
+                        tensor_name.format(bid=bid),
+                        tensor_key_mapping[tensor_name].format(bid=bid),
+                    )
 
             # Use copy to avoid errors with numpy and pytorch
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))

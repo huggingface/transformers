@@ -85,7 +85,9 @@ def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> str
 
 # Regexes that match TF/Flax/PT model names. Add here suffixes that are used to identify models, separated by |
 _re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
-_re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
+_re_flax_models = re.compile(
+    r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)"
+)
 # Will match any TF or Flax model too so need to be in an else branch after the two previous regexes.
 _re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 
@@ -112,7 +114,9 @@ def camel_case_split(identifier: str) -> List[str]:
     ```
     """
     # Regex thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python
-    matches = re.finditer(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)", identifier)
+    matches = re.finditer(
+        ".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)", identifier
+    )
     return [m.group(0) for m in matches]
 
 
@@ -187,13 +191,18 @@ def get_model_table_from_auto_modules() -> str:
     Generates an up-to-date model table from the content of the auto modules.
     """
     # Dictionary model names to config.
-    config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    config_maping_names = (
+        transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    )
     model_name_to_config = {
         name: config_maping_names[code]
         for code, name in transformers_module.MODEL_NAMES_MAPPING.items()
         if code in config_maping_names
     }
-    model_name_to_prefix = {name: config.replace("Config", "") for name, config in model_name_to_config.items()}
+    model_name_to_prefix = {
+        name: config.replace("Config", "")
+        for name, config in model_name_to_config.items()
+    }
 
     # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
     pt_models = collections.defaultdict(bool)
@@ -222,14 +231,25 @@ def get_model_table_from_auto_modules() -> str:
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
 
     # Let's build that table!
-    model_names = list(model_name_to_config.keys()) + list(MODEL_NAMES_WITH_SAME_CONFIG.keys())
+    model_names = list(model_name_to_config.keys()) + list(
+        MODEL_NAMES_WITH_SAME_CONFIG.keys()
+    )
 
     # model name to doc link mapping
-    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
-    model_name_to_link_mapping = {value: f"[{value}](model_doc/{key})" for key, value in model_names_mapping.items()}
+    model_names_mapping = (
+        transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
+    )
+    model_name_to_link_mapping = {
+        value: f"[{value}](model_doc/{key})"
+        for key, value in model_names_mapping.items()
+    }
     # update mapping with special model names
     model_name_to_link_mapping = {
-        k: SPECIAL_MODEL_NAME_LINK_MAPPING[k] if k in SPECIAL_MODEL_NAME_LINK_MAPPING else v
+        k: (
+            SPECIAL_MODEL_NAME_LINK_MAPPING[k]
+            if k in SPECIAL_MODEL_NAME_LINK_MAPPING
+            else v
+        )
         for k, v in model_name_to_link_mapping.items()
     }
 
@@ -242,10 +262,14 @@ def get_model_table_from_auto_modules() -> str:
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
 
     widths = [len(c) + 2 for c in columns]
-    widths[0] = max([len(doc_link) for doc_link in model_name_to_link_mapping.values()]) + 2
+    widths[0] = (
+        max([len(doc_link) for doc_link in model_name_to_link_mapping.values()]) + 2
+    )
 
     # Build the table per se
-    table = "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
+    table = (
+        "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
+    )
     # Use ":-----:" format to center-aligned table cell texts
     table += "|" + "|".join([":" + "-" * (w - 2) + ":" for w in widths]) + "|\n"
 
@@ -264,7 +288,9 @@ def get_model_table_from_auto_modules() -> str:
             check[tf_models[prefix]],
             check[flax_models[prefix]],
         ]
-        table += "|" + "|".join([_center_text(l, w) for l, w in zip(line, widths)]) + "|\n"
+        table += (
+            "|" + "|".join([_center_text(l, w) for l, w in zip(line, widths)]) + "|\n"
+        )
     return table
 
 
@@ -285,7 +311,12 @@ def check_model_table(overwrite=False):
 
     if current_table != new_table:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.md"), "w", encoding="utf-8", newline="\n") as f:
+            with open(
+                os.path.join(PATH_TO_DOCS, "index.md"),
+                "w",
+                encoding="utf-8",
+                newline="\n",
+            ) as f:
                 f.writelines(lines[:start_index] + [new_table] + lines[end_index:])
         else:
             raise ValueError(
@@ -295,7 +326,11 @@ def check_model_table(overwrite=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Whether to fix inconsistencies.",
+    )
     args = parser.parse_args()
 
     check_model_table(args.fix_and_overwrite)

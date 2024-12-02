@@ -27,7 +27,12 @@ import numpy as np
 import pytest
 
 from transformers import is_tf_available
-from transformers.testing_utils import is_pt_tf_cross_test, require_soundfile, require_tf, slow
+from transformers.testing_utils import (
+    is_pt_tf_cross_test,
+    require_soundfile,
+    require_tf,
+    slow,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -37,7 +42,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import HubertConfig, TFHubertForCTC, TFHubertModel, Wav2Vec2Processor
+    from transformers import (
+        HubertConfig,
+        TFHubertForCTC,
+        TFHubertModel,
+        Wav2Vec2Processor,
+    )
     from transformers.models.hubert.modeling_tf_hubert import _compute_mask_indices
 
 
@@ -102,7 +112,10 @@ class TFHubertModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
-        input_values = tf.cast(ids_tensor([self.batch_size, self.seq_length], 32768), tf.float32) / 32768.0
+        input_values = (
+            tf.cast(ids_tensor([self.batch_size, self.seq_length], 32768), tf.float32)
+            / 32768.0
+        )
         attention_mask = tf.ones_like(input_values)
 
         config = HubertConfig(
@@ -133,7 +146,8 @@ class TFHubertModelTester:
         model = TFHubertModel(config)
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.hidden_size),
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
@@ -152,7 +166,9 @@ class TFHubertModelTester:
         input_values = input_values * length_mask
         attention_mask = attention_mask * length_mask
 
-        batch_outputs = model(input_values, attention_mask=attention_mask, training=False).last_hidden_state
+        batch_outputs = model(
+            input_values, attention_mask=attention_mask, training=False
+        ).last_hidden_state
 
         for i in range(input_values.shape[0]):
             input_slice = input_values[i : i + 1, : input_lengths[i]]
@@ -169,7 +185,9 @@ class TFHubertModelTester:
 
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
         max_length_labels = model.hubert._get_feat_extract_output_lengths(input_lengths)
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        labels = ids_tensor(
+            (input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size
+        )
 
         length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
 
@@ -178,10 +196,14 @@ class TFHubertModelTester:
         attention_mask = attention_mask * length_mask
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        sum_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        mean_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss
 
         self.parent.assertTrue(abs(labels.shape[0] * mean_loss - sum_loss) < 1e-2)
 
@@ -195,7 +217,9 @@ class TFHubertModelTester:
 
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
         max_length_labels = model.hubert._get_feat_extract_output_lengths(input_lengths)
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size
+        )
 
         length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
 
@@ -212,7 +236,10 @@ class TFHubertModelTester:
         model = TFHubertForCTC(config)
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
         max_length_labels = model.hubert._get_feat_extract_output_lengths(input_lengths)
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size + 100)
+        labels = ids_tensor(
+            (input_values.shape[0], min(max_length_labels) - 1),
+            model.config.vocab_size + 100,
+        )
         with pytest.raises(ValueError):
             model(input_values, labels=labels)
 
@@ -225,14 +252,18 @@ class TFHubertModelTester:
 @require_tf
 class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFHubertModel, TFHubertForCTC) if is_tf_available() else ()
-    pipeline_model_mapping = {"feature-extraction": TFHubertModel} if is_tf_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": TFHubertModel} if is_tf_available() else {}
+    )
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
 
     def setUp(self):
         self.model_tester = TFHubertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=HubertConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -260,7 +291,9 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             outputs_dict = model(inputs)
 
-            inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs_keywords = copy.deepcopy(
+                self._prepare_for_class(inputs_dict, model_class)
+            )
             input_values = inputs_keywords.pop("input_values", None)
             outputs_keywords = model(input_values, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
@@ -279,7 +312,9 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
 
             hidden_states = outputs.hidden_states
@@ -327,12 +362,16 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model = TFHubertModel.from_pretrained("facebook/hubert-base-ls960")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Hubert hits OOM errors when loss is computed on full batch"
+    )
     def test_dataset_conversion(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
-    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Hubert hits OOM errors when loss is computed on full batch"
+    )
     def test_keras_fit(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
@@ -346,7 +385,9 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         import transformers
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
 
             # Output all for aggressive testing
             config.output_hidden_states = True
@@ -357,7 +398,9 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             # TODO: Use a uniform value for all models, make sure all tests pass without this processing, and remove it.
             self._make_attention_mask_non_null(inputs_dict)
 
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class_name = model_class.__name__[
+                2:
+            ]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             tf_model = model_class(config)
@@ -367,7 +410,10 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
+                tf_model,
+                pt_model,
+                tf_inputs=tf_inputs_dict,
+                allow_missing_keys=allow_missing_keys,
             )
             pt_model = transformers.load_tf2_model_in_pytorch_model(
                 pt_model, tf_model, allow_missing_keys=allow_missing_keys
@@ -409,7 +455,9 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
             do_stable_layer_norm=True,
             scope="robust",
         )
-        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=HubertConfig, hidden_size=37
+        )
 
     # overwrite because input_values != input_ids
     def test_forward_signature(self):
@@ -434,7 +482,9 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
 
             outputs_dict = model(inputs)
 
-            inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs_keywords = copy.deepcopy(
+                self._prepare_for_class(inputs_dict, model_class)
+            )
             input_values = inputs_keywords.pop("input_values", None)
             outputs_keywords = model(input_values, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
@@ -456,7 +506,9 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
 
             hidden_states = outputs.hidden_states
@@ -499,7 +551,9 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Hubert has no input embeddings or get_input_embeddings method")
+    @unittest.skip(
+        reason="Hubert has no input embeddings or get_input_embeddings method"
+    )
     def test_model_common_attributes(self):
         pass
 
@@ -508,12 +562,16 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Hubert hits OOM errors when loss is computed on full batch"
+    )
     def test_dataset_conversion(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
-    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Hubert hits OOM errors when loss is computed on full batch"
+    )
     def test_keras_fit(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
@@ -527,7 +585,9 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
         import transformers
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
 
             # Output all for aggressive testing
             config.output_hidden_states = True
@@ -538,7 +598,9 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
             # TODO: Use a uniform value for all models, make sure all tests pass without this processing, and remove it.
             self._make_attention_mask_non_null(inputs_dict)
 
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class_name = model_class.__name__[
+                2:
+            ]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             tf_model = model_class(config)
@@ -548,7 +610,10 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
+                tf_model,
+                pt_model,
+                tf_inputs=tf_inputs_dict,
+                allow_missing_keys=allow_missing_keys,
             )
             pt_model = transformers.load_tf2_model_in_pytorch_model(
                 pt_model, tf_model, allow_missing_keys=allow_missing_keys
@@ -583,10 +648,13 @@ class TFHubertUtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
 
         self.assertListEqual(
-            tf.reduce_sum(mask, -1).numpy().tolist(), [mask_prob * sequence_length for _ in range(batch_size)]
+            tf.reduce_sum(mask, -1).numpy().tolist(),
+            [mask_prob * sequence_length for _ in range(batch_size)],
         )
 
     def test_compute_mask_indices_overlap(self):
@@ -595,7 +663,9 @@ class TFHubertUtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
 
         # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in tf.reduce_sum(mask, -1):
@@ -609,7 +679,9 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -619,10 +691,14 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_ctc_normal(self):
         model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/hubert-large-ls960-ft", do_lower_case=True
+        )
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(input_speech, return_tensors="tf", sampling_rate=16000).input_values
+        input_values = processor(
+            input_speech, return_tensors="tf", sampling_rate=16000
+        ).input_values
 
         logits = model(input_values).logits
 
@@ -634,11 +710,15 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_ctc_normal_batched(self):
         model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/hubert-large-ls960-ft", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(2)
 
-        input_values = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000).input_values
+        input_values = processor(
+            input_speech, return_tensors="tf", padding=True, sampling_rate=16000
+        ).input_values
 
         logits = model(input_values).logits
 
@@ -653,11 +733,15 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_ctc_robust_batched(self):
         model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/hubert-large-ls960-ft", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000)
+        inputs = processor(
+            input_speech, return_tensors="tf", padding=True, sampling_rate=16000
+        )
 
         input_values = inputs.input_values
         attention_mask = inputs.attention_mask
