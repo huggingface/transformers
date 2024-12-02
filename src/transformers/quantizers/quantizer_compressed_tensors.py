@@ -79,7 +79,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
 
-        if not self.run_compressed or not self.is_compressed:
+        if self.is_compressed and not self.run_compressed:
             config = kwargs.get("config", None)
             cache_path = config._name_or_path
             if not os.path.exists(cache_path):
