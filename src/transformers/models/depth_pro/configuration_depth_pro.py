@@ -72,12 +72,6 @@ class DepthProConfig(PretrainedConfig):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
         use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
             Whether to use the SwiGLU feedforward neural network.
-        apply_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
-        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
-            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-            seq_len, hidden_size)`.
         intermediate_hook_ids (`List[int]`, *optional*, defaults to `[11, 5]`):
             Indices of the intermediate hidden states from the patch encoder to use for fusion.
         intermediate_feature_dims (`List[int]`, *optional*, defaults to `[256, 256]`):
@@ -134,8 +128,6 @@ class DepthProConfig(PretrainedConfig):
         layerscale_value=1.0,
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
         intermediate_hook_ids=[11, 5],
         intermediate_feature_dims=[256, 256],
         scaled_images_ratios=[0.25, 0.5, 1],
@@ -167,8 +159,6 @@ class DepthProConfig(PretrainedConfig):
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
         self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
         self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
         self.use_fov_model = use_fov_model

@@ -91,17 +91,17 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DepthProConfig
 
-## DepthProFeatureExtractor
-
-[[autodoc]] DepthProFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## DepthProImageProcessor
 
 [[autodoc]] DepthProImageProcessor
     - preprocess
-    - post_process_semantic_segmentation
+    - post_process_depth_estimation
+
+## DepthProImageProcessorFast
+
+[[autodoc]] DepthProImageProcessorFast
+    - preprocess
+    - post_process_depth_estimation
 
 ## DepthProModel
 
@@ -111,9 +111,4 @@ If you're interested in submitting a resource to be included here, please feel f
 ## DepthProForDepthEstimation
 
 [[autodoc]] DepthProForDepthEstimation
-    - forward
-
-## DepthProForSemanticSegmentation
-
-[[autodoc]] DepthProForSemanticSegmentation
     - forward
