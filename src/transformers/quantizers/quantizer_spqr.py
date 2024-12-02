@@ -30,21 +30,19 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# TODO(elvircrn): Copy from spqr repo.
 class SpQRHfQuantizer(HfQuantizer):
     """
     Quantizer of the SpQR method. Enables the loading of prequantized models.
     """
-
-    requires_calibration = True
-    required_packages = ["spqr_quant"]
-    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
+        if not torch.cuda.is_available():
+            raise RuntimeError("GPU is required to run SpQR quantized model.")
+
         if not is_accelerate_available():
             raise ImportError("Using `spqr` quantization requires Accelerate: `pip install accelerate`")
 
@@ -62,7 +60,7 @@ class SpQRHfQuantizer(HfQuantizer):
         replace_with_spqr_linear(
             model,
             quantization_config=self.quantization_config,
-            linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
+            modules_to_not_convert=self.quantization_config.modules_to_not_convert,
         )
         model.config.quantization_config = self.quantization_config
 
