@@ -67,7 +67,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.blocks.(\d+).(q|k)_norm.weight":                                 r"language_model.model.layers.\1.self_attn.\2_norm.layer.weight",
     r"transformer.blocks.(\d+).attn_norm.weight":                                  r"language_model.model.layers.\1.input_layernorm.weight",
     r"transformer.blocks.(\d+).attn_out.weight":                                   r"language_model.model.layers.\1.self_attn.o_proj.weight",
-    r"transformer.blocks.(\d+).ff_norm.weight":                                    r"language_model.model.layers.\1.post_attention_layernorm.layer.weight",
+    r"transformer.blocks.(\d+).ff_norm.weight":                                    r"language_model.model.layers.\1.post_attention_layernorm.weight",
     r"transformer.blocks.(\d+).ff_out.weight":                                     r"language_model.model.layers.\1.mlp.fc2.weight",
     r"transformer.blocks.(\d+).ff_proj.weight":                                    r"language_model.model.layers.\1.mlp.fc1.weight",
     r"transformer.ff_out.weight":                                                  r"language_model.lm_head.weight",
@@ -176,24 +176,13 @@ def write_model(
     if variant == "72B":
         pooling_config.text_intermediate_size = 59136
         pooling_config.text_hidden_size = 8192
-        text_config.qkv_bias = True
-        text_config.use_attention_layer_norm = False
-        text_config.use_post_attention_layernorm = True
-        text_config.use_post_mlp_layernorm = False
     elif variant == "7B-O":
         pooling_config.text_intermediate_size = 22016
         pooling_config.text_hidden_size = 4096
-        text_config.qkv_bias = original_config["qkv_bias"]
-        text_config.use_attention_layer_norm = original_config["attention_layer_norm"]
-        text_config.use_post_attention_layernorm = False
-        text_config.use_post_mlp_layernorm = True
-    elif variant == "7B-D":
-        text_config.qkv_bias = True
-        text_config.use_attention_layer_norm = False
-        text_config.use_post_attention_layernorm = True
-        text_config.use_post_mlp_layernorm = False
 
-    text_config.o_proj_bias = False
+    text_config.attention_bias = original_config["qkv_bias"]
+    text_config.use_postnorm = original_config["norm_after"]
+    text_config.use_attention_layer_norm = original_config["attention_layer_norm"]
 
     config = MolmoConfig(
         text_config=text_config.to_dict(),
@@ -221,9 +210,6 @@ def write_model(
     # Some post-processing of specific params.
     for old_key, new_key in new_keys.items():
         new_key = new_key.removeprefix("model.")
-        # remap keys
-        if "post_attention_layernorm" in new_key and variant == "7B-O":
-            new_key = new_key.replace("post_attention_layernorm", "post_mlp_layernorm")
         state_dict[new_key] = state_dict.pop(old_key)
         # Post-process the current_parameter.
 
@@ -293,9 +279,9 @@ def write_model(
     # ------------------------------------------------------------
     extra_special_tokens = {
         "image_token": "<image>",
-        "boi_token": "<im_patch>",
-        "eoi_token": "<im_start>",
-        "im_patch_token": "<im_end>",
+        "boi_token": "<im_start>",
+        "eoi_token": "<im_end>",
+        "im_patch_token": "<im_patch>",
         "im_col_token": "<im_col>",
     }
     if variant in ["7B-D", "72B"]:

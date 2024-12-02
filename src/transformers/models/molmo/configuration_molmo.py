@@ -300,6 +300,12 @@ class MolmoTextConfig(PretrainedConfig):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        use_postnorm (`bool), *optional*, defaults to `True`):
+            Whther to apply pre or post layer normalization in each decoder layer.
+        use_attention_layer_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply norm to keys and queries in the attention layer.
 
     ```python
     >>> from transformers import MolmoTextModel, MolmoTextConfig
@@ -338,6 +344,9 @@ class MolmoTextConfig(PretrainedConfig):
         sliding_window=4096,
         max_window_layers=28,
         attention_dropout=0.0,
+        attention_bias=False,
+        use_postnorm=True,
+        use_attention_layer_norm=False,
         **kwargs,
     ):
         super().__init__(
@@ -354,6 +363,9 @@ class MolmoTextConfig(PretrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if use_sliding_window else None
         self.max_window_layers = max_window_layers
+        self.attention_bias = attention_bias
+        self.use_postnorm = use_postnorm
+        self.use_attention_layer_norm = use_attention_layer_norm
 
         # for backward compatibility
         if num_key_value_heads is None:
