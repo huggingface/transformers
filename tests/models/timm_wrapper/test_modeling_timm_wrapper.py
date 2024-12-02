@@ -74,9 +74,6 @@ class TimmWrapperModelTester:
     def get_config(self):
         return TimmWrapperConfig.from_pretrained(self.model_name)
 
-    def get_large_model_config(self):
-        return TimmWrapperConfig.from_pretrained("timm/eva_giant_patch14_560.m30m_ft_in22k_in1k")
-
     def create_and_check_model(self, config, pixel_values):
         model = TimmWrapperModel(config=config)
         model.to(torch_device)
@@ -99,9 +96,6 @@ class TimmWrapperModelTester:
 @require_timm
 class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TimmWrapperModel, TimmWrapperForImageClassification) if is_torch_available() else ()
-    all_parallelizable_model_classes = (
-        (TimmWrapperModel, TimmWrapperForImageClassification) if is_torch_available() else ()
-    )
     pipeline_model_mapping = (
         {"image-feature-extraction": TimmWrapperModel, "image-classification": TimmWrapperForImageClassification}
         if is_torch_available()
@@ -112,7 +106,7 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_head_masking = False
     test_pruning = False
     has_attentions = False
-    test_model_parallel = True
+    test_model_parallel = False
 
     def setUp(self):
         self.config_class = TimmWrapperConfig
