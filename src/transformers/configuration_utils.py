@@ -37,7 +37,7 @@ from .utils import (
     download_url,
     extract_commit_hash,
     is_remote_url,
-    is_timm_checkpoint,
+    is_timm_config_dict,
     is_torch_available,
     logging,
 )
@@ -704,8 +704,8 @@ class PretrainedConfig(PushToHubMixin):
                 config_dict["custom_pipelines"], pretrained_model_name_or_path
             )
 
-        if "model_type" not in config_dict and is_timm_checkpoint(resolved_config_file):
-            # timm models are not saved with the model_type in the config file
+        # timm models are not saved with the model_type in the config file
+        if "model_type" not in config_dict and is_timm_config_dict(config_dict):
             config_dict["model_type"] = "timm_wrapper"
 
         return config_dict, kwargs

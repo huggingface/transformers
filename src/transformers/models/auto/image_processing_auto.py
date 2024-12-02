@@ -30,7 +30,8 @@ from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
     get_file_from_repo,
-    is_timm_checkpoint,
+    is_timm_config_dict,
+    is_timm_local_checkpoint,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -414,12 +415,38 @@ class AutoImageProcessor:
         use_fast = kwargs.pop("use_fast", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
-        default_image_processor_filename = (
-            "config.json" if is_timm_checkpoint(pretrained_model_name_or_path) else IMAGE_PROCESSOR_NAME
-        )
-        kwargs["image_processor_filename"] = kwargs.get("image_processor_filename", default_image_processor_filename)
 
-        config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        # Resolve the image processor config filename
+        if "image_processor_filename" in kwargs:
+            image_processor_filename = kwargs.pop("image_processor_filename")
+        elif is_timm_local_checkpoint(pretrained_model_name_or_path):
+            image_processor_filename = CONFIG_NAME
+        else:
+            image_processor_filename = IMAGE_PROCESSOR_NAME
+
+        # Load the image processor config
+        try:
+            # Main path for all transformers models and local TimmWrapper checkpoints
+            config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
+            )
+        except Exception as initial_exception:
+            # Fallback path for Hub TimmWrapper checkpoints. Timm models' image processing is saved in `config.json`
+            # instead of `preprocessor_config.json`. Because this is an Auto class and we don't have any information
+            # except the model name, the only way to check if a remote checkpoint is a timm model is to try to
+            # load `config.json` and if it fails with some error, we raise the initial exception.
+            try:
+                config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                    pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **kwargs
+                )
+            except Exception:
+                raise initial_exception
+
+            # In case we have a config_dict, but it's not a timm config dict, we raise the initial exception,
+            # because only timm models have image processing in `config.json`.
+            if not is_timm_config_dict(config_dict):
+                raise initial_exception
+
         image_processor_class = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
