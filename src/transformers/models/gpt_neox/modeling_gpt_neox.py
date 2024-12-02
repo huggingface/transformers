@@ -148,15 +148,14 @@ def flash_attention_forward(
     norm_factor,
     attention_dropout,
     training,
-    target_dtype=torch.float16,
+    target_dtype=None,
     **_kwargs,
 ):
     query_length = query.shape[-2]
 
     # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
-    value_dtype = value.dtype
-    query = query.to(value_dtype)
-    key = key.to(value_dtype)
+    query = query.to(value.dtype)
+    key = key.to(value.dtype)
 
     # Permute to get the expected shape for Flash Attention
     query = query.transpose(1, 2)
@@ -191,9 +190,8 @@ def sdpa_attention_forward(query, key, value, attention_mask, attention_dropout,
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
-    value_dtype = value.dtype
-    query = query.to(value_dtype)
-    key = key.to(value_dtype)
+    query = query.to(value.dtype)
+    key = key.to(value.dtype)
 
     # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
     query = query.contiguous()
@@ -219,9 +217,7 @@ def sdpa_attention_forward(query, key, value, attention_mask, attention_dropout,
     return attn_output, None
 
 
-def flex_attention_forward(
-    query, key, value, attention_mask, head_mask, norm_factor, output_attentions=False, **_kwargs
-):
+def flex_attention_forward(query, key, value, attention_mask, head_mask, norm_factor, **_kwargs):
     causal_mask = attention_mask
     if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
@@ -233,18 +229,20 @@ def flex_attention_forward(
             score += head_mask[b][h][0][0]
         return score
 
-    attn_output = flex_attention(
+    attn_output, attn_weights = flex_attention(
         query,
         key,
         value,
         score_mod=causal_mod,
         enable_gqa=True,
         scale=norm_factor,
-        return_lse=output_attentions,
+        # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
+        # For simplification, we thus always return it as no additional computations are introduced.
+        return_lse=True,
     )
 
-    attn_weights = attn_output[1] if output_attentions else None
-    attn_output = attn_output[0] if output_attentions else attn_output
+    # lse is returned in float32
+    attn_weights = attn_weights.to(value.dtype)
 
     # Reshape outputs
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -327,19 +325,6 @@ class GPTNeoXAttention(nn.Module):
             position_embeddings=position_embeddings,
         )
 
-        # Flash Attention 2 specific handling for PEFT integration
-        target_dtype = None
-        if self.config._attn_implementation == "flash_attention_2":
-            input_dtype = value.dtype
-            if input_dtype == torch.float32:
-                if torch.is_autocast_enabled():
-                    target_dtype = torch.get_autocast_gpu_dtype()
-                # Handle the case where the model is quantized
-                elif hasattr(self.config, "_pre_quantization_dtype"):
-                    target_dtype = self.config._pre_quantization_dtype
-                else:
-                    target_dtype = self.query_key_value.weight.dtype
-
         # Checking for fallbacks in case an unsupported feature is requested
         attention_type = self.config._attn_implementation
         if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
@@ -372,10 +357,8 @@ class GPTNeoXAttention(nn.Module):
             norm_factor=self.norm_factor,
             attention_dropout=self.config.attention_dropout,
             training=self.training,
-            # Flash Attention 2 specific
-            target_dtype=target_dtype,
-            # Flex Attention specific
-            output_attentions=output_attentions,
+            # Flash Attention 2 specific PEFT check
+            target_dtype=self._fa_peft_dtype_check(value),
         )
 
         # Reshape outputs and final projection
@@ -469,6 +452,25 @@ class GPTNeoXAttention(nn.Module):
             key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
 
         return query, key, value, layer_past
+
+    def _fa_peft_dtype_check(self, value):
+        """
+        PEFT can silently cast the dtype to float32 - this method returns the target dtype to which
+        FA should convert back to (if necessary). For now, we can not move this to the forward pass
+        itself due to the dependency on checking on some part of its own weights (last case).
+        """
+        target_dtype = None
+        if self.config._attn_implementation == "flash_attention_2":
+            input_dtype = value.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                # Handle the case where the model is quantized
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.query_key_value.weight.dtype
+        return target_dtype
 
 
 # TODO Remove in deprecation cycle
