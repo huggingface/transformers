@@ -3908,6 +3908,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 metadata = f.metadata()
 
             if metadata is None:
+                # Assume it's a pytorch checkpoint (introduced with for timm checkpoints)
                 pass
             elif metadata.get("format") == "pt":
                 pass
