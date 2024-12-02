@@ -76,7 +76,9 @@ class NemotronLayerNorm1P(nn.LayerNorm):
 
     def forward(self, input: Tensor) -> Tensor:
 
-        args = _cast_if_autocast_enabled(input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
+        args = _cast_if_autocast_enabled(
+            input, self.normalized_shape, self.weight + 1, self.bias, self.eps
+        )
         with torch.amp.autocast(input.device.type, enabled=False):
             return F.layer_norm(*args)
 
@@ -884,9 +886,13 @@ class NemotronModel(NemotronPreTrainedModel):
 
         if cache_position is None:
 
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)

@@ -1852,8 +1852,12 @@ class InstructBlipVideoForConditionalGeneration(
         if input_ids is None:
             start_tokens = [self.config.text_config.bos_token_id]
             if getattr(self.config, "video_token_index", None) is not None:
-                start_tokens += [self.config.video_token_index] * self.config.num_query_tokens * 4
-            input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
+                start_tokens += (
+                    [self.config.video_token_index] * self.config.num_query_tokens * 4
+                )
+            input_ids = torch.tensor(
+                [start_tokens], dtype=torch.long, device=image_embeds.device
+            )
             input_ids = input_ids.repeat(batch_size, 1)
 
         if attention_mask is None:

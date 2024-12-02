@@ -42,7 +42,13 @@ from transformers.utils import (
 
 from ...test_configuration_common import ConfigTester
 
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, sdpa_kernel
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    sdpa_kernel,
+)
 
 
 if is_torch_available():
@@ -783,8 +789,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                                     if torch_device in ["cpu", "cuda"]:
 
-                                        atol = atols[torch_device, enable_kernels, torch_dtype]
-                                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                        atol = atols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
+                                        rtol = rtols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
                                     elif torch_device == "xpu":
                                         # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                                         # which is implemented on PyTorch level using aten operators and is

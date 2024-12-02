@@ -799,7 +799,9 @@ class GgufIntegrationTests(unittest.TestCase):
             torch_dtype=torch.float16,
         )
 
-        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"].to(torch_device)
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"].to(
+            torch_device
+        )
         out = model.generate(text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello All,\nI am new to this forum."

@@ -51,7 +51,12 @@ from transformers.utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    sdpa_kernel,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -749,8 +754,12 @@ class MusicgenDecoderTest(
 
                                 if torch_device in ["cpu", "cuda"]:
 
-                                    atol = atols[torch_device, enable_kernels, torch_dtype]
-                                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                    atol = atols[
+                                        torch_device, enable_kernels, torch_dtype
+                                    ]
+                                    rtol = rtols[
+                                        torch_device, enable_kernels, torch_dtype
+                                    ]
                                 elif torch_device == "xpu":
                                     # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                                     # which is implemented on PyTorch level using aten operators and is
@@ -1613,8 +1622,9 @@ class MusicgenTest(
                     ]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-
-                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(
+                    enable_flash=True, enable_math=False, enable_mem_efficient=False
+                ):
                     _ = model(**inputs_dict)
 
     @require_flash_attn
@@ -2055,8 +2065,12 @@ class MusicgenTest(
 
                                 if torch_device in ["cpu", "cuda"]:
 
-                                    atol = atols[torch_device, enable_kernels, torch_dtype]
-                                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                    atol = atols[
+                                        torch_device, enable_kernels, torch_dtype
+                                    ]
+                                    rtol = rtols[
+                                        torch_device, enable_kernels, torch_dtype
+                                    ]
                                 elif torch_device == "xpu":
                                     # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                                     # which is implemented on PyTorch level using aten operators and is

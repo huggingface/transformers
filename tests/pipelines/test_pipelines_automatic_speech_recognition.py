@@ -1718,7 +1718,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="hf-internal-testing/tiny-random-wav2vec2",
         )
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        ).sort("id")
         audio = ds[40]["audio"]["array"]
 
         inputs = {"raw": audio, "sampling_rate": 16_000, "id": 1}

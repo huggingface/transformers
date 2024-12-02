@@ -101,7 +101,9 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool = True,
         size: Dict[str, int] = None,
         patch_size: Dict[str, int] = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = PILImageResampling.BICUBIC,
+        resample: Union[
+            PILImageResampling, "F.InterpolationMode"
+        ] = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -112,7 +114,9 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"longest_edge": 1024}
-        patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
+        patch_size = (
+            patch_size if patch_size is not None else {"height": 16, "width": 16}
+        )
         patch_size = get_size_dict(patch_size, default_to_square=True)
 
         self.do_resize = do_resize
@@ -122,8 +126,14 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
-        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
+        self.image_mean = (
+            image_mean
+            if image_mean is not None
+            else [0.48145466, 0.4578275, 0.40821073]
+        )
+        self.image_std = (
+            image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
+        )
         self.do_convert_rgb = do_convert_rgb
         self._valid_processor_keys = [
             "images",
@@ -164,18 +174,24 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use when resiizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        )
         if "longest_edge" in size:
             size = (size["longest_edge"], size["longest_edge"])
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("size must contain either 'longest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "size must contain either 'longest_edge' or 'height' and 'width'."
+            )
 
         if "height" in patch_size and "width" in patch_size:
             patch_size = (patch_size["height"], patch_size["width"])
         else:
-            raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "patch_size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -262,14 +278,21 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         device = kwargs.pop("device", None)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=self._valid_processor_keys,
+        )
 
         images_list = make_list_of_images(images)
         image_type = get_image_type(images_list[0][0])
@@ -291,28 +314,44 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         )
 
         if do_convert_rgb:
-            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+            images_list = [
+                [convert_to_rgb(image) for image in images] for images in images_list
+            ]
 
         if image_type == ImageType.PIL:
-            images_list = [[F.pil_to_tensor(image) for image in images] for images in images_list]
+            images_list = [
+                [F.pil_to_tensor(image) for image in images] for images in images_list
+            ]
         elif image_type == ImageType.NUMPY:
             # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images_list = [[torch.from_numpy(image).contiguous() for image in images] for images in images_list]
+            images_list = [
+                [torch.from_numpy(image).contiguous() for image in images]
+                for images in images_list
+            ]
 
         if device is not None:
-            images_list = [[image.to(device) for image in images] for images in images_list]
+            images_list = [
+                [image.to(device) for image in images] for images in images_list
+            ]
 
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(images_list[0][0])
         if input_data_format == ChannelDimension.LAST:
-            images_list = [[image.permute(2, 0, 1).contiguous() for image in images] for images in images_list]
+            images_list = [
+                [image.permute(2, 0, 1).contiguous() for image in images]
+                for images in images_list
+            ]
             input_data_format = ChannelDimension.FIRST
 
         if do_rescale and do_normalize:
             # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images_list[0][0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images_list[0][0].device) * (1.0 / rescale_factor)
+            new_mean = torch.tensor(image_mean, device=images_list[0][0].device) * (
+                1.0 / rescale_factor
+            )
+            new_std = torch.tensor(image_std, device=images_list[0][0].device) * (
+                1.0 / rescale_factor
+            )
 
         batch_images = []
         batch_image_sizes = []
@@ -335,7 +374,9 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
 
                 if do_rescale and do_normalize:
                     # fused rescale and normalize
-                    image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+                    image = F.normalize(
+                        image.to(dtype=torch.float32), new_mean, new_std
+                    )
                 elif do_rescale:
                     image = image * rescale_factor
                 elif do_normalize:
@@ -346,4 +387,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             batch_images.append(images)
             batch_image_sizes.append(image_sizes)
 
-        return BatchMixFeature(data={"pixel_values": batch_images, "image_sizes": batch_image_sizes}, tensor_type=None)
+        return BatchMixFeature(
+            data={"pixel_values": batch_images, "image_sizes": batch_image_sizes},
+            tensor_type=None,
+        )

@@ -195,7 +195,9 @@ def _deepspeed_zero3(ds_config):
 def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     if version.parse(torch.__version__).release < version.parse("2.3").release:
         return torch.backends.cuda.sdp_kernel(
-            enable_flash=enable_flash, enable_math=enable_math, enable_mem_efficient=enable_mem_efficient
+            enable_flash=enable_flash,
+            enable_math=enable_math,
+            enable_mem_efficient=enable_mem_efficient,
         )
 
     backends = []
@@ -3072,7 +3074,6 @@ class ModelTesterMixin:
             self.assertLessEqual(
                 max_diff,
                 tol,
-
                 f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}",
             )
         else:
@@ -5132,8 +5133,12 @@ class ModelTesterMixin:
 
                                     if torch_device in ["cpu", "cuda"]:
 
-                                        atol = atols[torch_device, enable_kernels, torch_dtype]
-                                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                        atol = atols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
+                                        rtol = rtols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
                                     elif torch_device == "xpu":
                                         # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                                         # which is implemented on PyTorch level using aten operators and is

@@ -747,11 +747,15 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id).to(
+                    torch_device
+                )
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
-                    model = transformers_class.from_pretrained(peft_model.config._name_or_path)
+                    model = transformers_class.from_pretrained(
+                        peft_model.config._name_or_path
+                    )
                     model.load_adapter(tmpdirname)
                     assert not any(p.requires_grad for p in model.parameters())
                     assert not any(m.training for m in model.modules())
@@ -764,11 +768,15 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id).to(
+                    torch_device
+                )
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
-                    model = transformers_class.from_pretrained(peft_model.config._name_or_path)
+                    model = transformers_class.from_pretrained(
+                        peft_model.config._name_or_path
+                    )
                     model.load_adapter(tmpdirname, is_trainable=True)
 
                     for name, module in model.named_modules():
