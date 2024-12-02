@@ -76,7 +76,9 @@ class SpQRTest(unittest.TestCase):
     input_text = "Hello my name is"
     max_new_tokens = 32
 
-    EXPECTED_OUTPUT = "Hello my name is Jesse. (I'm also known as Jesse) I'm a 25 year old male from United States. I'm looking for"
+    EXPECTED_OUTPUT = (
+        "Hello my name is Jesse. (I'm also known as Jesse) I'm a 25 year old male from United States. I'm looking for"
+    )
     EXPECTED_OUTPUT_COMPILE = "Hello my name is Jake and I am a 20 year old student at the University of North Texas. (Go Mean Green!) I am a huge fan of the Dallas"
 
     device_map = "cuda"
@@ -112,17 +114,18 @@ class SpQRTest(unittest.TestCase):
         quantization_config = SpQRConfig.from_dict(quantization_config)
 
         with init_empty_weights():
-            model = AutoModelForCausalLM.from_pretrained(
-                pretrained_model_name_or_path=model_id,
-                config=config)
+            model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id, config=config)
 
         nb_linears = 0
         for module in model.modules():
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_spqr_linear(model, quantization_config=quantization_config,
-                                            modules_to_not_convert=quantization_config.modules_to_not_convert)
+        model, _ = replace_with_spqr_linear(
+            model,
+            quantization_config=quantization_config,
+            modules_to_not_convert=quantization_config.modules_to_not_convert,
+        )
 
         nb_spqr_linear = 0
         for module in model.modules():
@@ -176,7 +179,6 @@ class SpQRTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-
     def test_quantized_model_compile(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -227,7 +229,7 @@ class SpQRTest(unittest.TestCase):
 
         with torch.no_grad():
             # Compile the CUDA graph
-            decode_one_tokens = torch.compile(decode_one_tokens, mode="default", backend='inductor', fullgraph=True)
+            decode_one_tokens = torch.compile(decode_one_tokens, mode="default", backend="inductor", fullgraph=True)
 
             # Generate tokens one by one
             cache_position = torch.tensor([seq_length + 1], device=torch_device)
@@ -240,4 +242,6 @@ class SpQRTest(unittest.TestCase):
                 cache_position += 1
 
         # Check generated text
-        self.assertEqual(self.tokenizer.decode(generated_ids[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_COMPILE)
+        self.assertEqual(
+            self.tokenizer.decode(generated_ids[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_COMPILE
+        )
