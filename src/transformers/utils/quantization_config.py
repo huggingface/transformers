@@ -1157,6 +1157,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
 
         """
+
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
@@ -1167,6 +1168,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def to_dict(self) -> Dict[str, Any]:
         """
+        Quantization config to be added to config.json
+
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """

@@ -113,5 +113,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # models need to be decompressed carry out qat
         return not self.run_compressed or not self.is_compressed
 
-    def is_serializable(self, safe_serialization=None):
-        return False
+    def is_serializable(self, safe_serialization=None) -> bool:
+        """Models quantized using compressed tensors can be saved to disk"""
+        return True
