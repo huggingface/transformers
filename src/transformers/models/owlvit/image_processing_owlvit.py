@@ -542,7 +542,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return results
 
-    # TODO: (Amy) Make compatible with other frameworks
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
@@ -591,13 +590,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         # Convert from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.tensor([i[0] for i in target_sizes])
-                img_w = torch.tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(target_boxes.device)
-            target_boxes = target_boxes * scale_fct[:, None, :]
+            target_boxes = _scale_boxes(target_boxes, target_sizes)
 
         # Compute box display alphas based on prediction scores
         results = []

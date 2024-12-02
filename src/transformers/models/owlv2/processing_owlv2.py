@@ -27,7 +27,7 @@ from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_av
 
 
 if TYPE_CHECKING:
-    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
+    from .modeling_owlv2 import Owlv2ImageGuidedObjectDetectionOutput, Owlv2ObjectDetectionOutput
 
 
 class Owlv2Processor(ProcessorMixin):
@@ -225,12 +225,38 @@ class Owlv2Processor(ProcessorMixin):
         return output
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_image_guided_detection with OwlViT->Owlv2
-    def post_process_image_guided_detection(self, *args, **kwargs):
+    def post_process_image_guided_detection(
+        self,
+        outputs: "Owlv2ImageGuidedObjectDetectionOutput",
+        threshold: float = 0.0,
+        nms_threshold: float = 0.3,
+        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+    ):
         """
-        This method forwards all its arguments to [`Owlv2ImageProcessor.post_process_one_shot_object_detection`].
-        Please refer to the docstring of this method for more information.
+        Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO
+        api.
+
+        Args:
+            outputs ([`Owlv2ImageGuidedObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.0):
+                Minimum confidence threshold to use to filter out predicted boxes.
+            nms_threshold (`float`, *optional*, defaults to 0.3):
+                IoU threshold for non-maximum suppression of overlapping boxes.
+            target_sizes (`torch.Tensor`, *optional*):
+                Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
+                the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
+                None, predictions will not be unnormalized.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            - "scores": The confidence scores for each predicted box on the image.
+            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
+            - "labels": Set to `None`.
         """
-        return self.image_processor.post_process_image_guided_detection(*args, **kwargs)
+        return self.image_processor.post_process_image_guided_detection(
+            outputs=outputs, threshold=threshold, nms_threshold=nms_threshold, target_sizes=target_sizes
+        )
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.batch_decode
     def batch_decode(self, *args, **kwargs):
