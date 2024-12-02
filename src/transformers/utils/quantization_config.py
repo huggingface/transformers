@@ -1245,6 +1245,10 @@ class HiggsConfig(QuantizationConfigMixin):
             Quantization grid dimension. 1 and 2 are supported. 2 is always better in practice. Default is 2.
         modules_to_not_convert (`list`, *optional*, default to ["lm_head"]):
             List of linear layers that should not be quantized.
+        hadamard_size (int, *optional*, defaults to 512):
+            Hadamard size for the HIGGS method. Default is 512. Input dimension of matrices is padded to this value. Decreasing this below 512 will reduce the quality of the quantization.
+        group_size (int, *optional*, defaults to 256):
+            Group size for the HIGGS method. Can be 64, 128 or 256. Decreasing it barely affects the performance. Default is 256. Must be a divisor of hadamard_size.
     """
 
     def __init__(
@@ -1252,6 +1256,8 @@ class HiggsConfig(QuantizationConfigMixin):
         bits: int = 4,
         p: int = 2,
         modules_to_not_convert: Optional[List[str]] = None,
+        hadamard_size: int = 512,
+        group_size: int = 256,
         **kwargs,
     ):
         if modules_to_not_convert is None:
@@ -1260,6 +1266,8 @@ class HiggsConfig(QuantizationConfigMixin):
         self.bits = bits
         self.p = p
         self.modules_to_not_convert = modules_to_not_convert
+        self.hadamard_size = hadamard_size
+        self.group_size = group_size
 
         self.post_init()
 
@@ -1269,6 +1277,8 @@ class HiggsConfig(QuantizationConfigMixin):
         """
         assert self.bits in [2, 3, 4], "bits must be 2, 3 or 4"
         assert self.p in [1, 2], "p must be 1 or 2. 2 is always better in practice"
+        assert self.group_size in [64, 128, 256], "group_size must be 64, 128 or 256"
+        assert self.hadamard_size % self.group_size == 0, "hadamard_size must be divisible by group_size"
 
 
 @dataclass

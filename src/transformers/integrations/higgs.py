@@ -597,6 +597,8 @@ def replace_with_higgs_linear(
                         out_features,
                         bias=module.bias is not None,
                         num_bits=quantization_config.bits,
+                        hadamard_size=quantization_config.hadamard_size,
+                        group_size=quantization_config.group_size,
                     )
                     has_been_replaced = True
 

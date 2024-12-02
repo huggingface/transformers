@@ -107,6 +107,8 @@ class HiggsHfQuantizer(HfQuantizer):
             param_value.to(target_device),
             self.quantization_config.bits,
             self.quantization_config.p,
+            self.quantization_config.group_size,
+            self.quantization_config.hadamard_size,
         )
 
         del param_value
@@ -168,13 +170,13 @@ class HiggsHfQuantizer(HfQuantizer):
                             scales=module.scales.data,
                             workspace=module.workspace,
                             num_bits=module.num_bits,
-                            group_size=256,
+                            group_size=module.group_size,
                             num_sms_packed=module.num_sms_packed.item(),
                         )
                         .T.contiguous()
                         .cpu(),
                         module.num_bits,
-                        256,
+                        module.group_size,
                     ).to(device=new_device)
                     module.num_sms_packed = torch.nn.Parameter(
                         torch.tensor(new_num_sms, device=new_device, dtype=torch.int32),
