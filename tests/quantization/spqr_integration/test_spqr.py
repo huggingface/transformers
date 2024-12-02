@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     torch_device,
+    slow,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
 
@@ -67,6 +68,7 @@ class SpQRConfigTest(unittest.TestCase):
         self.assertEqual(dict["shapes"], quantization_config.shapes)
 
 
+@slow
 @require_torch_gpu
 @require_spqr
 @require_accelerate

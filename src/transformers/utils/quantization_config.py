@@ -1523,6 +1523,11 @@ class SpQRConfig(QuantizationConfigMixin):
             SpQR tile width. Currently only beta1 = 16 is supported.
         beta2 (`int`, *optional*, defaults to 16):
             SpQR tile height. Currently only beta2 = 16 is supported.
+        shapes (`Optional`, *optional*):
+            A dictionary holding the shape of each object. We need this because it's impossible
+            to deduce the exact size of the parameters just from bits, beta1, beta2.
+        modules_to_not_convert (`Optional`, *optional*):
+            List of full paths of `nn.Linear` weight parameters that shall not be quantized.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
