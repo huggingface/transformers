@@ -1617,7 +1617,7 @@ class GenerationTesterMixin:
             #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
             pixel_values_is_mutually_exclusive = any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma"]
+                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma", "chameleon"]
             )
             if pixel_values_is_mutually_exclusive:
                 inputs_dict.pop("pixel_values", None)
@@ -1935,6 +1935,7 @@ class GenerationTesterMixin:
                     "output_scores": True,
                     "use_cache": True,
                 }
+                inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
 
                 static_cache_generation = model.generate(
                     **generation_kwargs, **inputs_dict, cache_implementation="static"

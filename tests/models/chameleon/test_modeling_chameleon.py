@@ -24,13 +24,14 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
     require_torch,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -57,7 +58,7 @@ class ChameleonModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        image_token_id=98,
+        image_token_index=1,
         boi_token_id=97,
         eoi_token_id=96,
         hidden_size=32,
@@ -72,6 +73,7 @@ class ChameleonModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
+        image_size=10,
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
@@ -83,12 +85,11 @@ class ChameleonModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.image_token_id = image_token_id
+        self.image_token_index = image_token_index
         self.boi_token_id = boi_token_id
         self.eoi_token_id = eoi_token_id
         self.hidden_size = hidden_size
@@ -107,13 +108,19 @@ class ChameleonModelTester:
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
         self.scope = scope
+        self.image_size = image_size
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
         self.vq_channel_multiplier = vq_channel_multiplier
         self.vq_img_token_start_id = vq_img_token_start_id
+        self.image_seq_length = 25
+        self.seq_length = seq_length + self.image_seq_length
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[input_ids == self.image_token_index] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_index
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
 
         input_mask = None
         if self.use_input_mask:
@@ -129,7 +136,7 @@ class ChameleonModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, input_mask, pixel_values, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
         # create dummy vocab map for image2bpe mapping if it needs remapping
@@ -138,7 +145,7 @@ class ChameleonModelTester:
         # we will need "vq_num_embeds" amount of tokens
 
         vocab_map = {i: chr(i) for i in range(self.vocab_size)}
-        vocab_map[self.image_token_id] = "<image>"
+        vocab_map[self.image_token_index] = "<image>"
         start = self.vq_img_token_start_id
         end = self.vq_img_token_start_id + self.vq_num_embeds
         for i in range(start, end):
@@ -163,7 +170,7 @@ class ChameleonModelTester:
             pad_token_id=self.pad_token_id,
             vocabulary_map={v: k for k, v in vocab_map.items()},
             vq_config=self.get_vq_config(),
-            image_token_id=self.image_token_id,
+            image_token_index=self.image_token_index,
             boi_token_id=self.boi_token_id,
             eoi_token_id=self.eoi_token_id,
         )
@@ -178,11 +185,13 @@ class ChameleonModelTester:
             "channel_multiplier": self.vq_channel_multiplier,
         }
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(
+        self, config, input_ids, input_mask, pixel_values, sequence_labels, token_labels, choice_labels
+    ):
         model = ChameleonModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
@@ -269,11 +278,12 @@ class ChameleonModelTester:
             config,
             input_ids,
             input_mask,
+            pixel_values,
             sequence_labels,
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "pixel_values": pixel_values}
         return config, inputs_dict
 
 
@@ -336,13 +346,51 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
+
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
-        pass
-
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("Chameleon is not compatible with end-to-end generation compilation")
-    def test_generate_compile_fullgraph(self):
         pass
 
 

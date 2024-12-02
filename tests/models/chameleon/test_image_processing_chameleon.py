@@ -206,6 +206,7 @@ class ChameleonImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue((encoded_images_nested == encoded_images).all())
 
     def test_postprocessing(self):
+        """Tests image postprocessing, in other words converting a normalized image back to `PIL` image"""
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # Pixel values for an image with 3 channels and 32x32 resolution
         pixel_values_single = torch.zeros((3, 32, 32))
@@ -217,3 +218,12 @@ class ChameleonImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(unnormalized_pixel_values.shape, pixel_values.shape)
             expected_pixel_values = torch.full_like(pixel_values, 128)
             self.assertTrue(torch.equal(unnormalized_pixel_values, expected_pixel_values))
+
+        # Test normalize -> unnormalize back if the arrays match
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], do_resize=False, do_center_crop=False, return_tensors="pt")
+        unnormalized_image = image_processing.postprocess(encoded_images.pixel_values)
+        # the diff of 1 because the images are in range 0-255 in `uint8` and some precision errors might apply
+        self.assertTrue((image_inputs[0] - unnormalized_image).abs().max() <= 1)

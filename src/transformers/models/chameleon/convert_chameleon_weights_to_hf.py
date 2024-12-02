@@ -325,9 +325,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1, vq
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
         tokenizer_config = json.load(tokenizer_file)
         vocabulary_map = tokenizer_config["model"]["vocab"]
-        vocabulary_map["<image>"] = vocabulary_map[
-            "<reserved08707>"
-        ]  # use a reserved token instead of adding a new one
+        # use a reserved token instead of adding a new one
+        vocabulary_map["<image>"] = vocabulary_map["<reserved08707>"]
         del vocabulary_map["<reserved08707>"]
 
         for token in tokenizer_config["added_tokens"]:
@@ -382,8 +381,15 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1, vq
         model.model.vqmodel.save_pretrained(vqvae_path, safe_serialization=True)
 
     # Load and save the processor
+    extra_special_tokens = {
+        "image_token": "<image>",
+        "boi_token": "<racm3:break>",
+        "eoi_token": "<eoss>",
+    }
     tokenizer = LlamaTokenizerFast(
-        tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
+        tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"),
+        legacy=False,
+        extra_special_tokens=extra_special_tokens,
     )
     tokenizer.sep_token_id = 8710  # assign <reserved08706> to sep so that we can append it after input text
     tokenizer.pad_token_id = 1  # assing <pad> to special pad_token
