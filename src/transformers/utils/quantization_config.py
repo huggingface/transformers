@@ -1523,7 +1523,7 @@ class SpQRConfig(QuantizationConfigMixin):
         self.bits = bits
         self.beta1 = beta1
         self.beta2 = beta2
-        self.linear_weights_not_to_quantize = kwargs["linear_weights_not_to_quantize"]
+        self.modules_to_not_convert = kwargs["modules_to_not_convert"]
         self.shapes = kwargs["shapes"]
         self.post_init()
 
