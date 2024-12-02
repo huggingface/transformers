@@ -47,7 +47,7 @@ def replace_with_spqr_linear(
             should not be passed by the user.
     """
     if not is_spqr_available():
-        raise ValueError("SpQR is not available. Please install it with `pip install spqr_quant`")
+        raise ValueError("SpQR is not available. Please install it with `pip install spqr_quant[gpu]`")
 
     if not is_accelerate_available():
         raise ValueError(
