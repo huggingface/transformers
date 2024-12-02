@@ -540,6 +540,10 @@ class Trainer:
             getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
         )
 
+        _is_model_quantized_and_qat_trainable = getattr(model, "hf_quantizer", None) is not None and getattr(
+            model.hf_quantizer, "is_qat_trainable", False
+        )
+
         # Filter out quantized + compiled models
         if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
             raise ValueError(
@@ -547,7 +551,7 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if _is_quantized_and_base_model and not _is_peft_model(model):
+        if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_qat_trainable:
             raise ValueError(
                 "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
@@ -2109,7 +2113,7 @@ class Trainer:
                 FutureWarning,
             )
         if len(kwargs) > 0:
-            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
+            raise TypeError(f"train() got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
         self._train_batch_size = self.args.train_batch_size
