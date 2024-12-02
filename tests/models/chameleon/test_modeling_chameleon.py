@@ -19,7 +19,7 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers import ChameleonConfig, ChameleonVQVAEConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
@@ -45,6 +45,7 @@ if is_torch_available():
         ChameleonForConditionalGeneration,
         ChameleonModel,
         ChameleonProcessor,
+        ChameleonVQVAE,
     )
 
 
@@ -300,7 +301,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
+    test_head_masking = False
     test_pruning = False
     fx_compatible = False
 
@@ -391,6 +392,104 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
+        pass
+
+
+class ChameleonVQModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=5,
+        is_training=False,
+        initializer_range=0.02,
+        image_size=30,
+        num_embeds=12,
+        base_channels=32,  # we have a GroupNorm of 32 groups, so can't do less
+        embed_dim=12,
+        channel_multiplier=[1, 2],
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.initializer_range = initializer_range
+        self.image_size = image_size
+        self.base_channels = base_channels
+        self.num_embeds = num_embeds
+        self.embed_dim = embed_dim
+        self.channel_multiplier = channel_multiplier
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
+        config = self.get_config()
+        return config, pixel_values
+
+    def get_config(self):
+        return ChameleonVQVAEConfig(
+            embed_dim=self.embed_dim,
+            num_embeddings=self.num_embeds,
+            latent_channels=self.embed_dim,
+            in_channels=3,
+            base_channels=self.base_channels,
+            channel_multiplier=self.channel_multiplier,
+            initializer_range=self.initializer_range,
+            resolution=self.image_size,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class ChameleonVQModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (ChameleonVQVAE,) if is_torch_available() else ()
+    test_head_masking = False
+    test_pruning = False
+    fx_compatible = False
+    has_attentions = False
+    test_resize_embeddings = False
+
+    def setUp(self):
+        self.model_tester = ChameleonVQModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=ChameleonVQVAEConfig,
+            has_text_modality=False,
+            common_properties=["embed_dim", "num_embeddings"],
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip("Chameleon VQ module cannot offload due to using `self.weight` directly")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("Chameleon VQ module cannot offload due to using `self.weight` directly")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip("Chameleon VQ module cannot offload due to using `self.weight` directly")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Chameleon VQ module has no hidden states")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("Chameleon VQ module has no hidden states")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("Chameleon VQ module has no get/set embeddings method")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip("Chameleon VQ module has no hidden states")
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
 

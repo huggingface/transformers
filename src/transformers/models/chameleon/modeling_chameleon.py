@@ -16,6 +16,7 @@
 
 import math
 import warnings
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Dict, Literal, Optional, Tuple, Union
 
@@ -47,6 +48,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -69,6 +71,22 @@ _CHECKPOINT_FOR_DOC = "meta/chameleon-7b"
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 4096]
 _SEQ_CLASS_EXPECTED_LOSS = 1.03
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
+
+
+@dataclass
+class ChameleonVQVAEOutput(ModelOutput):
+    """
+    Base class for Chameleon Vq-VAE mode model outputs.
+
+    Args:
+        decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            Reconstructed pixel values after encoding and decoding the input.
+        emb_loss (`torch.FloatTensor`):
+            Embedding loss.
+    """
+
+    decoded_pixel_values: Optional[torch.FloatTensor] = None
+    emb_loss: torch.FloatTensor = None
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Chameleon
@@ -1123,6 +1141,7 @@ CHAMELEON_VQ_START_DOCSTRING = r"""
 class ChameleonVQVAE(PreTrainedModel):
     config_class = ChameleonVQVAEConfig
     _no_split_modules = ["ChameleonVQVAEVectorQuantizer"]
+    main_input_name = "pixel_values"
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1176,7 +1195,7 @@ class ChameleonVQVAE(PreTrainedModel):
                 Batch of token IDs.
 
         Returns:
-            (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 Pixel values decoded from the token IDs.
         """
         if image_tokens.shape[1] != self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]:
@@ -1188,6 +1207,31 @@ class ChameleonVQVAE(PreTrainedModel):
         hidden_states = self.post_quant_conv(codebook_entry)
         pixel_values = self.decoder(hidden_states)
         return pixel_values
+
+    def forward(
+        self, pixel_values: torch.FloatTensor, return_dict: bool = None
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        """
+        Encodes pixel values into quantized tokens and decodes them back.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        Returns:
+            decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                Reconstructed pixel values after encoding and decoding the input.
+            emb_loss (`torch.FloatTensor`):
+                Embedding loss.
+
+        """
+        quant, emb_loss, indices = self.encode(pixel_values)
+        decoded_pixel_values = self.decode(indices)
+        if not return_dict:
+            return (decoded_pixel_values, emb_loss)
+        return ChameleonVQVAEOutput(decoded_pixel_values, emb_loss)
 
 
 class ChameleonImageVocabularyMapping:
