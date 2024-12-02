@@ -49,7 +49,7 @@ class SpQRHfQuantizer(HfQuantizer):
             raise ImportError("Using `spqr` quantization requires Accelerate: `pip install accelerate`")
 
         if not is_spqr_available():
-            raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant`")
+            raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         return torch.float16
