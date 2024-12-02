@@ -337,7 +337,7 @@ class GPTNeoXAttention(nn.Module):
             )
             attention_type = "eager"
 
-        if (
+        elif (
             self.training
             and self.config.attention_dropout > 0
             and self.config._attn_implementation == "flex_attention"
