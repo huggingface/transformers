@@ -485,7 +485,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         if isinstance(target_sizes, List):
-            image_pair_sizes = torch.tensor(target_sizes)
+            image_pair_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
         else:
             if target_sizes.shape[1] != 2 or target_sizes.shape[2] != 2:
                 raise ValueError(
