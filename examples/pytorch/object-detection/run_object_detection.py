@@ -381,6 +381,7 @@ def main():
     # Defaults for object detection task
     training_args.remove_unused_columns = False
     training_args.eval_do_concat_batches = False
+    training_args.batch_eval_metrics = True
 
     # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # # information sent is the one passed as arguments along with your Python/PyTorch versions.
