@@ -421,7 +421,12 @@ class GenerationMixin:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
                 if past_key_values is not None:
-                    model_input = model_input[:, -input_ids.shape[1] :]
+                    current_input_length = (
+                        model_inputs["inputs_embeds"].shape[1]
+                        if model_inputs["inputs_embeds"] is not None
+                        else model_inputs[input_ids_key].shape[1]
+                    )
+                    model_input = model_input[:, -current_input_length:]
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input
 
@@ -1605,7 +1610,7 @@ class GenerationMixin:
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
-            or cache_to_check.batch_size != batch_size
+            or cache_to_check.max_batch_size != batch_size
         )
         if cache_implementation != "mamba":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
@@ -1661,7 +1666,7 @@ class GenerationMixin:
 
             cache_kwargs = {
                 "config": self.config.get_text_config(),
-                "batch_size": batch_size,
+                "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,
