@@ -264,7 +264,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
 
         size = size if size is not None else self.size
-        size_dict = get_size_dict(size)
 
         images = make_list_of_images(images)
 

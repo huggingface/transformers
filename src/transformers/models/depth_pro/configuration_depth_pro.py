@@ -56,7 +56,7 @@ class DepthProConfig(PretrainedConfig):
         image_size (`int`, *optional*, defaults to 1536):
             The size (resolution) of each image,
             To generate depth of same size as image,
-            image_size / 2**n_fusion_blocks == patch_size / patch_embeddings_size
+            image_size / 2**(n_fusion_blocks+1) == patch_size / patch_embeddings_size
             where n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
         patch_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each patch.
