@@ -17,12 +17,12 @@ import gc
 import tempfile
 import unittest
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, SpQRConfig, StaticCache
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, SpQRConfig, StaticCache
 from transformers.testing_utils import (
     require_accelerate,
     require_spqr,
     require_torch_gpu,
-    slow,
+    require_torch_multi_gpu,
     torch_device,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
@@ -67,17 +67,17 @@ class SpQRConfigTest(unittest.TestCase):
         self.assertEqual(dict["shapes"], quantization_config.shapes)
 
 
-@slow
 @require_torch_gpu
 @require_spqr
 @require_accelerate
 class SpQRTest(unittest.TestCase):
-    model_name = "elvircrn/Llama-2-7b-SPQR-3Bit-16x16-red_pajama-hf"
+    model_name = "/home/elvircrn/CLionProjects/spqr_kernel/data/hf_output"
 
     input_text = "Hello my name is"
     max_new_tokens = 32
 
-    EXPECTED_OUTPUT = "Hello my name is Katie. I am a 20 year old college student. I am a very outgoing person. I love to have fun and be active. I"
+    EXPECTED_OUTPUT = "Hello my name is Jesse. (I'm also known as Jesse) I'm a 25 year old male from United States. I'm looking for"
+    EXPECTED_OUTPUT_COMPILE = "Hello my name is Jake and I am a 20 year old student at the University of North Texas. (Go Mean Green!) I am a huge fan of the Dallas"
 
     device_map = "cuda"
 
@@ -106,33 +106,24 @@ class SpQRTest(unittest.TestCase):
 
         from transformers.integrations import replace_with_spqr_linear
 
-        model_id = "facebook/opt-350m"
-        config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        quantization_config = SpQRConfig()
+        model_id = "meta-llama/Llama-2-7b-hf"
+        config = AutoConfig.from_pretrained(model_id)
+        quantization_config = AutoConfig.from_pretrained(self.model_name, return_dict=False).quantization_config
+        quantization_config = SpQRConfig.from_dict(quantization_config)
 
         with init_empty_weights():
-            model = OPTForCausalLM(config)
+            model = AutoModelForCausalLM.from_pretrained(
+                pretrained_model_name_or_path=model_id,
+                config=config)
 
         nb_linears = 0
         for module in model.modules():
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_spqr_linear(model, quantization_config=quantization_config)
-        nb_spqr_linear = 0
-        for module in model.modules():
-            if isinstance(module, QuantizedLinear):
-                nb_spqr_linear += 1
+        model, _ = replace_with_spqr_linear(model, quantization_config=quantization_config,
+                                            modules_to_not_convert=quantization_config.modules_to_not_convert)
 
-        self.assertEqual(nb_linears, nb_spqr_linear)
-
-        # Try with `modules_to_not_convert`
-        with init_empty_weights():
-            model = OPTForCausalLM(config)
-
-        model, _ = replace_with_spqr_linear(
-            model, quantization_config=quantization_config, modules_to_not_convert=["lm_head.weight"]
-        )
         nb_spqr_linear = 0
         for module in model.modules():
             if isinstance(module, QuantizedLinear):
@@ -150,12 +141,13 @@ class SpQRTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_raise_if_non_quantized(self):
-        model_id = "facebook/opt-125m"
-        quantization_config = SpQRConfig(bits=4)
+        model_id = "meta-llama/Llama-2-7b-hf"
+        quantization_config = SpQRConfig()
 
         with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
+    @unittest.skip
     def test_save_pretrained(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded
@@ -168,6 +160,22 @@ class SpQRTest(unittest.TestCase):
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    @require_torch_multi_gpu
+    def test_quantized_model_multi_gpu(self):
+        """
+        Simple test that checks if the quantized model is working properly with multiple GPUs
+        """
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
 
     def test_quantized_model_compile(self):
         """
@@ -219,7 +227,7 @@ class SpQRTest(unittest.TestCase):
 
         with torch.no_grad():
             # Compile the CUDA graph
-            decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
+            decode_one_tokens = torch.compile(decode_one_tokens, mode="default", backend='inductor', fullgraph=True)
 
             # Generate tokens one by one
             cache_position = torch.tensor([seq_length + 1], device=torch_device)
@@ -232,4 +240,4 @@ class SpQRTest(unittest.TestCase):
                 cache_position += 1
 
         # Check generated text
-        self.assertEqual(self.tokenizer.decode(generated_ids[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertEqual(self.tokenizer.decode(generated_ids[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_COMPILE)

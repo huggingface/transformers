@@ -1532,14 +1532,20 @@ class SpQRConfig(QuantizationConfigMixin):
         bits: int = 3,
         beta1: int = 16,
         beta2: int = 16,
+        shapes: Optional[Dict[str, int]] = None,
+        modules_to_not_convert: Optional[List[str]] = None,
         **kwargs,
     ):
+        if shapes is None:
+            shapes = {}
+        self.shapes = shapes
         self.quant_method = QuantizationMethod.SPQR
         self.bits = bits
         self.beta1 = beta1
         self.beta2 = beta2
-        self.modules_to_not_convert = kwargs["modules_to_not_convert"]
-        self.shapes = kwargs["shapes"]
+        if modules_to_not_convert is None:
+            modules_to_not_convert = []
+        self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
     def post_init(self):
@@ -1559,6 +1565,11 @@ class SpQRConfig(QuantizationConfigMixin):
             raise ValueError("SpQR currently only supports beta1 = 16")
         if self.beta2 != 16:
             raise ValueError("SpQR currently only supports beta2 = 16")
+
+        if self.modules_to_not_convert is not None and not isinstance(
+            self.modules_to_not_convert, list
+        ):
+            raise ValueError("modules_to_not_convert must be a list of strings")
 
         if not isinstance(self.shapes, dict):
             raise TypeError("shapes must be a dict")
