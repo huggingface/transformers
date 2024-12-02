@@ -20,6 +20,26 @@ HIGGS is a 0-shot quantization algorithm that combines Hadamard preprocessing wi
 
 Runtime support for HIGGS is implemented through [FLUTE](https://arxiv.org/abs/2407.10960), and its [library](https://github.com/HanGuo97/flute).
 
+## Usage Example
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, HiggsConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-2-9b-it",
+    quantization_config=HiggsConfig(bits=4),
+    device_map="auto",
+)
+
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b-it")
+
+tokenizer.decode(model.generate(
+    **tokenizer("Hi,", return_tensors="pt").to(model.device),
+    temperature=0.5,
+    top_p=0.80,
+)[0])
+```
+
 ## Current Limitations
 
 **Architectures**
