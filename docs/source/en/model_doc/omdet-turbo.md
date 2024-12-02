@@ -55,7 +55,7 @@ Here's how to load the model and prepare the inputs to perform zero-shot object 
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
->>> text_labels = [["cat", "remote"]]
+>>> text_labels = ["cat", "remote"]
 >>> inputs = processor(image, text=text_labels, return_tensors="pt")
 
 >>> with torch.no_grad():

@@ -156,7 +156,7 @@ def _post_process_boxes_for_image(
             The maximum number of detections to return. Default is None.
 
     Returns:
-        Tuple: A tuple the following:
+        Tuple: A tuple with the following:
             "boxes" (Tensor): A tensor of shape (num_filtered_objects, 4), containing the predicted boxes in (x1, y1, x2, y2) format.
             "scores" (Tensor): A tensor of shape (num_filtered_objects,), containing the predicted confidence scores for each detection.
             "labels" (Tensor): A tensor of ids, where each id is the predicted class id for the corresponding detection
@@ -336,7 +336,7 @@ class OmDetTurboProcessor(ProcessorMixin):
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
             text_labels (Union[List[str], List[List[str]]], *optional*):
-                The input classes names. If not provided, classes will be set to `None` in `outputs`.
+                The input classes names. If not provided, `text_labels` will be set to `None` in `outputs`.
             threshold (float, defaults to 0.3):
                 Only return detections with a confidence score exceeding this threshold.
             nms_threshold (float, defaults to 0.5):
