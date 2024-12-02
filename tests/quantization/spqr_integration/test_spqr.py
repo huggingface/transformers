@@ -23,8 +23,8 @@ from transformers.testing_utils import (
     require_spqr,
     require_torch_gpu,
     require_torch_multi_gpu,
-    torch_device,
     slow,
+    torch_device,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
 
