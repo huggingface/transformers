@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -345,7 +344,6 @@ class MolmoTextAttention(nn.Module):
             hidden_size=(self.hidden_size // self.num_heads) * self.num_key_value_heads,
             use_layer_norm=config.use_attention_layer_norm,
         )
-
         self.rotary_emb = MolmoTextRotaryEmbedding(config=self.config)
 
     def forward(
@@ -646,88 +644,6 @@ MOLMO_TEXT_ATTENTION_CLASSES = {
 }
 
 
-class MolmoPrenormDecoderLayer(nn.Module):
-    def __init__(self, config, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        if config.sliding_window and config._attn_implementation != "flash_attention_2":
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
-        self.self_attn = MOLMO_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-        self.mlp = MolmoMLP(config)
-        self.input_layernorm = MolmoTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MolmoTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
-
-
 class MolmoDecoderLayer(nn.Module):
     def __init__(self, config, layer_idx: int):
         super().__init__()
@@ -779,6 +695,8 @@ class MolmoDecoderLayer(nn.Module):
 
         residual = hidden_states
 
+        hidden_states = self.input_layernorm(hidden_states)
+
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -790,13 +708,80 @@ class MolmoDecoderLayer(nn.Module):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-        hidden_states = self.input_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+
+
+class MolmoPrenormDecoderLayer(MolmoDecoderLayer):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -853,8 +838,6 @@ class MolmoPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 MOLMO_TEXT_START_DOCSTRING = r"""
@@ -993,11 +976,8 @@ class MolmoTextModel(MolmoTextPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(
-            config.vocab_size,
-            config.hidden_size,
-        )
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         decoder_layer = MolmoDecoderLayer if self.config.use_postnorm else MolmoPrenormDecoderLayer
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -2064,6 +2044,10 @@ MOLMO_VISION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "openai/molmo_vision-vit-base-patch32"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
+
 
 @add_start_docstrings(
     """The vision model from MOLMO_VISION without any head or projection on top.""",
@@ -2136,7 +2120,6 @@ class MolmoPoolingAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
 
-        self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
@@ -2153,33 +2136,17 @@ class MolmoPoolingAttention(nn.Module):
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
-        seq_len = key_value_hidden_states.shape[1]
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = (
-            self.k_proj(key_value_hidden_states)
-            .view(bsz, seq_len, self.num_heads, self.head_dim)
-            .transpose(1, 2)
-            .contiguous()
-        )
-        value_states = (
-            self.v_proj(key_value_hidden_states)
-            .view(bsz, seq_len, self.num_heads, self.head_dim)
-            .transpose(1, 2)
-            .contiguous()
-        )
+        src_len = key_value_hidden_states.shape[1]
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = (
-            query_states.view(bsz, tgt_len, self.num_heads, self.head_dim)
-            .transpose(1, 2)
-            .contiguous()
-            .view(*proj_shape)
-        )
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -2187,17 +2154,10 @@ class MolmoPoolingAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -2205,13 +2165,12 @@ class MolmoPoolingAttention(nn.Module):
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, tgt_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped
+        return attn_output, attn_weights
 
 
 class MolmoPoolingSdpaAttention(MolmoPoolingAttention):
@@ -2359,10 +2318,6 @@ MOLMO_POOLING_ATTENTION_CLASSES = {
 }
 
 
-@add_start_docstrings(
-    """The adapter model from MOLMO that takes in image hidden states from vision tower.""",
-    MOLMO_START_DOCSTRING,
-)
 class MolmoAdapterModel(MolmoPreTrainedModel):
     config_class = MolmoPoolingConfig
     main_input_name = "image_features"
@@ -2370,25 +2325,20 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
     def __init__(self, config: MolmoPoolingConfig):
         super().__init__(config)
 
-        attention_class = MOLMO_POOLING_ATTENTION_CLASSES[config._attn_implementation]
-        if config.image_pooling_type in {"attention", "attention_meanq"}:
+        if config.image_pooling_type == "attention_meanq":
+            attention_class = MOLMO_POOLING_ATTENTION_CLASSES[config._attn_implementation]
             self.image_pooling_2d = attention_class(config)
-        elif config.image_pooling_type == "attention_2wide":
-            self.image_pooling_2d = attention_class(config)
-        elif config.image_pooling_type == "attention_v2":
-            self.image_pooling_2d = attention_class(config)
-        elif config.image_pooling_type in [None, "stack"]:
-            self.image_pooling_2d = None
-        else:
-            raise NotImplementedError(f"Unknown image pooling 2D method: {config.pooling_config.image_pooling_type}")
+        elif config.image_pooling_type is not None:
+            raise NotImplementedError(
+                f"Unknown image pooling 2D method: {config.pooling_config.image_pooling_type}, Can be only `attention_meanq`"
+            )
 
-        if config.image_padding_embed is not None:
-            if config.image_padding_embed in ["pad_embed", "regress"]:
-                self.pad_embed = nn.Parameter(torch.zeros((config.pad_embed_dim,)))
-            elif config.image_padding_embed == "pad_and_partial_pad":
-                self.pad_embed = nn.Parameter(torch.zeros((2, config.pad_embed_dim)))
-            else:
-                raise ValueError(config.image_padding_embed)
+        if config.image_padding_embed == "pad_and_partial_pad":
+            self.pad_embed = nn.Parameter(torch.zeros((2, config.pad_embed_dim)))
+        elif config.image_padding_embed is not None:
+            raise ValueError(
+                f"Unknown image padding method {config.image_padding_embed}, can be only `pad_and_partial_pad`"
+            )
 
         self.image_feature_dropout = nn.Dropout(config.image_feature_dropout)
         self.multi_modal_projector = MolmoMultiModalProjector(config)
@@ -2396,27 +2346,12 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
     def forward(self, image_features, image_masks) -> torch.FloatTensor:
         batch_size, patches = image_features.shape[:2]
         if self.config.image_padding_embed is not None:
-            image_padding_embed = self.config.image_padding_embed
-            if image_padding_embed == "pad_embed":
-                all_pad = (image_masks == 0).to(dtype=torch.float32)
-                pad_embed = self.pad_embed[None, None, None, :]
-                image_features = image_features + pad_embed * torch.unsqueeze(all_pad, -1)
-            elif image_padding_embed == "regress":
-                pad_embed = self.pad_embed[None, None, None, :]
-                image_features = image_features + pad_embed * torch.unsqueeze(
-                    torch.maximum(image_masks, torch.zeros_like(image_masks)), -1
-                )
-            elif image_padding_embed == "pad_and_partial_pad":
-                pad_embed = self.pad_embed[:, None, None, None, :]
-                all_pad = image_masks == 0
-                partial_pad = torch.logical_and(image_masks < 1, torch.logical_not(all_pad)).to(
-                    dtype=image_features.dtype
-                )
-                all_pad = all_pad.to(dtype=image_features.dtype)
-                image_features = image_features + pad_embed[0] * torch.unsqueeze(all_pad, -1)
-                image_features = image_features + pad_embed[1] * torch.unsqueeze(partial_pad, -1)
-            else:
-                raise ValueError(image_padding_embed)
+            pad_embed = self.pad_embed[:, None, None, None, :]
+            all_pad = image_masks == 0
+            partial_pad = torch.logical_and(image_masks < 1, torch.logical_not(all_pad)).to(dtype=image_features.dtype)
+            all_pad = all_pad.to(dtype=image_features.dtype)
+            image_features = image_features + pad_embed[0] * torch.unsqueeze(all_pad, -1)
+            image_features = image_features + pad_embed[1] * torch.unsqueeze(partial_pad, -1)
 
         image_features = self.image_feature_dropout(image_features)
         num_patches = self.config.image_num_patches
@@ -2447,11 +2382,8 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
             -1, self.config.pooling_height * self.config.pooling_width, image_embed_dim
         )
 
-        if self.config.image_pooling_type == "attention_meanq":
+        if self.config.image_pooling_type is not None:
             queries = image_features.mean(-2, keepdim=True)
-            image_features = self.image_pooling_2d(queries, image_features)[0]
-        elif self.config.image_pooling_type not in {None, "stack"}:
-            queries = image_features[:, :1, :]
             image_features = self.image_pooling_2d(queries, image_features)[0]
 
         # Round up in case we need to pad the image features for pooling

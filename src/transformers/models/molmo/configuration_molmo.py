@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -354,6 +353,9 @@ class MolmoTextConfig(PretrainedConfig):
             **kwargs,
         )
         self.head_dim = head_dim
+        self.attention_bias = attention_bias
+        self.use_postnorm = use_postnorm
+        self.use_attention_layer_norm = use_attention_layer_norm
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -363,9 +365,6 @@ class MolmoTextConfig(PretrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if use_sliding_window else None
         self.max_window_layers = max_window_layers
-        self.attention_bias = attention_bias
-        self.use_postnorm = use_postnorm
-        self.use_attention_layer_norm = use_attention_layer_norm
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -413,7 +412,7 @@ class MolmoConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
-        vision_feature_layers (`List[int]`, *optional*, defaults to `(-2, -9)`):
+        vision_feature_layers (`List[int]`, *optional*, defaults to (-2, -9)):
             The indices of the layers to select the vision feature.
 
     Example:
