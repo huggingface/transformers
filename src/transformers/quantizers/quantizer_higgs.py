@@ -215,7 +215,7 @@ class HiggsHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module, HiggsLinear) and tensor_name == "weight" and param_value.dtype != torch.int16:
-            # Add here check for loaded components' dtypes once serialization is implemented
+            # Only quantize weights of HiggsLinear modules that are not already quantized
             return True
         else:
             return False
