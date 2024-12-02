@@ -72,7 +72,9 @@ if is_torch_available():
         "mamba": MambaCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys())
+    ALL_CACHE_IMPLEMENTATIONS = (
+        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys()) + ["offloaded"]
+    )
 
 
 class GenerationMode(ExplicitEnum):
@@ -353,10 +355,21 @@ class GenerationConfig(PushToHubMixin):
             than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
             (defined by `num_assistant_tokens`) is not yet reached. It is an unsupervised version of the dynamic speculation lookahead
             from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
-        prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
+        prompt_lookup_num_tokens (`int`, *optional*):
             The number of tokens to be output as candidate tokens.
-        max_matching_ngram_size (`int`, *optional*, default to `None`):
+        max_matching_ngram_size (`int`, *optional*):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
+        assistant_early_exit(`int`, *optional*):
+            If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
+            models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
+        assistant_lookbehind(`int`, *optional*, defaults to 10):
+            If set to a positive integer, the re-encodeing process will additionally consider the last `assistant_lookbehind` assistant tokens
+            to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
+            See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        target_lookbehind(`int`, *optional*, defaults to 10):
+            If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
+            to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
+            See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
 
         > Wild card
 
@@ -454,10 +467,12 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 20)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "constant")
         self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", 0.4)
-
-        # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
+        self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
+        ## assistant generation for different tokenizers, the windows size for assistant/target model
+        self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", 10)
+        self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -534,7 +549,11 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.BEAM_SEARCH
 
         # Assisted generation may extend some generation modes
-        if assistant_model is not None or self.prompt_lookup_num_tokens is not None:
+        if (
+            assistant_model is not None
+            or self.prompt_lookup_num_tokens is not None
+            or self.assistant_early_exit is not None
+        ):
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
