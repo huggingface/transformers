@@ -181,6 +181,9 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
+        print("average diff", torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item())
+        print("max diff", torch.max(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item())
+
         self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2))
 
     @require_vision
