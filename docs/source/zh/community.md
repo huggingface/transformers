@@ -9,7 +9,7 @@
 
 | 资源     |      描述      |      作者      |
 |:----------|:-------------|------:|
-| [Hugging Face Transformers Glossary Flashcards](https://www.darigovresearch.com/huggingface-transformers-glossary-flashcards) | 这是一套基于 [Transformers文档术语表](glossary) 的抽认卡，它们已被整理成一种可以通过 [Anki](https://apps.ankiweb.net/) 这款专为长期知识保留而设计的开源、跨平台的应用来进行学习和复习的形式。参见这个 [介绍如何使用抽认卡的视频](https://www.youtube.com/watch?v=Dji_h7PILrw)。 | [Darigov Research](https://www.darigovresearch.com/) |
+| [Hugging Face Transformers Glossary Flashcards](https://www.darigovresearch.com/huggingface-transformers-glossary-flashcards) | 这是一套基于 [Transformers文档术语表](glossary) 的抽认卡，它们已被整理成可以通过 [Anki](https://apps.ankiweb.net/) （一款专为长期知识保留而设计的开源、跨平台的应用）来进行学习和复习的形式。使用方法参见： [介绍如何使用抽认卡的视频](https://www.youtube.com/watch?v=Dji_h7PILrw)。 | [Darigov Research](https://www.darigovresearch.com/) |
 
 ## 社区笔记本
 
