@@ -607,7 +607,8 @@ class TrainingArguments:
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
-
+        ort (:obj:`bool`, `optional`):
+            Use `ORTModule <https://github.com/microsoft/onnxruntime>`__.
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -1269,6 +1270,10 @@ class TrainingArguments:
                 " loaded json file as a dict"
             )
         },
+    )
+    ort: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Enable Ort"},
     )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
