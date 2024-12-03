@@ -460,27 +460,7 @@ class AriaImageProcessor(BaseImageProcessor):
         self.image_std = image_std
         self.split_image = split_image
         if split_resolutions is None:
-            split_resolutions = [
-                (1, 2),
-                (1, 3),
-                (1, 4),
-                (1, 5),
-                (1, 6),
-                (1, 7),
-                (1, 8),
-                (2, 4),
-                (2, 3),
-                (2, 2),
-                (2, 1),
-                (3, 1),
-                (3, 2),
-                (4, 1),
-                (4, 2),
-                (5, 1),
-                (6, 1),
-                (7, 1),
-                (8, 1),
-            ]
+            split_resolutions = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (2, 4), (2, 3), (2, 2), (2, 1), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (6, 1), (7, 1), (8, 1)] # fmt: skip
             split_resolutions = [(el[0] * 490, el[1] * 490) for el in split_resolutions]
         self.split_resolutions = split_resolutions
         self.do_convert_rgb = do_convert_rgb
