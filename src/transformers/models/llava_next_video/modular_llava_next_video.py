@@ -78,6 +78,9 @@ class LlavaNextVideoConfig(PretrainedConfig):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 288):
             Sequence length of one video embedding.
+        num_additional_image_tokens (`int`, *optional*, defaults to 0):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
 
     Example:
 
@@ -117,6 +120,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         spatial_pool_stride=2,
         image_seq_length=576,
         video_seq_length=288,
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.video_token_index = video_token_index
@@ -169,6 +173,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.num_additional_image_tokens = num_additional_image_tokens
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
@@ -221,6 +226,7 @@ class LlavaNextVideoPooler(nn.Module):
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     def __init__(self, config: LlavaNextVideoConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
+        self.num_additional_image_tokens = config.num_additional_image_tokens
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
@@ -268,7 +274,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, 1:]
+            selected_image_feature = selected_image_feature[:, self.num_additional_image_tokens :]
         elif vision_feature_select_strategy == "full":
             selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
@@ -298,7 +304,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         video_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_video_features = video_features.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
-            selected_video_features = selected_video_features[:, 1:]
+            selected_video_features = selected_video_features[:, self.num_additional_image_tokens :]
         elif vision_feature_select_strategy == "full":
             selected_video_features = selected_video_features
 
