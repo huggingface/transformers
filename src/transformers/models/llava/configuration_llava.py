@@ -50,7 +50,9 @@ class LlavaConfig(PretrainedConfig):
             The index of the layer to select the vision feature.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
-        num_additional_image_tokens (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        num_additional_image_tokens (`int`, *optional*, defaults to 0):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
 
     Example:
 
