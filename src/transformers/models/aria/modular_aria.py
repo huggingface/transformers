@@ -1063,8 +1063,8 @@ class AriaGroupedExpertsMLP(nn.Module):
             torch.Tensor: Output tensor after passing through the MLP.
         """
         fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        fc1_output = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = nn.functional.silu(fc1_output[0]) * fc1_output[1]
+        projection, gate = torch.chunk(fc1_output, 2, dim=-1)
+        fc1_output = nn.functional.silu(projection) * gate
         fc2_output = self.fc2(fc1_output, tokens_per_expert)
         return fc2_output
 
