@@ -784,10 +784,12 @@ class ModelFileMapper(ModuleMapper):
                 remaining_dependencies.remove(dep)
                 relative_order[dep] = idx
                 idx += 1
-            # Add the class itself
-            remaining_dependencies.remove(class_name)
-            relative_order[class_name] = idx
-            idx += 1
+            # Add the class itself (it can sometimes already be present if the order of classes in the source file
+            # does not make sense, i.e. a class is used somewhere before being defined...)
+            if class_name in remaining_dependencies:
+                remaining_dependencies.remove(class_name)
+                relative_order[class_name] = idx
+                idx += 1
 
         # Now add what still remains
         remaining_dependencies = tuple(remaining_dependencies)
