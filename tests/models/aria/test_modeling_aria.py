@@ -545,52 +545,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         fast_tokenizer.add_tokens("<image>", True)
 
         prompt = "<|startoftext|><|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>"
-        EXPECTED_OUTPUT = [
-            '<|startoftext|>',
-            '<',
-            '|',
-            'im',
-            '_',
-            'start',
-            '|',
-            '>',
-            'system',
-            '\n',
-            'Answer',
-            '▁the',
-            '▁questions',
-            '.<',
-            '|',
-            'im',
-            '_',
-            'end',
-            '|',
-            '><',
-            '|',
-            'im',
-            '_',
-            'start',
-            '|',
-            '>',
-            'user',
-            '\n',
-            '<image>',
-            '\n',
-            'What',
-            '▁is',
-            '▁shown',
-            '▁in',
-            '▁this',
-            '▁image',
-            '?',
-            '<',
-            '|',
-            'im',
-            '_',
-            'end',
-            '|',
-            '>'
-        ]  # fmt: skip
+        EXPECTED_OUTPUT = ['<|startoftext|>', '<', '|', 'im', '_', 'start', '|', '>', 'system', '\n', 'Answer', '▁the', '▁questions', '.<', '|', 'im', '_', 'end', '|', '><', '|', 'im', '_', 'start', '|', '>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<', '|', 'im', '_', 'end', '|', '>']  # fmt: skip
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 

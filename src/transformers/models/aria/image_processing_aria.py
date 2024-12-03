@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 from typing import Iterable, List, Optional, Tuple, Union
 
@@ -144,27 +158,7 @@ class AriaImageProcessor(BaseImageProcessor):
         self.image_std = image_std
         self.split_image = split_image
         if split_resolutions is None:
-            split_resolutions = [
-                (1, 2),
-                (1, 3),
-                (1, 4),
-                (1, 5),
-                (1, 6),
-                (1, 7),
-                (1, 8),
-                (2, 4),
-                (2, 3),
-                (2, 2),
-                (2, 1),
-                (3, 1),
-                (3, 2),
-                (4, 1),
-                (4, 2),
-                (5, 1),
-                (6, 1),
-                (7, 1),
-                (8, 1),
-            ]
+            split_resolutions = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (2, 4), (2, 3), (2, 2), (2, 1), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (6, 1), (7, 1), (8, 1)]  # fmt: skip
             split_resolutions = [(el[0] * 490, el[1] * 490) for el in split_resolutions]
         self.split_resolutions = split_resolutions
         self.do_convert_rgb = do_convert_rgb
@@ -443,16 +437,14 @@ class AriaImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
-        if mode == PaddingMode.CONSTANT:
-            image = np.pad(image, padding, mode="constant", constant_values=constant_values)
-        elif mode == PaddingMode.REFLECT:
-            image = np.pad(image, padding, mode="reflect")
-        elif mode == PaddingMode.REPLICATE:
-            image = np.pad(image, padding, mode="edge")
-        elif mode == PaddingMode.SYMMETRIC:
-            image = np.pad(image, padding, mode="symmetric")
-        else:
-            raise ValueError(f"Invalid padding mode: {mode}")
+
+        padding_mode_mapping = {
+            PaddingMode.CONSTANT: "constant",
+            PaddingMode.REFLECT: "reflect",
+            PaddingMode.REPLICATE: "edge",
+            PaddingMode.SYMMETRIC: "symmetric",
+        }
+        image = np.pad(image, padding, mode=padding_mode_mapping[mode], constant_values=constant_values)
         image = (
             to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
         )

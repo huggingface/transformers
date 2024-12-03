@@ -191,8 +191,6 @@ class AriaConfig(PretrainedConfig):
     Attributes:
         model_type (`str`):
             Type of the model, set to `"aria"`.
-        is_composition (`bool`):
-            Whether the model is a composition of multiple components.
         ignore_index (`int`):
             Index to ignore in loss calculation.
         image_token_index (`int`):
@@ -206,7 +204,6 @@ class AriaConfig(PretrainedConfig):
     """
 
     model_type = "aria"
-    is_composition = False
     sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     def __init__(
@@ -306,7 +303,7 @@ class AriaCrossAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.layer_norm_kv = nn.LayerNorm(hidden_size)
 
-    def forward(self, key_value_states, hidden_states, attn_mask=None, add_residual=False):
+    def forward(self, key_value_states, hidden_states, attn_mask=None):
         """
         Forward pass of the AriaCrossAttention module.
 
@@ -317,8 +314,6 @@ class AriaCrossAttention(nn.Module):
                 Input tensor for query.
             attn_mask (`torch.Tensor`, *optional*, defaults to None):
                 Attention mask.
-            add_residual (`bool`, *optional*, defaults to False):
-                Whether to add residual connection.
 
         Returns:
             torch.Tensor:
@@ -332,10 +327,7 @@ class AriaCrossAttention(nn.Module):
 
         attn_output, _ = self.multihead_attn(query, key, value, attn_mask=attn_mask)
 
-        if add_residual:
-            attn_output = hidden_states + self.dropout(self.linear(attn_output))
-        else:
-            attn_output = self.dropout(self.linear(attn_output))
+        attn_output = self.dropout(self.linear(attn_output))
 
         return attn_output
 
@@ -752,16 +744,14 @@ class AriaImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
-        if mode == PaddingMode.CONSTANT:
-            image = np.pad(image, padding, mode="constant", constant_values=constant_values)
-        elif mode == PaddingMode.REFLECT:
-            image = np.pad(image, padding, mode="reflect")
-        elif mode == PaddingMode.REPLICATE:
-            image = np.pad(image, padding, mode="edge")
-        elif mode == PaddingMode.SYMMETRIC:
-            image = np.pad(image, padding, mode="symmetric")
-        else:
-            raise ValueError(f"Invalid padding mode: {mode}")
+
+        padding_mode_mapping = {
+            PaddingMode.CONSTANT: "constant",
+            PaddingMode.REFLECT: "reflect",
+            PaddingMode.REPLICATE: "edge",
+            PaddingMode.SYMMETRIC: "symmetric",
+        }
+        image = np.pad(image, padding, mode=padding_mode_mapping[mode], constant_values=constant_values)
         image = (
             to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
         )
@@ -847,6 +837,7 @@ class AriaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template", "size_conversion"]
     image_processor_class = "AriaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -912,7 +903,6 @@ class AriaProcessor(ProcessorMixin):
             )
             # expand the image_token according to the num_crops and tokens per image
             tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
-
             prompt_strings = []
             num_crops = image_inputs.pop("num_crops") * tokens_per_image
             for sample in text:
@@ -1309,6 +1299,21 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
         self.post_init()
 
+    def _create_patch_attention_mask(self, pixel_mask):
+        if pixel_mask is None:
+            return None
+
+        patches_subgrid = pixel_mask.unfold(
+            dimension=1,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        ).unfold(
+            dimension=2,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        )
+        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
@@ -1348,21 +1353,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
-
-    def _create_patch_attention_mask(self, pixel_mask):
-        if pixel_mask is None:
-            return None
-
-        patches_subgrid = pixel_mask.unfold(
-            dimension=1,
-            size=self.vision_tower.config.patch_size,
-            step=self.vision_tower.config.patch_size,
-        ).unfold(
-            dimension=2,
-            size=self.vision_tower.config.patch_size,
-            step=self.vision_tower.config.patch_size,
-        )
-        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)

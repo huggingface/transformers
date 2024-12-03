@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import importlib
 import math
 import os
@@ -115,7 +129,7 @@ class AriaCrossAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.layer_norm_kv = nn.LayerNorm(hidden_size)
 
-    def forward(self, key_value_states, hidden_states, attn_mask=None, add_residual=False):
+    def forward(self, key_value_states, hidden_states, attn_mask=None):
         """
         Forward pass of the AriaCrossAttention module.
 
@@ -126,8 +140,6 @@ class AriaCrossAttention(nn.Module):
                 Input tensor for query.
             attn_mask (`torch.Tensor`, *optional*, defaults to None):
                 Attention mask.
-            add_residual (`bool`, *optional*, defaults to False):
-                Whether to add residual connection.
 
         Returns:
             torch.Tensor:
@@ -141,10 +153,7 @@ class AriaCrossAttention(nn.Module):
 
         attn_output, _ = self.multihead_attn(query, key, value, attn_mask=attn_mask)
 
-        if add_residual:
-            attn_output = hidden_states + self.dropout(self.linear(attn_output))
-        else:
-            attn_output = self.dropout(self.linear(attn_output))
+        attn_output = self.dropout(self.linear(attn_output))
 
         return attn_output
 
@@ -163,9 +172,8 @@ class AriaProjector(nn.Module):
     def __init__(
         self,
         config: AriaConfig,
-        **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__()
 
         self.patch_to_query_dict = config.projector_patch_to_query_dict
         self.in_features = config.vision_config.hidden_size
@@ -213,38 +221,6 @@ class AriaProjector(nn.Module):
         out = self.feed_forward(self.layer_norm(attention_out))
 
         return out
-
-
-class AriaTextPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "model"
-    _no_split_modules = ["AriaTextDecoderLayer"]
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedExpertsGEMM):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
 
 
 class AriaSharedExpertsMLP(nn.Module):
@@ -323,7 +299,7 @@ def get_experts_gemm():
 experts_gemm = get_experts_gemm()
 
 
-class AriaGroupedExpertsGEMM(nn.Module):
+class AriaGroupedExpertsGemm(nn.Module):
     """
     Grouped GEMM (General Matrix Multiplication) module for efficient expert computation.
     This module utilizes the grouped_gemm library (https://github.com/fanshiqing/grouped_gemm)
@@ -365,8 +341,7 @@ class AriaGroupedExpertsGEMM(nn.Module):
         # Ensure the CUDA device matches the input tensor's device.
         # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
         # with `device_map="auto"` on a multi-GPU setup.
-        if torch.cuda.is_available():
-            torch.cuda.set_device(input.device)
+        input.to(self.weight.device)
         original_dtype = input.dtype
         return experts_gemm(input.to(torch.bfloat16), self.weight.to(torch.bfloat16), tokens_per_expert).to(
             original_dtype
@@ -385,8 +360,8 @@ class AriaGroupedExpertsMLP(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
-        self.fc1 = AriaGroupedExpertsGEMM(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedExpertsGEMM(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
+        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
+        self.fc2 = AriaGroupedExpertsGemm(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
 
     def forward(self, permuted_tokens, tokens_per_expert):
         """
@@ -400,8 +375,8 @@ class AriaGroupedExpertsMLP(nn.Module):
             torch.Tensor: Output tensor after passing through the MLP.
         """
         fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        fc1_output = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = nn.functional.silu(fc1_output[0]) * fc1_output[1]
+        projection, gate = torch.chunk(fc1_output, 2, dim=-1)
+        fc1_output = nn.functional.silu(projection) * gate
         fc2_output = self.fc2(fc1_output, tokens_per_expert)
         return fc2_output
 
@@ -1042,6 +1017,38 @@ class AriaTextDecoderLayer(nn.Module):
         return outputs
 
 
+class AriaTextPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    _no_split_modules = ["AriaTextDecoderLayer"]
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedExpertsGemm):
+            module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+
+
 ARIA_TEXT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1085,7 +1092,7 @@ class AriaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedExpertsGEMM):
+        elif isinstance(module, AriaGroupedExpertsGemm):
             module.weight.data.normal_(mean=0.0, std=std)
         elif isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=std)
@@ -1707,8 +1714,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             dimension=1,
             size=self.vision_tower.config.patch_size,
             step=self.vision_tower.config.patch_size,
-        )
-        patches_subgrid = patches_subgrid.unfold(
+        ).unfold(
             dimension=2,
             size=self.vision_tower.config.patch_size,
             step=self.vision_tower.config.patch_size,
