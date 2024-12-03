@@ -694,86 +694,65 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_via_save_pretrained(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-generation-config-{Path(tmp_dir).name}"
-                config = GenerationConfig(
-                    do_sample=True,
-                    temperature=0.7,
-                    length_penalty=1.0,
-                )
-                # Push to hub via save_pretrained
-                config.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+        with TemporaryHubRepo() as tmp_repo:
+            config = GenerationConfig(
+                do_sample=True,
+                temperature=0.7,
+                length_penalty=1.0,
+            )
+            # Push to hub via save_pretrained
+            config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
-                new_config = GenerationConfig.from_pretrained(tmp_repo)
-                for k, v in config.to_dict().items():
-                    if k != "transformers_version":
-                        self.assertEqual(v, getattr(new_config, k))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
+            for k, v in config.to_dict().items():
+                if k != "transformers_version":
+                    self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_in_organization(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"valid_org/test-generation-config-org-{Path(tmp_dir).name}"
-                config = GenerationConfig(
-                    do_sample=True,
-                    temperature=0.7,
-                    length_penalty=1.0,
-                )
-                config.push_to_hub(tmp_repo, token=self._token)
+        with TemporaryHubRepo() as tmp_repo:
+            config = GenerationConfig(
+                do_sample=True,
+                temperature=0.7,
+                length_penalty=1.0,
+            )
+            config.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                new_config = GenerationConfig.from_pretrained(tmp_repo)
-                for k, v in config.to_dict().items():
-                    if k != "transformers_version":
-                        self.assertEqual(v, getattr(new_config, k))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
+            for k, v in config.to_dict().items():
+                if k != "transformers_version":
+                    self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"valid_org/test-generation-config-org-{Path(tmp_dir).name}"
-                config = GenerationConfig(
-                    do_sample=True,
-                    temperature=0.7,
-                    length_penalty=1.0,
-                )
-                # Push to hub via save_pretrained
-                config.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+        with TemporaryHubRepo() as tmp_repo:
+            config = GenerationConfig(
+                do_sample=True,
+                temperature=0.7,
+                length_penalty=1.0,
+            )
+            # Push to hub via save_pretrained
+            config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
-                new_config = GenerationConfig.from_pretrained(tmp_repo)
-                for k, v in config.to_dict().items():
-                    if k != "transformers_version":
-                        self.assertEqual(v, getattr(new_config, k))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
+            for k, v in config.to_dict().items():
+                if k != "transformers_version":
+                    self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_on_pr_revision(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                # create a repo and a PR
-                repo_id = f"{USER}/test-generation-config-{Path(tmp_dir).name}"
-                create_repo(repo_id=repo_id, token=self._token)
-                pr = create_pull_request(repo_id=repo_id, title="Test PR", token=self._token)
-                revision = f"refs/pr/{pr.num}"
+        with TemporaryHubRepo() as tmp_repo:
+            # create a PR
+            pr = create_pull_request(repo_id=tmp_repo.repo_id, title="Test PR", token=self._token)
+            revision = f"refs/pr/{pr.num}"
 
-                # push to PR ref
-                config = GenerationConfig(
-                    do_sample=True,
-                    temperature=0.7,
-                    length_penalty=1.0,
-                )
-                config.push_to_hub(repo_id, token=self._token, revision=revision)
+            # push to PR ref
+            config = GenerationConfig(
+                do_sample=True,
+                temperature=0.7,
+                length_penalty=1.0,
+            )
+            config.push_to_hub(tmp_repo.repo_id, token=self._token, revision=revision)
 
-                # load from PR ref
-                new_config = GenerationConfig.from_pretrained(repo_id, revision=revision)
-                for k, v in config.to_dict().items():
-                    if k != "transformers_version":
-                        self.assertEqual(v, getattr(new_config, k))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=repo_id, token=self._token)
+            # load from PR ref
+            new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id, revision=revision)
+            for k, v in config.to_dict().items():
+                if k != "transformers_version":
+                    self.assertEqual(v, getattr(new_config, k))
