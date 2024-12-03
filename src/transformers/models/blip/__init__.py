@@ -18,6 +18,7 @@ from ...utils import (
     _LazyModule,
     is_tf_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -38,6 +39,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_blip"] = ["BlipImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_blip_fast"] = ["BlipImageProcessorFast"]
 
 
 try:
@@ -83,6 +92,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_blip import BlipImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_blip_fast import BlipImageProcessorFast
 
     try:
         if not is_torch_available():
