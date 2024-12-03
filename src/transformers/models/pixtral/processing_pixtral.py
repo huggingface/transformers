@@ -22,7 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
+from ...utils import is_torch_device, is_torch_dtype, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -66,6 +66,7 @@ class BatchMixFeature(BatchFeature):
         Returns:
             [`BatchFeature`]: The same instance after modification.
         """
+
         def _recursive_to(obj, device, *args, **kwargs):
             # Lists can be nested, so keep digging until we hit tensors
             if isinstance(obj, list):
