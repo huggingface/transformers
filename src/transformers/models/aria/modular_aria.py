@@ -1143,10 +1143,10 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
     config_class = AriaConfig
     base_model_prefix = "model"
-    _no_split_modules = ["AriaTextDecoderLayer"]
+    _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_cache_class = True
 
@@ -1284,7 +1284,7 @@ ARIA_START_DOCSTRING = r"""
 )
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaConfig
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
     _supports_sdpa = False
 
     def __init__(self, config: AriaConfig):
