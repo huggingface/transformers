@@ -30,9 +30,8 @@ from transformers.models.llava_next.modeling_llava_next import (
 from ...configuration_utils import PretrainedConfig
 from ...utils import (
     logging,
-    replace_return_docstrings,
 )
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -100,7 +99,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_next_video"
-    is_composition = True
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -192,7 +191,7 @@ class LlavaNextVideoPooler(nn.Module):
         mode = config.spatial_pool_mode
         stride = config.spatial_pool_stride
         out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = config.vision_config.image_size // config.vision_config.patch_size**2
+        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
 
         if mode == "average":
             self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
@@ -309,7 +308,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         video_features = torch.split(video_features, frames, dim=0)
         return video_features
 
-    @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class="LlavaNextVideoConfig")
     def forward(
         self,
         input_ids: torch.LongTensor = None,

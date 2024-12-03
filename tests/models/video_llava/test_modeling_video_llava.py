@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoLlava model."""
 
-import gc
 import unittest
 
 import numpy as np
@@ -29,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_gpu,
@@ -57,8 +57,8 @@ class VideoLlavaVisionText2TextModelTester:
         image_token_index=0,
         video_token_index=1,
         projector_hidden_act="gelu",
-        seq_length=13,
-        num_frames=8,
+        seq_length=3,
+        num_frames=2,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         text_config={
@@ -88,7 +88,7 @@ class VideoLlavaVisionText2TextModelTester:
         vision_config={
             "model_type": "clip_vision_model",
             "batch_size": 12,
-            "image_size": 30,
+            "image_size": 8,
             "patch_size": 6,
             "num_channels": 3,
             "is_training": True,
@@ -123,10 +123,11 @@ class VideoLlavaVisionText2TextModelTester:
         self.batch_size = 5
         self.num_channels = 3
         self.image_size = 224
-        self.encoder_seq_length = 246
-        self.num_image_tokens = 25
-        self.num_video_tokens = 26 * self.num_frames
+
+        self.num_image_tokens = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
+        self.num_video_tokens = (self.num_image_tokens + 1) * self.num_frames
         self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -217,7 +218,13 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     def setUp(self):
         self.model_tester = VideoLlavaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VideoLlavaConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=VideoLlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -437,8 +444,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes
@@ -619,12 +625,14 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
+        processor.num_additional_image_tokens = 1
         inputs_expanded = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 274)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
+        processor.num_additional_image_tokens = None
         inputs = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
 
@@ -651,12 +659,14 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
+        processor.num_additional_image_tokens = 1
         inputs_expanded = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2074)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
+        processor.num_additional_image_tokens = None
         inputs = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
 

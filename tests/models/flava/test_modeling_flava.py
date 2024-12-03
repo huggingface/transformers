@@ -931,10 +931,17 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = self.class_for_tester(self)
+        common_properties = ["projection_dim", "logit_scale_init_value", "init_codebook"]
+        self.config_tester = ConfigTester(
+            self, config_class=FlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="tested in individual model tests")
     def test_hidden_states_output(self):
