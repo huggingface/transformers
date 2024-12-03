@@ -187,7 +187,6 @@ class AriaConfig(PretrainedConfig):
     """
 
     model_type = "aria"
-    is_composition = False
     sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     def __init__(
