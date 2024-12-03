@@ -55,6 +55,7 @@ logger = logging.get_logger(__name__)
 MultiScaleDeformableAttention = None
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.load_cuda_kernels
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
@@ -95,6 +96,7 @@ _CONFIG_FOR_DOC = "RelationDetrConfig"
 _CHECKPOINT_FOR_DOC = "xiuqhou/relation-detr"
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
@@ -366,6 +368,7 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
     hybrid_enc_outputs_coord: Optional[torch.FloatTensor] = None
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.inverse_sigmoid
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
