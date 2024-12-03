@@ -7,12 +7,7 @@ import torch.nn.functional as F
 from torch import autograd
 
 
-"""
-    Balancer code directly copied from: https://github.com/facebookresearch/encodec/blob/main/encodec/balancer.py
-"""
-
-
-class Balancer:
+class EnCodecLossBalancer:
     """Loss balancer.
 
     The loss balancer combines losses together to compute gradients for the backward.

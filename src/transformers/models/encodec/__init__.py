@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .configuration_encodec import EncodecConfig
     from .feature_extraction_encodec import EncodecFeatureExtractor
     from .loss_encodec import (
-        Balancer,
+        EnCodecLossBalancer,
         compute_discriminator_loss,
         compute_feature_matching_loss,
         compute_generator_adv_loss,

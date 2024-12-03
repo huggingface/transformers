@@ -87,6 +87,7 @@ class EncodecConfig(PretrainedConfig):
         use_conv_shortcut (`bool`, *optional*, defaults to `True`):
             Whether to use a convolutional layer as the 'skip' connection in the `EncodecResnetBlock` block. If False,
             an identity function will be used, giving a generic residual connection.
+        commitment_weight (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
 
     Example:
 
@@ -131,6 +132,7 @@ class EncodecConfig(PretrainedConfig):
         codebook_size=1024,
         codebook_dim=None,
         use_conv_shortcut=True,
+        commitment_weight=1.0,
         **kwargs,
     ):
         self.target_bandwidths = target_bandwidths
@@ -156,6 +158,7 @@ class EncodecConfig(PretrainedConfig):
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
         self.use_conv_shortcut = use_conv_shortcut
+        self.commitment_weight = commitment_weight
 
         if self.norm_type not in ["weight_norm", "time_group_norm"]:
             raise ValueError(

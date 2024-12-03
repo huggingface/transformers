@@ -4,19 +4,22 @@ import torch.nn.functional as F
 
 def EncodecLoss(model, input_values, audio_values):
     """
-    Computes the reconstruction and commitment losses for the Encodec model.
+    Computes the reconstruction and commitment losses for the EncodecModel.
 
     Args:
-        model: The EncodecModel instance.
-        input_values (torch.Tensor): Original input audio.
-        audio_values (torch.Tensor): Reconstructed audio from the model.
-        audio_codes (torch.Tensor): Discrete codes from the quantizer.
-        padding_mask (torch.Tensor): Padding mask used during encoding.
-        config: Model configuration.
+        model (`EncodecModel`):
+            The Encodec model instance.
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Original input audio values.
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Reconstructed audio values from the model.
 
     Returns:
-        tuple: A tuple containing (reconstruction_loss, commitment_loss).
+        `tuple[torch.Tensor, torch.Tensor]`: A tuple containing:
+            - reconstruction_loss (`torch.Tensor`): Combined time and frequency domain reconstruction loss
+            - commitment_loss (`torch.Tensor`): VQ commitment loss
     """
+
     # Compute commitment loss
     embeddings = model.encoder(input_values)
     _, quantization_steps = model.quantizer.encode(embeddings, bandwidth=None)
@@ -46,7 +49,7 @@ def EncodecLoss(model, input_values, audio_values):
     frequency_loss = frequency_loss / (len(scales) * 2)
 
     # Combine losses
-    lambda_t = 1.0  # You can adjust these weights if needed
+    lambda_t = 1.0  # Hardcoding these to match the weights detailed in paper
     lambda_f = 1.0
     reconstruction_loss = lambda_t * time_loss + lambda_f * frequency_loss
 

@@ -45,13 +45,6 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "EncodecConfig"
 
-
-ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/encodec_24khz",
-    "facebook/encodec_48khz",
-    # See all EnCodec models at https://huggingface.co/models?filter=encodec
-]
-
 scales = [2**i for i in range(5, 12)]
 
 
@@ -586,7 +579,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         self.quantizer = EncodecResidualVectorQuantizer(config)
 
-        self.commitment_weight = config.__dict__.get("commitment_weight", 1)
+        self.commitment_weight = config.commitment_weight
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
@@ -602,7 +595,7 @@ class EncodecModel(EncodecPreTrainedModel):
         return self.decoder
 
     def _encode_frame(
-        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int, return_quantization_steps: bool = False
+        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
     ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], Tuple[torch.Tensor, Optional[torch.Tensor], List]]:
         """
         Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
@@ -804,11 +797,10 @@ class EncodecModel(EncodecPreTrainedModel):
         return EncodecDecoderOutput(audio_values)
 
     def compute_mel_spectrogram(self, audio, n_fft, hop_length, n_mels=64):
-        device = audio.device
         # Adjust n_mels if necessary to avoid warnings
         n_mels = min(n_mels, n_fft // 2 + 1)
         # Create the window function on the correct device
-        window = torch.hann_window(n_fft, device=device)
+        window = torch.hann_window(n_fft, device=audio.device)
         mel_spec_transform = torchaudio.transforms.MelSpectrogram(
             sample_rate=self.config.sampling_rate,
             n_fft=n_fft,
@@ -818,7 +810,7 @@ class EncodecModel(EncodecPreTrainedModel):
             normalized=True,
             center=False,
             pad_mode=None,
-        ).to(device)
+        ).to(audio.device)
         return mel_spec_transform(audio)
 
     @add_start_docstrings_to_model_forward(ENCODEC_INPUTS_DOCSTRING)
@@ -885,11 +877,6 @@ class EncodecModel(EncodecPreTrainedModel):
             return tuple(outputs.values())
 
         return EncodecOutput(**outputs)
-
-
-"""
-    Discriminator code copied over and refactored from https://github.com/facebookresearch/encodec/blob/main/encodec/msstftd.py#L28
-"""
 
 
 @dataclass
@@ -962,27 +949,11 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
     torchscript: bool = False
 
 
-class ConvLayerNorm(nn.LayerNorm):
-    """
-    Convolution-friendly LayerNorm that moves channels to last dimensions
-    before running the normalization and moves them back to original position right after.
-    """
-
-    def __init__(self, normalized_shape: tp.Union[int, tp.List[int], torch.Size], **kwargs):
-        super().__init__(normalized_shape, **kwargs)
-
-    def forward(self, x):
-        # Move time dimension to second position
-        ndim = len(x.shape)
-        perm = [0] + [ndim - 1] + list(range(1, ndim - 1))
-        x = x.permute(perm)
-
-        x = super().forward(x)
-
-        # Move time dimension back to last position
-        perm = [0] + list(range(2, ndim)) + [1]
-        x = x.permute(perm)
-        return x
+def conv_layer_norm(x: torch.Tensor, normalized_shape: int) -> torch.Tensor:
+    x = x.permute(0, 2, 3, 1)
+    x = F.layer_norm(x, (normalized_shape,))
+    x = x.permute(0, 3, 1, 2)
+    return x
 
 
 CONV_NORMALIZATIONS = frozenset(
@@ -1009,7 +980,7 @@ def get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none",
     assert norm in CONV_NORMALIZATIONS
     if norm == "layer_norm":
         assert isinstance(module, nn.modules.conv._ConvNd)
-        return ConvLayerNorm(module.out_channels, **norm_kwargs)
+        return lambda x: conv_layer_norm(x, module.out_channels)
     elif norm == "time_group_norm":
         if causal:
             raise ValueError("GroupNorm doesn't support causal evaluation.")
@@ -1219,9 +1190,9 @@ class EncodecDiscriminator(PreTrainedModel):
 
         Returns:
             `tuple`:
-                - d_loss (`torch.Tensor`): Discriminator loss.
-                - g_adv_loss (`torch.Tensor`): Generator adversarial loss.
-                - fm_loss (`torch.Tensor`): Feature matching loss.
+                - discriminator_loss (`torch.Tensor`): Discriminator loss.
+                - generator_adversarial_loss (`torch.Tensor`): Generator adversarial loss.
+                - feature_matching_loss (`torch.Tensor`): Feature matching loss.
         """
 
         # Compute discriminator and generator losses
@@ -1229,22 +1200,22 @@ class EncodecDiscriminator(PreTrainedModel):
         fake_logits, fake_features = self.forward(fake_audio)
 
         # Discriminator loss
-        d_loss = 0
+        discriminator_loss = 0
         for real_logit, fake_logit in zip(real_logits, fake_logits):
-            d_loss += (F.relu(1 - real_logit)).mean() + F.relu(1 + fake_logit).mean()
-        d_loss /= self.num_discriminators
+            discriminator_loss += (F.relu(1 - real_logit)).mean() + F.relu(1 + fake_logit).mean()
+        discriminator_loss /= self.num_discriminators
 
         # Generator adversarial loss
-        g_adv_loss = 0
+        generator_adversarial_loss = 0
         for fake_logit in fake_logits:
-            g_adv_loss += -fake_logit.mean()
-        g_adv_loss /= self.num_discriminators
+            generator_adversarial_loss += -fake_logit.mean()
+        generator_adversarial_loss /= self.num_discriminators
 
         # feature matching loss
-        fm_loss = 0
+        feature_matching_loss = 0
         for real_feat, fake_feat in zip(real_features, fake_features):
             for real_f, fake_f in zip(real_feat, fake_feat):
-                fm_loss += F.l1_loss(fake_f, real_f.detach())
-        fm_loss /= self.num_discriminators
+                feature_matching_loss += F.l1_loss(fake_f, real_f.detach())
+        feature_matching_loss /= self.num_discriminators
 
-        return d_loss, g_adv_loss, fm_loss
+        return discriminator_loss, generator_adversarial_loss, feature_matching_loss
