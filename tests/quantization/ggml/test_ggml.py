@@ -15,6 +15,8 @@
 import tempfile
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
     require_gguf,
@@ -22,11 +24,60 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available
+from transformers.utils import is_gguf_available, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+if is_gguf_available():
+    from gguf import GGMLQuantizationType as QuantType
+
+
+@require_gguf
+@require_torch_gpu
+@slow
+class GgufQuantizationTests(unittest.TestCase):
+    model_id = ("duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF",)
+    gguf_filename_format = (lambda x: f"TinyLlama-1.1B-Chat-v1.0-{x.upper()}.gguf",)
+
+    example_text = "Hello"
+
+    @parameterized.expand(
+        [
+            # unquantized
+            (QuantType.F16, "Hello, World!\n\n5. Node.js"),
+            # standard quants
+            (QuantType.Q4_0, "Hello, World!\n\nStep 3: Add"),
+            (QuantType.Q5_0, "Hello, World!\n\n5. Use a library"),
+            (QuantType.Q8_0, "Hello, World!\n\n5. Use a library"),
+            # k-quants
+            (QuantType.Q2_K, "Hello, World!\n\n[10:0"),
+            (QuantType.Q3_K, "Hello, World!\n\n```\n<|user"),
+            (QuantType.Q5_K, "Hello, World!\n\nStep 3: Add"),
+            (QuantType.Q4_K, "Hello, World!\n\n5. Python:\n"),
+            (QuantType.Q6_K, "Hello, World!\n\nStep 3: Add"),
+            # i-matrix
+            (QuantType.IQ1_S, "Hello, I'm a friend of mine, I"),
+            (QuantType.IQ1_M, "Hello, I am interested in purching a copy of"),
+            (QuantType.IQ2_S, "Hello World!\n\n```\n<|user|"),
+            (QuantType.IQ2_XS, "Hello World!\n\n```\n<|user|"),
+            (QuantType.IQ2_XXS, "Hello, I'm a software engineer. I'"),
+            (QuantType.IQ3_S, "Hello, World!\n\n5. Python:\n"),
+            (QuantType.IQ3_XXS, "Hello, I am interested in your product. Can you"),
+            (QuantType.IQ4_XS, "Hello, world!\n\n5. Using a loop"),
+            (QuantType.IQ4_NL, "Hello, world!\n\n5. Using a loop"),
+        ]
+    )
+    def test_quantization_types(self, quant_type: QuantType, expected_text: str):
+        gguf_model_id = self.gguf_filename_format(quant_type.name)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=gguf_model_id).to(torch_device)
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), expected_text)
 
 
 @require_gguf
@@ -113,16 +164,6 @@ class GgufIntegrationTests(unittest.TestCase):
 
     example_text = "Hello"
 
-    def test_q2_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\n[10:0"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
     def test_q2_k_serialization(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id).to(torch_device)
@@ -140,66 +181,6 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, World!\n\n[10:0"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    def test_q3_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q3_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q3_k_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\n```\n<|user"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_q5_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q5_0_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q5_0_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\n5. Use a library"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_q5_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q5_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q5_k_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_q4_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q4_0_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q4_0_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_q4_k_m(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q4_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q4_k_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\n5. Python:\n"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_q6_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q6_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q6_k_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
     def test_q6_k_fp16(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q6_k_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -212,136 +193,6 @@ class GgufIntegrationTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_q8_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\n5. Use a library"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq1_s(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq1_s_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq1_s_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, I'm a friend of mine, I"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq1_m(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq1_m_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq1_m_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, I am interested in purching a copy of"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq2_s(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq2_s_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq2_s_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello World!\n\n```\n<|user|"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq2_xs(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq2_xs_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq2_xs_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello World!\n\n```\n<|user|"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq2_xxs(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq2_xxs_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq2_xxs_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, I'm a software engineer. I'"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq3_s(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq3_s_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq3_s_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\n5. Python:\n"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq3_xxs(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq3_xxs_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq3_xxs_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, I am interested in your product. Can you"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq4_xs(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq4_xs_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq4_xs_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, world!\n\n5. Using a loop"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq4_nl(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq4_nl_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq4_nl_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, world!\n\n5. Using a loop"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_f16(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_model_id, gguf_file=self.f16_tinyllama_model_id)
-        model = AutoModelForCausalLM.from_pretrained(
-            self.tinyllama_model_id, gguf_file=self.f16_tinyllama_model_id
-        ).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\n5. Node.js"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_mistral_q4_0(self):
