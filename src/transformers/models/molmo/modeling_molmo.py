@@ -44,9 +44,9 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
-    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
