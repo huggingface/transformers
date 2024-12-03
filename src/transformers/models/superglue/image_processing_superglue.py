@@ -464,10 +464,10 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         threshold: float = 0.0,
     ) -> List[Dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`SuperPointKeypointDescriptionOutput`]):
+            outputs ([`KeypointMatchingOutput`]):
                 Raw outputs of the model.q
             target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the
@@ -509,7 +509,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             scores0 = scores[mask0]
 
             # Filter out matches with low scores
-            valid_matches = scores0 > threshold
+            valid_matches = torch.logical_and(scores0 > threshold, matches0 > -1)
 
             matched_keypoints0 = keypoints0[valid_matches]
             matched_keypoints1 = keypoints1[matches0[valid_matches]]
