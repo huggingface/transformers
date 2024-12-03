@@ -680,20 +680,18 @@ class ConfigPushToHubTester(unittest.TestCase):
         HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
-        repo_id = f"{USER}/test-generation-config"
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with TemporaryHubRepo(prefix=repo_id, random_id=Path(tmp_dir).name, token=self._token) as tmp_repo:
-                config = GenerationConfig(
-                    do_sample=True,
-                    temperature=0.7,
-                    length_penalty=1.0,
-                )
-                config.push_to_hub(tmp_repo, token=self._token)
+        with TemporaryHubRepo() as tmp_repo:
+            config = GenerationConfig(
+                do_sample=True,
+                temperature=0.7,
+                length_penalty=1.0,
+            )
+            config.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                new_config = GenerationConfig.from_pretrained(tmp_repo)
-                for k, v in config.to_dict().items():
-                    if k != "transformers_version":
-                        self.assertEqual(v, getattr(new_config, k))
+            new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
+            for k, v in config.to_dict().items():
+                if k != "transformers_version":
+                    self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_via_save_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

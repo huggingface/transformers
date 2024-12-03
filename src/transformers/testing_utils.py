@@ -1584,17 +1584,16 @@ class TemporaryHubRepo:
         AutoModel.from_pretrained("openai-community/gpt2")  # calls logger.info() several times
     ```
     """
-    def __init__(self, prefix="repo", random_id=None, token=None):
-        self.prefix = prefix
-        self.random_id = random_id
+    def __init__(self, token=None):
         self.token = token
-        self.repo_id = f"{self.prefix}-{self.random_id}"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.repo_url = huggingface_hub.create_repo(tmp_dir, token=self.token)
 
     def __enter__(self):
-        return self.repo_id
+        return self.repo_url
 
     def __exit__(self, exc, value, tb):
-        delete_repo(repo_id=self.repo_id, token=self.token, missing_ok=True)
+        delete_repo(repo_id=self.repo_url.repo_id, token=self.token, missing_ok=True)
 
 
 @contextlib.contextmanager
