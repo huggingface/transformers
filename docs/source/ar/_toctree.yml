@@ -133,8 +133,8 @@
     title: المعايير
   - local: notebooks
     title: دفاتر الملاحظات مع الأمثلة
-#   - local: community
-#     title: موارد المجتمع
+  - local: community
+    title: موارد المجتمع
   - local: troubleshooting
     title: استكشاف الأخطاء وإصلاحها
   - local: gguf
