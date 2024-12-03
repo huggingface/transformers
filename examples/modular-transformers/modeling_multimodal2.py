@@ -10,6 +10,8 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import nn
 
+from transformers.utils import add_start_docstrings
+
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -311,7 +313,7 @@ class Multimodal2VisionMLP(nn.Module):
         return hidden_states
 
 
-MULTIMODAL_2_VISION_ATTENTION_CLASSES = {
+MULTIMODAL2_VISION_ATTENTION_CLASSES = {
     "eager": Multimodal2VisionAttention,
     "sdpa": Multimodal2VisionSdpaAttention,
     "flash_attention_2": Multimodal2VisionFlashAttention2,
@@ -322,7 +324,7 @@ class Multimodal2VisionEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = MULTIMODAL_2_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = MULTIMODAL2_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Multimodal2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -643,26 +645,10 @@ class Multimodal2VisionPreTrainedModel(PreTrainedModel):
             pass
 
 
-MULTIMODAL2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Multimodal2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+MULTIMODAL2_VISION_START_DOCSTRING = "doc"
 
 
-@add_start_docstrings(
-    """The vision model from MULTIMODAL2 without any head or projection on top.""",
-    MULTIMODAL2_START_DOCSTRING,
-)
+@add_start_docstrings("New doc", MULTIMODAL2_VISION_START_DOCSTRING)
 class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
     config_class = Multimodal2VisionConfig
     main_input_name = "pixel_values"
