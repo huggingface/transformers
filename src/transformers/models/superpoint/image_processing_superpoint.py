@@ -311,7 +311,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
 
         if isinstance(target_sizes, List):
-            image_sizes = torch.tensor(target_sizes)
+            image_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
         else:
             if target_sizes.shape[1] != 2:
                 raise ValueError(
