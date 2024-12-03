@@ -2513,7 +2513,7 @@ class Trainer:
                     with self.accelerator.accumulate(model):
                         tr_loss_step = self.training_step(model, inputs)
 
-                    if (self.state.global_step == 10):
+                    if (self.state.global_step == args.stable_train_warmup_steps):
                         start_train_stable_time = time.time()
 
                     if self.args.include_num_input_tokens_seen:
