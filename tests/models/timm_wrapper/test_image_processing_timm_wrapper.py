@@ -28,7 +28,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TimmWrapperImageProcessor, TimmWrapperModel
+    from transformers import TimmWrapperConfig, TimmWrapperImageProcessor
 
 
 @require_torch
@@ -40,8 +40,8 @@ class TimmWrapperImageProcessingTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.temp_dir = tempfile.TemporaryDirectory()
-        model = TimmWrapperModel.from_pretrained("timm/resnet18.a1_in1k")
-        model.save_pretrained(self.temp_dir.name)
+        config = TimmWrapperConfig.from_pretrained("timm/resnet18.a1_in1k")
+        config.save_pretrained(self.temp_dir.name)
 
     def tearDown(self):
         self.temp_dir.cleanup()
