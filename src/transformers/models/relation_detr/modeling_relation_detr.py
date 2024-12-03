@@ -218,6 +218,18 @@ class RelationDetrModelOutput(ModelOutput):
     Args:
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
+        dec_outputs_class (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+            Classification logits (including no-object) for all queries.
+        dec_outputs_coord (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding).
+        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Predicted bounding boxes scores with top `config.num_queries` scores in the first stage. Output of bounding
+            box binary classification (i.e. foreground and background).
+        enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+            Normalized boxes coordinates for queries with top `config.num_queries` scores in the first stage, represented
+            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible padding).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -236,7 +248,7 @@ class RelationDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
             weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -246,26 +258,44 @@ class RelationDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
+        hybrid_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, hybrid_queries, hidden_size)`. Hidden-states of the hybrid model at the output of each
+            layer plus the initial embedding outputs.
+        hybrid_attentions (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, hybrid_queries,
+            hybrid_queries)`. Attentions weights of the hybrid model, after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+        hybrid_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, hybrid_queries, num_heads, 4, 4)`.
+            Attentions weights of the hybrid model's cross-attention layer, after the attention softmax, used to compute
+            the weighted average in the cross-attention heads.
+        hybrid_outputs_class (`torch.FloatTensor` of shape `(batch_size, hybrid_queries, config.num_labels)`, *optional*, returned only for train mode):
+            Classification logits (including no-object) for all queries.
+        hybrid_outputs_coord (`torch.FloatTensor` of shape `(batch_size, hybrid_queries, 4)`, *optional*, returned only for train mode):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding).
+        hybrid_enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned only for train mode):
+            Predicted bounding boxes scores with top `config.hybrid_queries` scores in the first stage. Output of bounding box binary classification (i.e. foreground and background).
+        hybrid_enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned only for train mode):
+            Normalized boxes coordinates for queries with top `config.hybrid_queries` scores in the first stage, represented
+            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible padding).
+
     """
 
     init_reference_points: torch.FloatTensor = None
     dec_outputs_class: torch.FloatTensor = None
     dec_outputs_coord: torch.FloatTensor = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord: Optional[torch.FloatTensor] = None
+    enc_outputs_class: torch.FloatTensor = None
+    enc_outputs_coord: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_last_hidden_state: torch.FloatTensor = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -296,12 +326,29 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use [`~RelationDetrProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
-        auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
-            and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
-            `pred_boxes`) for each decoder layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+        auxiliary_outputs (`list[Dict]`):
+            It is a list of dictionaries containing the two above keys (`logits` and `pred_boxes`) for each decoder layer.
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.
+        dec_outputs_class (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+            Classification logits (including no-object) for all queries.
+        dec_outputs_coord (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding).
+        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Predicted bounding boxes scores with top `config.num_queries` scores in the first stage. Output of bounding
+            box binary classification (i.e. foreground and background).
+        enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+            Normalized boxes coordinates for queries with top `config.num_queries` scores in the first stage, represented
+            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each
+            individual image in the batch (disregarding possible padding).
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+            Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate reference points (reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
@@ -314,7 +361,7 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
             weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -324,41 +371,50 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_heads, 4,
             4)`. Attentions weights of the encoder, after the attention softmax, used to compute the weighted average
             in the self-attention heads.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
+        hybrid_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, hybrid_queries, hidden_size)`. Hidden-states of the hybrid model at the output of each
+            layer plus the initial embedding outputs.
+        hybrid_attentions (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, hybrid_queries,
+            hybrid_queries)`. Attentions weights of the hybrid model, after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+        hybrid_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, hybrid_queries, num_heads, 4, 4)`.
+            Attentions weights of the hybrid model's cross-attention layer, after the attention softmax, used to compute
+            the weighted average in the cross-attention heads.
+        hybrid_outputs_class (`torch.FloatTensor` of shape `(batch_size, hybrid_queries, config.num_labels)`, *optional*, returned only for train mode):
+            Classification logits (including no-object) for all queries.
+        hybrid_outputs_coord (`torch.FloatTensor` of shape `(batch_size, hybrid_queries, 4)`, *optional*, returned only for train mode):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding).
+        hybrid_enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned only for train mode):
+            Predicted bounding boxes scores with top `config.hybrid_queries` scores in the first stage. Output of bounding box binary classification (i.e. foreground and background).
+        hybrid_enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned only for train mode):
+            Normalized boxes coordinates for queries with top `config.hybrid_queries` scores in the first stage, represented
+            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible padding).
     """
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
-    auxiliary_outputs: Optional[List[Dict]] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
+    auxiliary_outputs: List[Dict] = None
+    init_reference_points: torch.FloatTensor = None
     dec_outputs_class: torch.FloatTensor = None
     dec_outputs_coord: torch.FloatTensor = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
+    enc_outputs_class: torch.FloatTensor = None
+    enc_outputs_coord: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_last_hidden_state: torch.FloatTensor = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord: Optional[torch.FloatTensor] = None
     hybrid_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_attentions: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
