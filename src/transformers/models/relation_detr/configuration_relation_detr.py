@@ -45,8 +45,6 @@ class RelationDetrConfig(PretrainedConfig):
         backbone_post_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply layer normalization after the backbone. Mainly used for the `FocalNet` backbone to be compatible
             with official implementation.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`RelationDetrForObjectDetection`] can detect in a single image.
@@ -110,9 +108,6 @@ class RelationDetrConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
         num_feature_levels (`int`, *optional*, defaults to 4):
             The number of input feature levels.
         encoder_n_points (`int`, *optional*, defaults to 4):
@@ -169,7 +164,6 @@ class RelationDetrConfig(PretrainedConfig):
         use_timm_backbone=True,
         backbone_config=None,
         backbone_post_layer_norm=False,
-        num_channels=3,
         num_queries=900,
         hybrid_queries=1500,
         hybrid_assign=6,
@@ -199,7 +193,6 @@ class RelationDetrConfig(PretrainedConfig):
         backbone="resnet50",
         use_pretrained_backbone=True,
         backbone_kwargs=None,
-        dilation=False,
         num_feature_levels=4,
         encoder_n_points=4,
         decoder_n_points=4,
@@ -216,16 +209,7 @@ class RelationDetrConfig(PretrainedConfig):
         is_encoder_decoder=True,
         **kwargs,
     ):
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            # RelationDETR use multi-scale features as default according to official repo
-            backbone_kwargs["out_indices"] = [2, 3, 4]
-            backbone_kwargs["in_chans"] = num_channels
-        elif not use_timm_backbone and isinstance(backbone_config, dict):
+        if isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
@@ -245,7 +229,6 @@ class RelationDetrConfig(PretrainedConfig):
         self.sin_cos_normalize = sin_cos_normalize
         self.sin_cos_scale = sin_cos_scale
         self.sin_cos_offset = sin_cos_offset
-        self.num_channels = num_channels
         self.num_queries = num_queries
         self.hybrid_queries = hybrid_queries
         self.hybrid_assign = hybrid_assign
@@ -271,7 +254,6 @@ class RelationDetrConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
-        self.dilation = dilation
         # deformable attributes
         self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points
