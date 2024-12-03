@@ -1594,10 +1594,7 @@ class TemporaryHubRepo:
         return self.repo_id
 
     def __exit__(self, exc, value, tb):
-        try:
-            delete_repo(repo_id=self.repo_id, token=self.token)
-        except huggingface_hub.utils.RepositoryNotFoundError as e:
-            pass
+        delete_repo(repo_id=self.repo_id, token=self.token, missing_ok=True)
 
 
 @contextlib.contextmanager
