@@ -9,6 +9,20 @@ class BaseImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
+class BlipImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
+class CLIPImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
 class DeformableDetrImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
