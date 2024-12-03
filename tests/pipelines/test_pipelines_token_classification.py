@@ -27,6 +27,7 @@ from transformers import (
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
 from transformers.testing_utils import (
     is_pipeline_test,
+    is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
@@ -36,6 +37,10 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
+
+
+if is_torch_available():
+    import torch
 
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
@@ -56,8 +61,23 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        token_classifier = TokenClassificationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
     def run_pipeline_test(self, token_classifier, _):
@@ -838,6 +858,36 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
                 [],
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt_fp16(self):
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.float16
+        )
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt_bf16(self):
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.bfloat16
+        )
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
             ],
         )
 

@@ -312,6 +312,15 @@ repo_utils_job = CircleCIJob(
 )
 
 
+non_model_job = CircleCIJob(
+    "non_model",
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    marker="not generate",
+    parallelism=6,
+    pytest_num_workers=8,
+)
+
+
 # We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure. Otherwise, the pytest
 # hangs forever during test collection while showing `collecting 0 items / 21 errors`. (To see this, we have to remove
 # the bash output redirection.)
@@ -336,7 +345,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job] # fmt: skip
+REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
 PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]

@@ -16,7 +16,15 @@
 
 import unittest
 
-from transformers.testing_utils import require_detectron2, require_torch, require_torch_multi_gpu, slow, torch_device, skipIfRocm
+from transformers.testing_utils import (
+    require_detectron2,
+    require_non_xpu,
+    require_torch,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+    skipIfRocm
+)
 from transformers.utils import is_detectron2_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -251,6 +259,7 @@ class LayoutLMv2ModelTester:
         return config, inputs_dict
 
 
+@require_non_xpu
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):

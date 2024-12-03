@@ -152,7 +152,8 @@ def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
         content = f.read()
 
     # filter out try/except block so in custom code we can have try/except imports
-    content = re.sub(r"\s*try\s*:\s*.*?\s*except\s*.*?:", "", content, flags=re.MULTILINE | re.DOTALL)
+    content = re.sub(r"\s*try\s*:.*?except.*?:", "", content, flags=re.DOTALL)
+
     # filter out imports under is_flash_attn_2_available block for avoid import issues in cpu only environment
     content = re.sub(
         r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
@@ -183,8 +184,15 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
     for imp in imports:
         try:
             importlib.import_module(imp)
-        except ImportError:
-            missing_packages.append(imp)
+        except ImportError as exception:
+            logger.warning(f"Encountered exception while importing {imp}: {exception}")
+            # Some packages can fail with an ImportError because of a dependency issue.
+            # This check avoids hiding such errors.
+            # See https://github.com/huggingface/transformers/issues/33604
+            if "No module named" in str(exception):
+                missing_packages.append(imp)
+            else:
+                raise
 
     if len(missing_packages) > 0:
         raise ImportError(

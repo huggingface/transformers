@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
-import gc
 import unittest
 
 import numpy as np
@@ -29,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     slow,
@@ -217,12 +217,22 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
+    )
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = LlavaOnevisionVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaOnevisionConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaOnevisionConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -306,6 +316,16 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_assisted_decoding_with_num_logits_to_keep(self):
         pass
 
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -325,8 +345,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt_video = "user\n<video>\nWhat do you see in this video?<|im_end|>\n<|im_start|>assistant\n"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes

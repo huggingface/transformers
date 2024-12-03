@@ -30,13 +30,13 @@ To quantize a model, you need to create an [`HqqConfig`]. There are two ways of 
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
 # Method 1: all linear layers will use the same quantization config
-quant_config  = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0) #axis=0 is used by default
+quant_config  = HqqConfig(nbits=8, group_size=64)
 ```
 
 ``` Python
 # Method 2: each linear layer with the same tag will use a dedicated quantization config
-q4_config = {'nbits':4, 'group_size':64, 'quant_zero':False, 'quant_scale':False}
-q3_config = {'nbits':3, 'group_size':32, 'quant_zero':False, 'quant_scale':False}
+q4_config = {'nbits':4, 'group_size':64}
+q3_config = {'nbits':3, 'group_size':32}
 quant_config  = HqqConfig(dynamic_config={
   'self_attn.q_proj':q4_config,
   'self_attn.k_proj':q4_config,

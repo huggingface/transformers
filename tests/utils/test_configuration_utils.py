@@ -228,6 +228,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_name_or_path",
                 "_commit_hash",
                 "_attn_implementation_internal",
+                "_attn_implementation_autoset",
                 "transformers_version",
             ],
         )
@@ -313,11 +314,12 @@ class ConfigTestUtils(unittest.TestCase):
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
         self.assertEqual(old_configuration.hidden_size, 768)
 
-    def test_saving_config_with_custom_generation_kwargs_raises_exception(self):
+    def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
         config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(ValueError):
+            with self.assertWarns(UserWarning) as cm:
                 config.save_pretrained(tmp_dir)
+            self.assertIn("min_length", str(cm.warning))
 
     def test_get_non_default_generation_parameters(self):
         config = BertConfig()

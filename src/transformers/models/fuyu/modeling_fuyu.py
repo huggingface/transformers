@@ -20,6 +20,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
@@ -145,7 +146,7 @@ FUYU_INPUTS_DOCSTRING = r"""
     "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
     FUYU_START_DOCSTRING,
 )
-class FuyuForCausalLM(FuyuPreTrainedModel):
+class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -264,7 +265,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = "Generate a coco-style caption.\n"
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
@@ -343,7 +344,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         image_patches_indices=None,
         **kwargs,
     ):
-        if past_key_values:
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
@@ -352,7 +355,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -1:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -374,3 +377,12 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             }
         )
         return model_inputs
+
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past

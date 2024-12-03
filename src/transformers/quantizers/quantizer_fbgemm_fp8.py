@@ -196,8 +196,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
-    @property
-    def is_serializable(self):
+    def is_serializable(self, safe_serialization=None):
         return True
 
     @property

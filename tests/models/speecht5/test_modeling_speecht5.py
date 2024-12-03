@@ -178,8 +178,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_headmasking = False
     test_resize_embeddings = False
 
-    input_name = "input_values"
-
     def setUp(self):
         self.model_tester = SpeechT5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
@@ -375,8 +373,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
-
-    input_name = "input_values"
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -895,8 +891,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
-
-    input_name = "input_ids"
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -1444,8 +1438,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_resize_embeddings = False
 
-    input_name = "input_values"
-
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToSpeechTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
@@ -1856,8 +1848,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
-
-    input_name = "spectrogram"
 
     def setUp(self):
         self.model_tester = SpeechT5HifiGanTester(self)

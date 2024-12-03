@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -139,3 +139,29 @@ class BlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer", "upper older longer string"]
+        image_input = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            size={"height": 214, "width": 214},
+            padding="longest",
+            max_length=76,
+        )
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 24)
