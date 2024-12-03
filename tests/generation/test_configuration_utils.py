@@ -701,7 +701,8 @@ class ConfigPushToHubTester(unittest.TestCase):
                 length_penalty=1.0,
             )
             # Push to hub via save_pretrained
-            config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
             new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
             for k, v in config.to_dict().items():
@@ -730,7 +731,8 @@ class ConfigPushToHubTester(unittest.TestCase):
                 length_penalty=1.0,
             )
             # Push to hub via save_pretrained
-            config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
             new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
             for k, v in config.to_dict().items():
