@@ -48,7 +48,7 @@ def get_module_source_from_name(module_name: str) -> str:
     # Extract the source code from the module name
     spec = importlib.util.find_spec(module_name)
     if spec is None or spec.origin is None:
-        return f"Module {module_name} not found"
+        raise ValueError(f"Cannot open file associated with {module_name} module.")
 
     with open(spec.origin, "r", encoding="utf-8") as file:
         source_code = file.read()
@@ -104,7 +104,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         - LLaMa -> MyNewModel       abd     MyNewModel      -> Llama
     """
 
-    def __init__(self, old_name, new_name, original_new_model_name):
+    def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
         super().__init__()
         self.old_name = old_name
         self.new_name = new_name
@@ -118,13 +118,22 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         }
         # In case new_name is a prefix alias, and not the original new model name
         self.original_new_model_name = original_new_model_name
+        self.only_doc = only_doc
 
-    @m.leave(m.Name() | m.SimpleString() | m.Comment())
-    def replace_name(self, original_node, updated_node):
+    def _replace_name(self, original_node, updated_node):
         if re.findall(r"# Copied from", updated_node.value):
             return cst.RemoveFromParent()
         update = preserve_case_replace(updated_node.value, self.patterns, self.cased_new_name)
         return updated_node.with_changes(value=update)
+
+    @m.leave(m.SimpleString() | m.Comment())
+    def replace_name(self, original_node, updated_node):
+        return self._replace_name(original_node, updated_node)
+
+    def leave_Name(self, original_node, updated_node):
+        if not self.only_doc:
+            return self._replace_name(original_node, updated_node)
+        return updated_node
 
     def leave_ImportFrom(self, original_node, updated_node):
         """The imports from other file types (configuration, processing etc) should use original model name."""
@@ -776,10 +785,9 @@ class ModelFileMapper(ModuleMapper):
                 relative_order[dep] = idx
                 idx += 1
             # Add the class itself
-            if class_name in remaining_dependencies:
-                remaining_dependencies.remove(class_name)
-                relative_order[class_name] = idx
-                idx += 1
+            remaining_dependencies.remove(class_name)
+            relative_order[class_name] = idx
+            idx += 1
 
         # Now add what still remains
         remaining_dependencies = tuple(remaining_dependencies)
@@ -922,6 +930,18 @@ def replace_class_node(
         raise ValueError(f"Could not parse the name of the bases for {class_node.name.value}")
 
     original_node = mapper.classes[renamed_super_class]
+    # Always use the new name of the class (in case we use e.g. `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`)
+    new_name = class_node.name
+
+    # If the new class name is different from the renamed super class name, we need to update the docstrings/comments accordingly
+    if new_name.value != renamed_super_class:
+        common_suffix = common_partial_suffix(new_name.value, renamed_super_class)
+        # Note that this works even without common prefix, in which case it does not replace anything
+        old, new = renamed_super_class.replace(common_suffix, ""), new_name.value.replace(common_suffix, "")
+        temp_module = cst.Module(body=[original_node])
+        original_node = temp_module.visit(
+            ReplaceNameTransformer(get_lowercase_name(old), get_lowercase_name(new), only_doc=True)
+        ).body[0]
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     additional_bases = [base for base in all_bases if base != original_super_class]
@@ -1025,10 +1045,10 @@ def replace_class_node(
 
     # Use decorators redefined in `modular_xxx.py` if any
     new_decorators = class_node.decorators if len(class_node.decorators) > 0 else original_node.decorators
-    # Always use the new name of the class (in case we use e.g. `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`)
-    name = class_node.name
 
-    return original_node.with_changes(body=new_replacement_body, decorators=new_decorators, bases=new_bases, name=name)
+    return original_node.with_changes(
+        body=new_replacement_body, decorators=new_decorators, bases=new_bases, name=new_name
+    )
 
 
 TYPE_TO_FILE_TYPE = {
@@ -1350,8 +1370,10 @@ class ModularFileMapper(ModuleMapper):
             pass
         ```
         with the `Text` prefix added to the model name.
-        However, in case of multiple prefix used, we raise a warning and always use the default name, to avoid parsing
+        However, in case of multiple prefix used, we raise a warning and use the most frequent prefix, to avoid parsing
         the same file multiple times and inconsistencies in the objects added from dependencies.
+        If the new prefix collides with a prefix of another class in the file where we are importing from, then we also
+        raise a warning, and use the default prefix (model name) to avoid collisions in dependencies.
         """
         prefix_model_name_mapping = defaultdict(Counter)
         cased_default_name = get_cased_name(self.model_name)
@@ -1379,16 +1401,39 @@ class ModularFileMapper(ModuleMapper):
                 _, total = prefixes_counter.most_common(1)[0]
                 most_used_entities = [name for name, count in prefixes_counter.most_common() if count == total]
                 # if the default name is in the pool of equally used prefixes, use it, otherwise last encountered
-                most_used = cased_default_name if cased_default_name in most_used_entities else most_used_entities[-1]
+                final_name = cased_default_name if cased_default_name in most_used_entities else most_used_entities[-1]
+            else:
+                final_name = list(prefixes_counter)[0]
+            # Check if the prefix can be used without collisions in the names
+            old_cased_model_name = get_cased_name(file.split(".")[-2])
+            old_model_name_prefix = final_name.replace(cased_default_name, old_cased_model_name)
+            # Raise adequate warning depending on the situation
+            has_prefix_collision = f"\nclass {old_model_name_prefix}" in get_module_source_from_name(file)
+            if final_name != cased_default_name and has_prefix_collision:
+                if len(prefixes_counter) > 1:
+                    logger.warning(
+                        f"We detected multiple prefix names when inheriting from {file}: {*set(prefixes_counter),}. However, the "
+                        f"most used one, '{final_name}', is already present in the source file and will likely cause consistency "
+                        f"issues. For this reason we fallback to the default prefix '{cased_default_name}' when grabbing args "
+                        "and dependencies. Make sure to subclass the intermediate classes with the prefix you want (if different "
+                        f"from '{cased_default_name}') or use a single prefix in all the modular (best)."
+                    )
+                else:
+                    logger.warning(
+                        f"We detected the use of the new default prefix {final_name} when inheriting from {file}. However, it is "
+                        "already present in the source file and will likely cause consistency issues. For this reason we fallback "
+                        f"to the default prefix '{cased_default_name}' when grabbing args and dependencies. Make sure to subclass "
+                        f"the intermediate classes with the prefix you want (if different from '{cased_default_name}')"
+                    )
+                final_name = cased_default_name
+            elif len(prefixes_counter) > 1:
                 logger.warning(
                     f"We detected multiple prefix names when inheriting from {file}: {*set(prefixes_counter),}. We will only "
-                    f"use the most used '{most_used}' prefix when grabbing args and dependencies. Make sure to subclass the "
-                    f"intermediate classes with the prefix you want (if different from '{most_used}') or use a single prefix "
+                    f"use the most used '{final_name}' prefix when grabbing args and dependencies. Make sure to subclass the "
+                    f"intermediate classes with the prefix you want (if different from '{final_name}') or use a single prefix "
                     "in all the modular (best)."
                 )
-                final_name_mapping[file] = get_lowercase_name(most_used)
-            else:
-                final_name_mapping[file] = get_lowercase_name(list(prefixes_counter)[0])
+            final_name_mapping[file] = get_lowercase_name(final_name)
 
         # Check we are not missing imported files
         for file in self.model_specific_modules.keys():

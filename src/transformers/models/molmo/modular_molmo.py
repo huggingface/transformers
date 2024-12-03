@@ -25,11 +25,13 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
 )
 from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
+    replace_return_docstrings,
 )
 from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import (
@@ -42,17 +44,20 @@ from ..clip.modeling_clip import (
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
+from ..cohere.modeling_cohere import (
+    CohereAttention,
+    CohereFlashAttention2,
+    CohereModel,
+    CoherePreTrainedModel,
+    CohereSdpaAttention,
+)
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import (
-    Qwen2Attention,
     Qwen2DecoderLayer,
-    Qwen2FlashAttention2,
     Qwen2ForCausalLM,
-    Qwen2Model,
-    Qwen2PreTrainedModel,
     Qwen2RMSNorm,
-    Qwen2SdpaAttention,
+    Qwen2RotaryEmbedding,
 )
 
 
@@ -60,6 +65,7 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 logger = logging.get_logger(__name__)
+_CONFIG_FOR_DOC = "MolmoTextConfig"
 
 
 class MolmoVisionConfig(CLIPVisionConfig):
@@ -327,6 +333,8 @@ class MolmoTextConfig(Qwen2Config):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        use_qk_norm (`bool), *optional*, defaults to `False`):
+            Whther to apply layer norm to keys and queries in attention module.
         use_postnorm (`bool), *optional*, defaults to `True`):
             Whther to apply pre or post layer normalization in each decoder layer.
         use_attention_layer_norm (`bool`, *optional*, defaults to `False`):
@@ -367,12 +375,14 @@ class MolmoTextConfig(Qwen2Config):
         max_window_layers=28,
         attention_dropout=0.0,
         attention_bias=False,
+        use_qk_norm=False,
         use_postnorm=True,
         use_attention_layer_norm=False,
         **kwargs,
     ):
         self.head_dim = head_dim
         self.attention_bias = attention_bias
+        self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
         self.use_attention_layer_norm = use_attention_layer_norm
         super().__init__(**kwargs)
@@ -514,49 +524,60 @@ class MolmoMLP(CLIPMLP):
         self.fc2 = nn.Linear(config.intermediate_size // 2, config.hidden_size, bias=False)
 
 
-class MolmoTextRMSNorm(Qwen2RMSNorm):
+class MolmoTextRotaryEmbedding(Qwen2RotaryEmbedding):
+    pass  # cohere has special RoPE so we need to get qwen2
+
+
+# cohere has special RoPE so we need to copy to not dispatch all dependencies of attn class
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+class MolmoTextLayerNorm(Qwen2RMSNorm):
     pass
 
 
-class ConditionalMolmoRMSNorm(nn.Module):
-    def __init__(self, hidden_size, use_layer_norm: bool = True, eps=1e-5):
-        """
-        Depending on configuration, will be a layernorm (for 7B-O) or a no-op (for 7B-D and 72B).
-        """
-        super().__init__()
-
-        if use_layer_norm:
-            self.layer = MolmoTextRMSNorm(hidden_size, eps=eps)
-        else:
-            self.layer = nn.Identity()
-
-    def forward(self, input_tensor):
-        return self.layer(input_tensor)
-
-
-# We have different attention classes for the txt and the image components, they need to be propagated back correctly
-# overwrite for renaming issues
-
-
-class MolmoTextAttention(Qwen2Attention):
+class MolmoTextAttention(CohereAttention):
     def __init__(self, config: MolmoTextConfig, layer_idx: Optional[int] = None, **super_kwargs):
         super().__init__(config, layer_idx, **super_kwargs)
-        self.q_norm = ConditionalMolmoRMSNorm(
-            hidden_size=self.hidden_size,
-            use_layer_norm=config.use_attention_layer_norm,
-        )
-
-        self.k_norm = ConditionalMolmoRMSNorm(
-            hidden_size=(self.hidden_size // self.num_heads) * self.num_key_value_heads,
-            use_layer_norm=config.use_attention_layer_norm,
-        )
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
 
-class MolmoTextSdpaAttention(MolmoTextAttention, Qwen2SdpaAttention):
+class MolmoTextSdpaAttention(MolmoTextAttention, CohereSdpaAttention):
     pass
 
 
-class MolmoTextFlashAttention2(MolmoTextAttention, Qwen2FlashAttention2):
+class MolmoTextFlashAttention2(MolmoTextAttention, CohereFlashAttention2):
     pass
 
 
@@ -567,14 +588,16 @@ MOLMO_TEXT_ATTENTION_CLASSES = {
 }
 
 
-class MolmoDecoderLayer(Qwen2DecoderLayer):
-    def __init__(self, config, layer_idx: int):
-        super().__init__()
+class MolmoTextDecoderLayer(Qwen2DecoderLayer):
+    def __init__(self, config, layer_idx: int, **super_kwargs):
+        super().__init__(**super_kwargs)
         self.mlp = MolmoMLP(config)
         self.self_attn = MOLMO_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class MolmoPrenormDecoderLayer(MolmoDecoderLayer):
+class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -642,13 +665,13 @@ class MolmoPrenormDecoderLayer(MolmoDecoderLayer):
         return outputs
 
 
-class MolmoPreTrainedModel(Qwen2PreTrainedModel):
-    pass
+class MolmoPreTrainedModel(CoherePreTrainedModel):
+    _no_split_modules = ["MolmoTextDecoderLayer", "MolmoTextPrenormDecoderLayer"]
 
 
-class MolmoTextModel(Qwen2Model):
+class MolmoTextModel(CohereModel):
     def __init__(self, config, **super_kwargs):
-        decoder_layer = MolmoDecoderLayer if self.config.use_postnorm else MolmoPrenormDecoderLayer
+        decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -657,14 +680,18 @@ class MolmoTextModel(Qwen2Model):
 
 
 class MolmoForCausalLM(Qwen2ForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, **super_kwargs):
+        super().__init__(config, **super_kwargs)
         self.model = MolmoTextModel(config)
-        self.post_init()
+
+    @add_start_docstrings_to_model_forward(MOLMO_TEXT_INPUTS_DOCSTRING) # naming issue here
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def forward(**super_kwargs):
+        super().forward()
+
 
 
 # New Molmo multimodal projection and image pooling
-
 
 class MolmoMultiModalProjector(nn.Module):
     def __init__(self, config: MolmoPoolingConfig):
@@ -823,7 +850,7 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
 
 
 class MolmoVisionModel(CLIPVisionModel):
-    pass
+    _no_split_modules = ["MolmoVisionEncoderLayer"]
 
 
 class MolmoPoolingAttention(nn.Module):
@@ -932,7 +959,6 @@ class MolmoPoolingSdpaAttention(MolmoPoolingAttention):
             value_states,
             attn_mask=None,
             dropout_p=self.dropout if self.training else 0.0,
-            scale=self.scale,
         )
 
         attn_output = attn_output.transpose(1, 2)
@@ -1112,6 +1138,8 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
 
 
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
+    config_class = MolmoConfig
+
     def __init__(self, config: MolmoConfig):
         super().__init__(config)
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)

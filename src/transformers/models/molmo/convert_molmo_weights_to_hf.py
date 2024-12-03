@@ -64,7 +64,7 @@ CHAT_TEMPLATE = (
 # r"text_model.layers.(\d+).attention.wqkv.weight": r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.blocks.(\d+).att_proj.(bias|weight)":                            r"language_model.model.layers.\1.self_attn.qkv_proj.\2", # fused attentions will need to be sliced later
-    r"transformer.blocks.(\d+).(q|k)_norm.weight":                                 r"language_model.model.layers.\1.self_attn.\2_norm.layer.weight",
+    r"transformer.blocks.(\d+).(q|k)_norm.weight":                                 r"language_model.model.layers.\1.self_attn.\2_norm.weight",
     r"transformer.blocks.(\d+).attn_norm.weight":                                  r"language_model.model.layers.\1.input_layernorm.weight",
     r"transformer.blocks.(\d+).attn_out.weight":                                   r"language_model.model.layers.\1.self_attn.o_proj.weight",
     r"transformer.blocks.(\d+).ff_norm.weight":                                    r"language_model.model.layers.\1.post_attention_layernorm.weight",

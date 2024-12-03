@@ -301,6 +301,8 @@ class MolmoTextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        use_qk_norm (`bool), *optional*, defaults to `False`):
+            Whther to apply layer norm to keys and queries in attention module.
         use_postnorm (`bool), *optional*, defaults to `True`):
             Whther to apply pre or post layer normalization in each decoder layer.
         use_attention_layer_norm (`bool`, *optional*, defaults to `False`):
@@ -344,6 +346,7 @@ class MolmoTextConfig(PretrainedConfig):
         max_window_layers=28,
         attention_dropout=0.0,
         attention_bias=False,
+        use_qk_norm=False,
         use_postnorm=True,
         use_attention_layer_norm=False,
         **kwargs,
@@ -354,6 +357,7 @@ class MolmoTextConfig(PretrainedConfig):
         )
         self.head_dim = head_dim
         self.attention_bias = attention_bias
+        self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
         self.use_attention_layer_norm = use_attention_layer_norm
         self.vocab_size = vocab_size
