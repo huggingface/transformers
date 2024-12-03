@@ -50,6 +50,7 @@ class LlavaConfig(PretrainedConfig):
             The index of the layer to select the vision feature.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        num_additional_image_tokens (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
 
     Example:
 
@@ -85,6 +86,7 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_seq_length=576,
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -127,5 +129,6 @@ class LlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.num_additional_image_tokens = num_additional_image_tokens
 
         super().__init__(**kwargs)

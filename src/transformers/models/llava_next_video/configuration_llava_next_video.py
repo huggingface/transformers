@@ -104,6 +104,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         spatial_pool_stride=2,
         image_seq_length=576,
         video_seq_length=288,
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.video_token_index = video_token_index
@@ -156,5 +157,6 @@ class LlavaNextVideoConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.num_additional_image_tokens = num_additional_image_tokens
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)

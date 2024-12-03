@@ -243,6 +243,8 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.num_additional_image_tokens = config.num_additional_image_tokens
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -290,7 +292,10 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
 
         # For VIP-llava, the image features are computed this way
         # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
-        image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+        image_features = [
+            image_outputs.hidden_states[index][:, self.num_additional_image_tokens :]
+            for index in vision_feature_layers
+        ]
         image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         return image_features

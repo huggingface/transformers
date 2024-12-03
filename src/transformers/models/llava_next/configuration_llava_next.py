@@ -55,6 +55,7 @@ class LlavaNextConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        num_additional_image_tokens (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
 
     Example:
 
@@ -92,6 +93,7 @@ class LlavaNextConfig(PretrainedConfig):
         image_grid_pinpoints=None,
         tie_word_embeddings=False,
         image_seq_length=576,
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -140,5 +142,6 @@ class LlavaNextConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.num_additional_image_tokens = num_additional_image_tokens
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)

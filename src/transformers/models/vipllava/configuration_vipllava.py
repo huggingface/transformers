@@ -84,6 +84,7 @@ class VipLlavaConfig(PretrainedConfig):
         projector_layernorm_eps=1e-5,
         vision_feature_layers=[-2, -5, -8, -11, 6],
         image_seq_length=576,
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -118,5 +119,6 @@ class VipLlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.num_additional_image_tokens = num_additional_image_tokens
 
         super().__init__(**kwargs)

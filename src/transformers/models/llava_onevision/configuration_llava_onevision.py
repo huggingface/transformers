@@ -95,6 +95,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
         vision_aspect_ratio="anyres_max_9",
         image_grid_pinpoints=None,
         tie_word_embeddings=False,
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -179,5 +180,6 @@ class LlavaOnevisionConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
+        self.num_additional_image_tokens = num_additional_image_tokens
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
