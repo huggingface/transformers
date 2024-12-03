@@ -10,7 +10,6 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import nn
 
-# ruff: noqa: F811 (due to the "examples" location, this import will be duplicated)
 from transformers.utils import add_start_docstrings
 
 from ...activations import ACT2FN
@@ -18,7 +17,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
-    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
