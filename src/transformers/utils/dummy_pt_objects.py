@@ -8955,9 +8955,6 @@ class TextNetPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class TimeSeriesTransformerForPrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
