@@ -1747,42 +1747,44 @@ class Sam2MemoryFuserCXBlock(nn.Module):
         config,
         drop_path=0.0,
         layer_scale_init_value=1e-6,
-        use_dwconv=True,
+        use_depthwise_convolution=True,
     ):
         super().__init__()
-        embed_dim = config.
-        self.dwconv = nn.Conv2d(
-            dim,
-            dim,
-            kernel_size=kernel_size,
-            padding=padding,
-            groups=dim if use_dwconv else 1,
+        memory_fuser_embed_dim = config.memory_fuser_embed_dim
+        self.depthwise_conv = nn.Conv2d(
+            memory_fuser_embed_dim,
+            memory_fuser_embed_dim,
+            kernel_size=config.memory_fuser_kernel_size,
+            padding=config.memory_fuser_padding,
+            groups=memory_fuser_embed_dim if use_depthwise_convolution else 1,
         )  # depthwise conv
-        self.norm = Sam2LayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
-        self.act = nn.GELU()
-        self.pwconv2 = nn.Linear(4 * dim, dim)
+        self.norm = Sam2LayerNorm(memory_fuser_embed_dim, eps=1e-6)
+        self.activation = ACT2FN(config.memory_fuser_hidden_act)
+        self.pointwise_conv1 = nn.Linear(
+            memory_fuser_embed_dim, 4 * memory_fuser_embed_dim
+        )  # pointwise/1x1 convs, implemented with linear layers
+        self.pointwise_conv2 = nn.Linear(4 * memory_fuser_embed_dim, memory_fuser_embed_dim)
         self.weight = (
-            nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            nn.Parameter(layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True)
             if layer_scale_init_value > 0
             else None
         )
         self.drop_path = Sam2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, x):
-        input = x
-        x = self.dwconv(x)
-        x = self.norm(x)
-        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
+    def forward(self, hidden_states):
+        input = hidden_states
+        hidden_states = self.depthwise_conv(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
+        hidden_states = self.pointwise_conv1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.pointwise_conv2(hidden_states)
         if self.weight is not None:
-            x = self.weight * x
-        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
+            hidden_states = self.weight * hidden_states
+        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
-        x = input + self.drop_path(x)
-        return x
+        hidden_states = input + self.drop_path(hidden_states)
+        return hidden_states
 
 
 class Sam2MemoryFuser(nn.Module):
@@ -1793,14 +1795,15 @@ class Sam2MemoryFuser(nn.Module):
         self.layers = get_clones(layer, config.memory_fuser_num_layers)
         if config.memory_fuser_input_projection:
             assert config.memory_fuser_embed_dim is not None
-            self.input_projection = nn.Conv2d(dim, dim, kernel_size=1)
+            embed_dim = config.memory_fuser_embed_dim
+            self.input_projection = nn.Conv2d(embed_dim, embed_dim, kernel_size=1)
 
-    def forward(self, x):
-        # normally x: (N, C, H, W)
-        x = self.input_projection(x)
+    def forward(self, hidden_states):
+        # normally hidden_states: (N, C, H, W)
+        hidden_states = self.input_projection(hidden_states)
         for layer in self.layers:
-            x = layer(x)
-        return x
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
 class Sam2MaskDownSampler(nn.Module):
@@ -1863,7 +1866,7 @@ class Sam2MemoryEncoder(nn.Module):
 
     def forward(
         self,
-        pix_feat: torch.Tensor,
+        vision_features: torch.Tensor,
         masks: torch.Tensor,
         skip_mask_sigmoid: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1873,18 +1876,18 @@ class Sam2MemoryEncoder(nn.Module):
             masks = F.sigmoid(masks)
         masks = self.mask_downsampler(masks)
 
-        ## Fuse pix_feats and downsampled masks
+        ## Fuse pixel_features and downsampled masks
         # in case the visual features are on CPU, cast them to CUDA
-        pix_feat = pix_feat.to(masks.device)
+        vision_features = vision_features.to(masks.device)
 
-        x = self.feature_projection(pix_feat)
-        x = x + masks
-        x = self.memory_fuser(x)
-        x = self.projection(x)
+        vision_features = self.feature_projection(vision_features)
+        vision_features = vision_features + masks
+        vision_features = self.memory_fuser(vision_features)
+        vision_features = self.projection(vision_features)
 
-        pos = self.position_encoding(x).to(x.dtype)
+        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
 
-        return {"vision_features": x, "vision_pos_enc": [pos]}
+        return {"vision_features": vision_features, "vision_pos_enc": [vision_pos_enc]}
 
 
 class Sam2PreTrainedModel(PreTrainedModel):

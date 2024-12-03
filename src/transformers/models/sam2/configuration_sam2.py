@@ -14,6 +14,8 @@
 # limitations under the License.
 """SAM2 model configuration"""
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -168,16 +170,32 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
         memory_fuser_num_layers=2,
         memory_fuser_embed_dim=256,
         memory_fuser_input_projection=False,
-        memory_fuser_num_layers=2,
         memory_fuser_kernel_size=7,
         memory_fuser_padding=3,
+        memory_fuser_hidden_act="gelu",
         **kwargs,
     ):
         super().__init__(**kwargs)
-        assert mask_downsampler_stride**int(math.log2(mask_downsampler_total_stride) // math.log2(mask_downsampler_stride)) == mask_downsampler_total_stride
+        assert (
+            mask_downsampler_stride
+            ** int(math.log2(mask_downsampler_total_stride) // math.log2(mask_downsampler_stride))
+            == mask_downsampler_total_stride
+        )
 
         self.hidden_size = hidden_size
         self.output_channels = output_channels
+        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
+        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
+        self.mask_downsampler_stride = mask_downsampler_stride
+        self.mask_downsampler_padding = mask_downsampler_padding
+        self.mask_downsampler_total_stride = mask_downsampler_total_stride
+        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
+        self.memory_fuser_num_layers = memory_fuser_num_layers
+        self.memory_fuser_embed_dim = memory_fuser_embed_dim
+        self.memory_fuser_input_projection = memory_fuser_input_projection
+        self.memory_fuser_kernel_size = memory_fuser_kernel_size
+        self.memory_fuser_padding = memory_fuser_padding
+        self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
 
 class Sam2MaskDecoderConfig(PretrainedConfig):
