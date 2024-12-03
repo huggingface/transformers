@@ -1037,6 +1037,7 @@ class RelationDetrEncoderLayer(nn.Module):
         return outputs
 
 
+# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderLayer
 class RelationDetrDecoderLayer(nn.Module):
     def __init__(self, config: RelationDetrConfig):
         super().__init__()
@@ -1152,6 +1153,7 @@ class RelationDetrDecoderLayer(nn.Module):
         return outputs
 
 
+# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel
 class RelationDetrPreTrainedModel(PreTrainedModel):
     config_class = RelationDetrConfig
     base_model_prefix = "model"
@@ -1321,35 +1323,39 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
 
     def forward(
         self,
-        inputs_embeds=None,
-        attention_mask=None,
-        reference_points=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        inputs_embeds: torch.FloatTensor,
+        position_embeddings: torch.FloatTensor,
+        spatial_shapes: torch.LongTensor,
+        spatial_shapes_list: List,
+        level_start_index: torch.LongTensor,
+        valid_ratios: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        reference_points: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
+            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of each feature map.
+            spatial_shapes_list (`List`):
+                Spatial shapes of each feature map with list data type.
+            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
+                Starting index of each feature map.
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
+                Ratio of valid area in each feature level.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
                 - 1 for pixel features that are real (i.e. **not masked**),
                 - 0 for pixel features that are padding (i.e. **masked**).
                 [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
+            reference_points (`torch.FloatTensor`, *optional*):
+                Reference points for `RelationDetrMultiscaleDeformableAttention`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1423,7 +1429,7 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         )
 
 
-def box_rel_encoding(src_boxes, tgt_boxes, eps=1e-5):
+def box_rel_encoding(src_boxes: torch.FloatTensor, tgt_boxes: torch.FloatTensor, eps: float = 1e-5):
     # construct position relation
     xy1, wh1 = src_boxes.split([2, 2], -1)
     xy2, wh2 = tgt_boxes.split([2, 2], -1)
@@ -1442,7 +1448,7 @@ def get_dim_t(num_pos_feats: int, temperature: int, device: torch.device):
     return dim_t  # (0, 2, 4, ..., ⌊n/2⌋*2)
 
 
-def exchange_xy_fn(pos_res):
+def exchange_xy_fn(pos_res: torch.FloatTensor):
     index = torch.cat(
         [
             torch.arange(1, -1, -1, device=pos_res.device),
@@ -1454,20 +1460,29 @@ def exchange_xy_fn(pos_res):
 
 
 def get_sine_pos_embed(
-    pos_tensor: Tensor,
+    pos_tensor: torch.FloatTensor,
     num_pos_feats: int = 128,
     temperature: int = 10000,
     scale: float = 2 * math.pi,
     exchange_xy: bool = True,
 ) -> Tensor:
-    """Generate sine position embedding for a position tensor
+    """
+    Generate sinusoidal position embedding for a tensor.
 
-    :param pos_tensor: shape as (..., 2*n).
-    :param num_pos_feats: projected shape for each float in the tensor, defaults to 128
-    :param temperature: the temperature used for scaling the position embedding, defaults to 10000
-    :param exchange_xy: exchange pos x and pos. For example,
-        input tensor is [x, y], the results will be [pos(y), pos(x)], defaults to True
-    :return: position embedding with shape (None, n * num_pos_feats)
+    Args:
+        pos_tensor (`torch.FloatTensor`):
+            Input tensor to be encoded through sinusoidal position encoding.
+        num_pos_feats (`int`, *optional*, defaults to 128):
+            Projected shape for each element in the tensor.
+        temperature (`int`, *optional*, defaults to 10000):
+            The temperature used for scaling the position embedding.
+        scale (`float`, *optional*, defaults to `2 * math.pi`):
+            The scale used for scaling the position embedding.
+        exchange_xy (`bool`, *optional*, defaults to True):
+            Exchange pos x and pos. For example, if the last dimension of input tensor denotes [x, y, ...],
+            the results will be [pos(y), pos(x), ...].
+    Returns:
+        `torch.FloatTensor` with the last dimension expanded by `num_pos_feats` times.
     """
     dim_t = get_dim_t(num_pos_feats, temperature, pos_tensor.device)
 
@@ -1482,12 +1497,12 @@ def get_sine_pos_embed(
 class PositionRelationEmbedding(nn.Module):
     def __init__(
         self,
-        embedding_dim=16,
-        num_heads=8,
-        temperature=10000.0,
-        scale=100.0,
-        activation_layer="relu",
-        inplace=True,
+        embedding_dim: int = 16,
+        num_heads: int = 8,
+        temperature: float = 10000.0,
+        scale: float = 100.0,
+        activation_layer: str = "relu",
+        inplace: bool = True,
     ):
         super().__init__()
         activation_layer = ACT2CLS[activation_layer]
@@ -1507,11 +1522,20 @@ class PositionRelationEmbedding(nn.Module):
             exchange_xy=False,
         )
 
-    def forward(self, src_boxes: Tensor, tgt_boxes: Tensor = None):
+    def forward(self, src_boxes: torch.FloatTensor, tgt_boxes: Optional[torch.FloatTensor] = None):
+        """
+        Args:
+            src_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+                Source boxes.
+            tgt_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
+                Target boxes, if not provided, `tgt_boxes` will be set to `src_boxes`.
+
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, num_heads, num_boxes, num_boxes)`
+        """
+
         if tgt_boxes is None:
             tgt_boxes = src_boxes
-        # src_boxes: [batch_size, num_boxes1, 4]
-        # tgt_boxes: [batch_size, num_boxes2, 4]
         torch._assert(src_boxes.shape[-1] == 4, "src_boxes much have 4 coordinates")
         torch._assert(tgt_boxes.shape[-1] == 4, "tgt_boxes must have 4 coordinates")
         with torch.no_grad():
@@ -1582,43 +1606,50 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
 
     def forward(
         self,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        self_attention_mask=None,
-        encoder_attention_mask=None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        skip_relation=False,
+        inputs_embeds: torch.FloatTensor,
+        encoder_hidden_states: torch.FloatTensor,
+        reference_points: torch.FloatTensor,
+        spatial_shapes: torch.LongTensor,
+        spatial_shapes_list: List,
+        level_start_index: torch.LongTensor,
+        valid_ratios: torch.FloatTensor,
+        self_attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        skip_relation: Optional[bool] = False,
     ):
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
                 The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
+            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+                Reference point in range `[0, 1]`, represented as (center_x, center_y, width, height), top-left (0,0),
+                bottom-right (1, 1), not including padding area.
+            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of the feature maps.
+            spatial_shapes_list (`List`):
+                Spatial shapes of each feature map with list data type.
+            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+                Ratio of valid area in each feature level.
+            self_attention_mask (`torch.LongTensor` or `torch.FloatTensor` of shape `(num_queries, num_queries)` or
+                `(batch_size * num_heads, num_queries, num_queries)`, *optional*):
+                Mask to avoid performing self-attention on padding pixel_values of the decoder. Mask values selected in
+                `[0, 1]`:
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
+                If input `torch.FloatTensor`, it will be added to self attention weight directly.
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
                 in `[0, 1]`:
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
-                Ratio of valid area in each feature level.
-
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1627,6 +1658,8 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            skip_relation (`bool`, *optional*):
+                Whether or not to skip the position relation embedding. Defaults to `False`.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1634,8 +1667,7 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
+        hidden_states = inputs_embeds
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1766,15 +1798,17 @@ class RelationDetrChannelMapper(nn.Module):
         stride: int = 1,
         groups: int = 1,
         norm_layer=functools.partial(nn.GroupNorm, 32),
-        activation_layer: nn.Module = None,
+        activation_layer: Optional[str] = None,
         dilation: int = 1,
         inplace: bool = True,
-        bias: bool = None,
+        bias: Optional[bool] = None,
     ):
         super().__init__()
         self.in_channels = in_channels
         self.convs = nn.ModuleList()
         self.num_channels = [out_channels] * num_outs
+        if activation_layer is not None:
+            activation_layer = ACT2CLS[activation_layer]
         for in_channel in in_channels:
             self.convs.append(
                 Conv2dNormActivation(
@@ -1809,19 +1843,17 @@ class RelationDetrChannelMapper(nn.Module):
             )
             in_channel = out_channels
 
-    def forward(self, inputs):
-        """Map inputs into specific embed_dim. If the length of inputs is smaller
-        than convolution modules, only the last `len(inputs) + extra` will be used
-        for mapping.
-
-        :param inputs: dict containing torch.Tensor.
-        :return: a list of mapped torch.Tensor
+    def forward(self, inputs: List[torch.FloatTensor]):
         """
-        if isinstance(inputs, dict):
-            inputs = list(inputs.values())
-        else:
-            assert isinstance(inputs, (list, tuple))
+        Map inputs into specific embed_dim. If the length of inputs is smaller than convolution modules,
+        only the last `len(inputs) + extra` will be used for mapping.
 
+        Args:
+            inputs: List of torch.FloatTensor.
+
+        Returns:
+            List of mapped torch.FloatTensor
+        """
         assert len(inputs) <= len(self.in_channels)
         start = len(self.in_channels) - len(inputs)
         convs = self.convs[start:]
@@ -1904,7 +1936,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             param.requires_grad_(True)
 
     @staticmethod
-    def flatten_multi_level(multi_level_elements):
+    def flatten_multi_level(multi_level_elements: torch.Tensor):
         multi_level_elements = torch.cat(tensors=[e.flatten(-2) for e in multi_level_elements], dim=-1)  # (b, [c], s)
         if multi_level_elements.ndim == 3:
             multi_level_elements.transpose_(1, 2)
@@ -1918,7 +1950,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         return spatial_shapes, level_start_index, valid_ratios
 
     @staticmethod
-    def get_valid_ratios(mask):
+    def get_valid_ratios(mask: torch.BoolTensor):
         b, h, w = mask.shape
         if h == 0 or w == 0:  # for empty Tensor
             return mask.new_ones((b, 2)).float()
@@ -1929,13 +1961,13 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)  # [n, 2]
         return valid_ratio
 
-    def multi_level_valid_ratios(self, multi_level_masks):
+    def multi_level_valid_ratios(self, multi_level_masks: List[torch.BoolTensor]):
         # note that True is valid and False is invalid for multi_level_masks
         # which is opposite to the official implementation
         return torch.stack([self.get_valid_ratios(~m) for m in multi_level_masks], 1)
 
     @staticmethod
-    def get_full_reference_points(spatial_shapes, valid_ratios):
+    def get_full_reference_points(spatial_shapes: torch.LongTensor, valid_ratios: torch.FloatTensor):
         reference_points_list = []
         for lvl, (h, w) in enumerate(spatial_shapes):
             ref_y, ref_x = torch.meshgrid(
@@ -1950,7 +1982,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         reference_points = torch.cat(reference_points_list, 1)  # [n, s, 2]
         return reference_points
 
-    def get_reference(self, spatial_shapes, valid_ratios):
+    def get_reference(self, spatial_shapes: torch.LongTensor, valid_ratios: torch.FloatTensor):
         # get full_reference_points, should be transferred using valid_ratios
         full_reference_points = self.get_full_reference_points(spatial_shapes, valid_ratios)
         reference_points = full_reference_points[:, :, None] * valid_ratios[:, None]
@@ -1961,11 +1993,13 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         proposals = torch.cat([full_reference_points, level_wh], -1)
         return reference_points, proposals
 
-    def get_lvl_pos_embed(self, multi_level_pos_embeds):
+    def get_lvl_pos_embed(self, multi_level_pos_embeds: List[torch.FloatTensor]):
         multi_level_pos_embeds = [p + l.view(1, -1, 1, 1) for p, l in zip(multi_level_pos_embeds, self.level_embed)]
         return self.flatten_multi_level(multi_level_pos_embeds)
 
-    def get_encoder_output(self, memory, proposals, memory_padding_mask):
+    def get_encoder_output(
+        self, memory: torch.FloatTensor, proposals: torch.FloatTensor, memory_padding_mask: torch.BoolTensor
+    ):
         output_proposals_valid = ((proposals > 0.01) & (proposals < 0.99)).all(-1, keepdim=True)
         proposals = torch.log(proposals / (1 - proposals))  # inverse_sigmoid
         invalid = memory_padding_mask.unsqueeze(-1) | ~output_proposals_valid
@@ -1975,7 +2009,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         output_memory = self.enc_output_norm(self.enc_output(output_memory))
         return output_memory, proposals
 
-    def get_multi_levels(self, pixel_values: Tensor, pixel_mask: Tensor):
+    def get_multi_levels(self, pixel_values: torch.FloatTensor, pixel_mask: torch.LongTensor):
         # extract higher features matching proto_levels
         multi_level_feats = self.backbone(pixel_values)
 
@@ -2045,9 +2079,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
-        # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # which is a list of tuples
+        # Extract multi-scale feature maps of same resolution `config.d_model`
         sources, masks, position_embeddings_list = self.get_multi_levels(pixel_values, pixel_mask)
 
         source_flatten = self.flatten_multi_level(sources)
@@ -2057,7 +2089,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         reference_points, proposals = self.get_reference(spatial_shapes, valid_ratios)
         spatial_shapes_list = spatial_shapes.tolist()
 
-        # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
+        # Sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -2081,7 +2113,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # Fifth, prepare decoder inputs
+        # Prepare decoder inputs
         batch_size, _, num_channels = encoder_outputs[0].shape
         enc_outputs_class = None
         enc_outputs_coord_logits = None
@@ -2089,24 +2121,24 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             encoder_outputs[0], proposals, ~mask_flatten
         )
 
-        # linear projection for bounding box binary classification (i.e. foreground and background)
+        # Linear projection for bounding box binary classification (i.e. foreground and background)
         enc_outputs_class = self.encoder_class_head(object_query_embedding)
         delta_bbox = self.encoder_bbox_head(object_query_embedding)
         enc_outputs_coord_logits = delta_bbox + output_proposals
 
-        # only keep top scoring `config.num_queries` proposals
+        # Only keep top scoring `config.num_queries` proposals
         topk = min(self.config.num_queries, enc_outputs_class.shape[1])
         topk_proposals = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1].unsqueeze(-1)
         topk_class = torch.gather(enc_outputs_class, 1, topk_proposals.repeat(1, 1, self.num_labels))
         topk_coords_logits = torch.gather(enc_outputs_coord_logits, 1, topk_proposals.repeat(1, 1, 4))
         topk_coords = topk_coords_logits.sigmoid()
 
-        # get target and reference points
+        # Get target and reference points
         reference_points = topk_coords.detach()
         target = self.target_embed.weight.expand(batch_size, -1, -1)[:, :topk]
 
         if self.training:
-            # get hybrid classes and coordinates, target and reference points
+            # Get hybrid classes and coordinates, target and reference points
             hybrid_enc_class = self.hybrid_class_head(object_query_embedding)
             hybrid_enc_coord = self.hybrid_bbox_head(object_query_embedding) + output_proposals
             hybrid_enc_coord = hybrid_enc_coord.sigmoid()
@@ -2119,7 +2151,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         else:
             hybrid_enc_class = hybrid_enc_coord = None
 
-        # combine with noised_label_query and noised_box_query for denoising training
+        # Combine with noised_label_query and noised_box_query for denoising training
         if noised_label_query is not None and noised_box_query is not None:
             target = torch.cat([noised_label_query, target], 1)
             reference_points = torch.cat([noised_box_query.sigmoid(), reference_points], 1)
@@ -2213,7 +2245,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
+# Modified from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
 class RelationDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
@@ -2223,30 +2255,37 @@ class RelationDetrMLPPredictionHead(nn.Module):
 
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
-    def forward(self, x):
+    def forward(self, x: torch.FloatTensor):
         for i, layer in enumerate(self.layers):
             x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
 
 
 class GenerateDNQueries(nn.Module):
-    """Generate denoising queries for DN-DETR
+    """
+    Generate denoising queries as introduced in https://arxiv.org/abs/2203.01305
 
     Args:
-        num_queries (int): Number of total queries in DN-DETR. Default: 300
-        num_classes (int): Number of total categories. Default: 80.
-        label_embed_dim (int): The embedding dimension for label encoding. Default: 256.
-        denoising_groups (int): Number of noised ground truth groups. Default: 5.
-        label_noise_ratio (float): The probability of the label being noised. Default: 0.2.
-        box_noise_scale (float): Scaling factor for box noising. Default: 0.4
-        with_indicator (bool): If True, add indicator in noised label/box queries.
-
+        num_queries (`int`, *optional*, defaults to 300):
+            Number of total denoising queries.
+        num_classes (`int`, *optional*, defaults to 80):
+            Number of total categories.
+        label_embed_dim (`int`, *optional*, defaults to 256):
+            The embedding dimension for label encoding.
+        denoising_groups (`int`, *optional*, defaults to 5):
+            Number of noised ground truth groups.
+        label_noise_ratio (`float`, *optional*, defaults to 0.2):
+            The probability of the label being noised.
+        box_noise_scale (`float`, *optional*, defaults to 0.4):
+            Scaling factor for box noising.
+        with_indicator (`bool`, *optional*, defaults to False):
+            Whether to add indicator in noised label/box queries.
     """
 
     def __init__(
@@ -2287,7 +2326,17 @@ class GenerateDNQueries(nn.Module):
             return labels
 
     @staticmethod
-    def apply_box_noise(boxes: torch.Tensor, box_noise_scale: float = 0.4):
+    def apply_box_noise(boxes: torch.FloatTensor, box_noise_scale: float = 0.4):
+        """
+        Args:
+            boxes (`torch.FloatTensor` of shape `(num_boxes, 4)`):
+                Bounding boxes in format `(center_x, center_y, width, height)` with shape `(num_boxes, 4)`.
+            box_noise_scale (`float`, *optional*, defaults to 0.4):
+                Scaling factor for box noising.
+
+        Returns:
+            `torch.FloatTensor`, noised bounding boxes with shape `(num_boxes, 4)`.
+        """
         if box_noise_scale > 0:
             diff = torch.zeros_like(boxes)
             diff[:, :2] = boxes[:, 2:] / 2
@@ -2296,7 +2345,7 @@ class GenerateDNQueries(nn.Module):
             boxes = boxes.clamp(min=0.0, max=1.0)
         return boxes
 
-    def generate_query_masks(self, max_gt_num_per_image, device):
+    def generate_query_masks(self, max_gt_num_per_image: int, device: torch.device):
         noised_query_nums = max_gt_num_per_image * self.denoising_groups
         tgt_size = noised_query_nums + self.num_queries
         attn_mask = torch.zeros(tgt_size, tgt_size, device=device, dtype=torch.bool)
@@ -2310,13 +2359,20 @@ class GenerateDNQueries(nn.Module):
             attn_mask[start_row:end_row, end_col:noised_query_nums] = True
         return attn_mask
 
-    def forward(self, gt_labels_list, gt_boxes_list, return_dict: bool = None):
+    def forward(
+        self,
+        gt_labels_list: List[torch.LongTensor],
+        gt_boxes_list: List[torch.FloatTensor],
+        return_dict: Optional[bool] = None,
+    ):
         """
-
-        :param gt_labels_list: Ground truth bounding boxes per image
-            with normalized coordinates in format ``(x, y, w, h)`` in shape ``(num_gts, 4)`
-        :param gt_boxes_list: Classification labels per image in shape ``(num_gt, )``
-        :return: Noised label queries, box queries, attention mask and denoising metas.
+        Args:
+            gt_labels_list (`List[torch.LongTensor]` of len `(batch_size,)`):
+                Classification labels for images in a batch.
+            gt_boxes_list (`List[torch.FloatTensor]` of len `(batch_size,)`):
+                Ground truth bounding boxes for images in a batch, in format `(center_x, center_y, width, height)`.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
 
         return_dict = return_dict if return_dict is not None else self.return_dict
@@ -2440,12 +2496,16 @@ class GenerateCDNQueries(GenerateDNQueries):
         self.num_denoising = num_denoising
         self.label_encoder = nn.Embedding(num_classes, label_embed_dim)
 
-    def apply_box_noise(self, boxes: torch.Tensor, box_noise_scale: float = 0.4):
+    def apply_box_noise(self, boxes: torch.FloatTensor, box_noise_scale: float = 0.4):
         """
+        Args:
+            boxes (`torch.FloatTensor` of shape `(num_boxes, 4)`):
+                Bounding boxes in format `(center_x, center_y, width, height)` with shape `(num_boxes, 4)`.
+            box_noise_scale (`float`, *optional*, defaults to 0.4):
+                Scaling factor for box noising.
 
-        :param boxes: Bounding boxes in format ``(x_c, y_c, w, h)`` with shape ``(num_boxes, 4)``
-        :param box_noise_scale: Scaling factor for box noising, defaults to 0.4
-        :return: Noised boxes
+        Returns:
+            `torch.FloatTensor`, noised bounding boxes with shape `(num_boxes, 4)`.
         """
         num_boxes = len(boxes) // self.denoising_groups // 2
         positive_idx = torch.arange(num_boxes, dtype=torch.long, device=boxes.device)
@@ -2470,15 +2530,21 @@ class GenerateCDNQueries(GenerateDNQueries):
 
         return boxes
 
-    def forward(self, gt_labels_list, gt_boxes_list, return_dict: bool = None):
+    def forward(
+        self,
+        gt_labels_list: List[torch.LongTensor],
+        gt_boxes_list: List[torch.FloatTensor],
+        return_dict: Optional[bool] = None,
+    ):
         """
-
-        :param gt_labels_list: Ground truth bounding boxes per image
-            with normalized coordinates in format ``(x, y, w, h)`` in shape ``(num_gts, 4)``
-        :param gt_boxes_list: Classification labels per image in shape ``(num_gt, )``
-        :return: Noised label queries, box queries, attention mask and denoising metas.
+        Args:
+            gt_labels_list (`List[torch.LongTensor]` of len `(batch_size,)`):
+                Classification labels for images in a batch.
+            gt_boxes_list (`List[torch.FloatTensor]` of len `(batch_size,)`):
+                Ground truth bounding boxes for images in a batch, in format `(center_x, center_y, width, height)`.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-
         return_dict = return_dict if return_dict is not None else self.return_dict
 
         # the number of ground truth per image in one batch
