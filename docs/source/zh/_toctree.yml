@@ -92,6 +92,8 @@
     title: 分词器的摘要
   - local: attention
     title: 注意力机制
+  - local: bertology
+    title: 基于BERT进行的相关研究
   title: 概念指南
 - sections:
   - sections:
