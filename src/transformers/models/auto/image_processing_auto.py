@@ -377,6 +377,8 @@ class AutoImageProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
+            image_processor_filename (`str`, *optional*, defaults to `"config.json"`):
+                The name of the file in the model directory to use for the image processor config.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is

@@ -285,6 +285,8 @@ class ImageProcessingMixin(PushToHubMixin):
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            image_processor_filename (`str`, *optional*, defaults to `"config.json"`):
+                The name of the file in the model directory to use for the image processor config.
 
         Returns:
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
