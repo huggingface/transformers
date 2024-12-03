@@ -22,7 +22,7 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_list_of_images
 from ...utils import TensorType, logging, requires_backends
-from ...utils.import_utils import is_timm_available, is_torch_available
+from ...utils.import_utils import is_timm_available, is_timm_greater_or_equal, is_torch_available
 
 
 if is_timm_available():
@@ -90,6 +90,13 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         """
         if return_tensors != "pt":
             raise ValueError(f"return_tensors for TimmWrapperImageProcessor must be 'pt', but got {return_tensors}")
+
+        # In timm versions before 1.0.8, transforms expect numpy arrays / PIL images rather than tensors
+        # as input since they use ToTensor transform. From 1.0.8 onwards, MaybeToTensor is used
+        # which can handle both numpy arrays / PIL images and tensors. So for older timm versions, we need
+        # to convert tensor inputs to numpy arrays.
+        if not is_timm_greater_or_equal("1.0.8") and isinstance(images, torch.Tensor):
+            images = images.cpu().numpy()
 
         # If the input is a torch tensor, then no conversion is needed
         # Otherwise, we need to pass in a list of PIL images

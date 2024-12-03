@@ -199,6 +199,7 @@ from .import_utils import (
     is_tf_available,
     is_tiktoken_available,
     is_timm_available,
+    is_timm_greater_or_equal,
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
