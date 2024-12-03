@@ -940,7 +940,7 @@ class ChameleonVQVAEEncoder(nn.Module):
         latent_channels = config.latent_channels
         channel_multiplier = config.channel_multiplier
 
-        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
+        self.conv_in = nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
 
         curr_res = resolution
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
@@ -1146,6 +1146,8 @@ class ChameleonVQVAE(PreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.GroupNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -1162,6 +1164,7 @@ class ChameleonVQVAE(PreTrainedModel):
         self.quantize = ChameleonVQVAEVectorQuantizer(config)
         self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
+        self.post_init()
         self.eval()  # Chameleon's VQ model is frozen
 
     def encode(self, pixel_values: torch.FloatTensor) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.LongTensor]:

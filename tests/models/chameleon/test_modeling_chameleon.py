@@ -184,6 +184,7 @@ class ChameleonModelTester:
             "in_channels": 3,
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
             "channel_multiplier": self.vq_channel_multiplier,
+            "initializer_range": self.initializer_range,
         }
 
     def create_and_check_model(
