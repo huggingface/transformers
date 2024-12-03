@@ -73,8 +73,11 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         ct_quantization_config = self.compressor.quantization_config
 
-        if self.run_compressed and self.is_compressed:
-            apply_quantization_config(model, ct_quantization_config, run_compressed=True)
+        # Model is quantized, populate state dict with scale and zp
+        # Compressed models need to be loaded as CompressedLinear for unpacking on decompression
+        apply_quantization_config(
+            model, ct_quantization_config, run_compressed=self.run_compressed or self.is_compressed
+        )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
