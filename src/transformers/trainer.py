@@ -2507,14 +2507,14 @@ class Trainer:
                     else:
                         self.accelerator.gradient_state._set_sync_gradients(True)
                 
-
-                if (self.state.global_step == args.stable_train_warmup_steps):
-                    start_train_stable_time = time.time()
+                    if (self.state.global_step == args.stable_train_warmup_steps):
+                        start_train_stable_time = time.time()
                 
+                    with self.accelerator.accumulate(model):
+                        tr_loss_step = self.training_step(model, inputs)
 
-                with self.accelerator.accumulate(model):
-                    tr_loss_step = self.training_step(model, inputs)
-
+                    if (self.state.global_step == 10):
+                        start_train_stable_time = time.time()
 
                     if self.args.include_num_input_tokens_seen:
                         main_input_name = getattr(self.model, "main_input_name", "input_ids")
