@@ -101,8 +101,6 @@ class RelationDetrConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
@@ -198,7 +196,6 @@ class RelationDetrConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         init_xavier_std=1.0,
-        position_embedding_type="sine",
         backbone="resnet50",
         use_pretrained_backbone=True,
         backbone_kwargs=None,
@@ -271,7 +268,6 @@ class RelationDetrConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.init_std = init_std
         self.init_xavier_std = init_xavier_std
-        self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
