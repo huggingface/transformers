@@ -31,7 +31,6 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import (
-    AllowOnlyTokensAtRelativeOffsetLogitsProcessor,
     AllowOnlyTokensInRelativeWindowLogitsProcessor,
     LogitsProcessorList,
     SuppressTokensAtBeginLogitsProcessor,
@@ -1901,6 +1900,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         if logits_processor is None:
             logits_processor = LogitsProcessorList()
         if generation_config.multimodal_generation_mode == "text-only":
+            # Suppress all image tokens
             logits_processor.append(
                 SuppressTokensLogitsProcessor(
                     suppress_tokens=self.vocabulary_mapping.image_token_ids
@@ -1930,22 +1930,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             suppress_tokens = [token_id for token_id in range(self.vocab_size) if token_id not in allowed_tokens]
             logits_processor.extend(
                 [
-                    AllowOnlyTokensAtRelativeOffsetLogitsProcessor(
-                        trigger_token_id=self.vocabulary_mapping.boi_token_id,
-                        allowed_token_ids=[self.vocabulary_mapping.eoi_token_id],
-                        offset=self.model.image_seq_length + 1,
-                        exclusive=True,
-                        device=self.device,
-                    ),
-                    AllowOnlyTokensInRelativeWindowLogitsProcessor(
-                        trigger_token_id=self.vocabulary_mapping.boi_token_id,
-                        allowed_token_ids=self.vocabulary_mapping.image_token_ids,
-                        window_width=self.model.image_seq_length,
-                        exclusive=True,
-                        device=self.device,
-                    ),
-                    # Don't start generating an image if there aren't enough space for the
-                    # rest of the image tokens.
+                    # Don't start generating an image if there aren't enough space for the rest of the image tokens.
                     SuppressTokensInIndexRangeLogitsProcessor(
                         suppress_tokens=[self.vocabulary_mapping.boi_token_id],
                         start_index=generation_config.max_length - self.model.image_seq_length - 1,
@@ -1964,13 +1949,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         elif generation_config.multimodal_generation_mode == "interleaved-text-image":
             logits_processor.extend(
                 [
-                    AllowOnlyTokensAtRelativeOffsetLogitsProcessor(
-                        trigger_token_id=self.vocabulary_mapping.boi_token_id,
-                        allowed_token_ids=[self.vocabulary_mapping.eoi_token_id],
-                        offset=self.model.image_seq_length + 1,
-                        exclusive=True,
-                        device=self.device,
-                    ),
+                    # Generate only image token ids for `image_seq_length` steps when the boi-token is already generated
                     AllowOnlyTokensInRelativeWindowLogitsProcessor(
                         trigger_token_id=self.vocabulary_mapping.boi_token_id,
                         allowed_token_ids=self.vocabulary_mapping.image_token_ids,
@@ -1978,8 +1957,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
                         exclusive=True,
                         device=self.device,
                     ),
-                    # Don't start generating an image if there aren't enough space for the
-                    # rest of the image tokens.
+                    # Don't start generating an image if there aren't enough space for the rest of the image tokens.
                     SuppressTokensInIndexRangeLogitsProcessor(
                         suppress_tokens=[self.vocabulary_mapping.boi_token_id],
                         start_index=generation_config.max_length - self.model.image_seq_length - 1,
@@ -1991,7 +1969,8 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             pass
         else:
             raise ValueError(
-                f"Unknown multimodal generation mode: {generation_config.multimodal_generation_mode}. Please choose one of 'unrestricted', 'text-only', 'image-only', or 'interleaved-text-image'."
+                f"Unknown multimodal generation mode: {generation_config.multimodal_generation_mode}. "
+                f"Please choose one of 'unrestricted', 'text-only', 'image-only', or 'interleaved-text-image'."
             )
         return super().generate(
             inputs=inputs,
