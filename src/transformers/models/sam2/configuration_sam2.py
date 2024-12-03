@@ -323,8 +323,6 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
             Window specifications for each stage.
         global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `(5, 7, 9)`):
             Blocks where global attention is used.
-        skip_lowest_resolutions (`int`, *optional*, defaults to 1):
-            The skip_lowest_resolutions parameter for the image encoder.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
             List of channel dimensions for the backbone.
         fpn_hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
@@ -361,7 +359,6 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         window_positional_embedding_background_size=(7, 7),
         window_spec=(8, 4, 14, 7),
         global_attention_blocks=(5, 7, 9),
-        skip_lowest_resolutions=1,
         backbone_channel_list=[768, 384, 192, 96],
         fpn_hidden_size=256,
         fpn_kernel_size=1,
@@ -377,7 +374,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         assert len(stages) == len(window_spec) == len(backbone_channel_list)
-        assert fuse_type in ["sum", "avg"]
+        assert fuse_type in ["sum", "average"]
 
         self.hidden_size = hidden_size
         self.num_heads = num_heads
@@ -395,7 +392,6 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         self.window_positional_embedding_background_size = window_positional_embedding_background_size
         self.window_spec = window_spec
         self.global_attention_blocks = global_attention_blocks
-        self.skip_lowest_resolutions = skip_lowest_resolutions
 
         # Neck
         self.backbone_channel_list = backbone_channel_list

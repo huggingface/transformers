@@ -304,7 +304,7 @@ class Sam2VisionNeck(nn.Module):
                     antialias=False,
                 )
                 prev_features = lateral_features + top_down_features
-                if self.fuse_type == "avg":
+                if self.fuse_type == "average":
                     prev_features /= 2
 
             prev_position_encoding = self.position_encoding(prev_features).to(prev_features.dtype)
@@ -370,7 +370,7 @@ class Sam2ImageEncoder(nn.Module):
             self.blocks.append(block)
 
         self.neck = Sam2VisionNeck(config)
-        self.skip_lowest_resolutions = config.skip_lowest_resolutions
+        self.num_feature_levels = None
 
     def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
         h, w = hw
@@ -421,12 +421,10 @@ class Sam2ImageEncoder(nn.Module):
 
         # Forward through backbone
         fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
-        if self.skip_lowest_resolutions > 0:
-            # Discard the lowest resolution features
-            fpn_hidden_states, fpn_position_encoding = (
-                fpn_hidden_states[: -self.skip_lowest_resolutions],
-                fpn_position_encoding[: -self.skip_lowest_resolutions],
-            )
+        fpn_hidden_states, fpn_position_encoding = (
+            fpn_hidden_states[-self.num_feature_levels:][::-1],
+            fpn_position_encoding[-self.num_feature_levels:][::-1],
+        )
 
         if not return_dict:
             outputs = (hidden_states, fpn_hidden_states, fpn_position_encoding)
@@ -2017,6 +2015,8 @@ class Sam2Model(Sam2PreTrainedModel):
 
         self.use_high_resolution_features = config.mask_decoder_config.use_high_resolution_features
         self.num_feature_levels = 3 if self.use_high_resolution_features else 1
+        # hacky_solution for giving image_encoder self.num_feature_levels
+        self.image_encoder.num_feature_levels = self.num_feature_levels
 
         # memory encoder related part
         # a single token to indicate no memory embedding from previous frames
@@ -2255,10 +2255,10 @@ class Sam2Model(Sam2PreTrainedModel):
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
 
-        if input_points is not None and vision_embeddings[-1].shape[0] != input_points.shape[0]:
+        if input_points is not None and vision_embeddings[-1].shape[1] != input_points.shape[0]:
             raise ValueError(
                 "The batch size of the image embeddings and the input points must be the same. ",
-                "Got {} and {} respectively.".format(vision_embeddings[-1].shape[0], input_points.shape[0]),
+                "Got {} and {} respectively.".format(vision_embeddings[-1].shape[1], input_points.shape[0]),
                 " if you want to pass multiple points for the same image, make sure that you passed ",
                 " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
                 " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
