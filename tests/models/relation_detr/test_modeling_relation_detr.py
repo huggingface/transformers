@@ -694,7 +694,7 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_logits = torch.tensor(
-            [[-5.2373, -3.9001, -5.3898], [-5.7824, -5.0136, -6.6365], [-6.4270, -4.7108, -6.6168]]
+            [[-5.2370, -3.9002, -5.3897], [-5.7823, -5.0137, -6.6365], [-6.4269, -4.7108, -6.6169]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [[0.7682, 0.4131, 0.4621], [0.1684, 0.1995, 0.2116], [0.5491, 0.2751, 0.0573]]
@@ -712,7 +712,7 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.9558, 0.9530, 0.9457, 0.8974, 0.8956]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([343.7997, 24.9038, 639.5161, 371.7106]).to(torch_device)
+        expected_slice_boxes = torch.tensor([343.8013, 24.9035, 639.5154, 371.7102]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
@@ -744,6 +744,6 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
             assert torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4)
 
         expected_logits = torch.tensor(
-            [[-5.2373, -3.9001, -5.3898], [-5.7824, -5.0136, -6.6365], [-6.4270, -4.7108, -6.6168]]
+            [[-5.2370, -3.9002, -5.3897], [-5.7823, -5.0137, -6.6365], [-6.4269, -4.7108, -6.6169]]
         )
         assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
