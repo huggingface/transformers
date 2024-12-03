@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import importlib
 import math
 import os
@@ -340,9 +354,8 @@ class AriaProjector(nn.Module):
     def __init__(
         self,
         config: AriaConfig,
-        **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__()
 
         self.patch_to_query_dict = config.projector_patch_to_query_dict
         self.in_features = config.vision_config.hidden_size
@@ -460,7 +473,7 @@ class AriaImageProcessor(BaseImageProcessor):
         self.image_std = image_std
         self.split_image = split_image
         if split_resolutions is None:
-            split_resolutions = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (2, 4), (2, 3), (2, 2), (2, 1), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (6, 1), (7, 1), (8, 1)] # fmt: skip
+            split_resolutions = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (2, 4), (2, 3), (2, 2), (2, 1), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (6, 1), (7, 1), (8, 1)]  # fmt: skip
             split_resolutions = [(el[0] * 490, el[1] * 490) for el in split_resolutions]
         self.split_resolutions = split_resolutions
         self.do_convert_rgb = do_convert_rgb
@@ -938,38 +951,6 @@ class AriaProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
-class AriaTextPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
-    base_model_prefix = "model"
-    _no_split_modules = ["AriaTextDecoderLayer"]
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedExpertsGEMM):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-
-
 class AriaSharedExpertsMLP(LlamaMLP):
     """
     Shared Expert MLP for shared experts.
@@ -986,7 +967,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
         self.intermediate_size = config.moe_intermediate_size * config.moe_num_shared_experts
 
 
-class AriaGroupedExpertsGEMM(nn.Module):
+class AriaGroupedExpertsGemm(nn.Module):
     """
     Grouped GEMM (General Matrix Multiplication) module for efficient expert computation.
     This module utilizes the grouped_gemm library (https://github.com/fanshiqing/grouped_gemm)
@@ -1028,8 +1009,7 @@ class AriaGroupedExpertsGEMM(nn.Module):
         # Ensure the CUDA device matches the input tensor's device.
         # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
         # with `device_map="auto"` on a multi-GPU setup.
-        if torch.cuda.is_available():
-            torch.cuda.set_device(input.device)
+        input.to(self.weight.device)
         original_dtype = input.dtype
         return experts_gemm(input.to(torch.bfloat16), self.weight.to(torch.bfloat16), tokens_per_expert).to(
             original_dtype
@@ -1048,8 +1028,8 @@ class AriaGroupedExpertsMLP(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
-        self.fc1 = AriaGroupedExpertsGEMM(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedExpertsGEMM(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
+        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
+        self.fc2 = AriaGroupedExpertsGemm(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
 
     def forward(self, permuted_tokens, tokens_per_expert):
         """
@@ -1167,6 +1147,38 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
         self.mlp = AriaTextMoELayer(config)
 
 
+class AriaTextPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = AriaConfig
+    base_model_prefix = "model"
+    _no_split_modules = ["AriaTextDecoderLayer"]
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, AriaGroupedExpertsGemm):
+            module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+
+
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1178,7 +1190,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedExpertsGEMM):
+        elif isinstance(module, AriaGroupedExpertsGemm):
             module.weight.data.normal_(mean=0.0, std=std)
         elif isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=std)
@@ -1328,7 +1340,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         image_outputs = self.vision_tower(
             pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
         )
-        image_attn_mask = self._create_image_attention_mask(patch_attention_mask)
+        image_attn_mask = None
+        if patch_attention_mask is not None:
+            flattened_mask = patch_attention_mask.flatten(1)
+            image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
@@ -1348,13 +1363,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             step=self.vision_tower.config.patch_size,
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
-    def _create_image_attention_mask(self, patch_attention_mask):
-        if patch_attention_mask is None:
-            return None
-
-        flattened_mask = patch_attention_mask.flatten(1)
-        return torch.logical_not(flattened_mask)
 
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)

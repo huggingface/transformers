@@ -1699,6 +1699,22 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
         self.post_init()
 
+    def _create_patch_attention_mask(self, pixel_mask):
+        if pixel_mask is None:
+            return None
+
+        patches_subgrid = pixel_mask.unfold(
+            dimension=1,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        )
+        patches_subgrid = patches_subgrid.unfold(
+            dimension=2,
+            size=self.vision_tower.config.patch_size,
+            step=self.vision_tower.config.patch_size,
+        )
+        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
@@ -1730,33 +1746,14 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         image_outputs = self.vision_tower(
             pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
         )
-        image_attn_mask = self._create_image_attention_mask(patch_attention_mask)
+        image_attn_mask = None
+        if patch_attention_mask is not None:
+            flattened_mask = patch_attention_mask.flatten(1)
+            image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
-
-    def _create_patch_attention_mask(self, pixel_mask):
-        if pixel_mask is None:
-            return None
-
-        patches_subgrid = pixel_mask.unfold(
-            dimension=1,
-            size=self.vision_tower.config.patch_size,
-            step=self.vision_tower.config.patch_size,
-        ).unfold(
-            dimension=2,
-            size=self.vision_tower.config.patch_size,
-            step=self.vision_tower.config.patch_size,
-        )
-        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
-    def _create_image_attention_mask(self, patch_attention_mask):
-        if patch_attention_mask is None:
-            return None
-
-        flattened_mask = patch_attention_mask.flatten(1)
-        return torch.logical_not(flattened_mask)
 
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
