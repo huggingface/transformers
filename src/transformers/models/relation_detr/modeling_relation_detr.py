@@ -677,6 +677,7 @@ def build_position_encoding(config):
     return position_embedding
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor,
     value_spatial_shapes: Union[Tensor, List[Tuple]],
@@ -719,6 +720,7 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
+# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention
 class RelationDetrMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Relation DETR.
@@ -845,6 +847,7 @@ class RelationDetrMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
+# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiheadAttention
 class RelationDetrMultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
@@ -984,6 +987,7 @@ class RelationDetrMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetr->RelationDetr
 class RelationDetrEncoderLayer(nn.Module):
     def __init__(self, config: RelationDetrConfig):
         super().__init__()
