@@ -38,15 +38,26 @@ logger = logging.get_logger(__name__)
 class TimmWrapperImageProcessor(BaseImageProcessor):
     """
     Wrapper class for timm models to be used within transformers.
+
+    Args:
+        pretrained_cfg (`Dict[str, Any]`):
+            The configuration of the pretrained model used to resolve evaluation and
+            training transforms.
+        architecture (`Optional[str]`):
+            Name of the architecture of the model.
     """
 
     main_input_name = "pixel_values"
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        pretrained_cfg: Dict[str, Any],
+        architecture: Optional[str] = None,
+        **kwargs,
+    ):
         requires_backends(self, "timm")
-        super().__init__(**kwargs)
+        super().__init__(architecture=architecture)
 
-        pretrained_cfg = kwargs.pop("pretrained_cfg", None)
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
 
