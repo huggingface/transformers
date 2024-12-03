@@ -343,10 +343,7 @@ class AriaGroupedExpertsGemm(nn.Module):
         # with `device_map="auto"` on a multi-GPU setup.
         original_dtype = input.dtype
         input.to(self.weight.device, dtype=torch.bfloat16)
-        return experts_gemm(input, self.weight, tokens_per_expert).to(
-            original_dtype
-        )
-
+        return experts_gemm(input, self.weight, tokens_per_expert).to(original_dtype)
 
 
 class AriaGroupedExpertsMLP(nn.Module):
