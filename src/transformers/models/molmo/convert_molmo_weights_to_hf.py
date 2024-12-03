@@ -91,7 +91,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_backbone.image_vit.positional_embedding":                             r"vision_tower.vision_model.embeddings.position_embedding.weight",
     r"vision_backbone.image_vit.class_embedding":                                  r"vision_tower.vision_model.embeddings.class_embedding",
     r"vision_backbone.image_vit.patch_embedding.weight":                           r"vision_tower.vision_model.embeddings.patch_embedding.weight",
-    r"vision_backbone.image_vit.pre_ln.(weight|bias)":                             r"vision_tower.vision_model.pre_layrnorm.\1",
+    r"vision_backbone.image_vit.pre_ln.(weight|bias)":                             r"vision_tower.vision_model.pre_layernorm.\1",
     r"vision_backbone.pad_embed":                                                  r"adapter.pad_embed",
 
 }

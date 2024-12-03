@@ -1089,14 +1089,18 @@ VARIABLES_AT_THE_BEGINNING = (
 IMPORTS_TO_SKIP_IN_MODULAR = ("auto.modeling_auto",)
 
 
-def append_new_import_node(node: cst.CSTNode, unused_imports: set[str], imports_to_keep: list[cst.CSTNode]):
-    """Insert the new `node` to the list of `imports_to_keep` in-place, if it is not part of the `unused_imports`."""
+def append_new_import_node(
+    node: cst.CSTNode, unused_imports: set[str], added_names: set, imports_to_keep: list[cst.CSTNode]
+):
+    """Insert the new `node` to the list of `imports_to_keep` in-place, if it is not part of the `unused_imports` or `added_names`.
+    Also modifies `added_names` in-place accordingly."""
     import_node = node.body[0]
     names_to_keep = []
     for name in import_node.names:
         name_value = name.evaluated_name
-        if name_value not in unused_imports:
+        if name_value not in unused_imports and name_value not in added_names:
             names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
+            added_names.add(name_value)
     if len(names_to_keep) > 0:
         new_node = node.with_changes(body=[import_node.with_changes(names=names_to_keep)])
         imports_to_keep.append(new_node)
@@ -1111,40 +1115,38 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
     scopes = set(wrapper.resolve(ScopeProvider).values())
     unused_imports = set()
-    import_ref_count = {}
+    import_ref_count = defaultdict(lambda: 0)
     for scope in scopes:
         for assignment in scope.assignments:
             node = assignment.node
             if isinstance(assignment, cst.metadata.Assignment) and isinstance(node, (cst.Import, cst.ImportFrom)):
                 ref_count = len(assignment.references)
                 name = assignment.name
-                # Similar imports may be redefined, and only used between their 1st and 2nd definition
-                # so if we already have a ref count > 0, the imports is actually used
-                if (ref_count == 0 and import_ref_count.get(name, -1) <= 0) or name in body.keys():
-                    unused_imports.add(name)
-                import_ref_count[name] = ref_count
+                import_ref_count[name] = max(ref_count, import_ref_count[name])
+    # Similar imports may be redefined, and only used between their 1st and 2nd definition so if we already have
+    # a ref count > 0 at any point, the imports is actually used
+    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body.keys()}
 
     imports_to_keep = []
+    # We need to keep track of which names were already imported, because some import may be duplicated from multiple sources
+    # or be both protected and unprotected due to inconsistency between models
+    added_names = set()
     existing_protected_statements = set()  # str repr of the import nodes - does not work with the nodes directly
     for node in all_imports:
         if m.matches(node, m.If()):  # handle safe imports
             new_statements = []
             for stmt_node in node.body.body:
-                append_new_import_node(stmt_node, unused_imports, new_statements)
+                append_new_import_node(stmt_node, unused_imports, added_names, new_statements)
             new_statements = [stmt for stmt in new_statements if str(stmt) not in existing_protected_statements]
             if len(new_statements) > 0:
                 new_node = node.with_changes(body=node.body.with_changes(body=new_statements))
                 imports_to_keep.append(new_node)
                 existing_protected_statements.update({str(stmt) for stmt in new_statements})
         else:
-            append_new_import_node(node, unused_imports, imports_to_keep)
+            append_new_import_node(node, unused_imports, added_names, imports_to_keep)
 
     protected_import_nodes = [node for node in imports_to_keep if m.matches(node, m.If())]
     usual_import_nodes = [node for node in imports_to_keep if not m.matches(node, m.If())]
-    # If the same import is both protected and unprotected, only keep the protected one
-    for protected_node in protected_import_nodes:
-        for stmt_node in protected_node.body.body:
-            usual_import_nodes = [node for node in usual_import_nodes if node.body[0] != stmt_node.body[0]]
 
     # Protected imports always appear at the end of all imports
     return usual_import_nodes + protected_import_nodes

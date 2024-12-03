@@ -37,13 +37,13 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
-    ModelOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -109,7 +109,7 @@ class MolmoSwiGLU(nn.Module):
         return nn.functional.silu(gate) * x
 
 
-class MolmoMLP(nn.Module):
+class MolmoTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -281,11 +281,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class MolmoTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        config: MolmoTextConfig,
-        layer_idx: Optional[int] = None,
-    ):
+    def __init__(self, config: MolmoTextConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -638,11 +634,7 @@ MOLMO_TEXT_ATTENTION_CLASSES = {
 
 
 class MolmoTextDecoderLayer(nn.Module):
-    def __init__(
-        self,
-        config,
-        layer_idx: int,
-    ):
+    def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -652,7 +644,8 @@ class MolmoTextDecoderLayer(nn.Module):
                 "unexpected results may be encountered."
             )
         self.self_attn = MOLMO_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-        self.mlp = MolmoMLP(config)
+
+        self.mlp = MolmoTextMLP(config)
         self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -948,19 +941,16 @@ class MolmoTextModel(MolmoTextPreTrainedModel):
     """
 
     # Ignore copy
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self, config):
         super().__init__(config)
         decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
-        self.layers = nn.ModuleList(
-            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = MolmoTextLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.rotary_emb = MolmoTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -1224,10 +1214,7 @@ class MolmoTextModel(MolmoTextPreTrainedModel):
 class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self, config):
         super().__init__(config)
         self.model = MolmoTextModel(config)
         self.vocab_size = config.vocab_size
@@ -1254,7 +1241,7 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(MOLMO_TEXT_INPUTS_DOCSTRING)  # naming issue here
+    @add_start_docstrings_to_model_forward(MOLMO_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1861,9 +1848,10 @@ class MolmoVisionTransformer(nn.Module):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
+
         self.embeddings = MolmoVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MolmoVisionEncoder(config)  # necessary because of renaming issue in modular
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(MOLMO_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MolmoVisionConfig)
@@ -1886,7 +1874,7 @@ class MolmoVisionTransformer(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,

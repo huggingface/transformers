@@ -25,13 +25,11 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
 )
 from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
-    replace_return_docstrings,
 )
 from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import (
@@ -516,7 +514,7 @@ class MolmoSwiGLU(nn.Module):
 
 
 # text modules inherited from Qwen2
-class MolmoMLP(CLIPMLP):
+class MolmoTextMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__()
         self.activation_fn = MolmoSwiGLU()
@@ -568,8 +566,8 @@ class MolmoTextLayerNorm(Qwen2RMSNorm):
 
 
 class MolmoTextAttention(CohereAttention):
-    def __init__(self, config: MolmoTextConfig, layer_idx: Optional[int] = None, **super_kwargs):
-        super().__init__(config, layer_idx, **super_kwargs)
+    def __init__(self, config: MolmoTextConfig, layer_idx: Optional[int] = None):
+        super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
 
@@ -581,18 +579,9 @@ class MolmoTextFlashAttention2(MolmoTextAttention, CohereFlashAttention2):
     pass
 
 
-MOLMO_TEXT_ATTENTION_CLASSES = {
-    "eager": MolmoTextAttention,
-    "sdpa": MolmoTextSdpaAttention,
-    "flash_attention_2": MolmoTextFlashAttention2,
-}
-
-
 class MolmoTextDecoderLayer(Qwen2DecoderLayer):
-    def __init__(self, config, layer_idx: int, **super_kwargs):
-        super().__init__(**super_kwargs)
-        self.mlp = MolmoMLP(config)
-        self.self_attn = MOLMO_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+    def __init__(self, config, layer_idx: int):
+        super().__init__(config, layer_idx)
         self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -670,28 +659,20 @@ class MolmoPreTrainedModel(CoherePreTrainedModel):
 
 
 class MolmoTextModel(CohereModel):
-    def __init__(self, config, **super_kwargs):
+    def __init__(self, config):
         decoder_layer = MolmoTextDecoderLayer if self.config.use_postnorm else MolmoTextPrenormDecoderLayer
+        super().__init__(config)
         self.layers = nn.ModuleList(
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        super().__init__(config)
-        del self.layers  # otherwise it adds self.layers twice O_O
 
 
 class MolmoForCausalLM(Qwen2ForCausalLM):
-    def __init__(self, config, **super_kwargs):
-        super().__init__(config, **super_kwargs)
-        self.model = MolmoTextModel(config)
-
-    @add_start_docstrings_to_model_forward(MOLMO_TEXT_INPUTS_DOCSTRING) # naming issue here
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    def forward(**super_kwargs):
-        super().forward()
-
+    pass
 
 
 # New Molmo multimodal projection and image pooling
+
 
 class MolmoMultiModalProjector(nn.Module):
     def __init__(self, config: MolmoPoolingConfig):
@@ -803,11 +784,11 @@ class MolmoVisionEncoder(CLIPEncoder):
 class MolmoVisionTransformer(CLIPVisionTransformer):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
-        self.embeddings = MolmoVisionEmbeddings(config)
         embed_dim = config.hidden_size
         self.encoder = MolmoVisionEncoder(config)  # necessary because of renaming issue in modular
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         del self.post_layernorm
+        del self.pre_layrnorm  # old typo in CLIP
 
     def forward(
         self,
@@ -828,7 +809,7 @@ class MolmoVisionTransformer(CLIPVisionTransformer):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
