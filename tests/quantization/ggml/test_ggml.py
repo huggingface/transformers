@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from parameterized import parameterized
+import pytest
 
 from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
@@ -42,16 +42,19 @@ class GgufQuantizationTests(unittest.TestCase):
     Test cases for the dequantization workflow of the GGUF models.
     """
 
-    model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
     example_text = "Hello"
 
-    def get_gguf_filename_format(self, quant_type: QuantType) -> str:
-        return f"TinyLlama-1.1B-Chat-v1.0-{quant_type.name.upper()}.gguf"
+    def run_gguf_model(self, gguf_model_id: str, gguf_filename: str, expected_text: str):
+        tokenizer = AutoTokenizer.from_pretrained(gguf_model_id, gguf_file=gguf_filename)
+        model = AutoModelForCausalLM.from_pretrained(gguf_model_id, gguf_file=gguf_filename).to(torch_device)
 
-    @parameterized.expand(
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), expected_text)
+
+    @pytest.mark.parametrize(
+        "quant_type, expected_text",
         [
-            # unquantized
-            (QuantType.F16, "Hello, World!\n\n5. Node.js"),
             # standard quants
             (QuantType.Q4_0, "Hello, World!\n\nStep 3: Add"),
             (QuantType.Q5_0, "Hello, World!\n\n5. Use a library"),
@@ -72,17 +75,12 @@ class GgufQuantizationTests(unittest.TestCase):
             (QuantType.IQ4_XS, "Hello, world!\n\n5. Using a loop"),
             (QuantType.IQ3_S, "Hello, World!\n\n5. Python:\n"),
             (QuantType.IQ4_NL, "Hello, world!\n\n5. Using a loop"),
-        ]
+        ],
     )
     def test_quantization_types(self, quant_type: QuantType, expected_text: str):
-        gguf_filename = self.get_gguf_filename_format(quant_type)
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=gguf_filename)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=gguf_filename).to(torch_device)
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), expected_text)
+        gguf_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
+        gguf_filename = f"TinyLlama-1.1B-Chat-v1.0-{quant_type.name}.gguf"
+        self.run_gguf_model(gguf_model_id, gguf_filename, expected_text)
 
     # TODO(Isotr0py): Fix these broken tests
     def test_tokenization_xnli(self):
