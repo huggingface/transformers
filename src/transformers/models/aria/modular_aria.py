@@ -228,6 +228,7 @@ class AriaConfig(PretrainedConfig):
                 4900: 256,
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
+        self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
         self.vision_feature_layer = vision_feature_layer
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"
@@ -356,7 +357,7 @@ class AriaProjector(nn.Module):
         self.hidden_features = config.text_config.hidden_size
         self.output_dim = config.text_config.hidden_size
 
-        self.query = nn.Parameter(torch.zeros(max(self.patch_to_query_dict.values()), self.in_features))
+        self.query = nn.Parameter(torch.zeros(config.max_value_projector_patch_to_query_dict, self.in_features))
 
         self.cross_attn = AriaCrossAttention(config)
 

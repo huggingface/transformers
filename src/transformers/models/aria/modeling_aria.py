@@ -182,7 +182,7 @@ class AriaProjector(nn.Module):
         self.hidden_features = config.text_config.hidden_size
         self.output_dim = config.text_config.hidden_size
 
-        self.query = nn.Parameter(torch.zeros(max(self.patch_to_query_dict.values()), self.in_features))
+        self.query = nn.Parameter(torch.zeros(config.max_value_projector_patch_to_query_dict, self.in_features))
 
         self.cross_attn = AriaCrossAttention(config)
 
