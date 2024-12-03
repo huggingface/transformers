@@ -85,7 +85,12 @@ class HiggsHfQuantizer(HfQuantizer):
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
+            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.float16` for FLUTE compatibility.")
             torch_dtype = torch.float16
+        elif torch_dtype != torch.float16 and torch_dtype != torch.bfloat16:
+            raise ValueError(
+                f"Invalid `torch_dtype` {torch_dtype}. HIGGS quantization only supports `torch_dtype=torch.float16` or `torch_dtype=torch.bfloat16`."
+            )
 
         return torch_dtype
 

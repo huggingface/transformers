@@ -448,6 +448,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
     grid_norm_2 = torch.linalg.norm(grid, axis=-1) ** 2
 
     device = weight.device
+    dtype = weight.dtype
     weight = weight.clone().float()
     # Pad to Hadamard transform size
     weight = pad_to_block(weight, [1], hadamard_size)
@@ -472,12 +473,12 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
 
     weight, scales, tables, tables2 = prepare_data_transposed(
         codes,
-        torch.repeat_interleave(scales.half(), hadamard_size // group_size, dim=1),
-        grid.half(),
+        torch.repeat_interleave(scales.to(dtype), hadamard_size // group_size, dim=1),
+        grid.to(dtype),
         num_bits=bits,
         group_size=group_size,
         vector_size=p,
-        dtype=torch.float16,
+        dtype=dtype,
         device=device,
     )
 
