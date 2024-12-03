@@ -22,7 +22,7 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_list_of_images
 from ...utils import TensorType, logging, requires_backends
-from ...utils.import_utils import is_timm_available, is_timm_greater_or_equal, is_torch_available
+from ...utils.import_utils import is_timm_available, is_torch_available
 
 
 if is_timm_available():
@@ -64,6 +64,13 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         # useful for training, see examples/pytorch/image-classification/run_image_classification.py
         self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
 
+        # If `ToTensor` is in the transforms, then the input should be numpy array or PIL image.
+        # Otherwise, the input can be a tensor. In later timm versions, `MaybeToTensor` is used
+        # which can handle both numpy arrays / PIL images and tensors.
+        self._not_supports_tensor_input = any(
+            transform.__class__.__name__ == "ToTensor" for transform in self.val_transforms.transforms
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
@@ -71,6 +78,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         output = super().to_dict()
         output.pop("train_transforms", None)
         output.pop("val_transforms", None)
+        output.pop("_not_supports_tensor_input", None)
         return output
 
     @classmethod
@@ -102,11 +110,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         if return_tensors != "pt":
             raise ValueError(f"return_tensors for TimmWrapperImageProcessor must be 'pt', but got {return_tensors}")
 
-        # In timm versions before 1.0.8, transforms expect numpy arrays / PIL images rather than tensors
-        # as input since they use ToTensor transform. From 1.0.8 onwards, MaybeToTensor is used
-        # which can handle both numpy arrays / PIL images and tensors. So for older timm versions, we need
-        # to convert tensor inputs to numpy arrays.
-        if not is_timm_greater_or_equal("1.0.8") and isinstance(images, torch.Tensor):
+        if self._not_supports_tensor_input and isinstance(images, torch.Tensor):
             images = images.cpu().numpy()
 
         # If the input is a torch tensor, then no conversion is needed
