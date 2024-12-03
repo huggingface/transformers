@@ -40,8 +40,10 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
+import huggingface_hub.utils
 import urllib3
 
+from huggingface_hub import delete_repo
 from transformers import logging as transformers_logging
 
 from .integrations import (
@@ -1550,7 +1552,7 @@ class CaptureLogger:
 
 
 @contextlib.contextmanager
-def LoggingLevel(level):
+def LoggingLevel():
     """
     This is a context manager to temporarily change transformers modules logging level to the desired value and have it
     restored to the original setting at the end of the scope.
@@ -1568,6 +1570,34 @@ def LoggingLevel(level):
         yield
     finally:
         transformers_logging.set_verbosity(orig_level)
+
+
+class TemporaryHubRepo:
+    """
+    This is a context manager to temporarily change transformers modules logging level to the desired value and have it
+    restored to the original setting at the end of the scope.
+
+    Example:
+
+    ```python
+    with LoggingLevel(logging.INFO):
+        AutoModel.from_pretrained("openai-community/gpt2")  # calls logger.info() several times
+    ```
+    """
+    def __init__(self, prefix="repo", random_id=None, token=None):
+        self.prefix = prefix
+        self.random_id = random_id
+        self.token = token
+        self.repo_id = f"{self.prefix}-{self.random_id}"
+
+    def __enter__(self):
+        return self.repo_id
+
+    def __exit__(self, exc, value, tb):
+        try:
+            delete_repo(repo_id=self.repo_id, token=self.token)
+        except huggingface_hub.utils.RepositoryNotFoundError as e:
+            pass
 
 
 @contextlib.contextmanager
