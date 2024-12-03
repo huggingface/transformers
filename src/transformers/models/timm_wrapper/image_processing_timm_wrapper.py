@@ -43,7 +43,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         pretrained_cfg (`Dict[str, Any]`):
             The configuration of the pretrained model used to resolve evaluation and
             training transforms.
-        architecture (`Optional[str]`):
+        architecture (`Optional[str]`, *optional*):
             Name of the architecture of the model.
     """
 
