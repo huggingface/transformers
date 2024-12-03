@@ -343,7 +343,7 @@ class AriaGroupedExpertsGemm(nn.Module):
         return experts_gemm(
             input.to(device=self.weight.device, dtype=torch.bfloat16),
             self.weight.to(dtype=torch.bfloat16),
-            tokens_per_expert
+            tokens_per_expert.cpu(),
         ).to(dtype=original_dtype)
 
 
