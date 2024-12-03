@@ -123,13 +123,13 @@ class AriaImageProcessor(BaseImageProcessor):
             Minimum image size.
         split_resolutions (`list`, *optional*, defaults to a list of optimal,resolutions as tuples):
             The optimal resolutions for splitting the image.
-        split_image (`bool`, *optional*, defaults to False):
+        split_image (`bool`, *optional*, defaults to `False`):
             Whether to split the image.
-        do_convert_rgb (`bool`, *optional*, defaults to True):
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        do_normalize (`bool`, *optional*, defaults to True):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
-        resample (PILImageResampling, *optional*, defaults to BICUBIC):
+        resample (PILImageResampling, *optional*, defaults to `BICUBIC`):
             The resampling filter to use if resizing the image.
     """
 
