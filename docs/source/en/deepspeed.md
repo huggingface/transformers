@@ -588,7 +588,7 @@ You can choose the communication data type by setting the `communication_data_ty
 
 ### Universal checkpointint
 
-DeepSpeed [Universal Checkpointing](https://www.deepspeed.ai/tutorials/universal-checkpointing) feature is a powerful tool for saving and loading model checkpoints in a way that is both efficient and flexible, enabling seamless model training continuation and finetuning across different model architectures, different parallelism techniques and training configurations.
+[Universal Checkpointing](https://www.deepspeed.ai/tutorials/universal-checkpointing) is an efficient and flexible feature for saving and loading model checkpoints. It enables seamless model training continuation and fine-tuning across different model architectures, parallelism techniques, and training configurations.
 
 You can resume training with universal checkpoint by setting [`load_universal`](https://www.deepspeed.ai/docs/config-json/#checkpoint-options) to `true` in the config file.
 
