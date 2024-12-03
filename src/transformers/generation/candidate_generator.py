@@ -320,7 +320,6 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
         self.prev_target_ids = None
-        self.prev_tokens = None
         self.prev_assistant_ids = None
         self.target_lookbehind = assistant_model.generation_config.target_lookbehind
         self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
@@ -468,7 +467,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         # Update state
         self.prev_target_ids = input_ids
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
-        self.prev_tokens = assistant_output.sequences
+        self.prev_assistant_ids = assistant_output.sequences
 
         if input_ids.shape[1] >= new_target_ids.shape[1]:
             return input_ids, None
@@ -483,7 +482,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         }
         remove_from_pkv = 0
 
-        if self.prev_tokens is not None and self.prev_target_ids.shape[1] > self.target_lookbehind:
+        if self.prev_assistant_ids is not None and self.prev_target_ids.shape[1] > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
             start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
 
