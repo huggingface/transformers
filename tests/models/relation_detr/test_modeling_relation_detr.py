@@ -234,7 +234,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
             self,
             config_class=RelationDetrConfig,
             has_text_modality=False,
-            common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],
+            common_properties=["d_model", "encoder_attention_heads", "decoder_attention_heads"],
         )
 
     def test_config(self):
