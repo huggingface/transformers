@@ -22,6 +22,8 @@ from transformers.models.clip.modeling_clip import (
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
+
+# ruff: noqa: F811 (due to the "examples" location, this import will be duplicated)
 from transformers.utils import add_start_docstrings
 
 

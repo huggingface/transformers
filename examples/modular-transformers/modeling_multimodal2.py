@@ -10,6 +10,7 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import nn
 
+# ruff: noqa: F811 (due to the "examples" location, this import will be duplicated)
 from transformers.utils import add_start_docstrings
 
 from ...activations import ACT2FN
