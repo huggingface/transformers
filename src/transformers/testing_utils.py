@@ -1587,7 +1587,7 @@ class TemporaryHubRepo:
     def __init__(self, token=None):
         self.token = token
         with tempfile.TemporaryDirectory() as tmp_dir:
-            self.repo_url = huggingface_hub.create_repo(tmp_dir, token=self.token)
+            self.repo_url = huggingface_hub.create_repo(Path(tmp_dir).name, token=self.token)
 
     def __enter__(self):
         return self.repo_url
