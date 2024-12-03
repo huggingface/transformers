@@ -770,9 +770,9 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
 
         results = []
         for score, label, box in zip(scores, labels, boxes):
-            score = score[score > threshold]
             label = label[score > threshold]
             box = box[score > threshold]
+            score = score[score > threshold]
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
