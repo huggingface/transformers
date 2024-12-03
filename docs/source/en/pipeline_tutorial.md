@@ -54,7 +54,7 @@ speech-to-text.
 Not the result you had in mind? Check out some of the [most downloaded automatic speech recognition models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
 on the Hub to see if you can get a better transcription.
 
-Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large) model from OpenAI. Whisper was released 
+Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large-v2) model from OpenAI. Whisper was released 
 2 years later than Wav2Vec2, and was trained on close to 10x more data. As such, it beats Wav2Vec2 on most downstream 
 benchmarks. It also has the added benefit of predicting punctuation and casing, neither of which are possible with  
 Wav2Vec2.

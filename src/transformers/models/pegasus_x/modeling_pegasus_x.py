@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1464,7 +1465,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
 
 
 @add_start_docstrings("The PEGASUS-X for conditional generation (e.g. summarization).", PEGASUS_X_START_DOCSTRING)
-class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
+class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1586,37 +1587,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)

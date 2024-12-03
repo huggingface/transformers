@@ -98,8 +98,8 @@ Take a look at an example now:
 
 There are two fields:
 
-- `audio`: a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file. 
-- `intent_class`: represents the class id of the speaker's intent. 
+- `audio`: a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file.
+- `intent_class`: represents the class id of the speaker's intent.
 
 To make it easier for the model to get the label name from the label id, create a dictionary that maps the label name to an integer and vice versa:
 
@@ -164,7 +164,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load an evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -235,7 +235,7 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=feature_extractor,
+...     processing_class=feature_extractor,
 ...     compute_metrics=compute_metrics,
 ... )
 

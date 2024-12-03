@@ -228,6 +228,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             elif hasattr(model.config, "hidden_sizes"):
                 # if there are many hidden sizes pick the largest one
                 hidden_size = max(model.config.hidden_sizes)
+            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                hidden_size = model.config.text_config.hidden_size
+            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                # if there are many hidden sizes pick the largest one
+                hidden_size = max(model.config.text_config.hidden_sizes)
             else:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
@@ -241,7 +246,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
                 # automatically assign the optimal config values based on model config
                 self.fill_only(
                     "zero_optimization.stage3_prefetch_bucket_size",
-                    0.9 * hidden_size * hidden_size,
+                    int(0.9 * hidden_size * hidden_size),
                 )
                 self.fill_only(
                     "zero_optimization.stage3_param_persistence_threshold",

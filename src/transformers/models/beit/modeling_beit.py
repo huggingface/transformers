@@ -41,6 +41,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_beit import BeitConfig
@@ -150,41 +151,46 @@ class BeitEmbeddings(nn.Module):
             self.position_embeddings = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows the model to interpolate the pre-trained position encodings so that it can be used on
-        higher resolution images.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
+
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
 
-        class_pos_embed = self.position_embeddings[:, 0]
+        class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-        h = height // self.patch_size
-        w = width // self.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h, w = h + 0.1, w + 0.1
 
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(h / math.sqrt(num_positions), w / math.sqrt(num_positions)),
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         )
-        if int(h) != patch_pos_embed.shape[-2] or int(w) != patch_pos_embed.shape[-1]:
-            raise ValueError("Width or height does not match with the interpolated position embeddings")
 
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(
         self,
@@ -566,7 +572,7 @@ class BeitRelativePositionBias(nn.Module):
 
         old_sub_table = old_sub_table.reshape(1, old_width, old_height, -1).permute(0, 3, 1, 2)
         new_sub_table = nn.functional.interpolate(
-            old_sub_table, size=(int(new_height), int(new_width)), mode="bilinear"
+            old_sub_table, size=(torch_int(new_height), torch_int(new_width)), mode="bilinear"
         )
         new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
 

@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -44,6 +45,7 @@ if is_torch_fx_available():
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
         AutoTokenizer,
@@ -585,7 +587,14 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
     # `src/transformers/data/processors/squad.py` (where this test fails for this model)
     def is_pipeline_test_to_skip(
-        self, pipeline_test_case_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         if tokenizer_name is None:
             return True
@@ -623,12 +632,9 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
                     ]
                     if labels is not None:
                         input_names.append("labels")
-
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
-
                     model_output = model(**filtered_inputs)
-
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
@@ -643,7 +649,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
                         "visual_feats",
                         "visual_pos",
                     ]
-
                     labels = inputs.get("labels", None)
                     start_positions = inputs.get("start_positions", None)
                     end_positions = inputs.get("end_positions", None)
@@ -653,15 +658,12 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
                         input_names.append("start_positions")
                     if end_positions is not None:
                         input_names.append("end_positions")
-
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
-
                     if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                         not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
-
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                     model_output = model(**filtered_inputs)
@@ -713,6 +715,41 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
             # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
+
+    # overwrite because T5 doesn't accept position ids as input and expects `decoder_input_ids`
+    def test_custom_4d_attention_mask(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+
+            (
+                input_ids,
+                _,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                _,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(
+                decoder_input_ids=input_ids,
+                input_ids=input_dict["input_ids"][:3],
+            ).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids=input_dict["input_ids"][:1],
+                decoder_input_ids=input_ids_shared_prefix,
+                decoder_attention_mask=mask_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1055,6 +1092,26 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_with_token_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
+
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if tokenizer_name is None:
+            return True
+
+        # `T5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
+        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+        if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
 
 def use_task_specific_params(model, task):
@@ -1455,6 +1512,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             [model.config.prefix + x for x in [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY]],
             padding="max_length",
             truncation=True,
+            max_length=512,
             return_tensors="pt",
         ).to(torch_device)
         self.assertEqual(512, dct["input_ids"].shape[1])
@@ -1577,13 +1635,75 @@ class T5ModelIntegrationTests(unittest.TestCase):
         outputs = t5_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
         generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
+        # TODO: @arthur?
+        # PR #31938 caused regression on this test which was fixed by PR #34089
         self.assertListEqual(
             generated_text,
             [
-                "Liana Barrientos has been married 10 times, nine of them in the Bronx. Her husbands filed for "
-                "permanent residence after the marriages, prosecutors say."
+                "Liana Barrientos has been married 10 times, nine of them in the Bronx . Her husbands filed for "
+                "permanent residence after the marriages, prosecutors say ."
             ],
         )
+
+    @slow
+    @require_torch_gpu
+    def test_compile_static_cache(self):
+        NUM_TOKENS_TO_GENERATE = 40
+        EXPECTED_TEXT_COMPLETION = [
+            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames. the laws of physics are the same for all inertial reference frames.",
+            "ketchup is my favorite condiment.",
+        ]
+
+        prompts = [
+            "summarize: Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
+            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+            "theory of relativity is not hard to grasp.",
+            "summarize: My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
+            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my pizza.",
+        ]
+        model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small").to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+        # Dynamic Cache
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
+
+        # Static Cache
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+
+        # Static Cache + compile
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
+
+    @slow
+    @require_torch_gpu
+    def test_compile_static_cache_encoder(self):
+        prompts = [
+            "summarize: Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
+            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+            "theory of relativity is not hard to grasp.",
+            "summarize: My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
+            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my pizza.",
+        ]
+        model = T5EncoderModel.from_pretrained("google-t5/t5-small").to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+        logits = model(**inputs)
+
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        logits_compiled = model(**inputs)
+        self.assertTrue(torch.allclose(logits[0][:, -3:, -3], logits_compiled[0][:, -3:, -3], atol=1e-5))
 
 
 @require_torch
