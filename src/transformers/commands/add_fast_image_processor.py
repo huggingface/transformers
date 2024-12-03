@@ -286,6 +286,11 @@ def add_fast_image_processor_file(
         "    image_std = None\n"
         '    size = {"height": None, "width": None}\n'
         '    crop_size = {"height": None, "width": None}\n'
+        "    do_resize = None\n"
+        "    do_center_crop = None\n"
+        "    do_rescale = None\n"
+        "    do_normalize = None\n"
+        "    do_convert_rgb = None\n"
     )
 
     content = content_header + imports + content_base_file

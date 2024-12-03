@@ -20,10 +20,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from .image_transforms import convert_to_rgb
+from .image_transforms import convert_to_rgb, get_resize_output_image_size, get_size_with_aspect_ratio
 from .image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     ImageType,
@@ -67,44 +65,49 @@ class SizeDict:
 
 
 class BaseImageProcessorFast(BaseImageProcessor):
-    resample = PILImageResampling.BILINEAR
-    image_mean = IMAGENET_DEFAULT_MEAN
-    image_std = IMAGENET_DEFAULT_STD
-    size = {"height": 640, "width": 640}
-    crop_size = {"height": 224, "width": 224}
+    resample = None
+    image_mean = None
+    image_std = None
+    size = None
+    crop_size = None
+    do_resize = None
+    do_center_crop = None
+    do_rescale = None
+    do_normalize = None
+    do_convert_rgb = None
 
     def __init__(
         self,
-        do_resize: bool = True,
+        do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = True,
+        do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
-        do_rescale: bool = True,
+        do_rescale: bool = None,
         rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = False,
+        do_normalize: bool = None,
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = True,
+        do_convert_rgb: bool = None,
         **kwargs,
     ) -> None:
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, default_to_square=True)
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
         super().__init__(**kwargs)
-        self.do_resize = do_resize
-        self.size = size
+        self.do_resize = do_resize if do_resize is not None else self.do_resize
+        self.size = size if size is not None else self.size
         self.resample = resample if resample is not None else self.resample
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_rescale = do_rescale
+        self.do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        self.crop_size = crop_size if crop_size is not None else self.crop_size
+        self.do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
+        self.do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         self.image_mean = image_mean if image_mean is not None else self.image_mean
         self.image_std = image_std if image_std is not None else self.image_std
-        self.do_convert_rgb = do_convert_rgb
+        self.do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
     def resize(
         self,
@@ -139,11 +142,33 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return F.resize_image(image, output_size, resample=resample)
+        print("size_dict", size)
+        if size.shortest_edge and size.longest_edge:
+            # Resize the image so that the shortest edge or the longest edge is of the given size
+            # while maintaining the aspect ratio of the original image.
+            new_size = get_size_with_aspect_ratio(
+                image.size()[-2:],
+                size["shortest_edge"],
+                size["longest_edge"],
+            )
+        elif size.shortest_edge:
+            new_size = get_resize_output_image_size(
+                image,
+                size=size["shortest_edge"],
+                default_to_square=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+        elif size.max_height and size.max_width:
+            new_size = get_image_size_for_max_height_width(image.size()[-2:], size["max_height"], size["max_width"])
+        elif size.height and size.width:
+            new_size = (size["height"], size["width"])
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
+                f" {size.keys()}."
+            )
+
+        return F.resize_image(image, new_size, interpolation=resample)
 
     def rescale(
         self,
@@ -238,8 +263,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
+        print("size_dict crop", size)
+        if size.height is None or size.width is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return F.center_crop(image, (size["height"], size["width"]))
 
@@ -308,7 +333,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
+        size = get_size_dict(size=size, default_to_square=True)
         resample = resample if resample is not None else self.resample
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -320,6 +349,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         # Make hashable for cache
         size = SizeDict(**size)
+        crop_size = SizeDict(**crop_size)
         image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
@@ -399,7 +429,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             processed_images.append(image)
         images = processed_images
 
-        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": torch.stack(images, dim=0)}, tensor_type=return_tensors)
 
     @functools.lru_cache(maxsize=1)
     def to_dict(self):

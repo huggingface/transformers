@@ -15,12 +15,17 @@
 """Fast Image processor class for CLIP."""
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 
 
 class CLIPImageProcessorFast(BaseImageProcessorFast):
-    # To be implemented
-    resample = None
-    image_mean = None
-    image_std = None
-    size = {"height": None, "width": None}
-    crop_size = {"height": None, "width": None}
+    resample = PILImageResampling.BICUBIC
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"shortest_edge": 224}
+    crop_size = {"height": 224, "width": 224}
+    do_resize = True
+    do_center_crop = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
