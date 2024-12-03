@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TextNet model configuration"""
+"""TextNet model configuration"""
+
 from transformers import PretrainedConfig
 from transformers.utils import logging
 from transformers.utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices

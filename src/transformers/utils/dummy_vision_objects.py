@@ -603,6 +603,7 @@ class SuperPointImageProcessor(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
 
+
 class TextNetImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
