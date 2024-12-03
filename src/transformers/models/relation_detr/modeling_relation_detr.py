@@ -531,7 +531,7 @@ class RelationDetrConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: RelationDetrConfig):
         super().__init__()
 
         self.config = config
@@ -600,18 +600,18 @@ class RelationDetrSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, embedding_dim=64, temperature=10000, normalize=False, scale=2 * math.pi, eps=1e-6, offset=0.0):
+    def __init__(self, config: RelationDetrConfig):
         super().__init__()
+        self.config = config
+        self.embedding_dim = config.d_model // 2
+        self.temperature = config.sin_cos_temperature
+        self.normalize = config.sin_cos_normalize
+        self.scale = config.sin_cos_scale
+        self.eps = 1e-6
+        self.offset = config.sin_cos_offset
         assert (
-            isinstance(temperature, int) or len(temperature) == 2
+            isinstance(self.temperature, int) or len(self.temperature) == 2
         ), "Only support (t_x, t_y) or an integer t for temperature"
-
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
-        self.normalize = normalize
-        self.scale = scale
-        self.eps = eps
-        self.offset = offset
 
     def get_dim_t(self, device: torch.device):
         if isinstance(self.temperature, int):
@@ -661,20 +661,6 @@ class RelationDetrLearnedPositionEmbedding(nn.Module):
         pos = pos.unsqueeze(0)
         pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
         return pos
-
-
-# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->RelationDetr
-def build_position_encoding(config):
-    n_steps = config.d_model // 2
-    if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = RelationDetrSinePositionEmbedding(n_steps, normalize=True)
-    elif config.position_embedding_type == "learned":
-        position_embedding = RelationDetrLearnedPositionEmbedding(n_steps)
-    else:
-        raise ValueError(f"Not supported {config.position_embedding_type}")
-
-    return position_embedding
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
@@ -1885,13 +1871,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         # Create backbone + positional encoding
         self.backbone = RelationDetrConvEncoder(config)
-        self.position_embeddings = RelationDetrSinePositionEmbedding(
-            embedding_dim=config.d_model // 2,
-            temperature=config.sin_cos_temperature,
-            normalize=config.sin_cos_normalize,
-            scale=config.sin_cos_scale,
-            offset=config.sin_cos_offset,
-        )
+        self.position_embeddings = RelationDetrSinePositionEmbedding(config)
 
         # Create input projection layers
         self.neck = RelationDetrChannelMapper(
