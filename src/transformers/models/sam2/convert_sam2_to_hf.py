@@ -80,18 +80,25 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_downscaling.3": "mask_embed.conv2",
     "mask_downscaling.4": "mask_embed.layer_norm2",
     "mask_downscaling.6": "mask_embed.conv3",
+    "dwconv": "depthwise_conv",
+    "pwconv": "pointwise_conv",
+    "fuser": "memory_fuser",
     "point_embeddings": "point_embed",
     "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
     "vision_encoder": "image_encoder",
     "sam_prompt_encoder": "prompt_encoder",
     "sam_mask_decoder": "mask_decoder",
+    "maskmem_tpos_enc": "memory_temporal_positional_encoding",
+    "gamma": "scale",
     "neck.0": "neck.conv1",
     "neck.1": "neck.layer_norm1",
     "neck.2": "neck.conv2",
     "neck.3": "neck.layer_norm2",
+    "pix_feat_proj": "feature_projection",
     "patch_embed.proj": "patch_embed.projection",
     "no_mem_embed": "no_memory_embedding",
-    "no_mem_pe_enc": "no_memory_positional_encoding",
+    "no_mem_pos_enc": "no_memory_positional_encoding",
+    "obj_ptr": "object_pointer",
     ".norm": ".layer_norm",
     "trunk.": "",
 }
@@ -104,6 +111,8 @@ def replace_keys(state_dict):
     output_mask_decoder_score_head_pattern = r"mask_decoder.pred_obj_score_head.layers.(\d+).*"
     output_image_encoder_mlps_pattern = r"image_encoder.blocks.(\d+).mlp.layers.(\d+).*"
     output_image_encoder_neck_pattern = r"image_encoder.neck.convs.(\d+).conv"
+    output_memory_encoder_projection_pattern = r"memory_encoder.out_proj.*"
+    output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
@@ -149,6 +158,19 @@ def replace_keys(state_dict):
         if re.match(output_image_encoder_neck_pattern, key):
             key = key.replace(".conv.", ".")
 
+        # memory_encoder.out_proj.weight -> memory_encoder.projection.weight
+        if re.match(output_memory_encoder_projection_pattern, key):
+            key = key.replace(".out_proj.", ".projection.")
+
+        if re.match(output_object_pointer_proj_pattern, key):
+            layer_nb = int(re.match(output_object_pointer_proj_pattern, key).group(1))
+            if layer_nb == 0:
+                key = key.replace("layers.0", "proj_in")
+            elif layer_nb == 1:
+                key = key.replace("layers.1", "layers.0")
+            elif layer_nb == 2:
+                key = key.replace("layers.2", "proj_out")
+
         model_state_dict[key] = value
 
     model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
@@ -171,7 +193,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    hf_model.load_state_dict(state_dict, strict=False)
+    hf_model.load_state_dict(state_dict, strict=True)
     hf_model = hf_model.to(device)
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
@@ -228,7 +250,7 @@ if __name__ == "__main__":
         required=False,
         help="Path to the original checkpoint",
     )
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--pytorch_dump_folder_path", default="", type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--push_to_hub",
         action="store_true",

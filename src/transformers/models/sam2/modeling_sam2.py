@@ -768,7 +768,7 @@ class Sam2MaskDecoder(nn.Module):
         self.pred_obj_scores = config.pred_obj_scores
         if self.pred_obj_scores:
             self.obj_score_token = nn.Embedding(1, config.hidden_size)
-        self.use_multimask_token_for_obj_ptr = config.use_multimask_token_for_obj_ptr
+        self.use_multimask_token_for_object_pointer = config.use_multimask_token_for_object_pointer
 
         self.upscale_conv1 = nn.ConvTranspose2d(config.hidden_size, config.hidden_size // 4, kernel_size=2, stride=2)
         self.upscale_conv2 = nn.ConvTranspose2d(
@@ -918,7 +918,7 @@ class Sam2MaskDecoder(nn.Module):
             masks = masks[:, :, 0:1, :, :]
             iou_pred = iou_pred[:, :, 0:1]
 
-        if multimask_output and self.use_multimask_token_for_obj_ptr:
+        if multimask_output and self.use_multimask_token_for_object_pointer:
             sam_tokens_out = mask_tokens_out[:, :, 1:]  # [b, 3, c] shape
         else:
             # Take the mask output token. Here we *always* use the token for single mask output.
@@ -1670,7 +1670,7 @@ class Sam2MemoryAttention(nn.Module):
         memory: torch.Tensor,
         current_vision_poisition_embeddings: Optional[Tensor] = None,
         memory_posision_embeddings: Optional[Tensor] = None,
-        num_obj_ptr_tokens: int = 0,
+        num_object_pointer_tokens: int = 0,
     ):
         """
         Args:
@@ -1682,7 +1682,7 @@ class Sam2MemoryAttention(nn.Module):
                 The position embeddings for the current vision features.
             memory_posision_embeddings (`torch.FloatTensor`, *optional*):
                 The position embeddings for the memory features.
-            num_obj_ptr_tokens (`int`, *optional*):
+            num_object_pointer_tokens (`int`, *optional*):
                 The number of object pointer tokens.
         """
         if isinstance(current_vision_features, list):
@@ -1709,7 +1709,7 @@ class Sam2MemoryAttention(nn.Module):
         for layer in self.layers:
             kwds = {}
             if isinstance(layer.cross_attn_image, Sam2RoPEAttention):
-                kwds = {"num_k_exclude_rope": num_obj_ptr_tokens}
+                kwds = {"num_k_exclude_rope": num_object_pointer_tokens}
 
             output = layer(
                 queries=output,
@@ -1746,27 +1746,28 @@ class Sam2MemoryFuserCXBlock(nn.Module):
         self,
         config,
         drop_path=0.0,
-        layer_scale_init_value=1e-6,
-        use_depthwise_convolution=True,
     ):
         super().__init__()
         memory_fuser_embed_dim = config.memory_fuser_embed_dim
+        memory_fuser_layer_scale_init_value = config.memory_fuser_layer_scale_init_value
         self.depthwise_conv = nn.Conv2d(
             memory_fuser_embed_dim,
             memory_fuser_embed_dim,
             kernel_size=config.memory_fuser_kernel_size,
             padding=config.memory_fuser_padding,
-            groups=memory_fuser_embed_dim if use_depthwise_convolution else 1,
+            groups=memory_fuser_embed_dim if config.memory_fuser_use_depthwise_conv else 1,
         )  # depthwise conv
-        self.norm = Sam2LayerNorm(memory_fuser_embed_dim, eps=1e-6)
-        self.activation = ACT2FN(config.memory_fuser_hidden_act)
+        self.layer_norm = Sam2LayerNorm(memory_fuser_embed_dim, eps=1e-6)
+        self.activation = ACT2FN[config.memory_fuser_hidden_act]
         self.pointwise_conv1 = nn.Linear(
             memory_fuser_embed_dim, 4 * memory_fuser_embed_dim
         )  # pointwise/1x1 convs, implemented with linear layers
         self.pointwise_conv2 = nn.Linear(4 * memory_fuser_embed_dim, memory_fuser_embed_dim)
-        self.weight = (
-            nn.Parameter(layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True)
-            if layer_scale_init_value > 0
+        self.scale = (
+            nn.Parameter(
+                memory_fuser_layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True
+            )
+            if memory_fuser_layer_scale_init_value > 0
             else None
         )
         self.drop_path = Sam2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -1774,13 +1775,13 @@ class Sam2MemoryFuserCXBlock(nn.Module):
     def forward(self, hidden_states):
         input = hidden_states
         hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
         hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
-        if self.weight is not None:
-            hidden_states = self.weight * hidden_states
+        if self.scale is not None:
+            hidden_states = self.scale * hidden_states
         hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
         hidden_states = input + self.drop_path(hidden_states)
@@ -1824,7 +1825,7 @@ class Sam2MaskDownSampler(nn.Module):
         num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
 
         self.encoder = nn.Sequential()
-        self.activation = ACT2FN(config.mask_downsampler_hidden_act)
+        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
         mask_in_chans, mask_out_chans = 1, 1
         for _ in range(num_layers):
             mask_out_chans = mask_in_chans * (config.mask_downsampler_stride**2)
@@ -2014,17 +2015,58 @@ class Sam2Model(Sam2PreTrainedModel):
         self.memory_attention = Sam2MemoryAttention(config.memory_attention_config)
         self.memory_encoder = Sam2MemoryEncoder(config.memory_encoder_config)
 
-        self.use_high_resolution_features_in_sam = config.mask_decoder_config.use_high_resolution_features_in_sam
-        self.num_feature_levels = 3 if self.use_high_resolution_features_in_sam else 1
+        self.use_high_resolution_features = config.mask_decoder_config.use_high_resolution_features
+        self.num_feature_levels = 3 if self.use_high_resolution_features else 1
 
+        # memory encoder related part
         # a single token to indicate no memory embedding from previous frames
         self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, config.image_encoder_config.fpn_hidden_size))
         self.no_memory_positional_encoding = torch.nn.Parameter(
             torch.zeros(1, 1, config.image_encoder_config.fpn_hidden_size)
         )
-        nn.init.trunc_normal_(self.no_memory_embedding, std=0.02)
-        nn.init.trunc_normal_(self.no_memory_positional_encoding, std=0.02)
         self.directly_add_no_memory_embedding = config.directly_add_no_memory_embedding
+
+        self.hidden_dim = config.image_encoder_config.fpn_hidden_size
+
+        self.mem_dim = self.hidden_dim
+        if hasattr(self.memory_encoder, "projection") and hasattr(self.memory_encoder.projection, "weight"):
+            # if there is compression of memories along channel dim
+            self.mem_dim = self.memory_encoder.projection.weight.shape[0]
+        self.num_maskmem = config.num_maskmem  # Number of memories accessible
+        # Temporal encoding of the memories
+        self.memory_temporal_positional_encoding = torch.nn.Parameter(
+            torch.zeros(self.num_maskmem, 1, 1, self.mem_dim)
+        )
+
+        # prompt encoder part
+        self.use_mlp_for_object_pointer_proj = config.use_mlp_for_object_pointer_proj
+        self.use_object_pointers_in_encoder = config.use_object_pointers_in_encoder
+        self.proj_tpos_enc_in_object_pointers = config.proj_tpos_enc_in_object_pointers
+
+        if config.pred_obj_scores and config.use_object_pointers_in_encoder:
+            self.no_object_pointer = torch.nn.Parameter(torch.zeros(1, self.hidden_dim))
+        if self.use_object_pointers_in_encoder:
+            # A conv layer to downsample the mask prompt to stride 4 (the same stride as
+            # low-res SAM mask logits) and to change its scales from 0~1 to SAM logit scale,
+            # so that it can be fed into the SAM mask decoder to generate a pointer.
+            self.mask_downsample = torch.nn.Conv2d(1, 1, kernel_size=4, stride=4)
+            # a linear projection on SAM output tokens to turn them into object pointers
+            self.object_pointer_proj = torch.nn.Linear(self.hidden_dim, self.hidden_dim)
+            if self.use_mlp_for_object_pointer_proj:
+                self.object_pointer_proj = Sam2FeedForward(self.hidden_dim, self.hidden_dim, self.hidden_dim, 3)
+        else:
+            self.object_pointer_proj = torch.nn.Identity()
+
+        if self.proj_tpos_enc_in_object_pointers:
+            # a linear projection on temporal positional encoding in object pointers to
+            # avoid potential interference with spatial positional encoding
+            self.object_pointer_tpos_proj = torch.nn.Linear(self.hidden_dim, self.mem_dim)
+        else:
+            self.object_pointer_tpos_proj = torch.nn.Identity()
+
+        self.no_obj_embed_spatial = None
+        if config.no_obj_embed_spatial:
+            self.no_obj_embed_spatial = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
 
         if torch.cuda.is_available():
             try:
@@ -2186,9 +2228,10 @@ class Sam2Model(Sam2PreTrainedModel):
             if output_attentions:
                 vision_attentions = vision_outputs[-1]
 
-            if self.use_high_resolution_features_in_sam:
+            if self.use_high_resolution_features:
                 # precompute projected level 0 and level 1 features in SAM decoder
                 # to avoid running it again on every SAM click
+                feature_maps = list(feature_maps)
                 feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
                 feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
 
@@ -2815,7 +2858,7 @@ class Sam2VideoModel(Sam2Model):
                 dtype=torch.float32,
                 device=inference_state["storage_device"],
             ),
-            "obj_ptr": torch.full(
+            "object_pointer": torch.full(
                 size=(batch_size, self.hidden_dim),
                 fill_value=NO_OBJ_SCORE,
                 dtype=torch.float32,
@@ -2846,7 +2889,7 @@ class Sam2VideoModel(Sam2Model):
                     if empty_mask_ptr is None:
                         empty_mask_ptr = self._get_empty_mask_ptr(inference_state, frame_idx)
                     # fill object pointer with a dummy pointer (based on an empty mask)
-                    consolidated_out["obj_ptr"][obj_idx : obj_idx + 1] = empty_mask_ptr
+                    consolidated_out["object_pointer"][obj_idx : obj_idx + 1] = empty_mask_ptr
                 continue
             # Add the temporary object output mask to consolidated output mask
             obj_mask = out["pred_masks"]
@@ -2862,7 +2905,7 @@ class Sam2VideoModel(Sam2Model):
                     align_corners=False,
                 )
                 consolidated_pred_masks[obj_idx : obj_idx + 1] = resized_obj_mask
-            consolidated_out["obj_ptr"][obj_idx : obj_idx + 1] = out["obj_ptr"]
+            consolidated_out["object_pointer"][obj_idx : obj_idx + 1] = out["object_pointer"]
 
         # Optionally, apply non-overlapping constraints on the consolidated scores
         # and rerun the memory encoder
@@ -2922,7 +2965,7 @@ class Sam2VideoModel(Sam2Model):
             run_mem_encoder=False,
             prev_sam_mask_logits=None,
         )
-        return current_out["obj_ptr"]
+        return current_out["object_pointer"]
 
     @torch.inference_mode()
     def propagate_in_video_preflight(self, inference_state):
@@ -3088,7 +3131,7 @@ class Sam2VideoModel(Sam2Model):
                 "maskmem_features": None,
                 "maskmem_pos_enc": None,
                 "pred_masks": current_out["pred_masks"][obj_slice],
-                "obj_ptr": current_out["obj_ptr"][obj_slice],
+                "object_pointer": current_out["object_pointer"][obj_slice],
             }
             if maskmem_features is not None:
                 obj_out["maskmem_features"] = maskmem_features[obj_slice]
@@ -3210,13 +3253,13 @@ class Sam2VideoModel(Sam2Model):
         # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
         maskmem_pos_enc = self._get_maskmem_pos_enc(inference_state, current_out)
         # object pointer is a small tensor, so we always keep it on GPU memory for fast access
-        obj_ptr = current_out["obj_ptr"]
+        object_pointer = current_out["object_pointer"]
         # make a compact version of this frame's output to reduce the state size
         compact_current_out = {
             "maskmem_features": maskmem_features,
             "maskmem_pos_enc": maskmem_pos_enc,
             "pred_masks": pred_masks,
-            "obj_ptr": obj_ptr,
+            "object_pointer": object_pointer,
         }
         return compact_current_out, pred_masks_gpu
 

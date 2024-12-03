@@ -162,9 +162,9 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
         hidden_size=256,
         output_channels=64,
         mask_downsampler_embed_dim=256,
-        mask_downsampler_kernel_size=4,
-        mask_downsampler_stride=4,
-        mask_downsampler_padding=0,
+        mask_downsampler_kernel_size=3,
+        mask_downsampler_stride=2,
+        mask_downsampler_padding=1,
         mask_downsampler_total_stride=16,
         mask_downsampler_hidden_act="gelu",
         memory_fuser_num_layers=2,
@@ -172,6 +172,8 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
         memory_fuser_input_projection=False,
         memory_fuser_kernel_size=7,
         memory_fuser_padding=3,
+        memory_fuser_layer_scale_init_value=1e-6,
+        memory_fuser_use_depthwise_conv=True,
         memory_fuser_hidden_act="gelu",
         **kwargs,
     ):
@@ -195,6 +197,8 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
         self.memory_fuser_input_projection = memory_fuser_input_projection
         self.memory_fuser_kernel_size = memory_fuser_kernel_size
         self.memory_fuser_padding = memory_fuser_padding
+        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
+        self.memory_fuser_use_depthwise_conv = memory_fuser_use_depthwise_conv
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
 
@@ -220,7 +224,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         dynamic_multimask_stability_thresh (`<fill_type>`, *optional*, defaults to 0.98): <fill_docstring>
         pred_obj_scores (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         pred_obj_scores_mlp (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        use_multimask_token_for_obj_ptr (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        use_multimask_token_for_object_pointer (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         feed_forward_hidden_act (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
         two_way_transformer_depth (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
         two_way_transformer_embedding_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
@@ -245,7 +249,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         dynamic_multimask_stability_thresh=0.98,
         pred_obj_scores=True,
         pred_obj_scores_mlp=True,
-        use_multimask_token_for_obj_ptr=True,
+        use_multimask_token_for_object_pointer=True,
         feed_forward_hidden_act="relu",
         two_way_transformer_depth=2,
         two_way_transformer_embedding_dim=256,
@@ -270,7 +274,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.dynamic_multimask_stability_thresh = dynamic_multimask_stability_thresh
         self.pred_obj_scores = pred_obj_scores
         self.pred_obj_scores_mlp = pred_obj_scores_mlp
-        self.use_multimask_token_for_obj_ptr = use_multimask_token_for_obj_ptr
+        self.use_multimask_token_for_object_pointer = use_multimask_token_for_object_pointer
         self.feed_forward_hidden_act = feed_forward_hidden_act
 
         # TwoWayTransformer configuration
@@ -516,6 +520,7 @@ class Sam2Config(PretrainedConfig):
         # on the first frame whether to directly add the no-memory embedding to the image feature
         # (instead of using the transformer encoder)
         self.directly_add_no_memory_embedding = True
+        self.no_obj_embed_spatial = True
         # whether to output multiple (3) masks for the first click on initial conditioning frames
         self.multimask_output_in_sam = True
         # the minimum and maximum number of clicks to use multimask_output_in_sam (only relevant when `multimask_output_in_sam=True`;
@@ -525,8 +530,8 @@ class Sam2Config(PretrainedConfig):
         # whether to also use multimask output for tracking (not just for the first click on initial conditioning frames; only relevant when `multimask_output_in_sam=True`)
         self.multimask_output_for_tracking = True
         # Whether to use multimask tokens for obj ptr; Only relevant when both
-        # use_obj_ptrs_in_encoder=True and multimask_output_for_tracking=True
-        self.use_multimask_token_for_obj_ptr = True
+        # use_object_pointers_in_encoder=True and multimask_output_for_tracking=True
+        self.use_multimask_token_for_object_pointer = True
         # whether to use sigmoid to restrict ious prediction to [0-1]
         self.iou_prediction_use_sigmoid = True
         # The memory bank's temporal stride during evaluation (i.e. the `r` parameter in XMem and Cutie; XMem and Cutie use r=5).
@@ -539,29 +544,33 @@ class Sam2Config(PretrainedConfig):
         # whether to apply non-overlapping constraints on the object masks in the memory encoder during evaluation (to avoid/alleviate superposing masks)
         self.non_overlap_masks_for_mem_enc = False
         # whether to cross-attend to object pointers from other frames (based on SAM output tokens) in the encoder
-        self.use_obj_ptrs_in_encoder = True
-        # the maximum number of object pointers from other frames in encoder cross attention (only relevant when `use_obj_ptrs_in_encoder=True`)
-        self.max_obj_ptrs_in_encoder = 16
-        # whether to add temporal positional encoding to the object pointers in the encoder (only relevant when `use_obj_ptrs_in_encoder=True`)
-        self.add_tpos_enc_to_obj_ptrs = False
+        self.use_object_pointers_in_encoder = True
+        # the maximum number of object pointers from other frames in encoder cross attention (only relevant when `use_object_pointers_in_encoder=True`)
+        self.max_object_pointers_in_encoder = 16
+        # whether to add temporal positional encoding to the object pointers in the encoder (only relevant when `use_object_pointers_in_encoder=True`)
+        self.add_tpos_enc_to_object_pointers = False
         # whether to add an extra linear projection layer for the temporal positional encoding in the object pointers to avoid potential interference
-        # with spatial positional encoding (only relevant when both `use_obj_ptrs_in_encoder=True` and `add_tpos_enc_to_obj_ptrs=True`)
-        self.proj_tpos_enc_in_obj_ptrs = False
+        # with spatial positional encoding (only relevant when both `use_object_pointers_in_encoder=True` and `add_tpos_enc_to_object_pointers=True`)
+        self.proj_tpos_enc_in_object_pointers = True
+        self.use_signed_tpos_enc_to_object_pointers = True
         # whether to only attend to object pointers in the past (before the current frame) in the encoder during evaluation
-        # (only relevant when `use_obj_ptrs_in_encoder=True`; this might avoid pointer information too far in the future to distract the initial tracking)
-        self.only_obj_ptrs_in_the_past_for_eval = True
+        # (only relevant when `use_object_pointers_in_encoder=True`; this might avoid pointer information too far in the future to distract the initial tracking)
+        self.only_object_pointers_in_the_past_for_eval = True
         # Whether to predict if there is an object in the frame
         self.pred_obj_scores = True
         # Whether to use an MLP to predict object scores
         self.pred_obj_scores_mlp = True
-        # Only relevant if pred_obj_scores=True and use_obj_ptrs_in_encoder=True;
+        # Only relevant if pred_obj_scores=True and use_object_pointers_in_encoder=True;
         # Whether to have a fixed no obj pointer when there is no object present
-        # or to use it as an additive embedding with obj_ptr produced by decoder
-        self.fixed_no_obj_ptr = True
-        # Soft no object i.e. mix in no_obj_ptr softly
+        # or to use it as an additive embedding with object_pointer produced by decoder
+        self.fixed_no_object_pointer = True
+        # Soft no object i.e. mix in no_object_pointer softly
         # hope to make recovery easier if there is a mistake and mitigate accumulation of errors
-        self.soft_no_obj_ptr = False
-        self.use_mlp_for_obj_ptr_proj = True
+        self.soft_no_object_pointer = False
+        if self.fixed_no_object_pointer:
+            assert self.pred_obj_scores
+            assert self.use_object_pointers_in_encoder
+        self.use_mlp_for_object_pointer_proj = True
         # extra arguments used to construct the SAM mask decoder; if not None it should be a dict of kwargs to be passed into `MaskDecoder` class.
         self.sam_mask_decoder_extra_args = None
         self.compile_image_encoder = False
