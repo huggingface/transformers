@@ -995,15 +995,15 @@ class AriaGroupedExpertsGemm(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (num_tokens, out_features).
         """
-        tokens_per_expert = tokens_per_expert.cpu()
-
         # Ensure the CUDA device matches the input tensor's device.
         # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
         # with `device_map="auto"` on a multi-GPU setup.
         original_dtype = input.dtype
-        input.to(self.weight.device, dtype=torch.bfloat16)
-        return experts_gemm(input, self.weight, tokens_per_expert).to(original_dtype)
-
+        return experts_gemm(
+            input.to(device=self.weight.device, dtype=torch.bfloat16),
+            self.weight.to(dtype=torch.bfloat16),
+            tokens_per_expert
+        ).to(original_dtype)
 
 class AriaGroupedExpertsMLP(nn.Module):
     """

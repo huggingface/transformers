@@ -301,6 +301,10 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
+    @unittest.skip(reason="Unsupported")
+    def test_generate_with_static_cache(self):
+        pass
+
 
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
