@@ -1948,7 +1948,10 @@ class GenerationTesterMixin:
                     "output_scores": True,
                     "use_cache": True,
                 }
-                inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
+                inputs_dict = {
+                    k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
+                    for k, v in inputs_dict.items()
+                }
 
                 static_cache_generation = model.generate(
                     **generation_kwargs, **inputs_dict, cache_implementation="static"

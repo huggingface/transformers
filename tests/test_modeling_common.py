@@ -819,8 +819,8 @@ class ModelTesterMixin:
                     single_row_input[key] = value
 
             with torch.no_grad():
-                model_batched_output = model(**batched_input_prepared, return_dict=True)
-                model_row_output = model(**single_row_input, return_dict=True)
+                model_batched_output = model(**batched_input_prepared)
+                model_row_output = model(**single_row_input)
 
             if isinstance(model_batched_output, torch.Tensor):
                 model_batched_output = {"model_output": model_batched_output}

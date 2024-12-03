@@ -31,6 +31,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -420,6 +421,8 @@ class ChameleonImageProcessor(BaseImageProcessor):
         do_unnormalize = do_unnormalize if do_unnormalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+
+        images = make_list_of_images(images)
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

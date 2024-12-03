@@ -1226,6 +1226,8 @@ class ChameleonVQVAE(PreTrainedModel):
                 Embedding loss.
 
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         quant, emb_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices)
         if not return_dict:
