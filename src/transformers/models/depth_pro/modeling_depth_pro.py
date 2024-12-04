@@ -103,7 +103,7 @@ class DepthProViTEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
-        num_positions = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and self.seq_len == num_positions and height == width:
@@ -117,8 +117,8 @@ class DepthProViTEmbeddings(nn.Module):
         new_height = height // self.config.patch_embeddings_size
         new_width = width // self.config.patch_embeddings_size
 
-        patch_pos_embed_size = torch_int(patch_pos_embed.shape[1] ** 0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, patch_pos_embed_size, patch_pos_embed_size, dim)
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         target_dtype = patch_pos_embed.dtype
 
@@ -734,7 +734,6 @@ class DepthProEncoder(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.fusion_hidden_size = config.fusion_hidden_size
-        self.patch_size = config.patch_size
 
         self.intermediate_hook_ids = config.intermediate_hook_ids
         self.intermediate_feature_dims = config.intermediate_feature_dims
@@ -868,7 +867,7 @@ class DepthProEncoder(nn.Module):
         patch_encodings = self.patch_encoder(
             patches,
             head_mask=head_mask,
-            output_attentions=False,
+            output_attentions=output_attentions,
             output_hidden_states=True,  # required for intermediate features
             return_dict=True,
         )
@@ -876,18 +875,11 @@ class DepthProEncoder(nn.Module):
             patch_encodings.last_hidden_state, scaled_images_num_patches[::-1]
         )[::-1]  # -1 as patch encoder expects high res patches first
 
-        # scale the image to patch size for image_encoder
-        scaled_image_to_patch_size = nn.functional.interpolate(
-            pixel_values,
-            size=(self.patch_size, self.patch_size),
-            mode="bilinear",
-            align_corners=False,
-        )
         image_encodings = self.image_encoder(
-            pixel_values=scaled_image_to_patch_size,
+            pixel_values=scaled_images[0],  # provide least resolution image
             head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_attentions=False,
+            output_hidden_states=False,
             return_dict=True,
         )
 
@@ -954,15 +946,19 @@ class DepthProEncoder(nn.Module):
         # a. extract hidden_state
         hidden_state = (
             image_encodings.last_hidden_state
-        )  # (B, self.seq_len+1, config.hidden_size)
+        )  # (scaled_images_num_patches[0], self.seq_len+1, config.hidden_size)
 
         # b. reshape back to image like
         image_features = reshape_feature(
             hidden_state, self.out_size, self.out_size
-        )  # (B, config.hidden_size, self.out_size, self.out_size)
+        )  # (scaled_images_num_patches[0], config.hidden_size, self.out_size, self.out_size)
 
         # c. merge patches back together
-        # no merge required for image_features as they are already in batches instead of patches
+        image_features = merge(
+            image_features,
+            batch_size=B,
+            merge_out_size=self.out_size * 2 ** (0),
+        )  # (B, config.hidden_size, self.out_size*2**(self.n_scaled_images-1), self.out_size*2**(self.n_scaled_images-1))
 
         # d. upsample
         image_features = self.upsample_image(
@@ -984,9 +980,20 @@ class DepthProEncoder(nn.Module):
 
         # prepare last_hidden_state, hidden_states, attentions from patches to batches
 
-        last_hidden_state = image_encodings.last_hidden_state
-        hidden_states = image_encodings.hidden_states if output_hidden_states else None
-        attentions = image_encodings.attentions if output_attentions else None
+        last_hidden_state = patch_encodings.last_hidden_state
+        hidden_states = patch_encodings.hidden_states if output_hidden_states else None
+        attentions = patch_encodings.attentions if output_attentions else None
+
+        num_patches = sum(scaled_images_num_patches)
+        # [0, 3, 6], [1, 4, 7], [2, 5, 8] when num_patches=9 and B=3
+        indexes = torch.arange(num_patches).reshape(num_patches//B, -1).T
+        indexes = indexes.to(last_hidden_state.device)
+
+        last_hidden_state = last_hidden_state[indexes].mean(1)
+        if hidden_states is not None:
+            hidden_states = tuple([state[indexes].mean(1) for state in hidden_states])
+        if attentions is not None:
+            attentions = tuple([state[indexes].mean(1) for state in attentions])
 
         if not return_dict:
             return tuple(v for v in [last_hidden_state, features, hidden_states, attentions] if v is not None)
