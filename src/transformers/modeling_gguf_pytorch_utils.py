@@ -325,9 +325,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"Architecture {architecture + model_size} not supported")
 
-    # handle tie_word_embeddings
+    # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
+    # tie_word_embeddings is true otherwise false
     parsed_parameters["config"]["tie_word_embeddings"] = all(
-        "output.weight" not in tensor.name for tensor in reader.tensors
+        "output.weight" != tensor.name for tensor in reader.tensors
     )
 
     # List all key-value pairs in a columnized format
