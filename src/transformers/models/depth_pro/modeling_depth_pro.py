@@ -80,6 +80,7 @@ class DepthProViTEmbeddings(nn.Module):
     """
     Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Embeddings
     except antialias=True in interpolation and removal of mask_token
+    and enabling dynamic embeddings.
     """
 
     def __init__(self, config: DepthProConfig) -> None:
@@ -103,7 +104,7 @@ class DepthProViTEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = embeddings.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and self.seq_len == num_positions and height == width:
@@ -117,8 +118,8 @@ class DepthProViTEmbeddings(nn.Module):
         new_height = height // self.config.patch_embeddings_size
         new_width = width // self.config.patch_embeddings_size
 
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed_size = torch_int(patch_pos_embed.shape[1] ** 0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, patch_pos_embed_size, patch_pos_embed_size, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         target_dtype = patch_pos_embed.dtype
 
