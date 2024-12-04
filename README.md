@@ -281,11 +281,11 @@ If you'd like to play with the examples or need the bleeding edge of the code an
 
 **d) Optional: Install from source for the latest updates:**
 
----Bash
+```Bash
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install---
-
+pip install
+```
 
 ### 2. With conda
 
@@ -306,7 +306,7 @@ Follow the installation pages of Flax, PyTorch or TensorFlow to see how to insta
 For GPU acceleration, install the appropriate CUDA drivers for your system:
 
 a) PyTorch CUDA Compatibility: ( https://pytorch.org/get-started/locally)
-b) TensorFlow GPU Support: ()
+b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)
 
 ## Model architectures
 
