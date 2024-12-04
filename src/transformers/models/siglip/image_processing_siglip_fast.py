@@ -19,7 +19,6 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILIma
 
 
 class SiglipImageProcessorFast(BaseImageProcessorFast):
-    # To be implemented
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
