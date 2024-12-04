@@ -296,9 +296,9 @@ def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: 
                 base_doc_string + "\n\n" + fast_doc_string,
             )
 
-        # write the updated content
-        with open(doc_file, "w", encoding="utf-8") as f:
-            f.write(updated_content)
+            # write the updated content
+            with open(doc_file, "w", encoding="utf-8") as f:
+                f.write(updated_content)
 
 
 def add_fast_image_processor_file(
