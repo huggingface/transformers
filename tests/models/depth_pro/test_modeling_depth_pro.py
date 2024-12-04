@@ -64,6 +64,7 @@ class DepthProModelTester:
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         use_fov_model=True,
+        num_fov_head_layers=0,
         num_labels=3,
     ):
         self.parent = parent
@@ -88,6 +89,7 @@ class DepthProModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.use_fov_model = use_fov_model
+        self.num_fov_head_layers = num_fov_head_layers
         self.num_labels = num_labels
 
         self.num_patches = (patch_size // patch_embeddings_size) ** 2
@@ -124,6 +126,7 @@ class DepthProModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
             use_fov_model=self.use_fov_model,
+            num_fov_head_layers=self.num_fov_head_layers,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
