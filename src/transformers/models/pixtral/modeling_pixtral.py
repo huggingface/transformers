@@ -489,7 +489,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in pixel_values]
+        patch_embeds_list = [self.patch_conv(img.to(self.dtype)) for sample in pixel_values for img in sample]
 
         # flatten to a single sequence
         patch_embeds = torch.cat([p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
