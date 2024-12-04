@@ -24,14 +24,22 @@ from .image_utils import (
     ChannelDimension,
     ImageInput,
     ImageType,
-    PILImageResampling,
     get_image_type,
     infer_channel_dimension_format,
     make_list_of_images,
     validate_fast_preprocess_arguments,
 )
-from .utils import TensorType, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from .utils import (
+    TensorType,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    is_vision_available,
+)
 
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 if is_torch_available():
     import torch
@@ -80,7 +88,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
+        resample: Union["PILImageResampling", "F.InterpolationMode"] = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
@@ -273,7 +281,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: Optional[Union[PILImageResampling, "F.InterpolationMode"]] = None,
+        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         do_center_crop: bool = None,
         crop_size: int = None,
         do_rescale: bool = None,
