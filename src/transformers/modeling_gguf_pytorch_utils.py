@@ -288,15 +288,6 @@ def get_gguf_hf_weights_map(hf_model):
     return gguf_to_hf_name_map
 
 
-def convert_gguf_state_dict_to_hf(gguf_state_dict: Dict[str, torch.Tensor], model):
-    gguf_to_hf_name_map = get_gguf_hf_weights_map(model)
-    new_state_dict: Dict[str, torch.Tensor] = {}
-    for gguf_name in gguf_state_dict:
-        hf_name = gguf_to_hf_name_map[gguf_name]
-        new_state_dict[hf_name] = gguf_state_dict.pop(gguf_name)
-    return new_state_dict
-
-
 def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
@@ -439,7 +430,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
             weights = result.weights
             name = result.name
-            bid = result.metadata.get("bid")
 
             if name not in tensor_key_mapping:
                 continue
