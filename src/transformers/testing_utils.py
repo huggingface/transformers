@@ -1588,6 +1588,7 @@ class TemporaryHubRepo:
         model.push_to_hub(tmp_repo.repo_id, token=self._token)
     ```
     """
+
     def __init__(self, token=None):
         self.token = token
         with tempfile.TemporaryDirectory() as tmp_dir:
