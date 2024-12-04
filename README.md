@@ -257,8 +257,8 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 
 **For macOS/Linux:**
 
----python -m venv env
->>> source env/bin/activate  # For macOS/Linux
+--- python -m venv env
+source env/bin/activate  # For macOS/Linux
 ---
 
 **For Windows:**
