@@ -2160,10 +2160,8 @@ class GenerationMixin:
                         "The attention mask and the pad token id were not set. As a consequence, you may observe "
                         "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                     )
-                logger.warning(
-                    f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation."
-                )
             pad_token_tensor = eos_token_tensor[0]
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
@@ -3744,16 +3742,14 @@ class GenerationMixin:
         )
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        def model_forward(model, *args, **kwargs):
-            return model.forward(*args, **kwargs)
-
+        model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), StaticCache):
             if self.device.type == "cuda":
                 logger.warning_once("Using `torch.compile`.")
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                model_forward = torch.compile(model_forward, mode="reduce-overhead", fullgraph=True)
+                model_forward = self.get_compiled_call(generation_config.compile_config)
 
-        i = 0
+        is_prefill = True
         while self._has_unfinished_sequences(
             this_peer_finished,
             synced_gpus,
@@ -3774,11 +3770,11 @@ class GenerationMixin:
                 else {}
             )
 
-            if i == 0:
+            if is_prefill:
                 outputs = self(**model_inputs, return_dict=True)
-                i += 1
+                is_prefill = False
             else:
-                outputs = model_forward(self, return_dict=True, **model_inputs)
+                outputs = model_forward(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
