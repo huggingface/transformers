@@ -28,7 +28,6 @@ from .image_utils import (
     get_image_type,
     infer_channel_dimension_format,
     make_list_of_images,
-    pil_torch_interpolation_mapping,
     validate_fast_preprocess_arguments,
 )
 from .utils import TensorType, is_torch_available, is_torchvision_available, is_torchvision_v2_available
@@ -38,6 +37,8 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
+    from .image_utils import pil_torch_interpolation_mapping
+
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
     else:
@@ -114,7 +115,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: "F.InterpolationMode" = F.InterpolationMode.BILINEAR,
+        resample: "F.InterpolationMode" = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -143,6 +144,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        resample = resample if resample is not None else F.InterpolationMode.BILINEAR
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
