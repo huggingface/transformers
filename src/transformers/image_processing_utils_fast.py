@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import functools
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -92,9 +91,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
         **kwargs,
     ) -> None:
         size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=False) if size is not None else None
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+        crop_size = (
+            get_size_dict(crop_size, default_to_square=True, param_name="crop_size") if crop_size is not None else None
+        )
 
         super().__init__(**kwargs)
         self.do_resize = do_resize if do_resize is not None else self.do_resize
@@ -142,7 +143,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        print("size_dict", size)
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -167,8 +167,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
-
-        return F.resize_image(image, new_size, interpolation=resample)
+        return F.resize(image, new_size, interpolation=resample)
 
     def rescale(
         self,
@@ -233,7 +232,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `torch.Tensor`: The normalized image.
         """
-        return F.normalize_image(image, mean, std)
+        return F.normalize(image, mean, std)
 
     def center_crop(
         self,
@@ -263,7 +262,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        print("size_dict crop", size)
         if size.height is None or size.width is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return F.center_crop(image, (size["height"], size["width"]))
@@ -333,11 +331,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size=size, default_to_square=True)
+        size = get_size_dict(size=size, default_to_square=True) if size is not None else None
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+        crop_size = (
+            get_size_dict(crop_size, default_to_square=True, param_name="crop_size") if crop_size is not None else None
+        )
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -348,8 +348,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         device = kwargs.pop("device", None)
 
         # Make hashable for cache
-        size = SizeDict(**size)
-        crop_size = SizeDict(**crop_size)
+        size = SizeDict(**size) if size is not None else None
+        crop_size = SizeDict(**crop_size) if crop_size is not None else None
         image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
@@ -431,9 +431,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         return BatchFeature(data={"pixel_values": torch.stack(images, dim=0)}, tensor_type=return_tensors)
 
-    @functools.lru_cache(maxsize=1)
     def to_dict(self):
         encoder_dict = super().to_dict()
+        encoder_dict.pop("_valid_processor_keys", None)
         return encoder_dict
 
 

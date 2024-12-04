@@ -1266,6 +1266,7 @@ else:
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
+    _import_structure["models.siglip"].append("SiglipImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 # PyTorch-backed objects
@@ -6206,6 +6207,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
+        from .models.siglip import SiglipImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     # Modeling

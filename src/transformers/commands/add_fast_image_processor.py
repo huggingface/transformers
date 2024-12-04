@@ -268,6 +268,39 @@ def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
             f.write(updated_content)
 
 
+def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: str):
+    doc_source = REPO_PATH / "docs" / "source"
+    # find the doc files
+    doc_files = list(doc_source.glob(f"*/model_doc/{model_name}.md"))
+    if not doc_files:
+        # try again with "-"
+        doc_files = list(doc_source.glob(f"*/model_doc/{model_name.replace('_', '-')}.md"))
+    if not doc_files:
+        raise ValueError(f"No doc files found for {model_name}")
+
+    base_doc_string = (
+        f"## {fast_image_processor_name[:-4]}\n\n" f"[[autodoc]] {fast_image_processor_name[:-4]}\n" "    - preprocess"
+    )
+    fast_doc_string = (
+        f"## {fast_image_processor_name}\n\n" f"[[autodoc]] {fast_image_processor_name}\n" "    - preprocess"
+    )
+
+    for doc_file in doc_files:
+        with open(doc_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        if fast_doc_string not in content:
+            # add the fast image processor to the doc
+            updated_content = content.replace(
+                base_doc_string,
+                base_doc_string + "\n\n" + fast_doc_string,
+            )
+
+        # write the updated content
+        with open(doc_file, "w", encoding="utf-8") as f:
+            f.write(updated_content)
+
+
 def add_fast_image_processor_file(
     fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
 ):
@@ -314,9 +347,13 @@ def add_fast_image_processor(model_name: str):
     if not image_processing_module_file:
         raise ValueError(f"No image processing module found in {model_module}")
     elif len(image_processing_module_file) > 1:
-        raise ValueError(f"Multiple image processing modules found in {model_module}")
+        for file_name in image_processing_module_file:
+            if not str(file_name).endswith("_fast.py"):
+                image_processing_module_file = str(file_name)
+                break
+    else:
+        image_processing_module_file = str(image_processing_module_file[0])
 
-    image_processing_module_file = str(image_processing_module_file[0])
     with open(image_processing_module_file, "r", encoding="utf-8") as f:
         content_base_file = f.read()
 
@@ -350,6 +387,11 @@ def add_fast_image_processor(model_name: str):
     )
 
     add_fast_image_processor_to_dummy(fast_image_processor_name=fast_image_processor_name)
+
+    add_fast_image_processor_to_doc(
+        fast_image_processor_name=fast_image_processor_name,
+        model_name=model_name,
+    )
 
     add_fast_image_processor_file(
         fast_image_processing_module_file=fast_image_processing_module_file,
