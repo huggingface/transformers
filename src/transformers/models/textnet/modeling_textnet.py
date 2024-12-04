@@ -70,8 +70,6 @@ TEXTNET_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST = ["Raghavan/textnet-base"]
-
 
 class TextNetConvLayer(nn.Module):
     def __init__(self, config):

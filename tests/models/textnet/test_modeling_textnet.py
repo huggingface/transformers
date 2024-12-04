@@ -19,7 +19,7 @@ import unittest
 import requests
 from PIL import Image
 
-from transformers import TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST, TextNetConfig
+from transformers import TextNetConfig
 from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
 from transformers.testing_utils import (
     require_torch,
@@ -305,9 +305,9 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TextNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Raghavan/textnet-base"
+        model = TextNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
