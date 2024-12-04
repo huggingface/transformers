@@ -76,6 +76,18 @@ response = processor.decode(output_ids, skip_special_tokens=True)
 ```
 
 
+## AriaImageProcessor
+
+[[autodoc]] AriaImageProcessor
+
+## AriaProcessor
+
+[[autodoc]] AriaProcessor
+
+## AriaTextConfig
+
+[[autodoc]] AriaTextConfig
+
 ## AriaConfig
 
 [[autodoc]] AriaConfig
@@ -83,6 +95,10 @@ response = processor.decode(output_ids, skip_special_tokens=True)
 ## AriaTextModel
 
 [[autodoc]] AriaTextModel
+
+## AriaTextForCausalLM
+
+[[autodoc]] AriaTextForCausalLM
 
 ## AriaForConditionalGeneration
 

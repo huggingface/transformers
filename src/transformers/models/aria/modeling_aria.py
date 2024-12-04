@@ -1940,4 +1940,10 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["AriaForConditionalGeneration", "AriaPreTrainedModel", "AriaTextModel", "AriaTextForCausalLM"]
+__all__ = [
+    "AriaForConditionalGeneration",
+    "AriaPreTrainedModel",
+    "AriaTextPreTrainedModel",
+    "AriaTextModel",
+    "AriaTextForCausalLM",
+]

@@ -1541,6 +1541,7 @@ __all__ = [
     "AriaProcessor",
     "AriaForConditionalGeneration",
     "AriaPreTrainedModel",
+    "AriaTextPreTrainedModel",
     "AriaTextModel",
     "AriaTextForCausalLM",
 ]
