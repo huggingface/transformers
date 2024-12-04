@@ -369,6 +369,12 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"Architecture {architecture + model_size} not supported")
 
+    # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
+    # tie_word_embeddings is true otherwise false
+    parsed_parameters["config"]["tie_word_embeddings"] = all(
+        "output.weight" != tensor.name for tensor in reader.tensors
+    )
+
     # List all key-value pairs in a columnized format
     for gguf_key, field in reader.fields.items():
         gguf_key = gguf_key.replace(architecture, updated_architecture)
