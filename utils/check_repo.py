@@ -213,7 +213,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JukeboxPrior",
     "SamModel",
     "DPTForDepthEstimation",
-    "DepthProForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
     "ViltForImagesAndTextClassification",

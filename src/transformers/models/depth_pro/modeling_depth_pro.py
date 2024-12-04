@@ -1496,11 +1496,25 @@ class DepthProDepthEstimatorOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
+DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        use_fov_model (`bool`, *optional*, defaults to `True`):
+            Whether to use `DepthProFOVModel` to generate the field of view.
+"""
+
+
 @add_start_docstrings(
     """
     DepthPro Model with a depth estimation head on top (consisting of 3 convolutional layers).
     """,
-    DEPTH_PRO_START_DOCSTRING,
+    DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING,
 )
 class DepthProForDepthEstimation(DepthProPreTrainedModel):
     def __init__(self, config, use_fov_model=None):
