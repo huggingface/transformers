@@ -1077,7 +1077,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*):
             dictionary mapping group name to a quantization scheme definition
         format (`str`, *optional*, defaults to `"dense"`):
-            format the model is represented as
+            format the model is represented as. Set `run_compressed` True to execute model as the
+            compressed format if not `dense`
         quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
             status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
         kv_cache_scheme (`typing.Union[QuantizationArgs, NoneType]`, *optional*):
@@ -1090,8 +1091,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        run_compressed (`bool`, *optional*, defaults to `True`): compress weights (usually linear) modules
-            as compressed weights, following the method specified on `format` arg above
+        run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
+            emulate compressed model execution if True, otherwise use default submodule
     """
 
     def __init__(
