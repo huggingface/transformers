@@ -71,7 +71,7 @@ VARIANT_CONFIGS = {
         "num_key_value_heads": 16,
         "num_attention_heads": 32,
         "head_dim": 128,
-        "query_pre_attn_scalar": 4608 // 32 # scaling is different for the 28b
+        "query_pre_attn_scalar": 4608 // 32,  # scaling is different for the 28b
     },
 }
 
@@ -108,7 +108,7 @@ def get_paligemma2_config(variant: str, precision: str):
             "num_attention_heads": variant_config["num_attention_heads"],
             "intermediate_size": variant_config["intermediate_size"],
             "is_encoder_decoder": False,
-            "query_pre_attn_scalar": variant_config["query_pre_attn_scalar"]
+            "query_pre_attn_scalar": variant_config["query_pre_attn_scalar"],
         }
         text_config.update(sup_text_config)
 
@@ -274,8 +274,8 @@ def slice_state_dict(state_dict, config):
                     state_dict[key] = torch.from_numpy(value).to(torch.bfloat16)
                 else:
                     state_dict[key] = torch.from_numpy(value)
-            except:
-                raise ValueError("Conversion failed from jax weights. Check your inputs.")
+            except Exception as initial_exception:
+                raise ValueError(f"Conversion failed from jax weights with {initial_exception}. Check your inputs.")
     return state_dict
 
 
@@ -292,8 +292,8 @@ def flatten_nested_dict(params, parent_key="", sep="/", precision: int = "float3
             if precision == "bfloat16":
                 try:
                     v = v.view(ml_dtypes.bfloat16)
-                except:
-                    raise ValueError("Conversion failed from bfloat16, check your inputs.")
+                except Exception as initial_exception:
+                    raise ValueError(f"Conversion failed from bfloat16 with {initial_exception}, check your inputs.")
             items.append((new_key, v))
     return dict(items)
 

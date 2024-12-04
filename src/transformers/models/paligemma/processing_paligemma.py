@@ -300,7 +300,10 @@ class PaliGemmaProcessor(ProcessorMixin):
                 ]
                 images = make_batched_images(images)
             else:
-                text = [sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length + self.tokenizer.bos_token) for sample in text]
+                text = [
+                    sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length + self.tokenizer.bos_token)
+                    for sample in text
+                ]
                 input_strings = [f"{sample}\n" for sample in text]
         pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
