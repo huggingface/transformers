@@ -354,8 +354,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
         if "max_size" in kwargs:
             logger.error(
-                "The `max_size` parameter is deprecated. "
-                "Please specify in `size['longest_edge'] instead`.",
+                "The `max_size` parameter is deprecated. " "Please specify in `size['longest_edge'] instead`.",
             )
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}

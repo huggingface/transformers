@@ -878,8 +878,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         if "max_size" in kwargs:
             logger.error(
-                "The `max_size` parameter is deprecated. "
-                "Please specify in `size['longest_edge'] instead`.",
+                "The `max_size` parameter is deprecated. " "Please specify in `size['longest_edge'] instead`.",
             )
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
@@ -1011,8 +1010,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         """
         if "max_size" in kwargs:
             logger.error(
-                "The `max_size` parameter is deprecated. "
-                "Please specify in `size['longest_edge'] instead`.",
+                "The `max_size` parameter is deprecated. " "Please specify in `size['longest_edge'] instead`.",
             )
 
         size = get_size_dict(size, default_to_square=False)
@@ -1362,10 +1360,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         if "max_size" in kwargs:
-            logger.error(
-                "The `max_size` argument is deprecated, use"
-                " `size['longest_edge']` instead."
-            )
+            logger.error("The `max_size` argument is deprecated, use" " `size['longest_edge']` instead.")
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
