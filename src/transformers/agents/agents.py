@@ -801,7 +801,9 @@ class ReactAgent(Agent):
         if plan_type is None:
             plan_type = SUPPORTED_PLAN_TYPES[0]
         else:
-            assert plan_type in SUPPORTED_PLAN_TYPES, f"plan type {plan_type} is not supported"
+            assert (
+                plan_type in SUPPORTED_PLAN_TYPES
+            ), f"plan type {plan_type} is not supported"
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
@@ -914,8 +916,13 @@ class ReactAgent(Agent):
             step_start_time = time.time()
             step_log_entry = {"iteration": iteration, "start_time": step_start_time}
             try:
-                if self.planning_interval is not None and iteration % self.planning_interval == 0:
-                    self.planning_step(task, is_first_step=(iteration == 0), iteration=iteration)
+                if (
+                    self.planning_interval is not None
+                    and iteration % self.planning_interval == 0
+                ):
+                    self.planning_step(
+                        task, is_first_step=(iteration == 0), iteration=iteration
+                    )
                 self.step(step_log_entry)
                 if "final_answer" in step_log_entry:
                     final_answer = step_log_entry["final_answer"]
@@ -1290,7 +1297,10 @@ class ReactCodeAgent(ReactAgent):
             raise AgentParsingError(error_msg)
 
         log_entry["rationale"] = rationale
-        log_entry["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
+        log_entry["tool_call"] = {
+            "tool_name": "code interpreter",
+            "tool_arguments": code_action,
+        }
 
         # Execute
         self.log_rationale_code_action(rationale, code_action)
@@ -1383,7 +1393,9 @@ And even if your task resolution is not successful, please return as much contex
             answer += f"\n\nFor more detail, find below a summary of this agent's work:\nSUMMARY OF WORK FROM AGENT '{self.name}':\n"
             for message in self.agent.write_inner_memory_from_logs(summary_mode=True):
                 content = message["content"]
-                if len(str(content)) < LENGTH_TRUNCATE_REPORTS or "[FACTS LIST]" in str(content):
+                if len(str(content)) < LENGTH_TRUNCATE_REPORTS or "[FACTS LIST]" in str(
+                    content
+                ):
                     answer += "\n" + str(content) + "\n---"
                 else:
                     answer += (

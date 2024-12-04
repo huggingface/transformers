@@ -1196,7 +1196,9 @@ else:
     _import_structure["models.conditional_detr"].extend(
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
-    _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
+    _import_structure["models.convnext"].extend(
+        ["ConvNextFeatureExtractor", "ConvNextImageProcessor"]
+    )
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
@@ -1205,9 +1207,15 @@ else:
         "EfficientFormerImageProcessor"
     )
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
-    _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
-    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
-    _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
+    _import_structure["models.deprecated.vit_hybrid"].extend(
+        ["ViTHybridImageProcessor"]
+    )
+    _import_structure["models.detr"].extend(
+        ["DetrFeatureExtractor", "DetrImageProcessor"]
+    )
+    _import_structure["models.donut"].extend(
+        ["DonutFeatureExtractor", "DonutImageProcessor"]
+    )
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(
@@ -1307,7 +1315,9 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
-    _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
+    _import_structure["models.deformable_detr"].append(
+        "DeformableDetrImageProcessorFast"
+    )
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
@@ -5093,7 +5103,13 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import CompileConfig, GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
+    from .generation import (
+        CompileConfig,
+        GenerationConfig,
+        TextIteratorStreamer,
+        TextStreamer,
+        WatermarkingConfig,
+    )
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -6214,7 +6230,10 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
-        from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
+        from .models.deformable_detr import (
+            DeformableDetrFeatureExtractor,
+            DeformableDetrImageProcessor,
+        )
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor

@@ -1452,7 +1452,9 @@ class TrainingArguments:
         default="every_save",
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
-    hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    hub_token: Optional[str] = field(
+        default=None, metadata={"help": "The token to use to push to the Model Hub."}
+    )
     hub_private_repo: Optional[bool] = field(
         default=None,
         metadata={

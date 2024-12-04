@@ -35,6 +35,10 @@ import packaging.version
 
 from .. import PreTrainedModel, TFPreTrainedModel
 from .. import __version__ as version
+from .. import PreTrainedModel, TFPreTrainedModel, modelcard  # noqa: E402
+from .. import __version__ as version
+from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
+from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy
 from ..utils import (
     PushToHubMixin,
     flatten_dict,
@@ -98,11 +102,7 @@ if TYPE_CHECKING and _has_neptune:
 
 from .. import modelcard  # noqa: E402
 from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
-from ..trainer_utils import (
-    PREFIX_CHECKPOINT_DIR,
-    BestRun,
-    IntervalStrategy,
-)
+
 
 # noqa: E402
 from ..training_args import ParallelMode  # noqa: E402

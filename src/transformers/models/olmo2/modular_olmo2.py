@@ -175,7 +175,9 @@ class Olmo2Attention(OlmoAttention):
     def __init__(self, config: Olmo2Config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx=layer_idx)
         self.q_norm = Olmo2RMSNorm(self.num_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = Olmo2RMSNorm(self.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.k_norm = Olmo2RMSNorm(
+            self.num_key_value_heads * self.head_dim, config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -454,8 +456,12 @@ class Olmo2SdpaAttention(OlmoSdpaAttention, Olmo2Attention):
 class Olmo2DecoderLayer(OlmoDecoderLayer):
     def __init__(self, config: Olmo2Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
-        self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Olmo2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_feedforward_layernorm = Olmo2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
         del self.input_layernorm
 
     def forward(
@@ -511,7 +517,10 @@ class Olmo2Model(OlmoModel):
     def __init__(self, config: Olmo2Config):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Olmo2DecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

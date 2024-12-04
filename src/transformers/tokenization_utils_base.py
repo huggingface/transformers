@@ -2322,7 +2322,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         if chat_template_file is not None:
             with open(chat_template_file) as chat_template_handle:
-                init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
+                init_kwargs["chat_template"] = (
+                    chat_template_handle.read()
+                )  # Clobbers any template in the config
 
         if not _is_local:
             if "auto_map" in init_kwargs:
@@ -2662,7 +2664,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE,
         )
         chat_template_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE,
         )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
@@ -2688,13 +2691,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # They will be reconstructed as a single dict during loading.
                 # We're trying to discourage chat template dicts, and they are always
                 # saved in the config, never as single files.
-                tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+                tokenizer_config["chat_template"] = [
+                    {"name": k, "template": v} for k, v in self.chat_template.items()
+                ]
             elif kwargs.get("save_raw_chat_template", False):
                 with open(chat_template_file, "w", encoding="utf-8") as f:
                     f.write(self.chat_template)
                 logger.info(f"chat template saved in {chat_template_file}")
                 if "chat_template" in tokenizer_config:
-                    tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
+                    tokenizer_config.pop(
+                        "chat_template"
+                    )  # To ensure it doesn't somehow end up in the config too
             else:
                 tokenizer_config["chat_template"] = self.chat_template
 

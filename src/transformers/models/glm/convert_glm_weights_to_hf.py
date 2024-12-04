@@ -38,13 +38,21 @@ STATE_DICT_MAPPING = {
 
 
 def load_weights(input_dir: str):
-    safetensor_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".safetensors")]
-    bin_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".bin")]
+    safetensor_files = [
+        os.path.join(input_dir, x)
+        for x in os.listdir(input_dir)
+        if x.endswith(".safetensors")
+    ]
+    bin_files = [
+        os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".bin")
+    ]
 
     all_weights = {}
 
     if safetensor_files:
-        safetensor_files = sorted(safetensor_files, key=lambda x: int(x.rsplit("-", 3)[1]))
+        safetensor_files = sorted(
+            safetensor_files, key=lambda x: int(x.rsplit("-", 3)[1])
+        )
         for file in safetensor_files:
             tensors = load_file(file)
             all_weights.update(tensors)
@@ -58,7 +66,9 @@ def load_weights(input_dir: str):
         return all_weights
 
     else:
-        raise ValueError("No .safetensors or .bin files found in the specified directory.")
+        raise ValueError(
+            "No .safetensors or .bin files found in the specified directory."
+        )
 
 
 def map_old_key_to_new(old_key):
@@ -138,7 +148,9 @@ def convert_config(original_config: dict):
 
 
 def convert_glm_tokenizer(input_dir, use_post_processor=False):
-    fast_tok = PreTrainedTokenizerFast.from_pretrained(input_dir, model_input_names=["input_ids", "attention_mask"])
+    fast_tok = PreTrainedTokenizerFast.from_pretrained(
+        input_dir, model_input_names=["input_ids", "attention_mask"]
+    )
     if use_post_processor:
         fast_tok._tokenizer.post_processor = processors.Sequence(
             [

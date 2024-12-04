@@ -2365,7 +2365,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output
         expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118]  # fmt: skip
         self.assertEqual(predictions[0].tolist(), expected_ids)
-        self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
+        self.assertEqual(
+            generated_text,
+            "Question: which city is this? Answer: it's not a city, it's a beach",
+        )
 
     def test_inference_interpolate_pos_encoding(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")

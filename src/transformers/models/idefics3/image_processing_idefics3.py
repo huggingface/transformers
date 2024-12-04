@@ -140,9 +140,13 @@ def get_resize_output_image_size(
     height, width = get_image_size(image, channel_dim=input_data_format)
 
     # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
-    height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=resolution_max_side)
+    height, width = _resize_output_size_rescale_to_max_len(
+        height, width, max_len=resolution_max_side
+    )
     # Find the output size when scaling the image to be below the MAX_IMAGE_SIZE
-    height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
+    height, width = _resize_output_size_scale_below_upper_bound(
+        height, width, max_len=MAX_IMAGE_SIZE
+    )
     return height, width
 
 
@@ -426,7 +430,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         image_mode = None
         if image.ndim == 2 or image.shape[-1] == 1:
             image_mode = "P"
-        image = to_pil_image(image, image_mode=image_mode, input_data_format=input_data_format)
+        image = to_pil_image(
+            image, image_mode=image_mode, input_data_format=input_data_format
+        )
 
         resized_image = image.resize((size[1], size[0]), resample=resample)
         resized_image = np.array(resized_image)
@@ -814,11 +820,19 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
             images_list = [
-                [np.expand_dims(img, axis=-1) if img.ndim == 2 else img for img in images] for images in images_list
+                [
+                    np.expand_dims(img, axis=-1) if img.ndim == 2 else img
+                    for img in images
+                ]
+                for images in images_list
             ]
         elif input_data_format == ChannelDimension.FIRST:
             images_list = [
-                [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
+                [
+                    np.expand_dims(img, axis=0) if img.ndim == 2 else img
+                    for img in images
+                ]
+                for images in images_list
             ]
 
         if is_scaled_image(images_list[0][0]) and do_rescale:

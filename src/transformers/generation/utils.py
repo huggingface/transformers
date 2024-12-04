@@ -449,7 +449,9 @@ class GenerationMixin:
                         else model_inputs[input_ids_key].shape[1]
                     )
                     model_input = model_input[:, -current_input_length:]
-                    model_input = model_input.clone(memory_format=torch.contiguous_format)
+                    model_input = model_input.clone(
+                        memory_format=torch.contiguous_format
+                    )
                 model_inputs[model_input_name] = model_input
 
         # 6. Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
@@ -1230,7 +1232,9 @@ class GenerationMixin:
         # Watermarking should be after all logits processing is finished (see #34630)
         if generation_config.watermarking_config is not None:
             processors.append(
-                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
+                generation_config.watermarking_config.construct_processor(
+                    self.config.vocab_size, device
+                )
             )
 
         # `LogitNormalization` should always be the last logit processor, when present
@@ -2145,7 +2149,9 @@ class GenerationMixin:
                         "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                     )
             pad_token_tensor = eos_token_tensor[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
+            logger.warning(
+                f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation."
+            )
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
@@ -2767,14 +2773,10 @@ class GenerationMixin:
             # handle BC (convert by default if he user hasn't passed a cache AND the cache is of the default type)
             should_convert_cache = generation_config.return_legacy_cache
             is_user_defined_cache = user_defined_cache is not None
-            is_default_cache_type = type(
-                result.past_key_values
-            ) == DynamicCache or (  # noqa E721
-                isinstance(result.past_key_values, EncoderDecoderCache)
-                and type(result.past_key_values.self_attention_cache)
-                == DynamicCache  # noqa E721
-                and type(result.past_key_values.cross_attention_cache)
-                == DynamicCache  # noqa E721
+            is_default_cache_type = isinstance(result.past_key_values, DynamicCache) or (isinstance(result.past_key_values, EncoderDecoderCache)
+                and isinstance(result.past_key_values.self_attention_cache, DynamicCache)
+                and isinstance(result.past_key_values.cross_attention_cache, DynamicCache)
+
             )
             if not is_user_defined_cache and is_default_cache_type:
                 logger.warning_once(

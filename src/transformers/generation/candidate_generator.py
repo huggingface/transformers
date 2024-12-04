@@ -379,7 +379,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_tokenizer = assistant_tokenizer
         self.prev_assistant_ids = None
         self.target_lookbehind = assistant_model.generation_config.target_lookbehind
-        self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
+        self.assistant_lookbehind = (
+            assistant_model.generation_config.assistant_lookbehind
+        )
 
     @staticmethod
     def _get_longest_diag_dict(input_matrix, nonzero_idx):
@@ -529,7 +531,10 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         # Since re-encoding the tokens may result in tokenization discrepancies, we use 2 look behind values
         # (one for each conversion) which mark where to start looking for the overlap between the
         # source and target encodings, to ensure the new tokens include the correct prompt suffix.
-        if self.prev_assistant_ids is not None and input_ids.shape[1] > self.target_lookbehind:
+        if (
+            self.prev_assistant_ids is not None
+            and input_ids.shape[1] > self.target_lookbehind
+        ):
             # input_ids contains all target prompt input ids and some new target input ids
             start_index_in_target_window = input_ids.shape[1] - self.target_lookbehind
 
@@ -575,7 +580,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 )
 
         else:
-            assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
+            assistant_input_ids = self.convert_source_tokens_to_target_tokens(
+                input_ids, **convert_kwargs
+            )
 
         self.prev_assistant_ids = assistant_input_ids
         new_cur_len = assistant_input_ids.shape[-1]

@@ -59,7 +59,14 @@ class Olmo2RMSNorm(nn.Module):
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo2
 # TODO(joao): add me back asap :)
 class Olmo2RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+    def __init__(
+        self,
+        dim,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+    ):
         super().__init__()
         self.scaling_factor = scaling_factor
         self.dim = dim
@@ -239,7 +246,9 @@ class Olmo2Attention(nn.Module):
         )
         self._init_rope()
         self.q_norm = Olmo2RMSNorm(self.num_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = Olmo2RMSNorm(self.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.k_norm = Olmo2RMSNorm(
+            self.num_key_value_heads * self.head_dim, config.rms_norm_eps
+        )
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -576,11 +585,17 @@ class Olmo2DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = OLMO2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = OLMO2_ATTENTION_CLASSES[config._attn_implementation](
+            config=config, layer_idx=layer_idx
+        )
 
         self.mlp = Olmo2MLP(config)
-        self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Olmo2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_feedforward_layernorm = Olmo2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     # TODO(joao): add me back asap :)
@@ -787,7 +802,10 @@ class Olmo2Model(Olmo2PreTrainedModel):
             config.vocab_size, config.hidden_size, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Olmo2DecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
@@ -1117,7 +1135,9 @@ class Olmo2ForCausalLM(Olmo2PreTrainedModel, GenerationMixin):
         return self.model
 
     @add_start_docstrings_to_model_forward(OLMO2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     # Ignore copy
     def forward(
         self,

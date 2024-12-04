@@ -2231,7 +2231,9 @@ class GenerationTesterMixin:
                             )
                         )
 
-    @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
+    @parameterized.expand(
+        [("offloaded",)]
+    )  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
     @require_torch_gpu
     @pytest.mark.generate
     def test_offloaded_cache_implementation(self, cache_implementation):
@@ -2297,7 +2299,9 @@ class GenerationTesterMixin:
 
                 # Check 1: The cache shapes must match the expected shapes
                 max_cache_len = seq_length + max_new_tokens
-                text_config = config.text_config if hasattr(config, "text_config") else config
+                text_config = (
+                    config.text_config if hasattr(config, "text_config") else config
+                )
                 head_dim = (
                     text_config.head_dim
                     if hasattr(text_config, "head_dim")
@@ -2310,13 +2314,25 @@ class GenerationTesterMixin:
                 )
                 num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
-                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(len(static_cache_generation.past_key_values.key_cache) == num_hidden_layers)
-                self.assertTrue(static_cache_generation.past_key_values.key_cache[0].shape == cache_shape)
+                self.assertTrue(
+                    isinstance(static_cache_generation.past_key_values, StaticCache)
+                )
+                self.assertTrue(
+                    len(static_cache_generation.past_key_values.key_cache)
+                    == num_hidden_layers
+                )
+                self.assertTrue(
+                    static_cache_generation.past_key_values.key_cache[0].shape
+                    == cache_shape
+                )
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
-                dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                self._check_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
+                dynamic_cache_generation = model.generate(
+                    **generation_kwargs, **inputs_dict
+                )
+                self._check_similar_generate_outputs(
+                    dynamic_cache_generation, static_cache_generation
+                )
 
     @require_optimum_quanto
     @pytest.mark.generate
@@ -3066,9 +3082,42 @@ class UtilsFunctionsTest(unittest.TestCase):
         candidate_logits = torch.tensor(
             [
                 [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
+                    [
+                        -10.0,
+                        10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                    ],  # generated 1
+                    [
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                    ],  # generated 4
+                    [
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                        -10.0,
+                    ],  # generated 5
                 ]
             ]
         )
@@ -3105,7 +3154,9 @@ class UtilsFunctionsTest(unittest.TestCase):
             last_validated_token.append(validated_tokens.tolist()[0][2])
         # check that the most likely tokens are selected more often than the less likely ones
         last_token_counts = collections.Counter(last_validated_token)
-        self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
+        self.assertTrue(
+            last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0
+        )
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
 

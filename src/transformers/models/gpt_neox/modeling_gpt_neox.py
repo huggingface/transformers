@@ -96,7 +96,15 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
 
 
 def eager_attention_forward(
-    query, key, value, attention_mask, head_mask, norm_factor, attention_dropout, training, **_kwargs
+    query,
+    key,
+    value,
+    attention_mask,
+    head_mask,
+    norm_factor,
+    attention_dropout,
+    training,
+    **_kwargs,
 ):
     # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
     batch_size, num_attention_heads, query_length, attn_head_size = query.size()
@@ -118,7 +126,9 @@ def eager_attention_forward(
         beta=1.0,
         alpha=norm_factor,
     )
-    attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
+    attn_scores = attn_scores.view(
+        batch_size, num_attention_heads, query_length, key_length
+    )
 
     if attention_mask is not None:  # no matter the length, we just slice it
         causal_mask = attention_mask[:, :, :, : key.shape[-2]]
@@ -131,7 +141,9 @@ def eager_attention_forward(
     if head_mask is not None:
         attn_weights = attn_weights * head_mask
 
-    attn_weights = nn.functional.dropout(attn_weights, p=attention_dropout, training=training)
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=attention_dropout, training=training
+    )
     attn_output = torch.matmul(attn_weights, value)
 
     # Reshape outputs
@@ -182,7 +194,9 @@ def flash_attention_forward(
     return attn_output, None
 
 
-def sdpa_attention_forward(query, key, value, attention_mask, attention_dropout, training, **_kwargs):
+def sdpa_attention_forward(
+    query, key, value, attention_mask, attention_dropout, training, **_kwargs
+):
     q_len = query.shape[-2]
 
     causal_mask = attention_mask
@@ -217,7 +231,9 @@ def sdpa_attention_forward(query, key, value, attention_mask, attention_dropout,
     return attn_output, None
 
 
-def flex_attention_forward(query, key, value, attention_mask, head_mask, norm_factor, **_kwargs):
+def flex_attention_forward(
+    query, key, value, attention_mask, head_mask, norm_factor, **_kwargs
+):
     causal_mask = attention_mask
     if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
@@ -333,7 +349,9 @@ class GPTNeoXAttention(nn.Module):
 
         # Checking for fallbacks in case an unsupported feature is requested
         attention_type = self.config._attn_implementation
-        if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
+        if (
+            output_attentions or head_mask is not None
+        ) and self.config._attn_implementation in [
             "sdpa",
             "flash_attention_2",
         ]:
@@ -973,11 +991,17 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        converted_head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        converted_head_mask = self.get_head_mask(
+            head_mask, self.config.num_hidden_layers
+        )
         # Flex Attention converts it to a separate mask
         if head_mask is not None:
-            converted_head_mask = ~converted_head_mask.bool() * torch.finfo(inputs_embeds.dtype).min
-            converted_head_mask = converted_head_mask.to(dtype=self.dtype, device=self.device)
+            converted_head_mask = (
+                ~converted_head_mask.bool() * torch.finfo(inputs_embeds.dtype).min
+            )
+            converted_head_mask = converted_head_mask.to(
+                dtype=self.dtype, device=self.device
+            )
         head_mask = converted_head_mask
 
         hidden_states = self.emb_dropout(inputs_embeds)

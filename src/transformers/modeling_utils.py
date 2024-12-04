@@ -172,7 +172,9 @@ if is_peft_available():
     from .utils import find_adapter_config_file
 
 
-SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
+SpecificPreTrainedModelType = TypeVar(
+    "SpecificPreTrainedModelType", bound="PreTrainedModel"
+)
 
 
 TORCH_INIT_FUNCTIONS = {
@@ -1703,9 +1705,7 @@ class PreTrainedModel(
                 if cls._supports_sdpa:
                     message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
                 if cls._supports_flex_attn:
-                    message += (
-                        ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
-                    )
+                    message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
                 raise ValueError(message + ".")
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
@@ -1742,7 +1742,10 @@ class PreTrainedModel(
             )
         elif requested_attn_implementation == "flex_attention":
             config = cls._check_and_enable_flex_attn(config, hard_check_only=True)
-        elif requested_attn_implementation in [None, "sdpa"] and not is_torch_xla_available():
+        elif (
+            requested_attn_implementation in [None, "sdpa"]
+            and not is_torch_xla_available()
+        ):
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(
                 config,
@@ -1983,7 +1986,9 @@ class PreTrainedModel(
         return config
 
     @classmethod
-    def _check_and_enable_flex_attn(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+    def _check_and_enable_flex_attn(
+        cls, config, hard_check_only: bool = False
+    ) -> PretrainedConfig:
         """
         Checks the availability of Flex Attention for a given model.
 
@@ -4362,11 +4367,18 @@ class PreTrainedModel(
                                     "_commit_hash": commit_hash,
                                     **has_file_kwargs,
                                 }
-                                if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
+                                if not has_file(
+                                    pretrained_model_name_or_path,
+                                    safe_weights_name,
+                                    **has_file_kwargs,
+                                ):
                                     Process(
                                         target=auto_conversion,
                                         args=(pretrained_model_name_or_path,),
-                                        kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
+                                        kwargs={
+                                            "ignore_errors_during_conversion": True,
+                                            **cached_file_kwargs,
+                                        },
                                         name="Process-auto_conversion",
                                     ).start()
                         else:
@@ -5779,7 +5791,9 @@ class PreTrainedModel(
                 The device mesh to use for tensor parallelism.
         """
         if not is_torch_greater_or_equal("2.5"):
-            raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
+            raise EnvironmentError(
+                "tensor parallel is only supported for `torch>=2.5`."
+            )
 
         # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
         # No op if `_tp_plan` attribute does not exist under the module.
@@ -5841,13 +5855,17 @@ class PreTrainedModel(
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
         # Only reset it if not present or different from previous config
-        default_config = getattr(self.generation_config, "compile_config", CompileConfig())
+        default_config = getattr(
+            self.generation_config, "compile_config", CompileConfig()
+        )
         if (
             not hasattr(self, "_compiled_call")
             or getattr(self, "_last_compile_config", default_config) != compile_config
         ):
             self._last_compile_config = compile_config
-            self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
+            self._compiled_call = torch.compile(
+                self.__call__, **compile_config.to_dict()
+            )
         return self._compiled_call
 
 

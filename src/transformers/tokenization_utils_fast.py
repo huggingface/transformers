@@ -671,7 +671,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if return_tensors is None and not return_overflowing_tokens:
             batched_output = BatchEncoding(
                 {
-                    key: (value[0] if len(value) > 0 and isinstance(value[0], list) else value)
+                    key: (
+                        value[0]
+                        if len(value) > 0 and isinstance(value[0], list)
+                        else value
+                    )
                     for key, value in batched_output.items()
                 },
                 batched_output.encodings,

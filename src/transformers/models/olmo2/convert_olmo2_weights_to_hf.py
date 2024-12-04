@@ -91,7 +91,9 @@ def write_model(
     dim = olmo2_config["d_model"]
     dims_per_head = dim // n_heads
     base = olmo2_config["rope_theta"]
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head)
+    )
     max_position_embeddings = olmo2_config["max_sequence_length"]
 
     vocab_size = olmo2_config.get("embedding_size", olmo2_config["vocab_size"])
@@ -219,7 +221,9 @@ def write_model(
         _write_tokenizer(model_path, config, input_base_path, tokenizer_path)
 
     print("Loading the checkpoint in a OLMo2 model.")
-    model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
+    model = Olmo2ForCausalLM.from_pretrained(
+        tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True
+    )
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")

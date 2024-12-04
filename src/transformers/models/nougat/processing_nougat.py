@@ -27,6 +27,9 @@ from transformers.tokenization_utils_base import (
 from ...processing_utils import ProcessorMixin
 from ...utils import PaddingStrategy, TensorType
 
+from transformers.image_processing_utils import ChannelDimension
+
+
 
 class NougatProcessor(ProcessorMixin):
     r"""

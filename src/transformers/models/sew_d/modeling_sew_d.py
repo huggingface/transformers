@@ -215,7 +215,9 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     return bucket_pos
 
 
-def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
+def build_relative_position(
+    query_size, key_size, bucket_size=-1, max_position=-1, device=None
+):
     """
     Build relative position according to the query and key
 

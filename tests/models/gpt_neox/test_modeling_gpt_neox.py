@@ -576,7 +576,9 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
 
-            inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+            inputs = tokenizer("My favorite food is", return_tensors="pt").to(
+                torch_device
+            )
             # The hub repo. is updated on 2023-04-04, resulting in poor outputs.
             # See: https://github.com/huggingface/transformers/pull/24193
             expected_output = "My favorite food is a good old-fashioned, old-fashioned, old-fashioned.\n\nI'm not sure"

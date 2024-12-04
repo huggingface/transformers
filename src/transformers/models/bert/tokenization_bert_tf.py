@@ -13,6 +13,8 @@ from tensorflow_text import (
 
 from ...modeling_tf_utils import keras
 from .tokenization_bert import BertTokenizer
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+
 
 
 class TFBertTokenizer(keras.layers.Layer):

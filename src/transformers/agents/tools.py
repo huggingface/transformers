@@ -853,11 +853,15 @@ def launch_gradio_demo(tool_class: Tool):
 
     gradio_inputs = []
     for input_name, input_details in tool_class.inputs.items():
-        input_gradio_component_class = TYPE_TO_COMPONENT_CLASS_MAPPING[input_details["type"]]
+        input_gradio_component_class = TYPE_TO_COMPONENT_CLASS_MAPPING[
+            input_details["type"]
+        ]
         new_component = input_gradio_component_class(label=input_name)
         gradio_inputs.append(new_component)
 
-    output_gradio_componentclass = TYPE_TO_COMPONENT_CLASS_MAPPING[tool_class.output_type]
+    output_gradio_componentclass = TYPE_TO_COMPONENT_CLASS_MAPPING[
+        tool_class.output_type
+    ]
     gradio_output = output_gradio_componentclass(label=input_name)
 
     gr.Interface(

@@ -111,7 +111,10 @@ class Monitor:
     def __init__(self, tracked_llm_engine):
         self.step_durations = []
         self.tracked_llm_engine = tracked_llm_engine
-        if getattr(self.tracked_llm_engine, "last_input_token_count", "Not found") != "Not found":
+        if (
+            getattr(self.tracked_llm_engine, "last_input_token_count", "Not found")
+            != "Not found"
+        ):
             self.total_input_token_count = 0
             self.total_output_token_count = 0
 
@@ -119,10 +122,16 @@ class Monitor:
         step_duration = step_log["step_duration"]
         self.step_durations.append(step_duration)
         logger.info(f"Step {len(self.step_durations)}:")
-        logger.info(f"- Time taken: {step_duration:.2f} seconds (valid only if step succeeded)")
+        logger.info(
+            f"- Time taken: {step_duration:.2f} seconds (valid only if step succeeded)"
+        )
 
         if getattr(self.tracked_llm_engine, "last_input_token_count", None) is not None:
-            self.total_input_token_count += self.tracked_llm_engine.last_input_token_count
-            self.total_output_token_count += self.tracked_llm_engine.last_output_token_count
+            self.total_input_token_count += (
+                self.tracked_llm_engine.last_input_token_count
+            )
+            self.total_output_token_count += (
+                self.tracked_llm_engine.last_output_token_count
+            )
             logger.info(f"- Input tokens: {self.total_input_token_count}")
             logger.info(f"- Output tokens: {self.total_output_token_count}")

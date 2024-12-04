@@ -436,8 +436,13 @@ class Gemma2Attention(nn.Module):
                 key_states, value_states, self.layer_idx, cache_kwargs
             )
 
-        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
-            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
+        if output_attentions and self.config._attn_implementation in [
+            "sdpa",
+            "flash_attention_2",
+        ]:
+            logger.warning_once(
+                "Setting `attention_type` to `flex_attention` because `output_attentions=True`"
+            )
             attention_type = "flex_attention"
         else:
             attention_type = self.config._attn_implementation

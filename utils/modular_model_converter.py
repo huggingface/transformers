@@ -109,7 +109,13 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         - LLaMa -> MyNewModel       abd     MyNewModel      -> Llama
     """
 
-    def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
+    def __init__(
+        self,
+        old_name: str,
+        new_name: str,
+        original_new_model_name: str = "",
+        only_doc: bool = False,
+    ):
         super().__init__()
         self.old_name = old_name
         self.new_name = new_name
@@ -128,7 +134,9 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def _replace_name(self, original_node, updated_node):
         if re.findall(r"# Copied from", updated_node.value):
             return cst.RemoveFromParent()
-        update = preserve_case_replace(updated_node.value, self.patterns, self.cased_new_name)
+        update = preserve_case_replace(
+            updated_node.value, self.patterns, self.cased_new_name
+        )
         return updated_node.with_changes(value=update)
 
     @m.leave(m.SimpleString() | m.Comment())
@@ -142,13 +150,19 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def leave_ImportFrom(self, original_node, updated_node):
         """The imports from other file types (configuration, processing etc) should use original model name."""
-        if self.original_new_model_name != self.new_name and m.matches(updated_node.module, m.Name()):
+        if self.original_new_model_name != self.new_name and m.matches(
+            updated_node.module, m.Name()
+        ):
             patterns = "|".join(ALL_FILE_TYPES)
             regex = rf"({patterns})_{self.new_name}"
             new_source = re.sub(
-                regex, lambda m: f"{m.group(1)}_{self.original_new_model_name}", updated_node.module.value
+                regex,
+                lambda m: f"{m.group(1)}_{self.original_new_model_name}",
+                updated_node.module.value,
             )
-            updated_node = updated_node.with_changes(module=updated_node.module.with_changes(value=new_source))
+            updated_node = updated_node.with_changes(
+                module=updated_node.module.with_changes(value=new_source)
+            )
         return updated_node
 
 
@@ -1033,7 +1047,10 @@ def common_partial_suffix(str1: str, str2: str) -> str:
 
 
 def replace_class_node(
-    mapper: ModelFileMapper, class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
+    mapper: ModelFileMapper,
+    class_node: cst.ClassDef,
+    renamed_super_class: str,
+    original_super_class: str,
 ):
     """
     Replace a class node which inherits from another modeling class. This function works in the following way:
@@ -1073,10 +1090,14 @@ def replace_class_node(
     if new_name.value != renamed_super_class:
         common_suffix = common_partial_suffix(new_name.value, renamed_super_class)
         # Note that this works even without common prefix, in which case it does not replace anything
-        old, new = renamed_super_class.replace(common_suffix, ""), new_name.value.replace(common_suffix, "")
+        old, new = renamed_super_class.replace(
+            common_suffix, ""
+        ), new_name.value.replace(common_suffix, "")
         temp_module = cst.Module(body=[original_node])
         original_node = temp_module.visit(
-            ReplaceNameTransformer(get_lowercase_name(old), get_lowercase_name(new), only_doc=True)
+            ReplaceNameTransformer(
+                get_lowercase_name(old), get_lowercase_name(new), only_doc=True
+            )
         ).body[0]
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
@@ -1091,7 +1112,9 @@ def replace_class_node(
             for additional_base_name in additional_bases:
                 suffix = common_partial_suffix(original_base_name, additional_base_name)
                 if len(suffix) > 0 and suffix[0].isupper():
-                    new_name_node = original_base.value.with_changes(value=additional_base_name)
+                    new_name_node = original_base.value.with_changes(
+                        value=additional_base_name
+                    )
                     new_base = original_base.with_changes(value=new_name_node)
                     break
         new_bases.append(new_base)
@@ -1171,18 +1194,28 @@ def replace_class_node(
         ):  # This processes the docstring of the class!
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
-            if len(docstring_node) == 0:  # If the original docstring is empty, just create one from the updated.
+            if (
+                len(docstring_node) == 0
+            ):  # If the original docstring is empty, just create one from the updated.
                 docstring_node = [
-                    cst.SimpleStatementLine(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
+                    cst.SimpleStatementLine(
+                        body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))]
+                    )
                 ]
             else:
                 original_docstring = docstring_node[0].body[0].value.value
                 merged_doc = merge_docstrings(original_docstring, updated_docstring)
                 # Update the docstring in the original function
                 docstring_node = [
-                    docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
+                    docstring_node[0].with_changes(
+                        body=[cst.Expr(value=cst.SimpleString(value=merged_doc))]
+                    )
                 ]
-        if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
+        if (
+            name not in original_methods
+            and func is not None
+            and isinstance(func, cst.FunctionDef)
+        ):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             # TODO we only use single assign might cause issues
@@ -1203,10 +1236,17 @@ def replace_class_node(
     new_replacement_body = new_replacement_class.body[0].body  # get the indented block
 
     # Use decorators redefined in `modular_xxx.py` if any
-    new_decorators = class_node.decorators if len(class_node.decorators) > 0 else original_node.decorators
+    new_decorators = (
+        class_node.decorators
+        if len(class_node.decorators) > 0
+        else original_node.decorators
+    )
 
     return original_node.with_changes(
-        body=new_replacement_body, decorators=new_decorators, bases=new_bases, name=new_name
+        body=new_replacement_body,
+        decorators=new_decorators,
+        bases=new_bases,
+        name=new_name,
     )
 
 
@@ -1249,7 +1289,10 @@ IMPORTS_TO_SKIP_IN_MODULAR = ("auto.modeling_auto",)
 
 
 def append_new_import_node(
-    node: cst.CSTNode, unused_imports: set[str], added_names: set, imports_to_keep: list[cst.CSTNode]
+    node: cst.CSTNode,
+    unused_imports: set[str],
+    added_names: set,
+    imports_to_keep: list[cst.CSTNode],
 ):
     """Insert the new `node` to the list of `imports_to_keep` in-place, if it is not part of the `unused_imports` or `added_names`.
     Also modifies `added_names` in-place accordingly."""
@@ -1292,19 +1335,31 @@ def get_needed_imports(
                 import_ref_count[name] = max(ref_count, import_ref_count[name])
     # Similar imports may be redefined, and only used between their 1st and 2nd definition so if we already have
     # a ref count > 0 at any point, the imports is actually used
-    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body.keys()}
+    unused_imports = {
+        name
+        for name, count in import_ref_count.items()
+        if count <= 0 or name in body.keys()
+    }
 
     imports_to_keep = []
     # We need to keep track of which names were already imported, because some import may be duplicated from multiple sources
     # or be both protected and unprotected due to inconsistency between models
     added_names = set()
-    existing_protected_statements = set()  # str repr of the import nodes - does not work with the nodes directly
+    existing_protected_statements = (
+        set()
+    )  # str repr of the import nodes - does not work with the nodes directly
     for node in all_imports:
         if m.matches(node, m.If()):  # handle safe imports
             new_statements = []
             for stmt_node in node.body.body:
-                append_new_import_node(stmt_node, unused_imports, added_names, new_statements)
-            new_statements = [stmt for stmt in new_statements if str(stmt) not in existing_protected_statements]
+                append_new_import_node(
+                    stmt_node, unused_imports, added_names, new_statements
+                )
+            new_statements = [
+                stmt
+                for stmt in new_statements
+                if str(stmt) not in existing_protected_statements
+            ]
             if len(new_statements) > 0:
                 new_node = node.with_changes(
                     body=node.body.with_changes(body=new_statements)
@@ -1316,8 +1371,12 @@ def get_needed_imports(
         else:
             append_new_import_node(node, unused_imports, added_names, imports_to_keep)
 
-    protected_import_nodes = [node for node in imports_to_keep if m.matches(node, m.If())]
-    usual_import_nodes = [node for node in imports_to_keep if not m.matches(node, m.If())]
+    protected_import_nodes = [
+        node for node in imports_to_keep if m.matches(node, m.If())
+    ]
+    usual_import_nodes = [
+        node for node in imports_to_keep if not m.matches(node, m.If())
+    ]
 
     # Protected imports always appear at the end of all imports
     return usual_import_nodes + protected_import_nodes
@@ -1592,7 +1651,9 @@ class ModularFileMapper(ModuleMapper):
         # Iterate over all new classes to get modeling super classes
         for class_name, class_node in self.classes.items():
             modeling_bases = [
-                k.value.value for k in class_node.bases if k.value.value in self.model_specific_imported_objects
+                k.value.value
+                for k in class_node.bases
+                if k.value.value in self.model_specific_imported_objects
             ]
             if len(modeling_bases) > 1:
                 raise ValueError(
@@ -1611,16 +1672,28 @@ class ModularFileMapper(ModuleMapper):
         for file, prefixes_counter in prefix_model_name_mapping.items():
             if len(prefixes_counter) > 1:
                 _, total = prefixes_counter.most_common(1)[0]
-                most_used_entities = [name for name, count in prefixes_counter.most_common() if count == total]
+                most_used_entities = [
+                    name
+                    for name, count in prefixes_counter.most_common()
+                    if count == total
+                ]
                 # if the default name is in the pool of equally used prefixes, use it, otherwise last encountered
-                final_name = cased_default_name if cased_default_name in most_used_entities else most_used_entities[-1]
+                final_name = (
+                    cased_default_name
+                    if cased_default_name in most_used_entities
+                    else most_used_entities[-1]
+                )
             else:
                 final_name = list(prefixes_counter)[0]
             # Check if the prefix can be used without collisions in the names
             old_cased_model_name = get_cased_name(file.split(".")[-2])
-            old_model_name_prefix = final_name.replace(cased_default_name, old_cased_model_name)
+            old_model_name_prefix = final_name.replace(
+                cased_default_name, old_cased_model_name
+            )
             # Raise adequate warning depending on the situation
-            has_prefix_collision = f"\nclass {old_model_name_prefix}" in get_module_source_from_name(file)
+            has_prefix_collision = (
+                f"\nclass {old_model_name_prefix}" in get_module_source_from_name(file)
+            )
             if final_name != cased_default_name and has_prefix_collision:
                 if len(prefixes_counter) > 1:
                     logger.warning(
@@ -1713,7 +1786,9 @@ def get_class_node_and_dependencies(
     """
     # An exception was already raised if this has len > 1
     model_specific_bases = [
-        k.value.value for k in node.bases if k.value.value in modular_mapper.model_specific_imported_objects
+        k.value.value
+        for k in node.bases
+        if k.value.value in modular_mapper.model_specific_imported_objects
     ]
     super_class = model_specific_bases[0] if len(model_specific_bases) == 1 else None
 
@@ -1732,10 +1807,14 @@ def get_class_node_and_dependencies(
         mapper = modular_mapper.visited_modules[super_file_name]
         # Rename the super class according to the exact same rule we used when renaming the whole module
         renamer = modular_mapper.renamers[super_file_name]
-        renamed_super_class = preserve_case_replace(super_class, renamer.patterns, renamer.cased_new_name)
+        renamed_super_class = preserve_case_replace(
+            super_class, renamer.patterns, renamer.cased_new_name
+        )
 
         # Create the new class node
-        updated_node = replace_class_node(mapper, node, renamed_super_class, super_class)
+        updated_node = replace_class_node(
+            mapper, node, renamed_super_class, super_class
+        )
 
         # Grab all immediate dependencies of the new node
         new_node_dependencies = augmented_dependencies_for_class_node(
