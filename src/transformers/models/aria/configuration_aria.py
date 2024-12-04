@@ -188,7 +188,7 @@ class AriaTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
+        self.intermediate_size = moe_intermediate_size * moe_num_shared_experts
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
 

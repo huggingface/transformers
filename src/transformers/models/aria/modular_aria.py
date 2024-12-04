@@ -232,6 +232,7 @@ class AriaTextConfig(LlamaConfig):
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
         self.moe_num_shared_experts = moe_num_shared_experts
+        self.intermediate_size = moe_intermediate_size * moe_num_shared_experts
 
 
 class AriaConfig(PretrainedConfig):
@@ -1009,19 +1010,7 @@ class AriaProcessor(ProcessorMixin):
 
 
 class AriaSharedExpertsMLP(LlamaMLP):
-    """
-    Shared Expert MLP for shared experts.
-
-    Unlike routed experts, shared experts process all tokens without routing.
-    This class reconfigures the intermediate size in comparison to the LlamaMLP.
-
-    Args:
-        config (`AriaTextConfig`): Configuration object for the Aria language model.
-    """
-
-    def __init__(self, config: AriaTextConfig):
-        super().__init__(self)
-        self.intermediate_size = config.moe_intermediate_size * config.moe_num_shared_experts
+    pass
 
 
 class AriaGroupedExpertsGemm(nn.Module):
