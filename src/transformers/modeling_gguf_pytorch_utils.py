@@ -291,7 +291,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     # FIXME: Currnetly this implementation is only for flan-t5 architecture.
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
-        parsed_parameters["config"]["tie_word_embeddings"] = False
         parsed_parameters["config"]["is_gated_act"] = True
         updated_architecture = "t5"
     else:
@@ -325,6 +324,11 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
     if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"Architecture {architecture + model_size} not supported")
+
+    # handle tie_word_embeddings
+    parsed_parameters["config"]["tie_word_embeddings"] = all(
+        "output.weight" not in tensor.name for tensor in reader.tensors
+    )
 
     # List all key-value pairs in a columnized format
     for gguf_key, field in reader.fields.items():
