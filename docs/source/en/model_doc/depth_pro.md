@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 *We present a foundation model for zero-shot metric monocular depth estimation. Our model, Depth Pro, synthesizes high-resolution depth maps with unparalleled sharpness and high-frequency details. The predictions are metric, with absolute scale, without relying on the availability of metadata such as camera intrinsics. And the model is fast, producing a 2.25-megapixel depth map in 0.3 seconds on a standard GPU. These characteristics are enabled by a number of technical contributions, including an efficient multi-scale vision transformer for dense prediction, a training protocol that combines real and synthetic datasets to achieve high metric accuracy alongside fine boundary tracing, dedicated evaluation metrics for boundary accuracy in estimated depth maps, and state-of-the-art focal length estimation from a single image. Extensive experiments analyze specific design choices and demonstrate that Depth Pro outperforms prior work along multiple dimensions.*
 
-<img src="https://raw.githubusercontent.com/apple/ml-depth-pro/b2cd0d51daa95e49277a9f642f7fd736b7f9e91d/data/depth-pro-teaser.jpg"
+<img src="https://huggingface.co/geetu040/DepthPro/resolve/main/assets/architecture.jpg"
 alt="drawing" width="600"/>
 
 <small> DepthPro architecture. Taken from the <a href="https://arxiv.org/abs/2410.02073" target="_blank">original paper</a>. </small>
@@ -38,15 +38,25 @@ This model was contributed by [geetu040](https://github.com/geetu040). The origi
 ## Usage tips
 
 ```python
-from transformers import Dinov2Config, DepthProConfig, DepthProForDepthEstimation
+from transformers import DepthProConfig, DepthProForDepthEstimation
 
-# initialize with a Transformer-based backbone such as DINOv2
-# in that case, we also specify `reshape_hidden_states=False` to get feature maps of shape (batch_size, num_channels, height, width)
-backbone_config = Dinov2Config.from_pretrained("facebook/dinov2-base", out_features=["stage1", "stage2", "stage3", "stage4"], reshape_hidden_states=False)
-
-config = DepthProConfig(backbone_config=backbone_config)
-model = DepthProForDepthEstimation(config=config)
+config = DepthProConfig()
+model = DPTForDepthEstimation(config=config)
 ```
+
+- By default model takes an input image of size `1536`, this can be changed via config, however the model is compatible with images of different width and height.
+- Input image is scaled with different ratios, as specified in `scaled_images_ratios`, then each of the scaled image is patched to `patch_size` with an overlap ratio of `scaled_images_overlap_ratios`.
+- These patches go through `DinoV2 (ViT)` based encoders and are reassembled via a `DPT` based decoder.
+- `DepthProForDepthEstimation` can also predict the `FOV (Field of View)` if `use_fov_model` is set to `True` in the config.
+- `DepthProImageProcessor` can be used for preprocessing the inputs and postprocessing the outputs. `DepthProImageProcessor.post_process_depth_estimation` interpolates the `predicted_depth` back to match the input image size.
+- To generate `predicted_depth` of the same size as input image, make sure the config is created such that
+```
+image_size / 2**(n_fusion_blocks+1) == patch_size / patch_embeddings_size
+
+where
+n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
+```
+
 
 ### Using Scaled Dot Product Attention (SDPA)
 
@@ -59,9 +69,9 @@ page for more information.
 SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```
-from transformers import ViTForImageClassification
-model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224", attn_implementation="sdpa", torch_dtype=torch.float16)
+```py
+from transformers import DepthProForDepthEstimation
+model = DepthProForDepthEstimation.from_pretrained("geetu040/DepthPro", attn_implementation="sdpa", torch_dtype=torch.float16)
 ...
 ```
 
@@ -78,12 +88,11 @@ On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` 
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DepthPro.
+- Research Paper: [Depth Pro: Sharp Monocular Metric Depth in Less Than a Second](https://arxiv.org/pdf/2410.02073)
 
-- Demo notebooks for [`DepthProForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DepthPro).
+- Official Implementation: [apple/ml-depth-pro](https://github.com/apple/ml-depth-pro)
 
-- [Semantic segmentation task guide](../tasks/semantic_segmentation)
-- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
+<!-- A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DepthPro. -->
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
