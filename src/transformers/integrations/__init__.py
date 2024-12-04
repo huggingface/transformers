@@ -25,6 +25,12 @@ _import_structure = {
         "replace_quantization_scales",
         "replace_with_awq_linear",
     ],
+    "bitnet": [
+        "BitLinear",
+        "pack_weights",
+        "replace_with_bitnet_linear",
+        "unpack_weights",
+    ],
     "bitsandbytes": [
         "dequantize_and_replace",
         "get_keys_to_not_convert",
@@ -48,6 +54,7 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
         "GGUF_TENSOR_MAPPING",
@@ -120,6 +127,12 @@ if TYPE_CHECKING:
         replace_quantization_scales,
         replace_with_awq_linear,
     )
+    from .bitnet import (
+        BitLinear,
+        pack_weights,
+        replace_with_bitnet_linear,
+        unpack_weights,
+    )
     from .bitsandbytes import (
         dequantize_and_replace,
         get_keys_to_not_convert,
@@ -143,6 +156,7 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .fsdp import is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,
         GGUF_TENSOR_MAPPING,

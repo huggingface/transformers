@@ -305,7 +305,14 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -411,10 +418,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     @unittest.skip(reason="TODO @arthurzucker not super important and failing.")
     def test_initialization(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not support generating with input embeddings (missing position_ids)")
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
         pass
 
 

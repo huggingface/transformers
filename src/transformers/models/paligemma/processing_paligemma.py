@@ -16,7 +16,6 @@
 Processor class for PaliGemma.
 """
 
-import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -34,9 +33,10 @@ from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
 )
+from ...utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
@@ -160,11 +160,15 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         self.image_seq_length = image_processor.image_seq_length
 
-        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
-        tokens_to_add = {"additional_special_tokens": [image_token]}
-        tokenizer.add_special_tokens(tokens_to_add)
+        if not hasattr(tokenizer, "image_token"):
+            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        else:
+            self.image_token_id = tokenizer.image_token_id
+
         tokenizer.add_tokens(EXTRA_TOKENS)
-        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
 

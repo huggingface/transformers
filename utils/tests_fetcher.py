@@ -997,7 +997,7 @@ def _print_list(l) -> str:
 def infer_tests_to_run(
     output_file: str,
     diff_with_last_commit: bool = False,
-    filter_models: bool = True,
+    filter_models: bool = False,
 ):
     """
     The main function called by the test fetcher. Determines the tests to run from the diff.
@@ -1229,6 +1229,6 @@ if __name__ == "__main__":
         infer_tests_to_run(
             args.output_file,
             diff_with_last_commit=diff_with_last_commit,
-            filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
+            filter_models=False,
         )
         filter_tests(args.output_file, ["repo_utils"])

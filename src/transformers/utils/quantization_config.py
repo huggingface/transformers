@@ -45,6 +45,7 @@ class QuantizationMethod(str, Enum):
     COMPRESSED_TENSORS = "compressed-tensors"
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
+    BITNET = "bitnet"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1149,6 +1150,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
         """
+
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
@@ -1159,16 +1161,23 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def to_dict(self) -> Dict[str, Any]:
         """
+        Quantization config to be added to config.json
+
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
-        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+        quantization_config = {}
+        if self.quantization_config is not None:
+            quantization_config = self.quantization_config.dict()
+        else:
+            quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
 
-        return {
-            "quantization_config": quantization_config,
-            "sparsity_config": sparsity_config,
-        }
+        if self.sparsity_config is not None:
+            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+        else:
+            quantization_config["sparsity_config"] = {}
+
+        return quantization_config
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
@@ -1263,8 +1272,13 @@ class TorchAoConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
-            raise ValueError("Requires torchao 0.4.0 version and above")
+        if is_torchao_available():
+            if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
+                raise ValueError("Requires torchao 0.4.0 version and above")
+        else:
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
 
         _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
         if self.quant_type not in _STR_TO_METHOD.keys():
@@ -1308,4 +1322,23 @@ class TorchAoConfig(QuantizationConfigMixin):
         return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
 
     def __repr__(self):
-        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.quant_type_kwargs.items())})"
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+
+@dataclass
+class BitNetConfig(QuantizationConfigMixin):
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.BITNET
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        pass

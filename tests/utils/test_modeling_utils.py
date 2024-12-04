@@ -14,6 +14,7 @@
 # limitations under the License.
 import copy
 import glob
+import itertools
 import json
 import os
 import os.path
@@ -105,7 +106,6 @@ if is_torch_available():
         _find_disjoint,
         _find_identical,
         dtype_byte_size,
-        shard_checkpoint,
     )
     from transformers.pytorch_utils import isin_mps_friendly
 
@@ -460,6 +460,19 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(ValueError):
             model = AutoModel.from_pretrained(TINY_T5, torch_dtype="int64")
 
+    @require_torch
+    def test_model_from_pretrained_meta_device(self):
+        def is_on_meta(model_id, dtype):
+            with torch.device("meta"):
+                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
+                return all(value.device.type == "meta" for value in model.state_dict().values())
+
+        model_ids = ("fxmarty/tiny-llama-fast-tokenizer", "fxmarty/small-llama-testing")
+        dtypes = (None, "auto", torch.float16)
+
+        for model_id, dtype in itertools.product(model_ids, dtypes):
+            self.assertTrue(is_on_meta(model_id, dtype))
+
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's torch_dtype argument
@@ -667,71 +680,6 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
-
-    def test_shard_checkpoint(self):
-        # This is the model we will use, total size 340,000 bytes.
-        model = torch.nn.Sequential(
-            torch.nn.Linear(100, 200, bias=False),  # size 80,000
-            torch.nn.Linear(200, 200, bias=False),  # size 160,000
-            torch.nn.Linear(200, 100, bias=False),  # size 80,000
-            torch.nn.Linear(100, 50, bias=False),  # size 20,000
-        )
-        state_dict = model.state_dict()
-
-        with self.subTest("No shard when max size is bigger than model size"):
-            shards, index = shard_checkpoint(state_dict)
-            self.assertIsNone(index)
-            self.assertDictEqual(shards, {WEIGHTS_NAME: state_dict})
-
-        with self.subTest("Test sharding, no weights bigger than max size"):
-            shards, index = shard_checkpoint(state_dict, max_shard_size="300kB")
-            # Split is first two layers then last two.
-            self.assertDictEqual(
-                index,
-                {
-                    "metadata": {"total_size": 340000},
-                    "weight_map": {
-                        "0.weight": "pytorch_model-00001-of-00002.bin",
-                        "1.weight": "pytorch_model-00001-of-00002.bin",
-                        "2.weight": "pytorch_model-00002-of-00002.bin",
-                        "3.weight": "pytorch_model-00002-of-00002.bin",
-                    },
-                },
-            )
-
-            shard1 = {"0.weight": state_dict["0.weight"], "1.weight": state_dict["1.weight"]}
-            shard2 = {"2.weight": state_dict["2.weight"], "3.weight": state_dict["3.weight"]}
-            self.assertDictEqual(
-                shards, {"pytorch_model-00001-of-00002.bin": shard1, "pytorch_model-00002-of-00002.bin": shard2}
-            )
-
-        with self.subTest("Test sharding with weights bigger than max size"):
-            shards, index = shard_checkpoint(state_dict, max_shard_size="100kB")
-            # Split is first layer, second layer then last 2.
-            self.assertDictEqual(
-                index,
-                {
-                    "metadata": {"total_size": 340000},
-                    "weight_map": {
-                        "0.weight": "pytorch_model-00001-of-00003.bin",
-                        "1.weight": "pytorch_model-00002-of-00003.bin",
-                        "2.weight": "pytorch_model-00003-of-00003.bin",
-                        "3.weight": "pytorch_model-00003-of-00003.bin",
-                    },
-                },
-            )
-
-            shard1 = {"0.weight": state_dict["0.weight"]}
-            shard2 = {"1.weight": state_dict["1.weight"]}
-            shard3 = {"2.weight": state_dict["2.weight"], "3.weight": state_dict["3.weight"]}
-            self.assertDictEqual(
-                shards,
-                {
-                    "pytorch_model-00001-of-00003.bin": shard1,
-                    "pytorch_model-00002-of-00003.bin": shard2,
-                    "pytorch_model-00003-of-00003.bin": shard3,
-                },
-            )
 
     def test_checkpoint_sharding_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -1544,15 +1492,16 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
     def test_generation_config_is_loaded_with_model(self):
-        # Note: `TinyLlama/TinyLlama-1.1B-Chat-v1.0` has a `generation_config.json` containing `max_length: 2048`
+        # Note: `hf-internal-testing/tiny-random-MistralForCausalLM` has a `generation_config.json`
+        # containing `bos_token_id: 1`
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-        self.assertEqual(model.generation_config.max_length, 2048)
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
         # 2. Load with `device_map`
-        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", device_map="auto")
-        self.assertEqual(model.generation_config.max_length, 2048)
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto")
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     @require_safetensors
     def test_safetensors_torch_from_torch(self):
@@ -1710,7 +1659,12 @@ class ModelUtilsTest(TestCasePlus):
                 torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
             )
         )
-        # We can match against an tensor of integers
+        # We can match against an 0D tensor
+        random_test_tensor = torch.randint(0, 100, (1,)).squeeze()
+        self.assertTrue(
+            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
+        )
+        # We can match against an 1D tensor (with many items)
         random_test_tensor = torch.randint(0, 100, (10,))
         self.assertTrue(
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
@@ -2009,19 +1963,18 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             if thread.name == "Thread-autoconversion":
                 thread.join(timeout=10)
 
-        with self.subTest("PR was open with the safetensors account"):
-            discussions = self.api.get_repo_discussions(self.repo_name)
+        discussions = self.api.get_repo_discussions(self.repo_name)
 
-            bot_opened_pr = None
-            bot_opened_pr_title = None
+        bot_opened_pr = None
+        bot_opened_pr_title = None
 
-            for discussion in discussions:
-                if discussion.author == "SFconvertbot":
-                    bot_opened_pr = True
-                    bot_opened_pr_title = discussion.title
+        for discussion in discussions:
+            if discussion.author == "SFconvertbot":
+                bot_opened_pr = True
+                bot_opened_pr_title = discussion.title
 
-            self.assertTrue(bot_opened_pr)
-            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+        self.assertTrue(bot_opened_pr)
+        self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
 
     @mock.patch("transformers.safetensors_conversion.spawn_conversion")
     def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):

@@ -14,15 +14,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ..utils import logging
 from .agent_types import AgentAudio, AgentImage, AgentText
-from .agents import ReactAgent
 
 
-def pull_message(step_log: dict):
+logger = logging.get_logger(__name__)
+
+
+def pull_message(step_log: dict, test_mode: bool = True):
     try:
         from gradio import ChatMessage
     except ImportError:
-        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+        if test_mode:
+
+            class ChatMessage:
+                def __init__(self, role, content, metadata=None):
+                    self.role = role
+                    self.content = content
+                    self.metadata = metadata
+        else:
+            raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
     if step_log.get("rationale"):
         yield ChatMessage(role="assistant", content=step_log["rationale"])
@@ -46,30 +57,61 @@ def pull_message(step_log: dict):
         )
 
 
-def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
+def stream_to_gradio(agent, task: str, test_mode: bool = False, **kwargs):
     """Runs an agent with the given task and streams the messages from the agent as gradio ChatMessages."""
 
     try:
         from gradio import ChatMessage
     except ImportError:
-        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+        if test_mode:
+
+            class ChatMessage:
+                def __init__(self, role, content, metadata=None):
+                    self.role = role
+                    self.content = content
+                    self.metadata = metadata
+        else:
+            raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
     for step_log in agent.run(task, stream=True, **kwargs):
         if isinstance(step_log, dict):
-            for message in pull_message(step_log):
+            for message in pull_message(step_log, test_mode=test_mode):
                 yield message
 
-    if isinstance(step_log, AgentText):
-        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{step_log.to_string()}\n```")
-    elif isinstance(step_log, AgentImage):
+    final_answer = step_log  # Last log is the run's final_answer
+
+    if isinstance(final_answer, AgentText):
+        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{final_answer.to_string()}\n```")
+    elif isinstance(final_answer, AgentImage):
         yield ChatMessage(
             role="assistant",
-            content={"path": step_log.to_string(), "mime_type": "image/png"},
+            content={"path": final_answer.to_string(), "mime_type": "image/png"},
         )
-    elif isinstance(step_log, AgentAudio):
+    elif isinstance(final_answer, AgentAudio):
         yield ChatMessage(
             role="assistant",
-            content={"path": step_log.to_string(), "mime_type": "audio/wav"},
+            content={"path": final_answer.to_string(), "mime_type": "audio/wav"},
         )
     else:
-        yield ChatMessage(role="assistant", content=str(step_log))
+        yield ChatMessage(role="assistant", content=str(final_answer))
+
+
+class Monitor:
+    def __init__(self, tracked_llm_engine):
+        self.step_durations = []
+        self.tracked_llm_engine = tracked_llm_engine
+        if getattr(self.tracked_llm_engine, "last_input_token_count", "Not found") != "Not found":
+            self.total_input_token_count = 0
+            self.total_output_token_count = 0
+
+    def update_metrics(self, step_log):
+        step_duration = step_log["step_duration"]
+        self.step_durations.append(step_duration)
+        logger.info(f"Step {len(self.step_durations)}:")
+        logger.info(f"- Time taken: {step_duration:.2f} seconds (valid only if step succeeded)")
+
+        if getattr(self.tracked_llm_engine, "last_input_token_count", None) is not None:
+            self.total_input_token_count += self.tracked_llm_engine.last_input_token_count
+            self.total_output_token_count += self.tracked_llm_engine.last_output_token_count
+            logger.info(f"- Input tokens: {self.total_input_token_count}")
+            logger.info(f"- Output tokens: {self.total_output_token_count}")
