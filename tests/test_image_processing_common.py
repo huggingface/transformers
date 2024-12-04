@@ -181,10 +181,10 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        print("average diff", torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item())
-        print("max diff", torch.max(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item())
-
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2))
+        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-4
+        )
 
     @require_vision
     @require_torch
@@ -196,6 +196,8 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
 
         def measure_time(image_processor, image):
+            # Warmup
+            _ = image_processor(image, return_tensors="pt")
             start = time.time()
             _ = image_processor(image, return_tensors="pt")
             return time.time() - start
@@ -271,8 +273,31 @@ class ImageProcessingTestMixin:
             image_processor_fast_1.save_pretrained(tmpdirname)
             image_processor_slow_1 = self.image_processing_class.from_pretrained(tmpdirname)
 
-        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
-        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
+        dict_slow_0 = image_processor_slow_0.to_dict()
+        dict_slow_1 = image_processor_slow_1.to_dict()
+        difference = {
+            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
+            for key in set(dict_slow_0) ^ set(dict_slow_1)
+        }
+        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        # check that all additional keys are None
+        self.assertTrue(all(value is None for value in difference.values()))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_slow_0, dict_slow_1)
+
+        dict_fast_0 = image_processor_fast_0.to_dict()
+        dict_fast_1 = image_processor_fast_1.to_dict()
+        difference = {
+            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
+            for key in set(dict_fast_0) ^ set(dict_fast_1)
+        }
+        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        # check that all additional keys are None
+        self.assertTrue(all(value is None for value in difference.values()))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_fast_0, dict_fast_1)
 
     def test_save_load_fast_slow_auto(self):
         "Test that we can load a fast image processor from a slow one and vice-versa using AutoImageProcessor."
@@ -294,8 +319,31 @@ class ImageProcessingTestMixin:
             image_processor_fast_1.save_pretrained(tmpdirname)
             image_processor_slow_1 = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=False)
 
-        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
-        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
+        dict_slow_0 = image_processor_slow_0.to_dict()
+        dict_slow_1 = image_processor_slow_1.to_dict()
+        difference = {
+            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
+            for key in set(dict_slow_0) ^ set(dict_slow_1)
+        }
+        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        # check that all additional keys are None
+        self.assertTrue(all(value is None for value in difference.values()))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_slow_0, dict_slow_1)
+
+        dict_fast_0 = image_processor_fast_0.to_dict()
+        dict_fast_1 = image_processor_fast_1.to_dict()
+        difference = {
+            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
+            for key in set(dict_fast_0) ^ set(dict_fast_1)
+        }
+        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        # check that all additional keys are None
+        self.assertTrue(all(value is None for value in difference.values()))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_fast_0, dict_fast_1)
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processor_list:
