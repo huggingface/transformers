@@ -544,17 +544,21 @@ class SpmConverter(Converter):
     SpmExtractor = SentencePieceExtractor
     special_tokens = {}
 
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         requires_backends(self, "protobuf")
 
         super().__init__(*args)
+        dduf_reader = kwargs.get("dduf_reader", None)
 
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
         m = model_pb2.ModelProto()
-        with open(self.original_tokenizer.vocab_file, "rb") as f:
-            m.ParseFromString(f.read())
+        if dduf_reader:
+            m.ParseFromString(dduf_reader.read_file(self.original_tokenizer.vocab_file))
+        else:
+            with open(self.original_tokenizer.vocab_file, "rb") as f:
+                m.ParseFromString(f.read())
         self.proto = m
 
         if self.proto.trainer_spec.byte_fallback and not self.handle_byte_fallback:
@@ -1606,7 +1610,7 @@ SLOW_TO_FAST_CONVERTERS = {
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False, **kwargs) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1625,7 +1629,7 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
     if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-        return converter_class(transformer_tokenizer).converted()
+        return converter_class(transformer_tokenizer, **kwargs).converted()
 
     else:
         try:
