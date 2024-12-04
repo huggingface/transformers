@@ -34,14 +34,14 @@ from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
 
 
-device = "cuda"  # "cpu"
+device = "cpu"
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 # TODO add sequence length variations here
 
-PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896", "27b-224", "27b-448"]
+PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896", "27b-224", "27b-448", "27b-896"]
 VARIANT_CONFIGS = {
     "2b": {
         "num_positions": 256,
@@ -310,7 +310,6 @@ def convert_paligemma2_checkpoint(
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
     config = get_paligemma2_config(variant, precision=precision)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     if do_convert_weights:
         tokenizer_id = "google/paligemma-3b-pt-224"  # same tokenizer as paligemma 1
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
