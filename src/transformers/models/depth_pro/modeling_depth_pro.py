@@ -839,7 +839,11 @@ class DepthProEncoder(nn.Module):
             )
 
         # scaled_images_ratios, scaled_images_overlap_ratios, scaled_images_feature_dims are consistent
-        if not (len(config.scaled_images_ratios) == len(config.scaled_images_overlap_ratios) == len(config.scaled_images_feature_dims)):
+        if not (
+            len(config.scaled_images_ratios)
+            == len(config.scaled_images_overlap_ratios)
+            == len(config.scaled_images_feature_dims)
+        ):
             raise ValueError(
                 f"len(scaled_images_ratios)={len(config.scaled_images_ratios)} and "
                 f"len(scaled_images_overlap_ratios)={len(config.scaled_images_overlap_ratios)} and "
