@@ -827,9 +827,10 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
-            2
-        ) as pool:
+        with (
+            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
+            multiprocessing.get_context("fork").Pool(2) as pool,
+        ):
             transcription = processor.batch_decode(logits.numpy(), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)
