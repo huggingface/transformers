@@ -273,7 +273,7 @@ To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or Ten
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
 **c) Install 🤗 Transformers:**
-```bash
+```
 pip install transformers
 ```
 
@@ -281,7 +281,7 @@ If you'd like to play with the examples or need the bleeding edge of the code an
 
 **d) Optional: Install from source for the latest updates:**
 
-```Bash
+```
 git clone https://github.com/huggingface/transformers.git
 cd transformers
 pip install
@@ -318,21 +318,18 @@ nvidia-smi
 
 Ensure you’re using Python 3.9 or later:
 ```
-bash
 python --version
 ```
 **b) Error: Missing Dependencies:**
 
 Install all required dependencies:
 ```
-bash
 pip install -r requirements.txt
 ```
 **c) Windows-Specific Issues:**
 
 Activate Developer Mode if prompted. Alternatively, use a virtual environment:
 ```
-bash
 Copy code
 python -m venv env
 env\Scripts\activate
