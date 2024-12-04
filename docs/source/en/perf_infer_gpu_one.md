@@ -217,6 +217,7 @@ PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.o
 
 For now, Transformers supports SDPA inference and training for the following architectures:
 * [Albert](https://huggingface.co/docs/transformers/model_doc/albert#transformers.AlbertModel)
+* [Aria](https://huggingface.co/docs/transformers/model_doc/aria#transformers.AriaForConditionalGeneration)
 * [Audio Spectrogram Transformer](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Bert](https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel)
