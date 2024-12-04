@@ -99,7 +99,7 @@ class TextNetConvLayer(nn.Module):
         if self.activation_function is not None:
             self.activation = ACT2CLS[self.activation_function]()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.batch_norm(hidden_states)
         return self.activation(hidden_states)
