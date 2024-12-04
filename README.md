@@ -313,6 +313,30 @@ b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)
 ```
 nvidia-smi
 ```
+### 4. Troubleshooting
+**a) Error: Python Version Not Supported:**
+
+Ensure you’re using Python 3.9 or later:
+```
+bash
+python --version
+```
+**b) Error: Missing Dependencies:**
+
+Install all required dependencies:
+```
+bash
+pip install -r requirements.txt
+```
+**c) Windows-Specific Issues:**
+
+Activate Developer Mode if prompted. Alternatively, use a virtual environment:
+```
+bash
+Copy code
+python -m venv env
+env\Scripts\activate
+```
 ## Model architectures
 
 **[All the model checkpoints](https://huggingface.co/models)** provided by 🤗 Transformers are seamlessly integrated from the huggingface.co [model hub](https://huggingface.co/models), where they are uploaded directly by [users](https://huggingface.co/users) and [organizations](https://huggingface.co/organizations).
