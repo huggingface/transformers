@@ -39,7 +39,10 @@ if is_gguf_available():
 @slow
 class GgufQuantizationTests(unittest.TestCase):
     """
-    Test cases for the dequantization workflow of the GGUF models.
+    Test cases for the basic interoperability with GGUF models:
+    - Tokenizer conversion and tokenization
+    - GGUF weights dequantization
+    - Model serilization and generation
     """
 
     example_text = "Hello"
