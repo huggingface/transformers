@@ -46,13 +46,13 @@ class AriaProcessor(ProcessorMixin):
     AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
 
     Args:
-        image_processor(`AriaImageProcessor`):
+        image_processor (`AriaImageProcessor`, *optional*):
             The AriaImageProcessor to use for image preprocessing.
         tokenizer (`PreTrainedTokenizerBase`, *optional*):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        size_conversion(`Dict`, *optional*):
+        size_conversion (`Dict`, *optional*):
             A dictionary indicating size conversions for images.
     """
 
@@ -65,8 +65,8 @@ class AriaProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer: Union[AutoTokenizer, str] = None,
-        chat_template: str = None,
-        size_conversion: Optional[Dict] = None,
+        chat_template: Optional[str] = None,
+        size_conversion: Optional[Dict[Union[float, int], int]] = None,
     ):
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
