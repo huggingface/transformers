@@ -646,8 +646,8 @@ class MolmoTextDecoderLayer(nn.Module):
         self.self_attn = MOLMO_TEXT_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         self.mlp = MolmoTextMLP(config)
-        self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,

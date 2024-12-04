@@ -42,6 +42,7 @@ from ..clip.modeling_clip import (
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
+from ..cohere.configuration_cohere import CohereConfig
 from ..cohere.modeling_cohere import (
     CohereAttention,
     CohereFlashAttention2,
@@ -50,7 +51,6 @@ from ..cohere.modeling_cohere import (
     CohereSdpaAttention,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
-from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import (
     Qwen2DecoderLayer,
     Qwen2ForCausalLM,
@@ -237,7 +237,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
 
 
-class MolmoTextConfig(Qwen2Config):
+class MolmoTextConfig(CohereConfig):
     r"""
     This is the configuration class to store the configuration of a [`MolmoModel`]. It is used to instantiate a
     Molmo model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -275,8 +275,8 @@ class MolmoTextConfig(Qwen2Config):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -321,12 +321,16 @@ class MolmoTextConfig(Qwen2Config):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -363,14 +367,16 @@ class MolmoTextConfig(Qwen2Config):
         hidden_act="swiglu",
         max_position_embeddings=4096,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        layer_norm_eps=1e-6,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=1000000.0,
         rope_scaling=None,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=28,
         attention_dropout=0.0,
         attention_bias=False,
         use_qk_norm=False,
@@ -383,7 +389,10 @@ class MolmoTextConfig(Qwen2Config):
         self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
         self.use_attention_layer_norm = use_attention_layer_norm
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window if use_sliding_window else None
         super().__init__(**kwargs)
+        del self.logit_scale
 
 
 class MolmoConfig(PretrainedConfig):
@@ -582,8 +591,8 @@ class MolmoTextFlashAttention2(MolmoTextAttention, CohereFlashAttention2):
 class MolmoTextDecoderLayer(Qwen2DecoderLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = MolmoTextLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
 
 class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
