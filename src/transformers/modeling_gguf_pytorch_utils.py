@@ -288,15 +288,16 @@ def get_gguf_hf_weights_map(hf_model):
     return gguf_to_hf_name_map
 
 
-def convert_gguf_state_dict_to_hf(gguf_state_dict, model):
+def convert_gguf_state_dict_to_hf(gguf_state_dict: Dict[str, torch.Tensor], model):
     gguf_to_hf_name_map = get_gguf_hf_weights_map(model)
-    new_state_dict = {}
-    for gguf_name, value in gguf_state_dict.items():
-        new_state_dict[gguf_to_hf_name_map[gguf_name]] = value
+    new_state_dict: Dict[str, torch.Tensor] = {}
+    for gguf_name in gguf_state_dict:
+        hf_name = gguf_to_hf_name_map[gguf_name]
+        new_state_dict[hf_name] = gguf_state_dict.pop(gguf_name)
     return new_state_dict
 
 
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, dummy_model=None):
+def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
@@ -412,7 +413,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, dummy_model
             )
 
     if return_tensors:
-        tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
+        # tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
+        tensor_key_mapping = get_gguf_hf_weights_map(model_to_load)
         config = parsed_parameters.get("config", {})
 
         ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
@@ -433,12 +435,13 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, dummy_model
             name = result.name
             bid = result.metadata.get("bid")
 
-            if name is None:
+            if name not in tensor_key_mapping:
                 continue
 
-            for tensor_name in tensor_key_mapping:
-                if tensor_name.format(bid=bid) in name:
-                    name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
+            name = tensor_key_mapping[name]
+            # for tensor_name in tensor_key_mapping:
+            #     if tensor_name.format(bid=bid) in name:
+            #         name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
 
             # Use copy to avoid errors with numpy and pytorch
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
