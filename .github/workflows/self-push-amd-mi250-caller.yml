@@ -19,7 +19,7 @@ jobs:
   run_amd_ci:
     name: AMD mi250
     if: (cancelled() != true) && ((github.event_name == 'workflow_run') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_push_ci_caller')))
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_push.yaml@main
     with:
       gpu_flavor: mi250
     secrets: inherit
