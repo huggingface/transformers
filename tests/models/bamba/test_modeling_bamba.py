@@ -20,7 +20,7 @@ import math
 
 from parameterized import parameterized
 
-from transformers import BambaConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, BambaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
@@ -397,4 +397,64 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @unittest.skip(reason="Bamba has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
+        pass
+
+@require_torch
+class BambaModelIntegrationTest(unittest.TestCase):
+    model = None
+    tokenizer = None
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        model_id = "ibm-fms/Bamba-9.8b-1.8T-hf"
+        cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
+    # @slow
+    def test_simple_generate(self):
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
+        EXPECTED_TEXTS = {
+            # 7: "",
+            8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing great. I am a 20",
+            #  9: """,
+        }
+
+        self.model.to(torch_device)
+
+        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
+            "input_ids"
+        ].to(torch_device)
+        out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(out[0, :])
+        self.assertEqual(output_sentence, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
+
+        # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
+        if self.cuda_compute_capability_major_version == 8:
+            with torch.no_grad():
+                logits = self.model(input_ids=input_ids, num_logits_to_keep=40).logits
+
+            EXPECTED_LOGITS_NO_GRAD = torch.tensor(
+                [
+                    192., 185., 185., 183., 183., 186., 184., 183.,
+                    183., 188., 184., 185., 185., 185., 188., 184.,
+                    186., 185., 185., 185., 185., 184., 184., 184.,
+                    184., 184., 187., 186., 185., 184., 185., 187.,
+                    188., 186., 186., 187., 186., 185., 186., 187.
+                ]
+                , dtype=torch.bfloat16)  # fmt: skip
+
+            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
+
+    # implement this
+    @slow
+    def test_simple_batched_generate_with_padding(self):
         pass

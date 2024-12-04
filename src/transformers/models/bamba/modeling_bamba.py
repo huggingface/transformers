@@ -1580,13 +1580,13 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         >>> model = BambaForCausalLM.from_pretrained("...")
         >>> tokenizer = AutoTokenizer.from_pretrained("...")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> prompt = "Hey, how have you been doing?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ""Hey, how have you been doing? I'm doing well, I'm just working a lot. I'm just trying to get my name out"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
