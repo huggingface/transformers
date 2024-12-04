@@ -1413,10 +1413,10 @@ else:
     _import_structure["models.aria"].extend(
         [
             "AriaForConditionalGeneration",
-            "AriaTextPreTrainedModel",
             "AriaPreTrainedModel",
             "AriaTextForCausalLM",
             "AriaTextModel",
+            "AriaTextPreTrainedModel",
         ]
     )
     _import_structure["models.audio_spectrogram_transformer"].extend(
