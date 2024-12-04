@@ -18,9 +18,8 @@ import os
 import tempfile
 import unittest
 import warnings
-from pathlib import Path
 
-from huggingface_hub import HfFolder, create_pull_request, create_repo, delete_repo
+from huggingface_hub import HfFolder, create_pull_request
 from parameterized import parameterized
 
 from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
@@ -57,7 +56,7 @@ from transformers.generation import (
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
     WatermarkLogitsProcessor,
 )
-from transformers.testing_utils import TemporaryHubRepo, TOKEN, is_staging_test, torch_device
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, torch_device
 
 
 class GenerationConfigTest(unittest.TestCase):

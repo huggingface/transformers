@@ -42,8 +42,8 @@ from unittest.mock import patch
 
 import huggingface_hub.utils
 import urllib3
-
 from huggingface_hub import delete_repo
+
 from transformers import logging as transformers_logging
 
 from .integrations import (
