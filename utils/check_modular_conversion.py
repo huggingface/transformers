@@ -4,6 +4,8 @@ import glob
 import logging
 from io import StringIO
 
+from create_dependency_mapping import find_priority_list
+
 # Console for rich printing
 from modular_model_converter import convert_modular_file
 from rich.console import Console
@@ -69,7 +71,7 @@ if __name__ == "__main__":
     if args.files == ["all"]:
         args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
     non_matching_files = 0
-    for modular_file_path in args.files:
+    for modular_file_path in find_priority_list(args.files):
         non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)
 
     if non_matching_files and not args.fix_and_overwrite:

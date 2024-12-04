@@ -547,7 +547,8 @@ class Message:
                     items = re.findall(pattern, line)
                 elif "tests/models/" in line:
                     model = line.split("/")[2]
-                    new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
+                    if model not in new_failed_tests:
+                        new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
                     for url, device in items:
                         new_failed_tests[model][f"{device}-gpu"].append(line)
             file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
@@ -1075,6 +1076,11 @@ if __name__ == "__main__":
 
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
+                        # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
+                        # `stacktraces.pop` below.
+                        # See `run_test_using_subprocess` in `src/transformers/testing_utils.py`
+                        if " - Failed: (subprocess)" in line:
+                            continue
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
@@ -1185,6 +1191,11 @@ if __name__ == "__main__":
             if failed:
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
+                        # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
+                        # `stacktraces.pop` below.
+                        # See `run_test_using_subprocess` in `src/transformers/testing_utils.py`
+                        if " - Failed: (subprocess)" in line:
+                            continue
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 

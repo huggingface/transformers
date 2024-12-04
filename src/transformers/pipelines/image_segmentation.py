@@ -1,4 +1,3 @@
-import warnings
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -91,9 +90,6 @@ class ImageSegmentationPipeline(Pipeline):
         if "overlap_mask_area_threshold" in kwargs:
             postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
         if "timeout" in kwargs:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_kwargs["timeout"] = kwargs["timeout"]
 
         return preprocess_kwargs, {}, postprocess_kwargs
@@ -122,6 +118,9 @@ class ImageSegmentationPipeline(Pipeline):
                 Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.5):
                 Mask overlap threshold to eliminate small, disconnected segments.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
