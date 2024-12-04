@@ -189,7 +189,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if (
             is_sklearn_available()
             and self.assistant_model.generation_config.assistant_confidence_threshold
-            and not isinstance(self, AssistedCandidateGeneratorDifferentTokenizers)
+            and type(self) is AssistedCandidateGenerator
         ):
             self.probs = []
             self.matches = []
@@ -244,7 +244,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
-        if is_sklearn_available() and self.assistant_model.generation_config.assistant_confidence_threshold:
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and type(self) is AssistedCandidateGenerator
+        ):
             scores_tensor = torch.cat(assistant_output.scores, dim=0)
             scores_softmax = torch.softmax(scores_tensor, dim=-1)
             ids = assistant_output.sequences[-1, -len(assistant_output.scores) :]
@@ -287,7 +291,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if (
             is_sklearn_available()
             and self.assistant_model.generation_config.assistant_confidence_threshold
-            and not isinstance(self, AssistedCandidateGeneratorDifferentTokenizers)
+            and type(self) is AssistedCandidateGenerator
         ):
             # update self.matches
             self.matches.extend([1] * num_matches)
