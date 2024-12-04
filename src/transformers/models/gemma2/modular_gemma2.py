@@ -213,14 +213,7 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
     pass
 
 
-def eager_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    **_kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -246,15 +239,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def flash_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    target_dtype: torch.dtype = torch.float16,
-    **_kwargs,
-) -> Tuple[torch.Tensor, None]:
+def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
     if mask is not None:
         seq_len = mask.shape[1]
         query = query[:, :, :seq_len]
@@ -295,15 +280,7 @@ def flash_attention_forward(
     return attn_output, None
 
 
-def flex_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    output_attentions: bool = False,
-    **_kwargs,
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
         score = soft_cap * torch.tanh(score / soft_cap)
@@ -329,14 +306,7 @@ def flex_attention_forward(
     return attn_output, attn_weights
 
 
-def sdpa_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    **_kwargs,
-) -> Tuple[torch.Tensor, None]:
+def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
 
