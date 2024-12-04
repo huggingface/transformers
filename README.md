@@ -310,7 +310,8 @@ a) PyTorch CUDA Compatibility: ( https://pytorch.org/get-started/locally)
 b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)
 
 **Verify GPU availability:**
-```nvidia-smi
+```
+nvidia-smi
 ```
 ## Model architectures
 
