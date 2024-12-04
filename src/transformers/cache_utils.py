@@ -1140,13 +1140,13 @@ class StaticCache(Cache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
-        if max_batch_size is not None:
+        if batch_size is not None:
             logger.warning_once(
-                f"The 'max_batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
-                "v4.46. Use the more precisely named 'batch_size' argument instead."
+                f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
+                "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
 
-        self.batch_size = batch_size or max_batch_size
+        self.max_batch_size = batch_size or max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
@@ -1253,6 +1253,14 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+    @property
+    def batch_size(self):
+        logger.warning_once(
+            f"The 'batch_size' attribute of {self.__class__.__name__} is deprecated and will be removed in "
+            "v4.49. Use the more precisely named 'self.max_batch_size' attribute instead."
+        )
+        return self.max_batch_size
 
 
 class SlidingWindowCache(StaticCache):
@@ -1626,10 +1634,10 @@ class HybridCache(Cache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
-        if max_batch_size is not None:
+        if batch_size is not None:
             logger.warning_once(
-                f"The 'max_batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
-                "v4.46. Use the more precisely named 'batch_size' argument instead."
+                f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
+                "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
@@ -1638,7 +1646,7 @@ class HybridCache(Cache):
                 "config and it's not set to None."
             )
         self.max_cache_len = max_cache_len
-        self.batch_size = batch_size or max_batch_size
+        self.max_batch_size = batch_size or max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
@@ -1758,6 +1766,14 @@ class HybridCache(Cache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
 
+    @property
+    def batch_size(self):
+        logger.warning_once(
+            f"The 'batch_size' attribute of {self.__class__.__name__} is deprecated and will be removed in "
+            "v4.49. Use the more precisely named 'self.max_batch_size' attribute instead."
+        )
+        return self.max_batch_size
+
 
 class MambaCache:
     """
@@ -1815,20 +1831,20 @@ class MambaCache:
         device: Optional[Union[torch.device, str]] = None,
         max_batch_size: Optional[int] = None,
     ):
-        if max_batch_size is not None:
+        if batch_size is not None:
             logger.warning_once(
-                f"The 'max_batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
-                "v4.46. Use the more precisely named 'batch_size' argument instead."
+                f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
+                "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
         self.dtype = dtype
-        self.batch_size = batch_size or max_batch_size
+        self.max_batch_size = batch_size or max_batch_size
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
 
         self.conv_states: torch.Tensor = torch.zeros(
             config.num_hidden_layers,
-            self.batch_size,
+            self.max_batch_size,
             self.intermediate_size,
             self.conv_kernel_size,
             device=device,
@@ -1836,7 +1852,7 @@ class MambaCache:
         )
         self.ssm_states: torch.Tensor = torch.zeros(
             config.num_hidden_layers,
-            self.batch_size,
+            self.max_batch_size,
             self.intermediate_size,
             self.ssm_state_size,
             device=device,
@@ -1866,6 +1882,14 @@ class MambaCache:
         self.conv_states.zero_()
         self.ssm_states.zero_()
 
+    @property
+    def batch_size(self):
+        logger.warning_once(
+            f"The 'batch_size' attribute of {self.__class__.__name__} is deprecated and will be removed in "
+            "v4.49. Use the more precisely named 'self.max_batch_size' attribute instead."
+        )
+        return self.max_batch_size
+
 
 class OffloadedStaticCache(StaticCache):
     """
@@ -1887,6 +1911,9 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
+        layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*):
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Attributes:
         key_cache (`List[torch.Tensor]`):
@@ -1933,10 +1960,11 @@ class OffloadedStaticCache(StaticCache):
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
-        self.device = torch.device(device)
+        self.device = torch.device(device) if layer_device_map is None else layer_device_map[0]
         self.offload_device = torch.device(offload_device)
         self.dtype = dtype if dtype is not None else torch.float32
 
@@ -1944,7 +1972,9 @@ class OffloadedStaticCache(StaticCache):
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
 
         num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+            config.num_attention_heads
+            if getattr(config, "num_key_value_heads", None) is None
+            else config.num_key_value_heads
         )
 
         cache_shape = (max_batch_size, num_key_value_heads, self.max_cache_len, head_dim)

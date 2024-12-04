@@ -360,8 +360,7 @@ class Trainer:
             inner layers, dropout probabilities etc).
         compute_loss_func (`Callable`, *optional*):
             A function that accepts the raw model outputs, labels, and the number of items in the entire accumulated
-            batch (batch_size * gradient_accumulation_steps) and returns the loss. For example, here is one using
-            the loss function from `transformers`
+            batch (batch_size * gradient_accumulation_steps) and returns the loss. For example, see the default [loss function](https://github.com/huggingface/transformers/blob/052e652d6d53c2b26ffde87e039b723949a53493/src/transformers/trainer.py#L3618) used by [`Trainer`].
         compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
             a dictionary string to metric values. *Note* When passing TrainingArgs with `batch_eval_metrics` set to
@@ -540,6 +539,10 @@ class Trainer:
             getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
         )
 
+        _is_model_quantized_and_qat_trainable = getattr(model, "hf_quantizer", None) is not None and getattr(
+            model.hf_quantizer, "is_qat_trainable", False
+        )
+
         # Filter out quantized + compiled models
         if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
             raise ValueError(
@@ -547,7 +550,7 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if _is_quantized_and_base_model and not _is_peft_model(model):
+        if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_qat_trainable:
             raise ValueError(
                 "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
@@ -2109,7 +2112,7 @@ class Trainer:
                 FutureWarning,
             )
         if len(kwargs) > 0:
-            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
+            raise TypeError(f"train() got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
         self._train_batch_size = self.args.train_batch_size
