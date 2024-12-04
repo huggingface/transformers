@@ -20,11 +20,7 @@ import regex as re
 import torch
 
 from transformers import RelationDetrConfig, RelationDetrForObjectDetection, RelationDetrImageProcessor
-from transformers.utils import logging
 
-
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
 
 # fmt: off
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
@@ -205,7 +201,7 @@ def convert_relation_detr_checkpoint(model_name, pytorch_dump_folder_path, push_
         "relation_detr_focal_l_o365_4e_coco_2x": "https://github.com/xiuqhou/Relation-DETR/releases/download/v1.0.0/relation_detr_focalnet_large_lrf_fl4_1200_2000_o365_4e-coco_2x.pth",
     }
 
-    logger.info(f"Converting model {model_name}...")
+    print(f"Converting model {model_name}...")
     state_dict = torch.hub.load_state_dict_from_url(model_name_to_checkpoint_url[model_name], map_location="cpu")
 
     # obtain label information from original state_dict
@@ -232,7 +228,7 @@ def convert_relation_detr_checkpoint(model_name, pytorch_dump_folder_path, push_
     # finally, create HuggingFace model and load state dict
     model = RelationDetrForObjectDetection(config)
     model.load_state_dict(state_dict, strict=True)
-    logger.info("Checkpoint loaded successfully.")
+    print("Checkpoint loaded successfully.")
 
     # load image processor
     image_processor = RelationDetrImageProcessor(size_divisor=32)
@@ -246,7 +242,7 @@ def convert_relation_detr_checkpoint(model_name, pytorch_dump_folder_path, push_
 
     if push_to_hub:
         # Upload model, image processor and config to the hub
-        logger.info("Uploading PyTorch model and image processor to the hub...")
+        print("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
             repo_id=repo_id,
             commit_message="Add config from convert_relation_detr_original_pytorch_checkpoint_to_pytorch.py",
