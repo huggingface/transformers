@@ -49,22 +49,29 @@ class GptqHfQuantizer(HfQuantizer):
         self.optimum_quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
+        if not is_optimum_available():
+            raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
+        if is_auto_gptq_available() and is_gptqmodel_available():
+            logger.warning("Detected gptqmodel and auto-gptq, will use gptqmodel, auto-gptq will be deprecated in the future.")
+
         gptq_supports_cpu = (
             is_auto_gptq_available()
             and version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
         ) or is_gptqmodel_available()
         if not gptq_supports_cpu and not torch.cuda.is_available():
             raise RuntimeError("GPU is required to quantize or run quantize model.")
-        elif not (is_optimum_available() and (is_auto_gptq_available() or is_gptqmodel_available())):
+        elif not (is_auto_gptq_available() or is_gptqmodel_available()):
             raise ImportError(
-                "Loading a GPTQ quantized model requires optimum (`pip install optimum`) and auto-gptq or gptqmodel library (`pip install auto-gptq` or `pip install gptqmodel`)"
+                "Loading a GPTQ quantized model requires optimum (`pip install optimum`) and auto-gptq or gptqmodel library (`pip install auto-gptq` or `pip install gptqmodel`). Please notice that auto-gptq will be deprecated in the future."
             )
         elif is_auto_gptq_available() and version.parse(importlib.metadata.version("auto_gptq")) < version.parse(
             "0.4.2"
         ):
             raise ImportError(
-                "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel`"
+                "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel`. Please notice that auto-gptq will be deprecated in the future."
             )
+        elif is_gptqmodel_available() and (version.parse(importlib.metadata.version("gptqmodel")) <= version.parse("1.3.0") or version.parse(importlib.metadata.version("optimum")) < version.parse("1.24.0")):
+            raise ImportError("The gptqmodel version should be > 1.3.0, optimum version should >= 1.24.0")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
