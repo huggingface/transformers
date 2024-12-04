@@ -166,7 +166,7 @@ class GgufQuantizationTests(unittest.TestCase):
     def test_q6_k_fp16(self):
         q6_k_gguf_model_id = self.gguf_filename.format(quant_type=QuantType.Q6_K.name)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=q6_k_gguf_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.gguf_model_id, gguf_file=q6_k_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(
             self.gguf_model_id, gguf_file=q6_k_gguf_model_id, torch_dtype=torch.float16
         ).to(torch_device)
