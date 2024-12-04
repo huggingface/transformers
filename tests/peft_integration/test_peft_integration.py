@@ -692,10 +692,12 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             dataset.append({"text": row, "label": i % 2})
         ds_train = Dataset.from_list(dataset)
         ds_valid = ds_train
-        datasets = DatasetDict({
-            "train": ds_train,
-            "val": ds_valid,
-        })
+        datasets = DatasetDict(
+            {
+                "train": ds_train,
+                "val": ds_valid,
+            }
+        )
 
         # tokenizer for peft-internal-testing/tiny-OPTForCausalLM-lora cannot be loaded, thus using
         # hf-internal-testing/tiny-random-OPTForCausalLM
