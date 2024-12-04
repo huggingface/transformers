@@ -773,7 +773,7 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
-    "models.textnet": ["TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "TextNetConfig"],
+    "models.textnet": ["TextNetConfig"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
@@ -3496,7 +3496,6 @@ else:
     )
     _import_structure["models.textnet"].extend(
         [
-            "TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TextNetBackbone",
             "TextNetForImageClassification",
             "TextNetModel",
@@ -5707,10 +5706,7 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
-    from .models.textnet import (
-        TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TextNetConfig,
-    )
+    from .models.textnet import TextNetConfig
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
@@ -7997,7 +7993,6 @@ if TYPE_CHECKING:
             load_tf_weights_in_tapas,
         )
         from .models.textnet import (
-            TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TextNetBackbone,
             TextNetForImageClassification,
             TextNetModel,

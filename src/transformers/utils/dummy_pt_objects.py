@@ -8924,9 +8924,6 @@ def load_tf_weights_in_tapas(*args, **kwargs):
     requires_backends(load_tf_weights_in_tapas, ["torch"])
 
 
-TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class TextNetBackbone(metaclass=DummyObject):
     _backends = ["torch"]
 
