@@ -1360,11 +1360,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         if "max_size" in kwargs:
-            logger.error(
-                "The `max_size` argument is deprecated, use"
-                " `size['longest_edge']` instead."
-            )
-            size = kwargs.pop("max_size")
+            logger.error("The `max_size` argument is deprecated, use" " `size['longest_edge']` instead.")
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
