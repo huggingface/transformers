@@ -630,7 +630,7 @@ MOBILEVITV2_START_DOCSTRING = r"""
 
 MOBILEVITV2_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileViTImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):

@@ -49,31 +49,31 @@ class VitsModelOutput(ModelOutput):
     Describes the outputs for the VITS model, with potential hidden states and attentions.
 
     Args:
-        waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        waveform (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             The final audio waveform predicted by the model.
-        sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
+        sequence_lengths  (`torch.Tensor` of shape `(batch_size,)`):
             The length in samples of each element in the `waveform` batch.
-        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+        spectrogram (`torch.Tensor` of shape `(batch_size, sequence_length, num_bins)`):
             The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
             GAN decoder model to obtain the final audio waveform.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    waveform: torch.FloatTensor = None
-    sequence_lengths: torch.FloatTensor = None
-    spectrogram: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    waveform: torch.Tensor = None
+    sequence_lengths: torch.Tensor = None
+    spectrogram: Optional[Tuple[torch.Tensor]] = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -82,30 +82,30 @@ class VitsTextEncoderOutput(ModelOutput):
     Describes the outputs for the VITS text encoder model, with potential hidden states and attentions.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        prior_means (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             The predicted mean values of the prior distribution for the latent text variables.
-        prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        prior_log_variances (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             The predicted log-variance values of the prior distribution for the latent text variables.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    prior_means: torch.FloatTensor = None
-    prior_log_variances: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor = None
+    prior_means: torch.Tensor = None
+    prior_log_variances: torch.Tensor = None
+    hidden_states: Optional[Tuple[torch.Tensor]] = None
+    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 @torch.jit.script
@@ -133,15 +133,15 @@ def _unconstrained_rational_quadratic_spline(
     `tail_bound`, the transform behaves as an identity function.
 
     Args:
-        inputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        inputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Second half of the hidden-states input to the Vits convolutional flow module.
-        unnormalized_widths (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_widths (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             First `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_heights (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_heights (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Second `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_derivatives (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_derivatives (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Third `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
         reverse (`bool`, *optional*, defaults to `False`):
@@ -156,10 +156,10 @@ def _unconstrained_rational_quadratic_spline(
         min_derivative (`float`, *optional*, defaults to 1e-3):
             Minimum bin value across the derivatives for the piecewise rational quadratic function.
     Returns:
-        outputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        outputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Hidden-states as transformed by the piecewise rational quadratic function with the `tail_bound` limits
             applied.
-        log_abs_det (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        log_abs_det (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Logarithm of the absolute value of the determinants corresponding to the `outputs` with the `tail_bound`
             limits applied.
     """
@@ -207,15 +207,15 @@ def _rational_quadratic_spline(
     function `_unconstrained_rational_quadratic_spline`, the function behaves the same across the `tail_bound`.
 
     Args:
-        inputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        inputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Second half of the hidden-states input to the Vits convolutional flow module.
-        unnormalized_widths (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_widths (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             First `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_heights (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_heights (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Second `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_derivatives (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_derivatives (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Third `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
         reverse (`bool`):
@@ -230,9 +230,9 @@ def _rational_quadratic_spline(
         min_derivative (`float`):
             Minimum bin value across the derivatives for the piecewise rational quadratic function.
     Returns:
-        outputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        outputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Hidden-states as transformed by the piecewise rational quadratic function.
-        log_abs_det (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        log_abs_det (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Logarithm of the absolute value of the determinants corresponding to the `outputs`.
     """
     upper_bound = tail_bound
@@ -541,20 +541,18 @@ class VitsHifiGan(nn.Module):
         for layer in self.resblocks:
             layer.remove_weight_norm()
 
-    def forward(
-        self, spectrogram: torch.FloatTensor, global_conditioning: Optional[torch.FloatTensor] = None
-    ) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.Tensor, global_conditioning: Optional[torch.Tensor] = None) -> torch.Tensor:
         r"""
         Converts a spectrogram into a speech waveform.
 
         Args:
-            spectrogram (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`):
+            spectrogram (`torch.Tensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`):
                 Tensor containing the spectrograms.
-            global_conditioning (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_size, 1)`, *optional*):
+            global_conditioning (`torch.Tensor` of shape `(batch_size, config.speaker_embedding_size, 1)`, *optional*):
                 Tensor containing speaker embeddings, for multispeaker models.
 
         Returns:
-            `torch.FloatTensor`: Tensor of shape shape `(batch_size, 1, num_frames)` containing the speech waveform.
+            `torch.Tensor`: Tensor of shape shape `(batch_size, 1, num_frames)` containing the speech waveform.
         """
         hidden_states = self.conv_pre(spectrogram)
 
@@ -1086,7 +1084,7 @@ class VitsEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        padding_mask: torch.FloatTensor,
+        padding_mask: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
@@ -1123,8 +1121,8 @@ class VitsEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        padding_mask: torch.FloatTensor,
+        hidden_states: torch.Tensor,
+        padding_mask: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1211,7 +1209,7 @@ class VitsTextEncoder(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        padding_mask: torch.FloatTensor,
+        padding_mask: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1369,10 +1367,10 @@ class VitsModel(VitsPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation.
 

@@ -1564,7 +1564,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 if float_answer is not None:
                     assert (
                         shape_list(labels)[0] == shape_list(float_answer)[0]
-                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    ), "Make sure the answers are a Tensor of shape (batch_size,)"
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,

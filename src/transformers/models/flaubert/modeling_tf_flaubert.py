@@ -151,7 +151,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             also use *attention_mask* for the same result (see above), kept here for compatibility Indices selected in
             `[0, ..., input_ids.size(-1)]`:
         cache (`Dict[str, tf.Tensor]`, *optional*):
-            Dictionary string to `tf.FloatTensor` that contains precomputed hidden states (key and values in the
+            Dictionary string to `tf.Tensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
 

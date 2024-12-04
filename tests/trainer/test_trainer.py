@@ -324,7 +324,7 @@ class AlmostAccuracyBatched:
             labels = labels[0]
         batch_size = len(predictions)
         true = torch.abs(predictions - labels) <= self.thresh
-        acc = true.type(torch.FloatTensor).mean().item()
+        acc = true.type(torch.Tensor).mean().item()
         self.batch_acc.extend([acc] * batch_size)
         if compute_result:
             result = {"accuracy": np.mean(self.batch_acc).item()}
@@ -649,7 +649,7 @@ class TrainerIntegrationCommon:
         keys = list(state_dict.keys())
 
         shard_files = [
-            shard_name.replace(f".{extension}", f"-{idx+1:05d}-of-{len(keys):05d}.{extension}")
+            shard_name.replace(f".{extension}", f"-{idx + 1:05d}-of-{len(keys):05d}.{extension}")
             for idx in range(len(keys))
         ]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}

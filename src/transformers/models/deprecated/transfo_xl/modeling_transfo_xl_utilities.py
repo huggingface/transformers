@@ -51,7 +51,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         if div_val == 1:
             for i in range(len(self.cutoffs)):
                 if d_proj != d_embed:
-                    self.out_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_embed)))
+                    self.out_projs.append(nn.Parameter(torch.Tensor(d_proj, d_embed)))
                 else:
                     self.out_projs.append(None)
 
@@ -61,7 +61,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
                 d_emb_i = d_embed // (div_val**i)
 
-                self.out_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
+                self.out_projs.append(nn.Parameter(torch.Tensor(d_proj, d_emb_i)))
 
                 self.out_layers.append(nn.Linear(d_emb_i, r_idx - l_idx))
 

@@ -801,7 +801,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         numeric_values_scale = inputs["numeric_values_scale"].to(torch_device)
 
         # the answer should be prepared by the user
-        float_answer = torch.FloatTensor(float_answer).to(torch_device)
+        float_answer = torch.Tensor(float_answer).to(torch_device)
 
         # forward pass to get loss + logits:
         with torch.no_grad():

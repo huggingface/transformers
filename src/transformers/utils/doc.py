@@ -60,8 +60,8 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        [`{full_output_type}`] or `tuple(torch.FloatTensor)`: A [`{full_output_type}`] or a tuple of
-        `torch.FloatTensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
+        [`{full_output_type}`] or `tuple(torch.Tensor)`: A [`{full_output_type}`] or a tuple of
+        `torch.Tensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
         elements depending on the configuration ([`{config_class}`]) and inputs.
 
 """

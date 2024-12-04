@@ -285,10 +285,10 @@ Here's an example of a tuple return, comprising several objects:
 
 ```python
     Returns:
-        `tuple(torch.FloatTensor)` comprising various elements depending on the configuration ([`BertConfig`]) and inputs:
-        - ** loss** (*optional*, returned when `masked_lm_labels` is provided) `torch.FloatTensor` of shape `(1,)` --
+        `tuple(torch.Tensor)` comprising various elements depending on the configuration ([`BertConfig`]) and inputs:
+        - ** loss** (*optional*, returned when `masked_lm_labels` is provided) `torch.Tensor` of shape `(1,)` --
           Total loss is the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
-        - **prediction_scores** (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`) --
+        - **prediction_scores** (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`) --
           Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 ```
 

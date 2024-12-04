@@ -456,7 +456,7 @@ GLPN_START_DOCSTRING = r"""
 GLPN_INPUTS_DOCSTRING = r"""
 
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`GLPNImageProcessor.__call__`] for details.
 
@@ -506,7 +506,7 @@ class GLPNModel(GLPNPreTrainedModel):
     # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -691,14 +691,14 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
     @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.
 
         Returns:

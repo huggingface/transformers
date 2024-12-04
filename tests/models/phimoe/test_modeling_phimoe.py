@@ -60,7 +60,7 @@ if is_torch_available():
         def forward(
             self,
             input_ids: torch.LongTensor = None,
-        ) -> torch.FloatTensor:
+        ) -> torch.Tensor:
             return self.model.forward(
                 input_ids=input_ids,
                 use_cache=True,

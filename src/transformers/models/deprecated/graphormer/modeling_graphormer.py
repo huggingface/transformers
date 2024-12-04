@@ -803,7 +803,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
         out_degree: torch.LongTensor,
         spatial_pos: torch.LongTensor,
         attn_edge_type: torch.LongTensor,
-        perturb: Optional[torch.FloatTensor] = None,
+        perturb: Optional[torch.Tensor] = None,
         masked_tokens: None = None,
         return_dict: Optional[bool] = None,
         **unused,

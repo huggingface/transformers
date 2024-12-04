@@ -149,7 +149,10 @@ class RTDetrResNetBasicLayer(nn.Module):
         if in_channels != out_channels:
             self.shortcut = (
                 nn.Sequential(
-                    *[nn.AvgPool2d(2, 2, 0, ceil_mode=True), RTDetrResNetShortCut(in_channels, out_channels, stride=1)]
+                    *[
+                        nn.AvgPool2d(2, 2, 0, ceil_mode=True),
+                        RTDetrResNetShortCut(in_channels, out_channels, stride=1),
+                    ]
                 )
                 if should_apply_shortcut
                 else nn.Identity()
@@ -349,7 +352,7 @@ RTDETR_RESNET_START_DOCSTRING = r"""
 
 RTDETR_RESNET_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`RTDetrImageProcessor.__call__`] for details.
 

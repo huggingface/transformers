@@ -163,7 +163,10 @@ def _compute_mask_indices(
             dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx,
+            ]
         )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
@@ -479,11 +482,11 @@ class WavLMAttention(nn.Module):
 
     def torch_multi_head_self_attention(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         attention_mask: Union[torch.LongTensor, torch.BoolTensor],
-        gated_position_bias: torch.FloatTensor,
+        gated_position_bias: torch.Tensor,
         output_attentions: bool,
-    ) -> (torch.FloatTensor, torch.FloatTensor):
+    ) -> (torch.Tensor, torch.Tensor):
         """simple wrapper around torch's multi_head_attention_forward function"""
         # self-attention assumes q = k = v
         query = key = value = hidden_states.transpose(0, 1)
@@ -532,7 +535,7 @@ class WavLMAttention(nn.Module):
 
         return attn_output, attn_weights
 
-    def compute_bias(self, query_length: int, key_length: int) -> torch.FloatTensor:
+    def compute_bias(self, query_length: int, key_length: int) -> torch.Tensor:
         context_position = torch.arange(query_length, dtype=torch.long)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position
@@ -542,7 +545,7 @@ class WavLMAttention(nn.Module):
         values = values.permute([2, 0, 1])
         return values
 
-    def _relative_positions_bucket(self, relative_positions: torch.FloatTensor) -> torch.FloatTensor:
+    def _relative_positions_bucket(self, relative_positions: torch.Tensor) -> torch.Tensor:
         num_buckets = self.num_buckets // 2
 
         relative_buckets = (relative_positions > 0).to(torch.long) * num_buckets
@@ -851,7 +854,7 @@ class WavLMGumbelVectorQuantizer(nn.Module):
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(
-            torch.FloatTensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
+            torch.Tensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
         )
         self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
 
@@ -1062,11 +1065,11 @@ WAVLM_START_DOCSTRING = r"""
 
 WAVLM_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
+            conversion into a tensor of type `torch.Tensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1144,8 +1147,8 @@ class WavLMModel(WavLMPreTrainedModel):
 
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
@@ -1200,7 +1203,7 @@ class WavLMModel(WavLMPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        mask_time_indices: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

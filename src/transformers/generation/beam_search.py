@@ -33,7 +33,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        next_scores (`torch.FloatTensor` of shape `(batch_size, 2 * num_beams)`):
+        next_scores (`torch.Tensor` of shape `(batch_size, 2 * num_beams)`):
             Current scores of the top `2 * num_beams` non-finished beam hypotheses.
         next_tokens (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
             `input_ids` of the tokens corresponding to the top `2 * num_beams` non-finished beam hypotheses.
@@ -51,11 +51,11 @@ PROCESS_INPUTS_DOCSTRING = r"""
     Return:
         `UserDict`: A dictionary composed of the fields as defined above:
 
-            - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of all
+            - **next_beam_scores** (`torch.Tensor` of shape `(batch_size * num_beams)`) -- Updated scores of all
               non-finished beams.
-            - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
+            - **next_beam_tokens** (`torch.Tensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
               to the non-finished beam_hypotheses.
-            - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
+            - **next_beam_indices** (`torch.Tensor` of shape `(batch_size * num_beams)`) -- Beam indices
               indicating to which beam the next tokens shall be added.
 
 """
@@ -69,11 +69,11 @@ FINALIZE_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        final_beam_scores (`torch.FloatTensor` of shape `(batch_size * num_beams)`):
+        final_beam_scores (`torch.Tensor` of shape `(batch_size * num_beams)`):
             The final scores of all non-finished beams.
-        final_beam_tokens (`torch.FloatTensor` of shape `(batch_size * num_beams)`):
+        final_beam_tokens (`torch.Tensor` of shape `(batch_size * num_beams)`):
             The last tokens to be added to the non-finished beam_hypotheses.
-        final_beam_indices (`torch.FloatTensor` of shape `(batch_size * num_beams)`):
+        final_beam_indices (`torch.Tensor` of shape `(batch_size * num_beams)`):
             The beam indices indicating to which beam the `final_beam_tokens` shall be added.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
@@ -99,7 +99,7 @@ class BeamScorer(ABC):
     def process(
         self,
         input_ids: torch.LongTensor,
-        next_scores: torch.FloatTensor,
+        next_scores: torch.Tensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         **kwargs,
@@ -111,7 +111,7 @@ class BeamScorer(ABC):
     def finalize(
         self,
         input_ids: torch.LongTensor,
-        next_scores: torch.FloatTensor,
+        next_scores: torch.Tensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         max_length: int,
@@ -215,7 +215,7 @@ class BeamSearchScorer(BeamScorer):
     def process(
         self,
         input_ids: torch.LongTensor,
-        next_scores: torch.FloatTensor,
+        next_scores: torch.Tensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
@@ -320,7 +320,7 @@ class BeamSearchScorer(BeamScorer):
     def finalize(
         self,
         input_ids: torch.LongTensor,
-        final_beam_scores: torch.FloatTensor,
+        final_beam_scores: torch.Tensor,
         final_beam_tokens: torch.LongTensor,
         final_beam_indices: torch.LongTensor,
         max_length: int,
@@ -513,10 +513,10 @@ class ConstrainedBeamSearchScorer(BeamScorer):
     def process(
         self,
         input_ids: torch.LongTensor,
-        next_scores: torch.FloatTensor,
+        next_scores: torch.Tensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
-        scores_for_all_vocab: torch.FloatTensor,
+        scores_for_all_vocab: torch.Tensor,
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
         eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
@@ -531,13 +531,13 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-            next_scores (`torch.FloatTensor` of shape `(batch_size, 2 * num_beams)`):
+            next_scores (`torch.Tensor` of shape `(batch_size, 2 * num_beams)`):
                 Current scores of the top `2 * num_beams` non-finished beam hypotheses.
             next_tokens (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
                 `input_ids` of the tokens corresponding to the top `2 * num_beams` non-finished beam hypotheses.
             next_indices (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
                 Beam indices indicating to which beam hypothesis the `next_tokens` correspond.
-            scores_for_all_vocab (`torch.FloatTensor` of shape `(batch_size * num_beams, sequence_length)`):
+            scores_for_all_vocab (`torch.Tensor` of shape `(batch_size * num_beams, sequence_length)`):
                 The scores of all tokens in the vocabulary for each of the beam hypotheses.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
@@ -550,14 +550,14 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         Return:
             `UserDict`: A dictionary composed of the fields as defined above:
 
-                - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of
+                - **next_beam_scores** (`torch.Tensor` of shape `(batch_size * num_beams)`) -- Updated scores of
                   all
                 non-finished beams.
 
-                - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be
+                - **next_beam_tokens** (`torch.Tensor` of shape `(batch_size * num_beams)`) -- Next tokens to be
                   added
                 to the non-finished beam_hypotheses.
-                - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
+                - **next_beam_indices** (`torch.Tensor` of shape `(batch_size * num_beams)`) -- Beam indices
                 indicating to which beam the next tokens shall be added.
         """
 
@@ -673,8 +673,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         self,
         batch_idx: int,
         input_ids: torch.LongTensor,
-        vocab_scores: torch.FloatTensor,
-        sent_beam_scores: torch.FloatTensor,
+        vocab_scores: torch.Tensor,
+        sent_beam_scores: torch.Tensor,
         sent_beam_tokens: torch.LongTensor,
         sent_beam_indices: torch.LongTensor,
         push_progress: bool = False,
@@ -813,7 +813,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
     def finalize(
         self,
         input_ids: torch.LongTensor,
-        final_beam_scores: torch.FloatTensor,
+        final_beam_scores: torch.Tensor,
         final_beam_tokens: torch.LongTensor,
         final_beam_indices: torch.LongTensor,
         max_length: int,

@@ -176,12 +176,12 @@ class LlavaNextVideoConfig(PretrainedConfig):
 @dataclass
 class LlavaNextVideoCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     """
-    video_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
+    video_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    video_hidden_states: Optional[torch.FloatTensor] = None
+    video_hidden_states: Optional[torch.Tensor] = None
 
 
 class LlavaNextVideoPooler(nn.Module):
@@ -226,7 +226,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int,
         vision_feature_select_strategy: str,
@@ -235,7 +235,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+            pixel_values (`torch.Tensor]` of shape `(batch_size, num_patches, channels, height, width)`)
                The tensors corresponding to the input images.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
@@ -276,13 +276,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         return image_features
 
     def get_video_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layer: int, vision_feature_select_strategy: str
+        self, pixel_values: torch.Tensor, vision_feature_layer: int, vision_feature_select_strategy: str
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
 
         Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+            pixel_values (`torch.Tensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input video.
             vision_feature_layer (`int`):
                 The index of the layer to select the vision feature.
@@ -311,13 +311,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        pixel_values: torch.Tensor = None,
+        pixel_values_videos: torch.Tensor = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[List[torch.Tensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         vision_feature_layer: Optional[int] = None,
         vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -330,7 +330,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     ) -> Union[Tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
         Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
+            pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
                 The tensors corresponding to the input videos. Pixel values can be obtained using
                 [`AutoImageProcessor`]. See [`LlavaNextVideoVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
                 [`LlavaNextVideoVideoProcessor`] for processing videos.

@@ -234,7 +234,7 @@ class BatchFeature(UserDict):
             else:
                 # it's something else
                 raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `Tensor`
         for k, v in self.items():
             # check if v is a floating point
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):

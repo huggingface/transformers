@@ -2645,7 +2645,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         class DummyCriteria(StoppingCriteria):
-            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+            def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor, **kwargs) -> bool:
                 return input_ids.shape[-1] >= 20
 
         stopping_criteria = StoppingCriteriaList()

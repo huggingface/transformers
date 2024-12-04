@@ -420,17 +420,17 @@ class PegasusXGlobalLocalAttention(nn.Module):
         sequence tokens are arranged in blocks for local attention, we unblock them and compute attention.
 
         Args:
-            global_q (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+            global_q (`torch.Tensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
                 query vectors from global tokens
-            global_k (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+            global_k (`torch.Tensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
                 key vectors from global tokens
-            global_v (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+            global_v (`torch.Tensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
                 value vectors from global tokens
-            local_k (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+            local_k (`torch.Tensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
                 key vectors from local tokens
-            local_v (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+            local_v (`torch.Tensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
                 value vectors from local tokens
-            mask (`torch.FloatTensor`) of shape [batch_size, padded_seq_len]: attention mask
+            mask (`torch.Tensor`) of shape [batch_size, padded_seq_len]: attention mask
             dim (DimensionInfo): DimensionInfo wrapper for dimensions
 
         Returns:
@@ -463,17 +463,17 @@ class PegasusXGlobalLocalAttention(nn.Module):
         we need to tile and concatenate the global tokens to every local block
 
         Args:
-            global_k (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+            global_k (`torch.Tensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
                 key vectors from global tokens
-            global_v (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+            global_v (`torch.Tensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
                 value vectors from global tokens
-            local_q (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+            local_q (`torch.Tensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
                 query vectors from local tokens
-            local_k (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+            local_k (`torch.Tensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
                 key vectors from local tokens
-            local_v (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+            local_v (`torch.Tensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
                 value vectors from local tokens
-            mask (`torch.FloatTensor`) of shape [batch_size, padded_seq_len]: attention mask
+            mask (`torch.Tensor`) of shape [batch_size, padded_seq_len]: attention mask
             dim (DimensionInfo): DimensionInfo wrapper for dimensions
 
         Returns:
@@ -548,10 +548,10 @@ class PegasusXEncoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
-            global_hidden_states (`torch.FloatTensor`): global token hidden states
+            hidden_states (`torch.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            global_hidden_states (`torch.Tensor`): global token hidden states
                 *(seq_len, num_global_tokens, embed_dim)*
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            attention_mask (`torch.Tensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -674,14 +674,14 @@ class PegasusXDecoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            attention_mask (`torch.Tensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_value (`Tuple(torch.Tensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -810,7 +810,7 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -834,12 +834,12 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
 
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        past_key_values (`tuple(tuple(torch.Tensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
             `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
@@ -849,11 +849,11 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+        decoder_inputs_embeds (`torch.Tensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
             input (see `past_key_values`). This is useful if you want more control over how to convert
@@ -971,7 +971,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
@@ -1155,7 +1155,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -1167,8 +1167,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            past_key_values (`tuple(tuple(torch.Tensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of
                 shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
                 shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
@@ -1178,7 +1178,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of
+            inputs_embeds (`torch.Tensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
@@ -1382,8 +1382,8 @@ class PegasusXModel(PegasusXPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1521,8 +1521,8 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,

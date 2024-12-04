@@ -96,7 +96,12 @@ class SegGptModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
         prompt_pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.image_size // 2, self.image_size]
+            [
+                self.batch_size,
+                self.num_channels,
+                self.image_size // 2,
+                self.image_size,
+            ]
         )
         prompt_masks = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
 
@@ -335,9 +340,7 @@ def prepare_bool_masked_pos(config: SegGptConfig):
     torch.manual_seed(2)
     num_masked_patches = int(num_patches * mask_ratio)
     shuffle_idx = torch.randperm(num_patches)
-    bool_masked_pos = torch.FloatTensor([0] * (num_patches - num_masked_patches) + [1] * num_masked_patches)[
-        shuffle_idx
-    ]
+    bool_masked_pos = torch.Tensor([0] * (num_patches - num_masked_patches) + [1] * num_masked_patches)[shuffle_idx]
     bool_masked_pos = bool_masked_pos.unsqueeze(0).bool()
 
     return bool_masked_pos

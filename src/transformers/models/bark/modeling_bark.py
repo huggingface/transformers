@@ -479,7 +479,7 @@ BARK_FINE_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*): NOT IMPLEMENTED YET.
-        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
+        input_embeds (`torch.Tensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. If
             `past_key_values` is used, optionally only the last `input_embeds` have to be input (see
             `past_key_values`). This is useful if you want more control over how to convert `input_ids` indices into
@@ -500,8 +500,8 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it. Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        past_key_values (`tuple(tuple(torch.Tensor))`, *optional*, returned when `use_cache` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`.
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
@@ -527,7 +527,7 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
+        input_embeds (`torch.Tensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
             have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds`
@@ -643,7 +643,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -948,9 +948,9 @@ class BarkCoarseModel(BarkCausalModel):
             history_prompt (`Optional[Dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
         Returns: Returns:
-            `tuple(torch.FloatTensor)`:
-            - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
-            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
+            `tuple(torch.Tensor)`:
+            - **x_semantic_history** (`torch.Tensor` -- Processed semantic speaker prompt.
+            - **x_coarse_history** (`torch.Tensor`) -- Processed coarse speaker prompt.
         """
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
@@ -1492,7 +1492,10 @@ class BarkFineModel(BarkPreTrainedModel):
             start_idx = min([n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_input_length])
 
             start_fill_idx = min(
-                [n_history + n_outer * max_fine_history_length, fine_input.shape[1] - max_fine_history_length]
+                [
+                    n_history + n_outer * max_fine_history_length,
+                    fine_input.shape[1] - max_fine_history_length,
+                ]
             )
             rel_start_fill_idx = start_fill_idx - start_idx
             input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]

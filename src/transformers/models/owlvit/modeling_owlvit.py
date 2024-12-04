@@ -64,17 +64,17 @@ def owlvit_loss(similarity: torch.Tensor) -> torch.Tensor:
 class OwlViTOutput(ModelOutput):
     """
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        logits_per_image (`torch.Tensor` of shape `(image_batch_size, text_batch_size)`):
             The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
             similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        logits_per_text (`torch.Tensor` of shape `(text_batch_size, image_batch_size)`):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size * num_max_text_queries, output_dim`):
+        text_embeds (`torch.Tensor` of shape `(batch_size * num_max_text_queries, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        image_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             [`OwlViTVisionModel`].
         text_model_output (Tuple[`BaseModelOutputWithPooling`]):
@@ -83,11 +83,11 @@ class OwlViTOutput(ModelOutput):
             The output of the [`OwlViTVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    loss: Optional[torch.Tensor] = None
+    logits_per_image: torch.Tensor = None
+    logits_per_text: torch.Tensor = None
+    text_embeds: torch.Tensor = None
+    image_embeds: torch.Tensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -113,12 +113,12 @@ def box_area(boxes: Tensor) -> Tensor:
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
     Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+        boxes (`torch.Tensor` of shape `(number_of_boxes, 4)`):
             Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
             < x2` and `0 <= y1 < y2`.
 
     Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
+        `torch.Tensor`: a tensor containing the area for each box.
     """
     boxes = _upcast(boxes)
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -147,7 +147,7 @@ def generalized_box_iou(boxes1, boxes2):
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
     Returns:
-        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+        `torch.Tensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
@@ -172,25 +172,25 @@ class OwlViTObjectDetectionOutput(ModelOutput):
     Output type of [`OwlViTForObjectDetection`].
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
             Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
             bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
             scale-invariant IoU loss.
         loss_dict (`Dict`, *optional*):
             A dictionary containing the individual losses. Useful for logging.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
+        logits (`torch.Tensor` of shape `(batch_size, num_patches, num_queries)`):
             Classification logits (including no-object) for all queries.
-        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+        pred_boxes (`torch.Tensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
+        text_embeds (`torch.Tensor` of shape `(batch_size, num_max_text_queries, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        image_embeds (`torch.Tensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
             image embeddings for each patch.
-        class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+        class_embeds (`torch.Tensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWL-ViT represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
         text_model_output (Tuple[`BaseModelOutputWithPooling`]):
@@ -199,13 +199,13 @@ class OwlViTObjectDetectionOutput(ModelOutput):
             The output of the [`OwlViTVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.Tensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
-    class_embeds: torch.FloatTensor = None
+    logits: torch.Tensor = None
+    pred_boxes: torch.Tensor = None
+    text_embeds: torch.Tensor = None
+    image_embeds: torch.Tensor = None
+    class_embeds: torch.Tensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -222,25 +222,25 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
     Output type of [`OwlViTForObjectDetection.image_guided_detection`].
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
+        logits (`torch.Tensor` of shape `(batch_size, num_patches, num_queries)`):
             Classification logits (including no-object) for all queries.
-        target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+        target_pred_boxes (`torch.Tensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual target image in the batch
             (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
-        query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+        query_pred_boxes (`torch.Tensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual query image in the batch
             (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        image_embeds (`torch.Tensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
             image embeddings for each patch.
-        query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        query_image_embeds (`torch.Tensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
             image embeddings for each patch.
-        class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+        class_embeds (`torch.Tensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWL-ViT represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
         text_model_output (Tuple[`BaseModelOutputWithPooling`]):
@@ -249,12 +249,12 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
             The output of the [`OwlViTVisionModel`].
     """
 
-    logits: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
-    query_image_embeds: torch.FloatTensor = None
-    target_pred_boxes: torch.FloatTensor = None
-    query_pred_boxes: torch.FloatTensor = None
-    class_embeds: torch.FloatTensor = None
+    logits: torch.Tensor = None
+    image_embeds: torch.Tensor = None
+    query_image_embeds: torch.Tensor = None
+    target_pred_boxes: torch.Tensor = None
+    query_pred_boxes: torch.Tensor = None
+    class_embeds: torch.Tensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -285,7 +285,7 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -312,7 +312,7 @@ class OwlViTTextEmbeddings(nn.Module):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
@@ -467,11 +467,11 @@ class OwlViTEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.Tensor]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
                 `(config.encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
@@ -593,7 +593,7 @@ OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
 
 OWLVIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -616,7 +616,7 @@ OWLVIT_INPUTS_DOCSTRING = r"""
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -632,7 +632,7 @@ OWLVIT_INPUTS_DOCSTRING = r"""
 
 OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -652,9 +652,9 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
 
 OWLVIT_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
-        query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        query_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values of query image(s) to be detected. Pass in one query image per target image.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -692,7 +692,7 @@ class OwlViTEncoder(nn.Module):
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`).
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`).
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
                 - 1 for tokens that are **not masked**,
@@ -896,7 +896,7 @@ class OwlViTVisionTransformer(nn.Module):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -957,7 +957,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1034,10 +1034,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         r"""
         Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            text_features (`torch.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`OwlViTTextModel`].
 
         Examples:
@@ -1064,14 +1064,14 @@ class OwlViTModel(OwlViTPreTrainedModel):
     @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         r"""
         Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            image_features (`torch.Tensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`OwlViTVisionModel`].
 
         Examples:
@@ -1111,7 +1111,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1206,7 +1206,7 @@ class OwlViTBoxPredictionHead(nn.Module):
         self.gelu = nn.GELU()
         self.dense2 = nn.Linear(width, out_dim)
 
-    def forward(self, image_features: torch.Tensor) -> torch.FloatTensor:
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
         output = self.dense0(image_features)
         output = self.gelu(output)
         output = self.dense1(output)
@@ -1229,10 +1229,10 @@ class OwlViTClassPredictionHead(nn.Module):
 
     def forward(
         self,
-        image_embeds: torch.FloatTensor,
-        query_embeds: Optional[torch.FloatTensor],
+        image_embeds: torch.Tensor,
+        query_embeds: Optional[torch.Tensor],
         query_mask: Optional[torch.Tensor],
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.Tensor]:
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1296,7 +1296,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return box_coordinates
 
     @lru_cache(maxsize=2)
-    def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+    def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.Tensor] = None) -> torch.Tensor:
         if feature_map is not None:
             raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
         # The box center is biased to its position on the feature grid
@@ -1316,9 +1316,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
     def box_predictor(
         self,
-        image_feats: torch.FloatTensor,
-        feature_map: torch.FloatTensor,
-    ) -> torch.FloatTensor:
+        image_feats: torch.Tensor,
+        feature_map: torch.Tensor,
+    ) -> torch.Tensor:
         """
         Args:
             image_feats:
@@ -1340,10 +1340,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
     def class_predictor(
         self,
-        image_feats: torch.FloatTensor,
-        query_embeds: Optional[torch.FloatTensor] = None,
+        image_feats: torch.Tensor,
+        query_embeds: Optional[torch.Tensor] = None,
         query_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.Tensor]:
         """
         Args:
             image_feats:
@@ -1360,11 +1360,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def image_text_embedder(
         self,
         input_ids: torch.Tensor,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.Tensor]:
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
@@ -1400,10 +1400,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
     def image_embedder(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.Tensor]:
         # Get OwlViTModel vision embeddings (same as CLIP)
         vision_outputs = self.owlvit.vision_model(pixel_values=pixel_values, return_dict=True)
 
@@ -1429,9 +1429,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (image_embeds, vision_outputs)
 
-    def embed_image_query(
-        self, query_image_features: torch.FloatTensor, query_feature_map: torch.FloatTensor
-    ) -> torch.FloatTensor:
+    def embed_image_query(self, query_image_features: torch.Tensor, query_feature_map: torch.Tensor) -> torch.Tensor:
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map)
         pred_boxes_as_corners = center_to_corners_format(pred_boxes)
@@ -1474,8 +1472,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     @replace_return_docstrings(output_type=OwlViTImageGuidedObjectDetectionOutput, config_class=OwlViTConfig)
     def image_guided_detection(
         self,
-        pixel_values: torch.FloatTensor,
-        query_pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        query_pixel_values: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1570,7 +1568,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

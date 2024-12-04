@@ -84,7 +84,7 @@ class Distiller:
             self.mlm_mask_prop = params.mlm_mask_prop
             assert 0.0 <= self.mlm_mask_prop <= 1.0
             assert params.word_mask + params.word_keep + params.word_rand == 1.0
-            self.pred_probs = torch.FloatTensor([params.word_mask, params.word_keep, params.word_rand])
+            self.pred_probs = torch.Tensor([params.word_mask, params.word_keep, params.word_rand])
             self.pred_probs = self.pred_probs.to(f"cuda:{params.local_rank}") if params.n_gpu > 0 else self.pred_probs
             self.token_probs = token_probs.to(f"cuda:{params.local_rank}") if params.n_gpu > 0 else token_probs
             if self.fp16:
@@ -339,7 +339,7 @@ class Distiller:
 
         for _ in range(self.params.n_epoch):
             if self.is_master:
-                logger.info(f"--- Starting epoch {self.epoch}/{self.params.n_epoch-1}")
+                logger.info(f"--- Starting epoch {self.epoch}/{self.params.n_epoch - 1}")
             if self.multi_gpu:
                 torch.distributed.barrier()
 
@@ -356,12 +356,15 @@ class Distiller:
 
                 iter_bar.update()
                 iter_bar.set_postfix(
-                    {"Last_loss": f"{self.last_loss:.2f}", "Avg_cum_loss": f"{self.total_loss_epoch/self.n_iter:.2f}"}
+                    {
+                        "Last_loss": f"{self.last_loss:.2f}",
+                        "Avg_cum_loss": f"{self.total_loss_epoch / self.n_iter:.2f}",
+                    }
                 )
             iter_bar.close()
 
             if self.is_master:
-                logger.info(f"--- Ending epoch {self.epoch}/{self.params.n_epoch-1}")
+                logger.info(f"--- Ending epoch {self.epoch}/{self.params.n_epoch - 1}")
             self.end_epoch()
 
         if self.is_master:

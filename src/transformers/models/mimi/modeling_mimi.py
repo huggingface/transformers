@@ -55,7 +55,7 @@ class MimiOutput(ModelOutput):
     Args:
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
-        audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*)
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
             Decoded audio values, obtained using the decoder part of Mimi.
         encoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
@@ -76,9 +76,9 @@ class MimiOutput(ModelOutput):
     """
 
     audio_codes: torch.LongTensor = None
-    audio_values: torch.FloatTensor = None
-    encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
-    decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    audio_values: torch.Tensor = None
+    encoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None
+    decoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None
 
 
 @dataclass
@@ -98,14 +98,14 @@ class MimiEncoderOutput(ModelOutput):
     """
 
     audio_codes: torch.LongTensor = None
-    encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    encoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None
 
 
 @dataclass
 class MimiDecoderOutput(ModelOutput):
     """
     Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        audio_values (`torch.Tensor`  of shape `(batch_size, segment_length)`, *optional*):
             Decoded audio values, obtained using the decoder part of Mimi.
         decoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
@@ -117,8 +117,8 @@ class MimiDecoderOutput(ModelOutput):
             have their past key value states given to this model).
     """
 
-    audio_values: torch.FloatTensor = None
-    decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    audio_values: torch.Tensor = None
+    decoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None
 
 
 class MimiConv1d(nn.Module):
@@ -789,11 +789,11 @@ class MimiTransformerLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
             output_attentions (`bool`, *optional*):
@@ -802,7 +802,7 @@ class MimiTransformerLayer(nn.Module):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_value (`Tuple(torch.Tensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
             kwargs (`dict`, *optional*):
@@ -867,7 +867,7 @@ class MimiTransformerModel(nn.Module):
         hidden_states: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -876,7 +876,7 @@ class MimiTransformerModel(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Embedded representation that will be contextualized by the model
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -903,14 +903,14 @@ class MimiTransformerModel(nn.Module):
                 config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            past_key_values (`Cache` or `tuple(tuple(torch.Tensor))`, *optional*):
                 Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
                 blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
                 returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
                 Two formats are allowed:
                 - a [`~cache_utils.Cache`] instance;
-                - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                - Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of
                 shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
                 cache format.
 
@@ -1444,7 +1444,7 @@ MIMI_START_DOCSTRING = r"""
 
 MIMI_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float.
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
@@ -1532,7 +1532,7 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         num_quantizers: int,
         padding_mask: int,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
@@ -1558,7 +1558,7 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         padding_mask: torch.Tensor = None,
         num_quantizers: Optional[float] = None,
-        encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        encoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], MimiEncoderOutput]:
         """
@@ -1622,7 +1622,7 @@ class MimiModel(MimiPreTrainedModel):
     def _decode_frame(
         self,
         codes: torch.Tensor,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.Tensor:
         embeddings = self.quantizer.decode(codes)
@@ -1643,7 +1643,7 @@ class MimiModel(MimiPreTrainedModel):
         self,
         audio_codes: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
-        decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        decoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], MimiDecoderOutput]:
         """
@@ -1695,8 +1695,8 @@ class MimiModel(MimiPreTrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[int] = None,
         audio_codes: Optional[torch.Tensor] = None,
-        encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        encoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
+        decoder_past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], MimiOutput]:
         r"""
