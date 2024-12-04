@@ -12,9 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 import math
-import os
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -47,7 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_torch_available
+from ...utils.import_utils import is_grouped_gemm_available, is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -69,54 +67,39 @@ if is_torch_available():
     from torch import nn
 
 
-def sequential_gemm(token_states, expert_weights, tokens_per_expert):
-    """
-    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
+if is_grouped_gemm_available():
+    from grouped_gemm.ops import gmm as experts_gemm
+else:
 
-    Args:
-        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
-        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
-        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+    def experts_gemm(token_states, expert_weights, tokens_per_expert):
+        """
+        Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
 
-    Returns:
-        torch.Tensor: Output tensor of shape (num_tokens, out_features).
-    """
-    num_tokens = token_states.shape[0]
-    out_features = expert_weights.shape[-1]
-    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
+        Args:
+            token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+            expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
 
-    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
-    # Insert zero at the begining for offset index's convenience
-    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
-    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
+        Returns:
+            torch.Tensor: Output tensor of shape (num_tokens, out_features).
+        """
+        num_tokens = token_states.shape[0]
+        out_features = expert_weights.shape[-1]
+        output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
 
-    for expert_num in range(expert_weights.shape[0]):
-        start = cumsum_num_tokens[expert_num]
-        end = cumsum_num_tokens[expert_num + 1]
-        tokens = token_states[start:end]
+        cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
+        # Insert zero at the begining for offset index's convenience
+        zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
+        cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
 
-        out = torch.matmul(tokens, expert_weights[expert_num])
-        output[start:end] = out
-    return output
+        for expert_num in range(expert_weights.shape[0]):
+            start = cumsum_num_tokens[expert_num]
+            end = cumsum_num_tokens[expert_num + 1]
+            tokens = token_states[start:end]
 
-
-def get_experts_gemm():
-    """Return the experts gemm function to be used."""
-    if os.environ.get("USE_GROUPED_GEMM", "1") == "0":
-        logger.warning("environment variable USE_GROUPED_GEMM is set to 0, using sequential GEMM")
-        experts_gemm = sequential_gemm
-    else:
-        if importlib.util.find_spec("grouped_gemm") is None:
-            logger.warning("grouped_gemm is not installed, using sequential GEMM, which is slower.")
-            experts_gemm = sequential_gemm
-        else:
-            from grouped_gemm.ops import gmm
-
-            experts_gemm = gmm
-    return experts_gemm
-
-
-experts_gemm = get_experts_gemm()
+            out = torch.matmul(tokens, expert_weights[expert_num])
+            output[start:end] = out
+        return output
 
 
 class AriaTextConfig(LlamaConfig):
