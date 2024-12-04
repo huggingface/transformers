@@ -1196,45 +1196,18 @@ else:
     _import_structure["models.conditional_detr"].extend(
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
-<<<<<<< HEAD
-    _import_structure["models.convnext"].extend(
-        ["ConvNextFeatureExtractor", "ConvNextImageProcessor"]
-    )
-    _import_structure["models.deformable_detr"].extend(
-        [
-            "DeformableDetrFeatureExtractor",
-            "DeformableDetrImageProcessor",
-            "DeformableDetrImageProcessorFast",
-        ]
-    )
-    _import_structure["models.deit"].extend(
-        ["DeiTFeatureExtractor", "DeiTImageProcessor"]
-=======
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     )
     _import_structure["models.deprecated.deta"].append("DetaImageProcessor")
     _import_structure["models.deprecated.efficientformer"].append(
         "EfficientFormerImageProcessor"
     )
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
-<<<<<<< HEAD
-    _import_structure["models.deprecated.vit_hybrid"].extend(
-        ["ViTHybridImageProcessor"]
-    )
-    _import_structure["models.detr"].extend(
-        ["DetrFeatureExtractor", "DetrImageProcessor", "DetrImageProcessorFast"]
-    )
-    _import_structure["models.donut"].extend(
-        ["DonutFeatureExtractor", "DonutImageProcessor"]
-    )
-=======
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(
@@ -1298,13 +1271,7 @@ else:
     )
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
-<<<<<<< HEAD
-    _import_structure["models.rt_detr"].extend(
-        ["RTDetrImageProcessor", "RTDetrImageProcessorFast"]
-    )
-=======
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(
         ["SegformerFeatureExtractor", "SegformerImageProcessor"]
@@ -6200,7 +6167,7 @@ if TYPE_CHECKING:
         if not (is_sentencepiece_available() and is_tokenizers_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .utils.dummies_sentencepiece_and_tokenizers_objects import *
+        from .utils.dummy_sentencepiece_and_tokenizers_objects import *
     else:
         from .convert_slow_tokenizer import (
             SLOW_TO_FAST_CONVERTERS,
@@ -6253,15 +6220,7 @@ if TYPE_CHECKING:
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
-<<<<<<< HEAD
-        from .models.detr import (
-            DetrFeatureExtractor,
-            DetrImageProcessor,
-            DetrImageProcessorFast,
-        )
-=======
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
