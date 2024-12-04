@@ -26,9 +26,10 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class AriaTextConfig(PretrainedConfig):
-    """
-    Configuration class for Aria language model.
-
+    r"""
+    This class handles the configuration for the text component of the Aria model.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
+    [rhymes-ai/Aria](https://huggingface.co/rhymes-ai/Aria) architecture.
     This class extends the LlamaConfig to include additional parameters specific to the Mixture of Experts (MoE) architecture.
 
     Args:
@@ -38,11 +39,6 @@ class AriaTextConfig(PretrainedConfig):
             The number of experts in the MoE layer.
         moe_topk (`int`, *optional*, defaults to 2):
             The number of top experts to route to for each token.
-        moe_z_loss_coeff (`float`, *optional*, defaults to 1e-05):
-            The coefficient for the auxiliary z-loss.
-        moe_aux_loss_coeff (`float`, *optional*, defaults to 0.001):
-            The coefficient for the auxiliary load balancing loss.
-        moe_num_shared_experts (`int`, *optional*, defaults to 2):
             The number of shared experts.
         pad_token_id (`int`, *optional*, defaults to 2):
             The padding token ID.
@@ -89,8 +85,6 @@ class AriaTextConfig(PretrainedConfig):
         moe_intermediate_size: int = 4096,
         moe_num_experts: int = 8,
         moe_topk: int = 2,
-        moe_z_loss_coeff: float = 1e-5,
-        moe_aux_loss_coeff: float = 1e-3,
         moe_num_shared_experts: int = 2,
         **kwargs,
     ):
@@ -132,17 +126,18 @@ class AriaTextConfig(PretrainedConfig):
         self.moe_intermediate_size = moe_intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
-        self.moe_z_loss_coeff = moe_z_loss_coeff
-        self.moe_aux_loss_coeff = moe_aux_loss_coeff
         self.moe_num_shared_experts = moe_num_shared_experts
 
 
 class AriaConfig(PretrainedConfig):
-    """
-    Configuration class for Aria model.
-
+    r"""
     This class handles the configuration for both vision and text components of the Aria model,
     as well as additional parameters for image token handling and projector mapping.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
+    [rhymes-ai/Aria](https://huggingface.co/rhymes-ai/Aria) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vision_config (`AriaVisionConfig` or `dict`, *optional*):
@@ -153,8 +148,6 @@ class AriaConfig(PretrainedConfig):
             Configuration for the text component.
         projector_patch_to_query_dict (`dict`, *optional*):
             Mapping of patch sizes to query dimensions.
-        ignore_index (`int`, *optional*, defaults to -100):
-            Index to ignore in loss calculation.
         image_token_index (`int`, *optional*, defaults to 9):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -163,8 +156,6 @@ class AriaConfig(PretrainedConfig):
     Attributes:
         model_type (`str`):
             Type of the model, set to `"aria"`.
-        ignore_index (`int`):
-            Index to ignore in loss calculation.
         image_token_index (`int`):
             Index used to represent image tokens.
         projector_patch_to_query_dict (`dict`):
@@ -184,12 +175,10 @@ class AriaConfig(PretrainedConfig):
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
         projector_patch_to_query_dict: Dict = None,
-        ignore_index: int = -100,
         image_token_index: int = 9,
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
 
         # Convert the keys and values of projector_patch_to_query_dict to integers
