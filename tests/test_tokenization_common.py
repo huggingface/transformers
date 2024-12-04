@@ -1312,21 +1312,6 @@ class TokenizerTesterMixin:
                     tokenizer.save_pretrained(tmp_dir_name)
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
 
-<<<<<<< HEAD
-                self.assertEqual(
-                    tokenizer.chat_template, dummy_template
-                )  # Test template has persisted
-                output = tokenizer.apply_chat_template(
-                    dummy_conversation, tokenize=False, return_dict=False
-                )
-                self.assertEqual(
-                    output, expected_output
-                )  # Test output is the same after reloading
-                # Check that no error raised
-                tokenizer.apply_chat_template(
-                    dummy_conversation, tokenize=True, return_dict=False
-                )
-=======
                 self.assertEqual(new_tokenizer.chat_template, dummy_template)  # Test template has persisted
                 output = new_tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
@@ -1348,7 +1333,6 @@ class TokenizerTesterMixin:
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
                 # Check that no error raised
                 new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     @require_jinja
     def test_chat_template_batched(self):
@@ -1835,25 +1819,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-<<<<<<< HEAD
-                tokenizer.chat_template = {
-                    "template1": dummy_template_1,
-                    "template2": dummy_template_2,
-                }
-                with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    tokenizer.save_pretrained(tmp_dir_name)
-                    config_dict = json.load(
-                        open(os.path.join(tmp_dir_name, "tokenizer_config.json"))
-                    )
-                    # Assert that chat templates are correctly serialized as lists of dictionaries
-                    self.assertEqual(
-                        config_dict["chat_template"],
-                        [
-                            {"name": "template1", "template": "{{'a'}}"},
-                            {"name": "template2", "template": "{{'b'}}"},
-                        ],
-                    )
-=======
                 for save_raw_chat_template in (True, False):
                     tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
                     with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -1885,7 +1850,6 @@ class TokenizerTesterMixin:
                     tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=False)
                     with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
                         f.write(dummy_template2)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
                 # Assert the file template clobbers any template in the config
                 self.assertEqual(new_tokenizer.chat_template, dummy_template2)

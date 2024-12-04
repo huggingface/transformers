@@ -1485,64 +1485,6 @@ class WhisperModelTest(
             encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
             self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
-<<<<<<< HEAD
-    def test_generate_with_prompt_ids_and_task_and_language(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        input_features = input_dict["input_features"]
-        prompt_ids = torch.arange(5).to(torch_device)
-        language = "<|de|>"
-        task = "translate"
-        lang_id = 6
-        task_id = 7
-        model.generation_config.__setattr__("lang_to_id", {language: lang_id})
-        model.generation_config.__setattr__("task_to_id", {task: task_id})
-
-        output = model.generate(
-            input_features,
-            max_new_tokens=5,
-            task=task,
-            language=language,
-            prompt_ids=prompt_ids,
-        )
-
-        expected_output_start = [
-            *prompt_ids.tolist(),
-            model.generation_config.decoder_start_token_id,
-            lang_id,
-            task_id,
-        ]
-        for row in output.tolist():
-            self.assertListEqual(
-                row[: len(expected_output_start)], expected_output_start
-            )
-
-    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        input_features = input_dict["input_features"]
-        prompt_ids = torch.arange(5).to(torch_device)
-        forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
-
-        output = model.generate(
-            input_features,
-            max_new_tokens=5,
-            forced_decoder_ids=forced_decoder_ids,
-            prompt_ids=prompt_ids,
-        )
-
-        expected_output_start = [
-            *prompt_ids.tolist(),
-            model.generation_config.decoder_start_token_id,
-            *[token for _rank, token in forced_decoder_ids],
-        ]
-        for row in output.tolist():
-            self.assertListEqual(
-                row[: len(expected_output_start)], expected_output_start
-            )
-
-=======
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     def test_generate_with_prompt_ids_max_length(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.max_target_positions = 7
@@ -1606,13 +1548,7 @@ class WhisperModelTest(
                 )
                 for row in output.tolist():
                     # make sure no token below 10 is in generated output => this means for long-form prompt ids should NOT be returned
-<<<<<<< HEAD
-                    assert not any(
-                        i in row for i in model.generation_config.suppress_tokens
-                    )
-=======
                     self.assertTrue(not any(i in row for i in model.generation_config.suppress_tokens))
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def _check_longform_generate_single_batch(self, condition_on_prev_tokens):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1683,17 +1619,6 @@ class WhisperModelTest(
         segments = outputs["segments"][0]
 
         for _, segment in enumerate(segments):
-<<<<<<< HEAD
-            assert (
-                segment["start"] <= segment["end"]
-            ), "start has to be smaller equal end"
-            assert any(
-                s > timestamp_begin for s in segment["tokens"][1:]
-            ), f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}"
-            assert (
-                segment["tokens"].shape[-1] <= max_length
-            ), "make sure that no segment is larger than max generation length"
-=======
             self.assertTrue(segment["start"] <= segment["end"], "start has to be smaller equal end")
             self.assertTrue(
                 any(s > timestamp_begin for s in segment["tokens"][1:]),
@@ -1703,7 +1628,6 @@ class WhisperModelTest(
                 segment["tokens"].shape[-1] <= max_length,
                 "make sure that no segment is larger than max generation length",
             )
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def test_longform_generate_single_batch(self):
         self._check_longform_generate_single_batch(condition_on_prev_tokens=False)
@@ -1855,15 +1779,8 @@ class WhisperModelTest(
             model = model_class(config).to(torch_device).eval()
 
             # short-form generation without fallback
-<<<<<<< HEAD
-            pred_ids = model.generate(
-                **inputs, return_dict_in_generate=return_dict_in_generate
-            )
-            assert isinstance(pred_ids, expected_output_type)
-=======
             pred_ids = model.generate(**inputs, return_dict_in_generate=return_dict_in_generate)
             self.assertIsInstance(pred_ids, expected_output_type)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
             # short-form generation with fallback
             pred_ids = model.generate(
@@ -2171,13 +2088,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-<<<<<<< HEAD
-        EXPECTED_TRANSCRIPT = (
-            " Mr. Quilter is the apostle of the middle classes and we are glad"
-        )
-=======
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
@@ -2210,13 +2121,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             task="transcribe",
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-<<<<<<< HEAD
-        EXPECTED_TRANSCRIPT = (
-            " Denken Sie, soeben walten meine Gedanken bei Ihnen in Adela"
-        )
-=======
         EXPECTED_TRANSCRIPT = " denken sie soeben weilten meine gedanken bei ihnen in adelaide und ich wünsch"
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
@@ -2227,13 +2132,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             task="translate",
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-<<<<<<< HEAD
-        EXPECTED_TRANSCRIPT = (
-            " Think, my thoughts were just rolling with you in Adelaide, and I"
-        )
-=======
         EXPECTED_TRANSCRIPT = " Think, my thoughts were just now in Adelaide with you, and I wished to be able"
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
@@ -2544,10 +2443,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             input_speech,
             return_tensors="pt",
             sampling_rate=16_000,
-<<<<<<< HEAD
-            return_token_timestamps=True,
-=======
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         ).input_features
         input_features = input_features.to(torch_device)
 
@@ -3030,86 +2925,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-<<<<<<< HEAD
-        assert (
-            transcription
-            == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
-        )
-
-        # set task to translate
-        sequences = model.generate(
-            input_features, task="translate", return_timestamps=True
-        )
-        transcription = processor.batch_decode(sequences)[0]
-=======
         self.assertEqual(transcription, " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?")
 
         # set task to translate
         sequences = model.generate(input_features, task="translate", return_timestamps=True)
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         self.assertEqual(
             transcription,
             " How many different species are there in the chilli? How many different species are there in the chilli?",
         )
 
-<<<<<<< HEAD
-    @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(
-            input_speech, return_tensors="pt", sampling_rate=16_000
-        ).input_features
-        input_features = input_features.to(torch_device)
-        task = "translate"
-        language = "de"
-        expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(
-            torch_device
-        )
-
-        output = model.generate(
-            input_features, task=task, language=language, prompt_ids=prompt_ids
-        )
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-        self.assertTrue(all(token in text for token in expected_tokens))
-
-    @slow
-    def test_generate_with_prompt_ids_and_no_non_prompt_forced_decoder_ids(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = WhisperForConditionalGeneration.from_pretrained(
-            "openai/whisper-tiny.en"
-        )
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(
-            input_speech, return_tensors="pt", sampling_rate=16_000
-        ).input_features
-        input_features = input_features.to(torch_device)
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(
-            torch_device
-        )
-
-        model.generation_config.forced_decoder_ids = None
-        model.config.forced_decoder_ids = None
-
-        output = model.generate(
-            input_features, prompt_ids=prompt_ids, return_timestamps=True
-        )
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-
-=======
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     @require_non_xpu
     @slow
     @require_torch_gpu
@@ -3164,22 +2990,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
 
-<<<<<<< HEAD
-        assert transcription_ass == transcription_non_ass
-        assert transcription_ass == [
-            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
-        ]
-        assert (
-            total_time_non_assist > total_time_assist
-        ), "Make sure that assistant decoding is faster"
-=======
         self.assertEqual(transcription_ass, transcription_non_ass)
         self.assertEqual(
             transcription_ass,
             [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
         )
         self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     @slow
     @require_torch_gpu
@@ -3234,22 +3050,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
 
-<<<<<<< HEAD
-        assert transcription_ass == transcription_non_ass
-        assert transcription_ass == [
-            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
-        ]
-        assert (
-            total_time_non_assist > total_time_assist
-        ), "Make sure that assistant decoding is faster"
-=======
         self.assertEqual(transcription_ass, transcription_non_ass)
         self.assertEqual(
             transcription_ass,
             [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
         )
         self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     @slow
     def test_whisper_longform_single_batch(self):
@@ -4601,13 +4407,7 @@ class WhisperStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-<<<<<<< HEAD
-        assert torch.allclose(
-            output_from_past_slice, output_from_no_past_slice, atol=1e-3
-        )
-=======
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def create_and_check_decoder_model_attention_mask_past(self, config, input_ids):
         model = WhisperDecoder(config=config).to(torch_device).eval()
@@ -4661,13 +4461,7 @@ class WhisperStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-<<<<<<< HEAD
-        assert torch.allclose(
-            output_from_past_slice, output_from_no_past_slice, atol=1e-3
-        )
-=======
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
 
 @require_torch

@@ -502,24 +502,12 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_450m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-<<<<<<< HEAD
-        model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta", device_map="auto"
-        )
-=======
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-<<<<<<< HEAD
-        EXPECTED_MEAN = torch.tensor(
-            [[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]]
-        )
-=======
         EXPECTED_MEAN = torch.tensor([[-1.9537, -1.6193, -1.4123, -1.4673, -1.8511, -1.9309, -1.9826, -2.1776]])
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([3.2025, 7.1265, 4.6058, 3.6423, 1.6357, 3.9265, 5.1883, 5.8760, 2.7942, 4.4823, 3.2571, 2.1063, 3.4275, 4.2028, 1.9767, 5.2115, 6.6756, 6.3999, 6.0483, 5.7378, 5.6660, 5.2298, 5.4103, 5.1248, 5.4376, 2.4570, 2.6107, 5.4039, 2.8077, 4.7777])  # fmt: skip
@@ -536,21 +524,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
             """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
         )
         prompt = "My favourite condiment is "
-<<<<<<< HEAD
-        tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2-450m-beta", use_fast=False
-        )
-        model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta", device_map="auto"
-        )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(
-            model.model.embed_tokens.weight.device
-        )
-=======
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
@@ -620,13 +596,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
             """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
         )
         prompt = "My favourite condiment is "
-<<<<<<< HEAD
-        tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2-450m-beta", use_fast=False
-        )
-=======
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(
             model.model.embed_tokens.weight.device
@@ -639,21 +609,12 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-<<<<<<< HEAD
-        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-beta", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta", device_map="auto", torch_dtype=torch.float16
-        )
-=======
         EXPECTED_TEXT_COMPLETION = (
             "My favourite condiment is 100% natural honey, and I always like to use it in my recipes. I love"
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         assistant_model = Qwen2ForCausalLM.from_pretrained(
             "Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16
         )
@@ -689,17 +650,6 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
         qwen_model = "Qwen/Qwen2-0.5B"
 
-<<<<<<< HEAD
-        tokenizer = AutoTokenizer.from_pretrained(
-            qwen_model, pad_token="</s>", padding_side="right"
-        )
-        EXPECTED_TEXT_COMPLETION = [
-            "My favourite condiment is 100% sugar. I have a jar of 1000 grams of sugar. I use"
-        ]
-        max_generation_length = tokenizer(
-            EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True
-        )["input_ids"].shape[-1]
-=======
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = [
             "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
@@ -707,7 +657,6 @@ class Qwen2IntegrationTest(unittest.TestCase):
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # Load model
         device = "cpu"

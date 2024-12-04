@@ -65,17 +65,8 @@ class BitNetTest(unittest.TestCase):
         """
         Load the model
         """
-<<<<<<< HEAD
-        cls.tokenizer = AutoTokenizer.from_pretrained(
-            "meta-llama/Meta-Llama-3-8B-Instruct"
-        )
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device
-        )
-=======
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def tearDown(self):
         gc.collect()
@@ -112,17 +103,8 @@ class BitNetTest(unittest.TestCase):
         expected_output = "What are we having for dinner? What are we going to do for fun this weekend?"
         input_ids = self.tokenizer(input_text, return_tensors="pt").to("cuda")
 
-<<<<<<< HEAD
-        output = quantized_model.generate(
-            **input_ids, max_new_tokens=11, do_sample=False
-        )
-        self.assertEqual(
-            tokenizer.decode(output[0], skip_special_tokens=True), expected_output
-        )
-=======
         output = self.quantized_model.generate(**input_ids, max_new_tokens=11, do_sample=False)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     def test_packing_unpacking(self):
         """
@@ -150,13 +132,7 @@ class BitNetTest(unittest.TestCase):
         )
         layer.to(self.device)
 
-<<<<<<< HEAD
-        input_tensor = torch.tensor(
-            [[1.0, -1.0, -1.0, 1.0], [1.0, -1.0, 1.0, 1.0]], dtype=torch.float32
-        ).to(torch_device)
-=======
         input_tensor = torch.tensor([1.0, -1.0, -1.0, 1.0], dtype=torch.float32).to(torch_device)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # Quantize the input tensor
         quantized_tensor, scale = layer.activation_quant(input_tensor)

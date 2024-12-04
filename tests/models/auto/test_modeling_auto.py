@@ -267,15 +267,8 @@ class AutoModelTest(unittest.TestCase):
         self.assertIsInstance(model, TimmBackbone)
 
         # Check kwargs are correctly passed to the backbone
-<<<<<<< HEAD
-        model = AutoBackbone.from_pretrained(
-            "resnet18", use_timm_backbone=True, out_indices=(-2, -1)
-        )
-        self.assertEqual(model.out_indices, (-2, -1))
-=======
         model = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, out_indices=(-2, -1))
         self.assertEqual(model.out_indices, [-2, -1])
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # Check out_features cannot be passed to Timm backbones
         with self.assertRaises(ValueError):

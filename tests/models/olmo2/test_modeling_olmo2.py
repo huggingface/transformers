@@ -304,21 +304,9 @@ class Olmo2ModelTester:
 
 
 @require_torch
-<<<<<<< HEAD:tests/models/olmo_1124/test_modeling_olmo_1124.py
-class Olmo1124ModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
-):
-    all_model_classes = (
-        (Olmo1124Model, Olmo1124ForCausalLM) if is_torch_available() else ()
-    )
-    all_generative_model_classes = (
-        (Olmo1124ForCausalLM,) if is_torch_available() else ()
-    )
-=======
 class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Olmo2Model, Olmo2ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Olmo2ForCausalLM,) if is_torch_available() else ()
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:tests/models/olmo2/test_modeling_olmo2.py
     pipeline_model_mapping = (
         {
             "feature-extraction": Olmo2Model,
@@ -335,15 +323,8 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     model_split_percents = [0.5, 0.7, 0.8]
 
     def setUp(self):
-<<<<<<< HEAD:tests/models/olmo_1124/test_modeling_olmo_1124.py
-        self.model_tester = Olmo1124ModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Olmo1124Config, hidden_size=37
-        )
-=======
         self.model_tester = Olmo2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Olmo2Config, hidden_size=37)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:tests/models/olmo2/test_modeling_olmo2.py
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -362,13 +343,7 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-<<<<<<< HEAD:tests/models/olmo_1124/test_modeling_olmo_1124.py
-    @unittest.skip(
-        reason="OLMo November 2024 buffers include complex numbers, which breaks this test"
-    )
-=======
     @unittest.skip(reason="OLMo2 buffers include complex numbers, which breaks this test")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:tests/models/olmo2/test_modeling_olmo2.py
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -380,15 +355,8 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
         )
 
-<<<<<<< HEAD:tests/models/olmo_1124/test_modeling_olmo_1124.py
-        set_seed(
-            42
-        )  # Fixed seed at init time so the two models get the same random weights
-        original_model = Olmo1124Model(config)
-=======
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         original_model = Olmo2Model(config)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:tests/models/olmo2/test_modeling_olmo2.py
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -426,13 +394,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-<<<<<<< HEAD:tests/models/olmo_1124/test_modeling_olmo_1124.py
-        model = Olmo1124ForCausalLM.from_pretrained(
-            "shanearora/OLMo-7B-1124-hf", device_map="auto"
-        )
-=======
         model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:tests/models/olmo2/test_modeling_olmo2.py
         out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor(
@@ -458,17 +420,8 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the fastest speed possible, and 3) the speed of light is the same for all observers, regardless of their relative motion. The theory of relativity is based on the idea that the speed of light is constant. This means that"""
         prompt = "Simply put, the theory of relativity states that "
-<<<<<<< HEAD:tests/models/olmo_1124/test_modeling_olmo_1124.py
-        tokenizer = AutoTokenizer.from_pretrained(
-            "shanearora/OLMo-7B-1124-hf", device_map="auto"
-        )
-        model = Olmo1124ForCausalLM.from_pretrained(
-            "shanearora/OLMo-7B-1124-hf", device_map="auto"
-        )
-=======
         tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
         model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:tests/models/olmo2/test_modeling_olmo2.py
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
@@ -532,13 +485,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
 
         olmo2_model = "shanearora/OLMo2-7B-1124-hf"
 
-<<<<<<< HEAD:tests/models/olmo_1124/test_modeling_olmo_1124.py
-        tokenizer = AutoTokenizer.from_pretrained(
-            olmo_1124_model, pad_token="</s>", padding_side="right"
-        )
-=======
         tokenizer = AutoTokenizer.from_pretrained(olmo2_model, pad_token="</s>", padding_side="right")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:tests/models/olmo2/test_modeling_olmo2.py
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light",
         ]

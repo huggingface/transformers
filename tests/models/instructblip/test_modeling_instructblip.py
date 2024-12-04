@@ -1165,19 +1165,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         # Add args to the config to trigger new logic when inputs are expanded in processing file
         processor.num_query_tokens = model.config.num_query_tokens
-<<<<<<< HEAD
-        processor.tokenizer.add_special_tokens(
-            {"additional_special_tokens": ["<image>"]}
-        )
-        model.config.image_token_index = len(processor.tokenizer) - 1
-        model.resize_token_embeddings(
-            processor.tokenizer.vocab_size, pad_to_multiple_of=64
-        )
-=======
         processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         model.config.image_token_index = len(processor.tokenizer) - 2
         model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # Generate again with new inputs
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(
