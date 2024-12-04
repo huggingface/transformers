@@ -22,7 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -30,13 +30,10 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import (
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal,
     is_torch_greater_or_equal,
     logging,
 )
 from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -52,6 +49,9 @@ if TYPE_CHECKING:
 
 if is_torch_greater_or_equal("2.5"):
     from torch.nn.attention.flex_attention import flex_attention
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
@@ -443,14 +443,14 @@ class GemmaMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-def eager_attention_forward(config, query, key, value, mask, **_kwargs):
-    key_states = repeat_kv(key, config.num_key_value_groups)
-    value_states = repeat_kv(value, config.num_key_value_groups)
+def eager_attention_forward(config, groups, query, key, value, attention_mask, scaling, **_kwargs):
+    key_states = repeat_kv(key, groups)
+    value_states = repeat_kv(value, groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) 
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
 
-    if mask is not None:  # no matter the length, we just slice it
-        causal_mask = mask[:, :, :, : key_states.shape[-2]]
+    if attention_mask is not None:  # no matter the length, we just slice it
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
@@ -461,9 +461,11 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     return attn_output, attn_weights
 
 
-def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
-    if mask is not None:
-        seq_len = mask.shape[1]
+def flash_attention_forward(
+    config, query, key, value, attention_mask, scaling,target_dtype=torch.float16, **_kwargs
+):
+    if attention_mask is not None:
+        seq_len = attention_mask.shape[1]
         query = query[:, :, :seq_len]
         value = value[:, :, :seq_len]
 
@@ -485,8 +487,9 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
         query_states,
         key_states,
         value_states,
-        mask,
+        attention_mask,
         seq_len,
+        softmax_scale=scaling,
         dropout=dropout_rate,
         is_causal=config.is_causal,
         sliding_window=config.sliding_window,
@@ -496,27 +499,41 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
     return attn_output, None
 
 
+def flex_attention_forward(query, key, value, attention_mask, output_attentions=False, **_kwargs):
+    causal_mask_exists = attention_mask is not None
 
-def flex_attention_forward(config, query, key, value,output_attentions=False, **_kwargs):
+    causal_mask = attention_mask
+    if causal_mask_exists:
+        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+
+    def causal_mod(score, b, h, q_idx, kv_idx):
+        if causal_mask_exists:
+            score += causal_mask[b][0][q_idx][kv_idx]
+        return score
+
     attn_output = flex_attention(
         query,
         key,
         value,
+        score_mod=causal_mod,
         enable_gqa=True,
         return_lse=output_attentions,
     )
+
+    # Reshape outputs
+    attn_output = attn_output.transpose(1, 2).contiguous()
     if not output_attentions:
         return attn_output, None
     else:
         return attn_output[0], attn_output[1]
 
 
-def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
+def sdpa_attention_forward(config, query, key, value, attention_mask,**_kwargs):
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
 
-    causal_mask = mask
-    if mask is not None:
+    causal_mask = attention_mask
+    if attention_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
@@ -538,6 +555,7 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
         dropout_p=config.attention_dropout if config.training else 0.0,
         is_causal=is_causal,
     )
+    attn_output = attn_output.transpose(1, 2)
     return attn_output, None
 
 
@@ -565,8 +583,14 @@ class GemmaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.scaling = 1 / math.sqrt(config.head_dim)
         self.is_causal = True
-
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -616,17 +640,31 @@ class GemmaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
-
             logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
             attention_type = "eager"
         else:
             attention_type = self.config._attn_implementation
 
+            logger.warning_once(
+                f"Setting `attention_type` to `eager` because `dropout` is not supported in {attention_type}"
+            )
+            attention_type = "eager"
+
         attn_output, attn_weights = GEMMA_ATTENTION_FUNCTION[attention_type](
-            self, query_states, key_states, value_states, attention_mask, output_attentions=output_attentions
+            self,
+            query=query_states,
+            key=key_states,
+            value=value_states,
+            scaling=self.scaling,
+            groups=self.num_key_value_groups,
+            attention_mask=attention_mask,
+            target_dtype=torch.float16,
+            training=self.training,
+            output_attentions=output_attentions,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = attn_output.contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -650,13 +688,9 @@ class GemmaSdpaAttention(GemmaAttention):
         super().__init__(config, layer_idx)
         self.config._attn_implementation = "sdpa"
         logger.warning_once(
-            "The `GemmaFlashAttention` class is deprecated in favor of simply modifying the `config._attn_implementation`"
+            "The `GemmaFlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
             "attribute of the `GemmaAttention` class! It will be removed in v4.48"
         )
-
-
-
-
 
 class GemmaDecoderLayer(nn.Module):
     def __init__(self, config: GemmaConfig, layer_idx: int):
@@ -668,7 +702,6 @@ class GemmaDecoderLayer(nn.Module):
         self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -680,7 +713,6 @@ class GemmaDecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 

@@ -192,7 +192,7 @@ def eager_attention_forward(
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
+    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=False)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -212,13 +212,11 @@ def flash_attention_forward(
         query = query[:, :, :seq_len]
         value = value[:, :, :seq_len]
 
-    # TODO: These transpose are quite inefficient but Flash Attention requires the layout
-    # [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor rotary embedding
     query_states = query.transpose(1, 2)
     key_states = key.transpose(1, 2)
     value_states = value.transpose(1, 2)
 
-    dropout_rate = config.attention_dropout if config.training else 0.0
+    dropout_rate = config.attention_dropout if False else 0.0
 
     input_dtype = query_states.dtype
     if input_dtype == torch.float32:
