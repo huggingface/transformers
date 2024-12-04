@@ -157,13 +157,17 @@ class DepthProImageProcessor(BaseImageProcessor):
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         output_size = (size["height"], size["width"])
 
-        return torch.nn.functional.interpolate(
-            # input should be (B, C, H, W)
-            input=torch.from_numpy(image).unsqueeze(0),
-            size=output_size,
-            mode=pil_torch_interpolation_mapping[resample].value,
-            antialias=antialias,
-        ).squeeze(0).numpy()
+        return (
+            torch.nn.functional.interpolate(
+                # input should be (B, C, H, W)
+                input=torch.from_numpy(image).unsqueeze(0),
+                size=output_size,
+                mode=pil_torch_interpolation_mapping[resample].value,
+                antialias=antialias,
+            )
+            .squeeze(0)
+            .numpy()
+        )
 
     def _validate_input_arguments(
         self,

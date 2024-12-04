@@ -51,6 +51,7 @@ def patch_to_batch(data: torch.Tensor, batch_size: int) -> torch.Tensor:
     data = data.transpose(0, 1)
     return data
 
+
 def batch_to_patch(data: torch.Tensor) -> torch.Tensor:
     """
     converts tensor from shape:
@@ -155,10 +156,10 @@ class DepthProViTEmbeddings(nn.Module):
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(
-            self,
-            pixel_values: torch.Tensor,
-            batch_size: Optional[int] = None,
-        ) -> torch.Tensor:
+        self,
+        pixel_values: torch.Tensor,
+        batch_size: Optional[int] = None,
+    ) -> torch.Tensor:
         n, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
@@ -274,7 +275,10 @@ class DepthProViTSdpaSelfAttention(DepthProViTSelfAttention):
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
-                hidden_states=hidden_states, head_mask=head_mask, output_attentions=output_attentions, batch_size=batch_size,
+                hidden_states=hidden_states,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                batch_size=batch_size,
             )
 
         mixed_query_layer = self.query(hidden_states)
@@ -940,9 +944,9 @@ class DepthProEncoder(nn.Module):
         )
         last_hidden_state = patch_encodings.last_hidden_state
         last_hidden_state = batch_to_patch(last_hidden_state)
-        scaled_images_last_hidden_state = torch.split_with_sizes(
-            last_hidden_state, scaled_images_num_patches[::-1]
-        )[::-1]  # -1 as patch encoder expects high res patches first
+        scaled_images_last_hidden_state = torch.split_with_sizes(last_hidden_state, scaled_images_num_patches[::-1])
+        scaled_images_last_hidden_state = scaled_images_last_hidden_state[::-1]
+        # -1 as patch encoder expects high res patches first
 
         image_encodings = self.image_encoder(
             pixel_values=scaled_images[0],  # provide least resolution image
@@ -1610,12 +1614,16 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         fused_features = self.fusion_stage(features)
         predicted_depth = self.head(fused_features)
 
-        fov = self.fov_model(
-            pixel_values=pixel_values,
-            # use lowest scaled image features for fov model
-            global_features=features[0].detach(),
-            head_mask=head_mask,
-        ) if self.use_fov_model else None
+        fov = (
+            self.fov_model(
+                pixel_values=pixel_values,
+                # use lowest scaled image features for fov model
+                global_features=features[0].detach(),
+                head_mask=head_mask,
+            )
+            if self.use_fov_model
+            else None
+        )
 
         if not return_dict:
             outputs = [loss, predicted_depth, fov, depth_pro_outputs.hidden_states, depth_pro_outputs.attentions]
