@@ -609,3 +609,14 @@ class TextGenerationPipelineTests(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             _ = text_generator(prompt, max_length=10)
         self.assertNotIn(logger_msg, cl.out)
+
+    def test_return_dict_in_generate(self):
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
+        try:
+            output = text_generator("Hello, world!")
+            self.assertIsNotNone(output)
+            self.assertIsInstance(output, list)
+            self.assertTrue(len(output) > 0)
+            self.assertIn("generated_text", output[0])
+        except Exception as e:
+            self.fail(f"Pipeline raised an exception when using return_dict_in_generate=True: {e}")

@@ -2,7 +2,9 @@ import enum
 import warnings
 from typing import Dict
 
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available
+import torch
+
+from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -367,13 +369,37 @@ class TextGenerationPipeline(Pipeline):
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
-        generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
-        out_b = generated_sequence.shape[0]
+        output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+
+        if isinstance(output, ModelOutput):
+            generated_sequences = output.sequences
+            other_outputs = {k: v for k, v in output.items() if k != "sequences"}
+        else:
+            generated_sequences = output
+            other_outputs = {}
+
+        out_b = generated_sequences.shape[0]
         if self.framework == "pt":
-            generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
+            generated_sequences = generated_sequences.reshape(in_b, out_b // in_b, *generated_sequences.shape[1:])
         elif self.framework == "tf":
-            generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
-        return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
+            generated_sequences = tf.reshape(
+                generated_sequences, (in_b, out_b // in_b, *generated_sequences.shape[1:])
+            )
+
+        for key, value in other_outputs.items():
+            if isinstance(value, (torch.Tensor, tf.Tensor)) and value.shape[0] == out_b:
+                if self.framework == "pt":
+                    other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
+                elif self.framework == "tf":
+                    other_outputs[key] = tf.reshape(value, (in_b, out_b // in_b, *value.shape[1:]))
+
+        model_outputs = {
+            "generated_sequences": generated_sequences,
+            "input_ids": input_ids,
+            "prompt_text": prompt_text,
+        }
+        model_outputs.update(other_outputs)
+        return model_outputs
 
     def postprocess(
         self,
@@ -382,14 +408,45 @@ class TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=True,
         continue_final_message=None,
     ):
-        generated_sequence = model_outputs["generated_sequence"][0]
+        generated_sequences = model_outputs["generated_sequences"]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
-        generated_sequence = generated_sequence.numpy().tolist()
+        other_outputs = {
+            k: v for k, v in model_outputs.items() if k not in ["generated_sequences", "input_ids", "prompt_text"]
+        }
+
+        batch_size, num_return_sequences, sequence_length = generated_sequences.shape
+        total_sequences = batch_size * num_return_sequences
+
+        if self.framework == "pt":
+            sequences = generated_sequences.reshape(total_sequences, sequence_length)
+            sequences = sequences.cpu().numpy().tolist()
+        else:
+            sequences = tf.reshape(generated_sequences, (total_sequences, sequence_length))
+            sequences = sequences.numpy().tolist()
+
+        if input_ids is not None:
+            if self.framework == "pt":
+                input_ids = input_ids.cpu().numpy().tolist()
+            else:
+                input_ids = input_ids.numpy().tolist()
+        else:
+            input_ids = [None] * batch_size
+
+        if isinstance(prompt_text, list):
+            prompts = prompt_text
+        else:
+            prompts = [prompt_text] * batch_size
+
         records = []
-        for sequence in generated_sequence:
+        for idx, sequence in enumerate(sequences):
+            batch_idx = idx // num_return_sequences
+            input_id = input_ids[batch_idx]
+            prompt = prompts[batch_idx]
+
+            record = {}
             if return_type == ReturnType.TENSORS:
-                record = {"generated_token_ids": sequence}
+                record["generated_token_ids"] = sequence
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
                 # Decode text
                 text = self.tokenizer.decode(
@@ -398,13 +455,12 @@ class TextGenerationPipeline(Pipeline):
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
-                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
-                if input_ids is None:
+                if input_id is None:
                     prompt_length = 0
                 else:
                     prompt_length = len(
                         self.tokenizer.decode(
-                            input_ids[0],
+                            input_id,
                             skip_special_tokens=True,
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
@@ -412,25 +468,32 @@ class TextGenerationPipeline(Pipeline):
 
                 all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
-                    if isinstance(prompt_text, str):
-                        all_text = prompt_text + all_text
-                    elif isinstance(prompt_text, Chat):
+                    if isinstance(prompt, str):
+                        all_text = prompt + all_text
+                    elif isinstance(prompt, Chat):
                         if continue_final_message is None:
-                            # If the user passes a chat ending in an assistant message, we treat it as a prefill by
-                            # default because very few models support multiple separate, consecutive assistant messages
-                            continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
+                            continue_final_message = prompt.messages[-1]["role"] == "assistant"
                         if continue_final_message:
-                            # With assistant prefill, concat onto the end of the last message
-                            all_text = list(prompt_text.messages)[:-1] + [
+                            all_text = list(prompt.messages)[:-1] + [
                                 {
-                                    "role": prompt_text.messages[-1]["role"],
-                                    "content": prompt_text.messages[-1]["content"] + all_text,
+                                    "role": prompt.messages[-1]["role"],
+                                    "content": prompt.messages[-1]["content"] + all_text,
                                 }
                             ]
                         else:
-                            # When we're not starting from a prefill, the output is a new assistant message
-                            all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
-                record = {"generated_text": all_text}
+                            all_text = list(prompt.messages) + [{"role": "assistant", "content": all_text}]
+                record["generated_text"] = all_text
+
+            for key, value in other_outputs.items():
+                if isinstance(value, (list, tuple)):
+                    record[key] = value[idx]
+                elif isinstance(value, (torch.Tensor, tf.Tensor)):
+                    if value.shape[0] == total_sequences:
+                        record[key] = value[idx]
+                    else:
+                        record[key] = value
+                else:
+                    record[key] = value
             records.append(record)
 
         return records
