@@ -4280,7 +4280,8 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
-
+            candidate_input_ids = candidate_input_ids.to(self.device)
+            
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
 
@@ -4482,9 +4483,12 @@ def _speculative_sampling(
     # Gets the probabilities from the logits. q_i and p_i denote the assistant and model probabilities of the tokens
     # selected by the assistant, respectively.
     q = candidate_logits.softmax(dim=-1)
+    device = new_candidate_input_ids.device
+    #new_candidate_input_ids = new_candidate_input_ids.to(q.device)
     q_i = q[:, torch.arange(candidate_length), new_candidate_input_ids].squeeze(0, 1)
     p = new_logits.softmax(dim=-1)
     p_i = p[:, torch.arange(candidate_length), new_candidate_input_ids].squeeze(0, 1)
+    #new_candidate_input_ids = new_candidate_input_ids.to(device)
     probability_ratio = p_i / q_i
 
     # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
