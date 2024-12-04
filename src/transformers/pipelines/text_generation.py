@@ -2,15 +2,16 @@ import enum
 import warnings
 from typing import Dict
 
-import torch
-
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
     from .pt_utils import KeyDataset
+
 
 if is_tf_available():
     import tensorflow as tf
