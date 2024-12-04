@@ -751,9 +751,6 @@ class PhiModel(LlamaModel):
         super().__init__(config)
         del self.norm
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
-        self.layers = nn.ModuleList(
-            [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = PhiRotaryEmbedding(config=config)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -891,26 +888,9 @@ class PhiModel(LlamaModel):
 class PhiForCausalLM(GemmaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
-        self.model = PhiModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
-        self.post_init()
 
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
-        **loss_kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    def forward(self, **super_kwargs) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         ```python
         >>> from transformers import AutoTokenizer, PhiForCausalLM
@@ -926,21 +906,7 @@ class PhiForCausalLM(GemmaForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         'This is an example script .\n\n\n\nfrom typing import List\n\ndef find_most_common_letter(words: List[str'
         ```"""
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            labels=labels,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
-            **loss_kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
 class PhiForSequenceClassification(LlamaForSequenceClassification):
@@ -952,7 +918,6 @@ class PhiForTokenClassification(LlamaForTokenClassification):
         super().__init__(config)
         del self.score
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.post_init()
 
     def forward(
         self,
