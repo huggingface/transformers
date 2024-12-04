@@ -1552,7 +1552,7 @@ class CaptureLogger:
 
 
 @contextlib.contextmanager
-def LoggingLevel():
+def LoggingLevel(level):
     """
     This is a context manager to temporarily change transformers modules logging level to the desired value and have it
     restored to the original setting at the end of the scope.
@@ -1573,15 +1573,19 @@ def LoggingLevel():
 
 
 class TemporaryHubRepo:
-    """
-    This is a context manager to temporarily change transformers modules logging level to the desired value and have it
-    restored to the original setting at the end of the scope.
+    """Create a temporary Hub repository and return its `RepoUrl` object. This is similar to
+    `tempfile.TemporaryDirectory` and can be used as a context manager.  For example:
+
+        with TemporaryHubRepo() as temp_repo:
+            ...
+
+    Upon exiting the context, the repository and everything contained in it are removed.
 
     Example:
 
     ```python
-    with LoggingLevel(logging.INFO):
-        AutoModel.from_pretrained("openai-community/gpt2")  # calls logger.info() several times
+    with TemporaryHubRepo() as temp_repo:
+        model.push_to_hub(tmp_repo.repo_id, token=self._token)
     ```
     """
     def __init__(self, token=None):
