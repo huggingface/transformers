@@ -28,7 +28,7 @@ TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
-        This is the configuration class to store the configuration of a [`TextNextModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`TextNextModel`]. It is used to instantiate a
     TextNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [Raghavan/textnet-base](https://huggingface.co/Raghavan/textnet-base)Configuration objects inherit from
