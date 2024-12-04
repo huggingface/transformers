@@ -72,7 +72,7 @@ TEXTNET_INPUTS_DOCSTRING = r"""
 
 
 class TextNetConvLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__()
 
         self.kernel_size = config.stem_kernel_size
