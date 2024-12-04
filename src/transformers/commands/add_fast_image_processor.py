@@ -161,22 +161,35 @@ def add_fast_image_processor_to_model_init(
         # we have an init file in the old format
 
         # add "is_torchvision_available" import to from ...utils import (
-        # get import block
-        import_block_regex = re.compile(r"from \.\.\.utils import \(\n(?P<import_block>.*?)(?=\n\))", re.DOTALL)
-        match = import_block_regex.search(content)
-        if not match:
-            raise ValueError("Couldn't find the 'from ...utils import' block.")
+        # Regex to match import statements from transformers.utils
+        pattern = r"""
+            from\s+\.\.\.utils\s+import\s+
+            (?:                                   # Non-capturing group for either:
+                ([\w, ]+)                         # 1. Single-line imports (e.g., 'a, b')
+                |                                 # OR
+                \((.*?)\)                         # 2. Multi-line imports (e.g., '(a, ... b)')
+            )
+        """
+        regex = re.compile(pattern, re.VERBOSE | re.DOTALL)
 
-        import_block = match.group("import_block")
-        entries = import_block.split("\n")
-        indent = " " * (len(entries[0]) - len(entries[0].lstrip()))
-        new_entry = f"{indent}is_torchvision_available,"
-        if new_entry not in entries:
-            entries.append(new_entry)
-        entries.sort()
-        updated_block = "\n".join(entry for entry in entries)
-        # Replace the original block in the content
-        updated_content = content[: match.start("import_block")] + updated_block + content[match.end("import_block") :]
+        def replacement_function(match):
+            # Extract existing imports
+            imports = (match.group(1) or match.group(2)).split(",")
+            imports = imports[:-1] if imports[-1] == "\n" else imports
+            imports = [imp.strip() for imp in imports]
+
+            # Add the new import if not already present
+            if "is_torchvision_available" not in imports:
+                imports.append("is_torchvision_available")
+                imports.sort()
+
+            # Convert to multi-line import in all cases
+            updated_imports = "(\n    " + ",\n    ".join(imports) + ",\n)"
+
+            return f"from ...utils import {updated_imports}"
+
+        # Replace all matches in the file content
+        updated_content = regex.sub(replacement_function, content)
 
         vision_import_structure_block = f'    _import_structure["{fast_image_processing_module_file[:-5]}"] = ["{fast_image_processor_name[:-4]}"]\n'
 
@@ -301,6 +314,88 @@ def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: 
                 f.write(updated_content)
 
 
+def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name: str):
+    tests_path = REPO_PATH / "tests" / "models" / model_name
+    test_file = tests_path / f"test_image_processing_{model_name}.py"
+    print(test_file)
+    if not os.path.exists(test_file):
+        logger.warning(f"No test file found for {model_name}. Skipping.")
+        return
+
+    with open(test_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # add is_torchvision_available import to the imports
+    # Regex to match import statements from transformers.utils
+    pattern = r"""
+        from\s+transformers\.utils\s+import\s+
+        (?:                                   # Non-capturing group for either:
+            ([\w, ]+)                         # 1. Single-line imports (e.g., 'a, b')
+            |                                 # OR
+            \((.*?)\)                         # 2. Multi-line imports (e.g., '(a, ... b)')
+        )
+    """
+    regex = re.compile(pattern, re.VERBOSE | re.DOTALL)
+
+    def replacement_function(match):
+        # Extract existing imports
+        existing_imports = (match.group(1) or match.group(2)).split(",")
+        existing_imports = existing_imports[:-1] if existing_imports[-1] == "\n" else existing_imports
+        existing_imports = [imp.strip() for imp in existing_imports]
+
+        # Add the new import if not already present
+        if "is_torchvision_available" not in existing_imports:
+            existing_imports.append("is_torchvision_available")
+            existing_imports.sort()
+
+        # Rebuild the import statement
+        if match.group(1):  # Single-line import
+            updated_imports = ", ".join(existing_imports)
+        else:  # Multi-line import
+            updated_imports = "(\n    " + ",\n    ".join(existing_imports) + ",\n)"
+
+        return f"from transformers.utils import {updated_imports}"
+
+    # Replace all matches in the file content
+    updated_content = regex.sub(replacement_function, content)
+
+    # add the fast image processor to the imports
+    base_import_string = f"    from transformers import {fast_image_processor_name[:-4]}"
+    fast_import_string = (
+        "    if is_torchvision_available():\n" f"        from transformers import {fast_image_processor_name}"
+    )
+    if fast_import_string not in updated_content:
+        updated_content = updated_content.replace(base_import_string, base_import_string + "\n\n" + fast_import_string)
+
+    # get line starting with "    image_processing_class = " and add a line after it starting with "    fast_image_processing_class = "
+    image_processing_class_line = re.search(r"    image_processing_class = .*", updated_content)
+    if not image_processing_class_line:
+        logger.warning(f"Couldn't find the 'image_processing_class' line in {test_file}. Skipping.")
+        return
+
+    fast_image_processing_class_line = (
+        f"    fast_image_processing_class = {fast_image_processor_name} if is_torchvision_available() else None"
+    )
+    if "    fast_image_processing_class = " not in updated_content:
+        updated_content = updated_content.replace(
+            image_processing_class_line.group(0),
+            image_processing_class_line.group(0) + "\n" + fast_image_processing_class_line,
+        )
+
+    # write the updated content
+    with open(test_file, "w", encoding="utf-8") as f:
+        f.write(updated_content)
+
+
+def get_fast_image_processing_content_header(content: str) -> str:
+    # get all lines before and including the line containing """Image processor
+    content_header = re.search(r"^(.*?\n)*?\"\"\"Image processor.*", content)
+    content_header = content_header.group(0)
+    content_header = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content_header)
+    content_header = content_header.replace("Image processor", "Fast Image processor")
+    return content_header
+
+
 def add_fast_image_processor_file(
     fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
 ):
@@ -331,15 +426,6 @@ def add_fast_image_processor_file(
 
     with open(fast_image_processing_module_file, "w", encoding="utf-8") as f:
         f.write(content)
-
-
-def get_fast_image_processing_content_header(content: str) -> str:
-    # get all lines before and including the line containing """Image processor
-    content_header = re.search(r"^(.*?\n)*?\"\"\"Image processor.*", content)
-    content_header = content_header.group(0)
-    content_header = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content_header)
-    content_header = content_header.replace("Image processor", "Fast Image processor")
-    return content_header
 
 
 def add_fast_image_processor(model_name: str):
@@ -390,6 +476,11 @@ def add_fast_image_processor(model_name: str):
     add_fast_image_processor_to_dummy(fast_image_processor_name=fast_image_processor_name)
 
     add_fast_image_processor_to_doc(
+        fast_image_processor_name=fast_image_processor_name,
+        model_name=model_name,
+    )
+
+    add_fast_image_processor_to_tests(
         fast_image_processor_name=fast_image_processor_name,
         model_name=model_name,
     )

@@ -53,6 +53,67 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+def get_image_size_for_max_height_width(
+    image_size: Tuple[int, int],
+    max_height: int,
+    max_width: int,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+    """
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
+
+
+def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
+    """
+    Squeezes a tensor, but only if the axis specified has dim 1.
+    """
+    if axis is None:
+        return tensor.squeeze()
+
+    try:
+        return tensor.squeeze(axis=axis)
+    except ValueError:
+        return tensor
+
+
+def max_across_indices(values: Iterable[Any]) -> List[Any]:
+    """
+    Return the maximum value across all indices of an iterable of values.
+    """
+    return [max(values_i) for values_i in zip(*values)]
+
+
+def get_max_height_width(images: List["torch.Tensor"]) -> Tuple[int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
+
+    _, max_height, max_width = max_across_indices([img.shape for img in images])
+
+    return (max_height, max_width)
+
+
 @dataclass(frozen=True)
 class SizeDict:
     """
@@ -73,17 +134,58 @@ class SizeDict:
 
 
 class BaseImageProcessorFast(BaseImageProcessor):
+    r"""
+    Constructs a Fast Base image processor.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `None`):
+            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
+            `do_resize` parameter in the `preprocess` method.
+        size (`dict`, *optional*, defaults to `None`):
+            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
+            method.
+        resample (`PILImageResampling`, *optional*, defaults to `None`):
+            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
+            overridden by the `resample` parameter in the `preprocess` method.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
+            `preprocess` method.
+        crop_size (`Dict[str, int]` *optional*, defaults to 224):
+            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
+            method.
+        do_rescale (`bool`, *optional*, defaults to `None`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
+            overridden by the `rescale_factor` parameter in the `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `None`):
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `None`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
+            overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `None`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_rgb (`bool`, *optional*, defaults to `None`):
+            Whether to convert the image to RGB.
+    """
+
     resample = None
     image_mean = None
     image_std = None
     size = None
-    default_to_square = True
+    default_to_square = None
     crop_size = None
     do_resize = None
     do_center_crop = None
     do_rescale = None
     do_normalize = None
     do_convert_rgb = None
+    model_input_names = ["pixel_values"]
 
     def __init__(
         self,
@@ -277,6 +379,19 @@ class BaseImageProcessorFast(BaseImageProcessor):
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return F.center_crop(image, (size["height"], size["width"]))
 
+    def convert_to_rgb(
+        self,
+        image: ImageInput,
+    ) -> ImageInput:
+        """
+        Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+        as is.
+        Args:
+            image (Image):
+                The image to convert.
+        """
+        return convert_to_rgb(image)
+
     def preprocess(
         self,
         images: ImageInput,
@@ -388,7 +503,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
 
         if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+            images = [self.convert_to_rgb(image) for image in images]
 
         if image_type == ImageType.PIL:
             images = [F.pil_to_tensor(image) for image in images]
@@ -449,62 +564,45 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return encoder_dict
 
 
-def get_image_size_for_max_height_width(
-    image_size: Tuple[int, int],
-    max_height: int,
-    max_width: int,
-) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
-    Important, even if image_height < max_height and image_width < max_width, the image will be resized
-    to at least one of the edges be equal to max_height or max_width.
+class SemanticSegmentationMixin:
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+        """
+        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
-    For example:
-        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
-        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+        Args:
+            outputs ([`MobileNetV2ForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
 
-    Args:
-        image_size (`Tuple[int, int]`):
-            The image to resize.
-        max_height (`int`):
-            The maximum allowed height.
-        max_width (`int`):
-            The maximum allowed width.
-    """
-    height, width = image_size
-    height_scale = max_height / height
-    width_scale = max_width / width
-    min_scale = min(height_scale, width_scale)
-    new_height = int(height * min_scale)
-    new_width = int(width * min_scale)
-    return new_height, new_width
+        Returns:
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
+        logits = outputs.logits
 
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
 
-def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
-    """
-    Squeezes a tensor, but only if the axis specified has dim 1.
-    """
-    if axis is None:
-        return tensor.squeeze()
+            # if is_torch_tensor(target_sizes):
+            #     target_sizes = target_sizes.numpy()
 
-    try:
-        return tensor.squeeze(axis=axis)
-    except ValueError:
-        return tensor
+            semantic_segmentation = []
 
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
-    """
-    Return the maximum value across all indices of an iterable of values.
-    """
-    return [max(values_i) for values_i in zip(*values)]
-
-
-def get_max_height_width(images: List["torch.Tensor"]) -> Tuple[int]:
-    """
-    Get the maximum height and width across all images in a batch.
-    """
-
-    _, max_height, max_width = max_across_indices([img.shape for img in images])
-
-    return (max_height, max_width)
+        return semantic_segmentation
