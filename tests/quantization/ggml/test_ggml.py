@@ -39,16 +39,10 @@ if is_gguf_available():
 @slow
 class GgufQuantizationTests(unittest.TestCase):
     """
-    Test cases for the basic interoperability with GGUF models:
-    - Tokenizer conversion and tokenization
-    - GGUF weights dequantization
-    - Model serilization and generation
+    Test cases for weights dequantization with GGUF models:
     """
 
     example_text = "Hello"
-    original_model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    gguf_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
-    gguf_filename = "TinyLlama-1.1B-Chat-v1.0-{quant_type}.gguf"
 
     def run_gguf_model(self, gguf_model_id: str, gguf_filename: str, expected_text: str):
         tokenizer = AutoTokenizer.from_pretrained(gguf_model_id, gguf_file=gguf_filename)
@@ -64,12 +58,32 @@ class GgufQuantizationTests(unittest.TestCase):
             (QuantType.Q4_0.name, "Hello, World!\n\nStep 3: Add"),
             (QuantType.Q5_0.name, "Hello, World!\n\n5. Use a library"),
             (QuantType.Q8_0.name, "Hello, World!\n\n5. Use a library"),
-            # k-quants
+        ],
+    )
+    def test_standard_quants(self, quant_type: str, expected_text: str):
+        gguf_model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
+        filename_format = "tinyllama-1.1b-chat-v1.0.{quant_type}.gguf"
+        gguf_filename = filename_format.format(quant_type=quant_type)
+        self.run_gguf_model(gguf_model_id, gguf_filename, expected_text)
+
+    # k-quants
+    @parameterized.expand(
+        [
             (QuantType.Q2_K.name, "Hello, World!\n\n[10:0"),
             (QuantType.Q3_K.name, "Hello, World!\n\n```\n<|user"),
             (QuantType.Q4_K.name, "Hello, World!\n\n5. Python:\n"),
             (QuantType.Q5_K.name, "Hello, World!\n\nStep 3: Add"),
             (QuantType.Q6_K.name, "Hello, World!\n\nStep 3: Add"),
+        ],
+    )
+    def test_k_quants(self, quant_type: str, expected_text: str):
+        gguf_model_id = "legraphista/Llama-3.2-1B-Instruct-IMat-GGUF"
+        filename_format = "Llama-3.2-1B-Instruct.{quant_type}.gguf"
+        gguf_filename = filename_format.format(quant_type=quant_type)
+        self.run_gguf_model(gguf_model_id, gguf_filename, expected_text)
+
+    @parameterized.expand(
+        [
             # i-matrix
             (QuantType.IQ1_S.name, "Hello, I'm a friend of mine, I"),
             (QuantType.IQ1_M.name, "Hello, I am interested in purching a copy of"),
@@ -82,9 +96,27 @@ class GgufQuantizationTests(unittest.TestCase):
             (QuantType.IQ4_NL.name, "Hello, world!\n\n5. Using a loop"),
         ],
     )
-    def test_quantization_types(self, quant_type: str, expected_text: str):
-        gguf_filename = self.gguf_filename.format(quant_type=quant_type)
-        self.run_gguf_model(self.gguf_model_id, gguf_filename, expected_text)
+    def test_imatrix_quants(self, quant_type: str, expected_text: str):
+        gguf_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
+        filename_format = "TinyLlama-1.1B-Chat-v1.0-{quant_type}.gguf"
+        gguf_filename = filename_format.format(quant_type=quant_type)
+        self.run_gguf_model(gguf_model_id, gguf_filename, expected_text)
+
+
+@require_gguf
+@require_torch_gpu
+@slow
+class GgufIntegrationTests(unittest.TestCase):
+    """
+    Test cases for basic interoperability with GGUF models:
+    - Tokenization
+    - Model dtype casting and serialization
+    """
+
+    example_text = "Hello"
+    original_model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    gguf_model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
+    gguf_filename = "tinyllama-1.1b-chat-v1.0.{quant_type}.gguf"
 
     def test_tokenization_xnli(self):
         import tqdm
@@ -183,7 +215,7 @@ class GgufQuantizationTests(unittest.TestCase):
 @require_gguf
 @require_torch_gpu
 @slow
-class GgufIntegrationTests(unittest.TestCase):
+class GgufModelTests(unittest.TestCase):
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
     qwen2moe_model_id = "gdax/Qwen1.5-MoE-A2.7B_gguf"
