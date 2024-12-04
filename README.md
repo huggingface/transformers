@@ -306,8 +306,12 @@ Follow the installation pages of Flax, PyTorch or TensorFlow to see how to insta
 For GPU acceleration, install the appropriate CUDA drivers for your system:
 
 a) PyTorch CUDA Compatibility: ( https://pytorch.org/get-started/locally)
+
 b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)
 
+**Verify GPU availability:**
+```nvidia-smi
+```
 ## Model architectures
 
 **[All the model checkpoints](https://huggingface.co/models)** provided by 🤗 Transformers are seamlessly integrated from the huggingface.co [model hub](https://huggingface.co/models), where they are uploaded directly by [users](https://huggingface.co/users) and [organizations](https://huggingface.co/organizations).
