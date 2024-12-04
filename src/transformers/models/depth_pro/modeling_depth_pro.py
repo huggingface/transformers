@@ -838,6 +838,23 @@ class DepthProEncoder(nn.Module):
                 f"by patch_embeddings_size={config.patch_embeddings_size}."
             )
 
+        # scaled_images_ratios, scaled_images_overlap_ratios, scaled_images_feature_dims are consistent
+        if not (len(config.scaled_images_ratios) == len(config.scaled_images_overlap_ratios) == len(config.scaled_images_feature_dims)):
+            raise ValueError(
+                f"len(scaled_images_ratios)={len(config.scaled_images_ratios)} and "
+                f"len(scaled_images_overlap_ratios)={len(config.scaled_images_overlap_ratios)} and "
+                f"len(scaled_images_feature_dims)={len(config.scaled_images_feature_dims)}, "
+                f"should match in config."
+            )
+
+        # intermediate_hook_ids, intermediate_feature_dims are consistent
+        if not (len(config.intermediate_hook_ids) == len(config.intermediate_feature_dims)):
+            raise ValueError(
+                f"len(intermediate_hook_ids)={len(config.intermediate_hook_ids)} and "
+                f"len(intermediate_feature_dims)={len(config.intermediate_feature_dims)}, "
+                f"should match in config."
+            )
+
         # patch encoder
         self.patch_encoder = DepthProViT(config)
 
