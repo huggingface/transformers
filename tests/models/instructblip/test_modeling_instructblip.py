@@ -486,6 +486,15 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     def setUp(self):
         self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=InstructBlipConfig,
+            has_text_modality=False,
+            common_properties=["num_query_tokens", "image_token_index"],
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -936,7 +945,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         # Add args to the config to trigger new logic when inputs are expanded in processing file
         processor.num_query_tokens = model.config.num_query_tokens
         processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        model.config.image_token_index = len(processor.tokenizer) - 1
+        model.config.image_token_index = len(processor.tokenizer) - 2
         model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
 
         # Generate again with new inputs

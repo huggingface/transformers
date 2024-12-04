@@ -205,13 +205,6 @@ class DetrImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class DetrImageProcessorFast(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class DonutFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -577,13 +570,6 @@ class Qwen2VLImageProcessor(metaclass=DummyObject):
 
 
 class RTDetrImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
-class RTDetrImageProcessorFast(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

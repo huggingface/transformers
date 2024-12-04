@@ -77,6 +77,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
 * [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [OLMo2](https://huggingface.co/docs/transformers/model_doc/olmo2#transformers.Olmo2Model)
 * [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
 * [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
@@ -261,6 +262,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
 * [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [OLMo2](https://huggingface.co/docs/transformers/model_doc/olmo2#transformers.Olmo2Model)
 * [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
 * [OPT](https://huggingface.co/docs/transformers/en/model_doc/opt)
 * [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
@@ -404,7 +406,7 @@ To load a model in 4-bit for inference, use the `load_in_4bit` parameter. The `d
 from transformers import AutoModelForCausalLM
 
 model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True)
 ```
 
 To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 600MB of memory to the first GPU and 1GB of memory to the second GPU:
@@ -413,7 +415,7 @@ To load a model in 4-bit for inference with multiple GPUs, you can control how m
 max_memory_mapping = {0: "600MB", 1: "1GB"}
 model_name = "bigscience/bloom-3b"
 model_4bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
+    model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
 )
 ```
 
@@ -431,7 +433,7 @@ To load a model in 8-bit for inference, use the `load_in_8bit` parameter. The `d
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 If you're loading a model in 8-bit for text generation, you should use the [`~transformers.GenerationMixin.generate`] method instead of the [`Pipeline`] function which is not optimized for 8-bit models and will be slower. Some sampling strategies, like nucleus sampling, are also not supported by the [`Pipeline`] for 8-bit models. You should also place all inputs on the same device as the model:
@@ -441,7 +443,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 
 prompt = "Hello, my llama is cute"
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
@@ -455,7 +457,7 @@ To load a model in 4-bit for inference with multiple GPUs, you can control how m
 max_memory_mapping = {0: "1GB", 1: "2GB"}
 model_name = "bigscience/bloom-3b"
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
+    model_name, torch_dtype="auto", device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
 )
 ```
 
@@ -514,7 +516,7 @@ quantization_config = BitsAndBytesConfig(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=quantization_config)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype="auto", quantization_config=quantization_config)
 
 # enable BetterTransformer
 model = model.to_bettertransformer()
