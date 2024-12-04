@@ -220,10 +220,10 @@ class TextNetEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_state,
+        hidden_state: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> BaseModelOutputWithNoAttention:
         hidden_states = [hidden_state]
         for stage in self.stages:
             hidden_state = stage(hidden_state)
