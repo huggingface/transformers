@@ -140,19 +140,9 @@ def get_resize_output_image_size(
     height, width = get_image_size(image, channel_dim=input_data_format)
 
     # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
-<<<<<<< HEAD
-    height, width = _resize_output_size_rescale_to_max_len(
-        height, width, max_len=resolution_max_side
-    )
-    # Find the output size when scaling the image to be below the max_image_size
-    height, width = _resize_output_size_scale_below_upper_bound(
-        height, width, max_len=max_image_size
-    )
-=======
     height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=resolution_max_side)
     # Find the output size when scaling the image to be below the MAX_IMAGE_SIZE
     height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     return height, width
 
 
@@ -843,29 +833,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 images_list[0][0], num_channels=(1, 3, 4)
             )
 
-<<<<<<< HEAD
-        # Extra channel dimension for grayscale images
-        if input_data_format == ChannelDimension.LAST:
-            images_list = [
-                [
-                    np.expand_dims(img, axis=-1) if img.ndim == 2 else img
-                    for img in images
-                ]
-                for images in images_list
-            ]
-        elif input_data_format == ChannelDimension.FIRST:
-            images_list = [
-                [
-                    np.expand_dims(img, axis=0) if img.ndim == 2 else img
-                    for img in images
-                ]
-                for images in images_list
-            ]
-        else:
-            raise ValueError(f"Invalid channel dimension format {input_data_format}.")
-
-=======
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         if do_resize:
             images_list = [
                 [

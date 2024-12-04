@@ -79,18 +79,9 @@ if is_torch_available():
         "hybrid": HybridCache,
         "mamba": MambaCache,
     }
-<<<<<<< HEAD
-    QUANT_BACKEND_CLASSES_MAPPING = {
-        "quanto": QuantoQuantizedCache,
-        "HQQ": HQQQuantizedCache,
-    }
-    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(
-        NEEDS_CACHE_CONFIG.keys()
-=======
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
         list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys()) + ["offloaded"]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     )
 
 

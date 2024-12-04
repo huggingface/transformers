@@ -443,12 +443,6 @@ class GenerationMixin:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
                 if past_key_values is not None:
-<<<<<<< HEAD
-                    model_input = model_input[:, -input_ids.shape[1] :]
-                    model_input = model_input.clone(
-                        memory_format=torch.contiguous_format
-                    )
-=======
                     current_input_length = (
                         model_inputs["inputs_embeds"].shape[1]
                         if model_inputs["inputs_embeds"] is not None
@@ -456,7 +450,6 @@ class GenerationMixin:
                     )
                     model_input = model_input[:, -current_input_length:]
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
                 model_inputs[model_input_name] = model_input
 
         # 6. Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
@@ -1151,15 +1144,6 @@ class GenerationMixin:
                 "You have explicitly specified `forced_decoder_ids`. Please remove the `forced_decoder_ids` argument "
                 "in favour of `input_ids` or `decoder_input_ids` respectively.",
             )
-<<<<<<< HEAD
-        if generation_config.watermarking_config is not None:
-            processors.append(
-                generation_config.watermarking_config.construct_processor(
-                    self.config.vocab_size, device
-                )
-            )
-=======
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # TODO (joao): find a strategy to specify the order of the processors
         processors = self._merge_criteria_processor_list(processors, logits_processor)

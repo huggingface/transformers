@@ -217,16 +217,9 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 )
                 if not isinstance(original_size, (list, tuple)):
                     # cast to list to avoid numerical precision errors when calculating unpadding
-<<<<<<< HEAD
-                    orig_height, orig_width = original_size.tolist()
-                num_image_tokens = self._get_number_of_features(
-                    orig_height, orig_width, height, width
-                )
-=======
                     original_size = original_size.tolist()
                 orig_height, orig_width = original_size
                 num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
                 sample = sample.replace(

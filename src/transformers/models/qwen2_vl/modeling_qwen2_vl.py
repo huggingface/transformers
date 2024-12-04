@@ -1188,11 +1188,6 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
-<<<<<<< HEAD
-        cu_seqlens = torch.repeat_interleave(
-            grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]
-        ).cumsum(dim=0, dtype=torch.int32)
-=======
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0,
             # Select dtype based on the following factors:
@@ -1201,7 +1196,6 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             # See https://github.com/huggingface/transformers/pull/34852 for more information
             dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
         )
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         for blk in self.blocks:
@@ -1979,12 +1973,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-<<<<<<< HEAD
-        if position_ids is None and input_ids is not None:
-            position_ids, _ = self.get_rope_index(
-                input_ids, image_grid_thw, video_grid_thw, attention_mask
-            )
-=======
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and input_ids is not None and (attention_mask is None or attention_mask.ndim == 2):
             # calculate RoPE index once per generation in the pre-fill stage only
@@ -2003,7 +1991,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         outputs = self.model(
             input_ids=None,
@@ -2077,29 +2064,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             ):  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
-<<<<<<< HEAD
-        rope_deltas = kwargs.get("rope_deltas", None)
-        if attention_mask is not None and position_ids is None:
-            if cache_position is None or (
-                cache_position is not None and cache_position[0] == 0
-            ):
-                position_ids, rope_deltas = self.get_rope_index(
-                    input_ids, image_grid_thw, video_grid_thw, attention_mask
-                )
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = (
-                    cache_position[0] + rope_deltas
-                    if cache_position is not None and rope_deltas is not None
-                    else 0
-                )
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
-=======
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         if cache_position[0] != 0:
             pixel_values = None
             pixel_values_videos = None

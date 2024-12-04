@@ -81,49 +81,24 @@ def write_model(
     config_path = Path(input_base_path) / "config.yaml"
     olmo2_config = yaml.safe_load(config_path.read_text())["model"]
 
-<<<<<<< HEAD:src/transformers/models/olmo_1124/convert_olmo_1124_weights_to_hf.py
-    if not olmo_1124_config.get("attention_layer_norm", False):
-        raise RuntimeError(
-            "OLMo November 2024 checkpoints must have attention layer norm"
-        )
-    if not olmo_1124_config.get("norm_after", False):
-        raise RuntimeError("OLMo November 2024 checkpoints must set norm_after to True")
-=======
     if not olmo2_config.get("attention_layer_norm", False):
         raise RuntimeError("OLMo2 checkpoints must have attention layer norm")
     if not olmo2_config.get("norm_after", False):
         raise RuntimeError("OLMo2 checkpoints must set norm_after to True")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/convert_olmo2_weights_to_hf.py
 
     n_layers = olmo2_config["n_layers"]
     n_heads = olmo2_config["n_heads"]
     dim = olmo2_config["d_model"]
     dims_per_head = dim // n_heads
-<<<<<<< HEAD:src/transformers/models/olmo_1124/convert_olmo_1124_weights_to_hf.py
-    base = olmo_1124_config["rope_theta"]
-    inv_freq = 1.0 / (
-        base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head)
-    )
-    max_position_embeddings = olmo_1124_config["max_sequence_length"]
-=======
     base = olmo2_config["rope_theta"]
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
     max_position_embeddings = olmo2_config["max_sequence_length"]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/convert_olmo2_weights_to_hf.py
 
     vocab_size = olmo2_config.get("embedding_size", olmo2_config["vocab_size"])
 
-<<<<<<< HEAD:src/transformers/models/olmo_1124/convert_olmo_1124_weights_to_hf.py
-    if olmo_1124_config.get("n_kv_heads", None) is not None:
-        num_key_value_heads = olmo_1124_config["n_kv_heads"]  # for GQA / MQA
-    elif olmo_1124_config[
-        "multi_query_attention"
-    ]:  # compatibility with other checkpoints
-=======
     if olmo2_config.get("n_kv_heads", None) is not None:
         num_key_value_heads = olmo2_config["n_kv_heads"]  # for GQA / MQA
     elif olmo2_config["multi_query_attention"]:  # compatibility with other checkpoints
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/convert_olmo2_weights_to_hf.py
         num_key_value_heads = 1
     else:
         num_key_value_heads = n_heads
@@ -243,15 +218,8 @@ def write_model(
     if include_tokenizer:
         _write_tokenizer(model_path, config, input_base_path, tokenizer_path)
 
-<<<<<<< HEAD:src/transformers/models/olmo_1124/convert_olmo_1124_weights_to_hf.py
-    print("Loading the checkpoint in a OLMo November 2024 model.")
-    model = Olmo1124ForCausalLM.from_pretrained(
-        tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True
-    )
-=======
     print("Loading the checkpoint in a OLMo2 model.")
     model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/convert_olmo2_weights_to_hf.py
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")

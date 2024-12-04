@@ -215,14 +215,7 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     return bucket_pos
 
 
-<<<<<<< HEAD
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.build_relative_position
-def build_relative_position(
-    query_size, key_size, bucket_size=-1, max_position=-1, device=None
-):
-=======
 def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     """
     Build relative position according to the query and key
 

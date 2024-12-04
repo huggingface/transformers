@@ -2436,13 +2436,7 @@ class Trainer:
                 FutureWarning,
             )
         if len(kwargs) > 0:
-<<<<<<< HEAD
-            raise TypeError(
-                f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}."
-            )
-=======
             raise TypeError(f"train() got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
         self._train_batch_size = self.args.train_batch_size
@@ -2912,17 +2906,9 @@ class Trainer:
                             )
                         else:
                             input_tokens = inputs[main_input_name].numel()
-<<<<<<< HEAD
-                            input_tokens = torch.tensor(
-                                input_tokens, device=self.args.device, dtype=torch.int64
-                            )
-                            self.state.num_input_tokens_seen += (
-                                self.accelerator.gather(input_tokens).cpu().item()
-=======
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
                             self.state.num_input_tokens_seen += (
                                 self.accelerator.gather(input_tokens).sum().cpu().item()
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
                             )
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)

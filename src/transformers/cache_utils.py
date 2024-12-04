@@ -1268,15 +1268,8 @@ class StaticCache(Cache):
                 "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
 
-<<<<<<< HEAD
-        self.batch_size = batch_size or max_batch_size
-        self.max_cache_len = (
-            config.max_position_embeddings if max_cache_len is None else max_cache_len
-        )
-=======
         self.max_batch_size = batch_size or max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
@@ -2179,32 +2172,18 @@ class OffloadedStaticCache(StaticCache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         self.max_batch_size = max_batch_size
-<<<<<<< HEAD
-        self.max_cache_len = (
-            config.max_position_embeddings if max_cache_len is None else max_cache_len
-        )
-        self.device = torch.device(device)
-=======
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device) if layer_device_map is None else layer_device_map[0]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         self.offload_device = torch.device(offload_device)
         self.dtype = dtype if dtype is not None else torch.float32
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-<<<<<<< HEAD
-        head_dim = (
-            config.head_dim
-            if hasattr(config, "head_dim")
-            else config.hidden_size // config.num_attention_heads
-=======
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
 
         num_key_value_heads = (
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         )
 
         num_key_value_heads = (

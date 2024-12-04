@@ -58,20 +58,8 @@ class Olmo2RMSNorm(nn.Module):
 
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo2
 # TODO(joao): add me back asap :)
-<<<<<<< HEAD:src/transformers/models/olmo_1124/modeling_olmo_1124.py
-class Olmo1124RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-    ):
-=======
 class Olmo2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/modeling_olmo2.py
         super().__init__()
         self.scaling_factor = scaling_factor
         self.dim = dim
@@ -250,17 +238,8 @@ class Olmo2Attention(nn.Module):
             self.hidden_size, self.hidden_size, bias=config.attention_bias
         )
         self._init_rope()
-<<<<<<< HEAD:src/transformers/models/olmo_1124/modeling_olmo_1124.py
-        self.q_norm = Olmo1124RMSNorm(
-            self.num_heads * self.head_dim, config.rms_norm_eps
-        )
-        self.k_norm = Olmo1124RMSNorm(
-            self.num_key_value_heads * self.head_dim, config.rms_norm_eps
-        )
-=======
         self.q_norm = Olmo2RMSNorm(self.num_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo2RMSNorm(self.num_key_value_heads * self.head_dim, config.rms_norm_eps)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/modeling_olmo2.py
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -597,25 +576,11 @@ class Olmo2DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-<<<<<<< HEAD:src/transformers/models/olmo_1124/modeling_olmo_1124.py
-        self.self_attn = OLMO_1124_ATTENTION_CLASSES[config._attn_implementation](
-            config=config, layer_idx=layer_idx
-        )
-
-        self.mlp = Olmo1124MLP(config)
-        self.post_attention_layernorm = Olmo1124RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_feedforward_layernorm = Olmo1124RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-=======
         self.self_attn = OLMO2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = Olmo2MLP(config)
         self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/modeling_olmo2.py
 
     # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     # TODO(joao): add me back asap :)
@@ -822,14 +787,7 @@ class Olmo2Model(Olmo2PreTrainedModel):
             config.vocab_size, config.hidden_size, self.padding_idx
         )
         self.layers = nn.ModuleList(
-<<<<<<< HEAD:src/transformers/models/olmo_1124/modeling_olmo_1124.py
-            [
-                Olmo1124DecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
-=======
             [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/modeling_olmo2.py
         )
         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
@@ -1158,15 +1116,8 @@ class Olmo2ForCausalLM(Olmo2PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-<<<<<<< HEAD:src/transformers/models/olmo_1124/modeling_olmo_1124.py
-    @add_start_docstrings_to_model_forward(OLMO_1124_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
-    )
-=======
     @add_start_docstrings_to_model_forward(OLMO2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e:src/transformers/models/olmo2/modeling_olmo2.py
     # Ignore copy
     def forward(
         self,

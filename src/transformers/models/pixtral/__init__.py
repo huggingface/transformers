@@ -17,10 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
-<<<<<<< HEAD
-=======
     is_torchvision_available,
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     is_vision_available,
 )
 

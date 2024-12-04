@@ -557,17 +557,6 @@ class ProcessorMixin(PushToHubMixin):
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
-<<<<<<< HEAD
-            chat_template_json_string = (
-                json.dumps(
-                    {"chat_template": self.chat_template}, indent=2, sort_keys=True
-                )
-                + "\n"
-            )
-            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
-                writer.write(chat_template_json_string)
-            logger.info(f"chat template saved in {output_chat_template_file}")
-=======
             if kwargs.get("save_raw_chat_template", False):
                 with open(output_raw_chat_template_file, "w", encoding="utf-8") as writer:
                     writer.write(self.chat_template)
@@ -579,7 +568,6 @@ class ProcessorMixin(PushToHubMixin):
                 with open(output_chat_template_file, "w", encoding="utf-8") as writer:
                     writer.write(chat_template_json_string)
                 logger.info(f"chat template saved in {output_chat_template_file}")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
@@ -642,12 +630,6 @@ class ProcessorMixin(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
-<<<<<<< HEAD
-            chat_template_file = os.path.join(
-                pretrained_model_name_or_path, "chat_template.json"
-            )
-=======
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path

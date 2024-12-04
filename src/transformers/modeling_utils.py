@@ -4362,28 +4362,12 @@ class PreTrainedModel(
                                     "_commit_hash": commit_hash,
                                     **has_file_kwargs,
                                 }
-<<<<<<< HEAD
-                                if not has_file(
-                                    pretrained_model_name_or_path,
-                                    safe_weights_name,
-                                    **has_file_kwargs,
-                                ):
-                                    Thread(
-                                        target=auto_conversion,
-                                        args=(pretrained_model_name_or_path,),
-                                        kwargs={
-                                            "ignore_errors_during_conversion": True,
-                                            **cached_file_kwargs,
-                                        },
-                                        name="Thread-autoconversion",
-=======
                                 if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
                                     Process(
                                         target=auto_conversion,
                                         args=(pretrained_model_name_or_path,),
                                         kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
                                         name="Process-auto_conversion",
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
                                     ).start()
                         else:
                             # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
@@ -5794,15 +5778,8 @@ class PreTrainedModel(
             device_mesh (`torch.distributed.DeviceMesh`):
                 The device mesh to use for tensor parallelism.
         """
-<<<<<<< HEAD
-        if not is_torch_greater_or_equal_than_2_4:
-            raise EnvironmentError(
-                "tensor parallel is only supported for `torch>=2.5`."
-            )
-=======
         if not is_torch_greater_or_equal("2.5"):
             raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
         # No op if `_tp_plan` attribute does not exist under the module.

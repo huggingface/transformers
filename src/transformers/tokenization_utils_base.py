@@ -2686,11 +2686,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if isinstance(self.chat_template, dict):
                 # Chat template dicts are saved to the config as lists of dicts with fixed key names.
                 # They will be reconstructed as a single dict during loading.
-<<<<<<< HEAD
-                tokenizer_config["chat_template"] = [
-                    {"name": k, "template": v} for k, v in self.chat_template.items()
-                ]
-=======
                 # We're trying to discourage chat template dicts, and they are always
                 # saved in the config, never as single files.
                 tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
@@ -2700,7 +2695,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 logger.info(f"chat template saved in {chat_template_file}")
                 if "chat_template" in tokenizer_config:
                     tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
             else:
                 tokenizer_config["chat_template"] = self.chat_template
 

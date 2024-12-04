@@ -791,11 +791,7 @@ class GlmModel(GlmPreTrainedModel):
         )
         self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmRotaryEmbedding(
-<<<<<<< HEAD
-            dim=config.head_dim // 2,
-=======
             dim=int(config.head_dim * config.partial_rotary_factor),
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
         )

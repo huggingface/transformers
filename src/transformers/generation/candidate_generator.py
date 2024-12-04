@@ -529,20 +529,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         # Since re-encoding the tokens may result in tokenization discrepancies, we use 2 look behind values
         # (one for each conversion) which mark where to start looking for the overlap between the
         # source and target encodings, to ensure the new tokens include the correct prompt suffix.
-<<<<<<< HEAD
-        if (
-            self.prev_tokens is not None
-            and self.prev_target_ids.shape[1] > self.target_lookbehind
-        ):
-            # input_ids contains all target prompt input ids and some new target input ids
-            start_index_in_target_window = (
-                self.prev_target_ids.shape[1] - self.target_lookbehind
-            )
-=======
         if self.prev_assistant_ids is not None and input_ids.shape[1] > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
             start_index_in_target_window = input_ids.shape[1] - self.target_lookbehind
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
             new_assistant_ids = self.convert_source_tokens_to_target_tokens(
                 input_ids[:, start_index_in_target_window:], **convert_kwargs
@@ -586,14 +575,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 )
 
         else:
-<<<<<<< HEAD
-            assistant_input_ids = self.convert_source_tokens_to_target_tokens(
-                input_ids, **convert_kwargs
-            )
-            self.prev_target_ids = input_ids
-=======
             assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
         self.prev_assistant_ids = assistant_input_ids
         new_cur_len = assistant_input_ids.shape[-1]

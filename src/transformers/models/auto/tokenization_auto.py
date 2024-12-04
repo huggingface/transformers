@@ -746,24 +746,9 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-<<<<<<< HEAD
-            (
-                "olmo",
-                (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-            ),
-            (
-                "olmo_1124",
-                (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-            ),
-            (
-                "olmoe",
-                (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-            ),
-=======
             ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("olmo2", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
             (
                 "omdet-turbo",
                 (

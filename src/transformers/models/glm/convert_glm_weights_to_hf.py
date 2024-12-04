@@ -37,19 +37,9 @@ STATE_DICT_MAPPING = {
 # fmt: on
 
 
-<<<<<<< HEAD
-def merge_safetensors(input_dir: str):
-    all_files = [
-        os.path.join(input_dir, x)
-        for x in os.listdir(input_dir)
-        if x.endswith(".safetensors")
-    ]
-    all_files = sorted(all_files, key=lambda x: int(x.rsplit("-", 3)[1]))
-=======
 def load_weights(input_dir: str):
     safetensor_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".safetensors")]
     bin_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".bin")]
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
 
     all_weights = {}
 
@@ -147,24 +137,6 @@ def convert_config(original_config: dict):
     return new_config
 
 
-<<<<<<< HEAD
-def convert_glm_tokenizer(input_dir):
-    fast_tok = PreTrainedTokenizerFast.from_pretrained(
-        input_dir, model_input_names=["input_ids", "attention_mask"]
-    )
-    # Add the two tokens automatically with post processor
-    fast_tok._tokenizer.post_processor = processors.Sequence(
-        [
-            processors.ByteLevel(trim_offsets=False),
-            processors.TemplateProcessing(
-                single="[gMASK]:0 <sop>:0 $A:0",
-                pair="[gMASK]:0 <sop>:0 $A:0 $B:1",
-                special_tokens=[("[gMASK]", 151331), ("<sop>", 151333)],
-            ),
-        ],
-    )
-
-=======
 def convert_glm_tokenizer(input_dir, use_post_processor=False):
     fast_tok = PreTrainedTokenizerFast.from_pretrained(input_dir, model_input_names=["input_ids", "attention_mask"])
     if use_post_processor:
@@ -182,7 +154,6 @@ def convert_glm_tokenizer(input_dir, use_post_processor=False):
         fast_tok._tokenizer.post_processor = processors.Sequence(
             [processors.ByteLevel(trim_offsets=False)],
         )
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     return fast_tok
 
 

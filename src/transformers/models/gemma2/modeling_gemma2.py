@@ -216,10 +216,6 @@ def eager_attention_forward(
 
 
 def flash_attention_forward(
-<<<<<<< HEAD
-    config, query, key, value, mask, target_dtype=torch.float16, **_kwargs
-):
-=======
     config: Gemma2Config,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -228,7 +224,6 @@ def flash_attention_forward(
     target_dtype: torch.dtype = torch.float16,
     **_kwargs,
 ) -> Tuple[torch.Tensor, None]:
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     if mask is not None:
         seq_len = mask.shape[1]
         query = query[:, :, :seq_len]
@@ -270,10 +265,6 @@ def flash_attention_forward(
 
 
 def flex_attention_forward(
-<<<<<<< HEAD
-    config, query, key, value, mask, output_attentions=False, **_kwargs
-):
-=======
     config: Gemma2Config,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -282,7 +273,6 @@ def flex_attention_forward(
     output_attentions: bool = False,
     **_kwargs,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
         score = soft_cap * torch.tanh(score / soft_cap)
@@ -446,20 +436,9 @@ class Gemma2Attention(nn.Module):
                 key_states, value_states, self.layer_idx, cache_kwargs
             )
 
-<<<<<<< HEAD
-        if output_attentions and self.config._attn_implementation in [
-            "sdpa",
-            "flash_attention_2",
-        ]:
-            logger.warning_once(
-                "Setting `attention_type` to `flex_attention` because `output_attentions=True`"
-            )
-            attention_type = "eager"
-=======
         if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
             logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
             attention_type = "flex_attention"
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
         else:
             attention_type = self.config._attn_implementation
 

@@ -1452,21 +1452,12 @@ class TrainingArguments:
         default="every_save",
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
-<<<<<<< HEAD
-    hub_token: Optional[str] = field(
-        default=None, metadata={"help": "The token to use to push to the Model Hub."}
-    )
-    hub_private_repo: bool = field(
-        default=False,
-        metadata={"help": "Whether the model repository is private or not."},
-=======
     hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     hub_private_repo: Optional[bool] = field(
         default=None,
         metadata={
             "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
         },
->>>>>>> a09860d758302d61d4d1b73a791329e94f762b0e
     )
     hub_always_push: bool = field(
         default=False,
