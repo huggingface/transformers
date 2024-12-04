@@ -261,7 +261,7 @@ This will use the [`~OffloadedStaticCache`] implementation instead.
 >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
 "Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
 ```
-Same as the example above, cache offloading requires a CUDA GPU.
+Cache offloading requires a CUDA GPU.
 
 
 ### Sliding Window Cache
