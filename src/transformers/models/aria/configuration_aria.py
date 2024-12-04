@@ -38,8 +38,8 @@ class AriaTextConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`LlamaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            The size of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -124,8 +124,6 @@ class AriaTextConfig(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
-        moe_intermediate_size (`int`, *optional*, defaults to 4096):
-            The intermediate size for MoE layers.
         moe_num_experts (`int`, *optional*, defaults to 8):
             The number of experts in the MoE layer.
         moe_topk (`int`, *optional*, defaults to 2):
@@ -152,7 +150,7 @@ class AriaTextConfig(PretrainedConfig):
         self,
         vocab_size=32000,
         hidden_size=4096,
-        intermediate_size=11008,
+        intermediate_size: int = 4096,
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
@@ -172,7 +170,6 @@ class AriaTextConfig(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        moe_intermediate_size: int = 4096,
         moe_num_experts: int = 8,
         moe_topk: int = 2,
         moe_num_shared_experts: int = 2,
@@ -188,7 +185,7 @@ class AriaTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
-        self.intermediate_size = moe_intermediate_size * moe_num_shared_experts
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
 
@@ -213,7 +210,6 @@ class AriaTextConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        self.moe_intermediate_size = moe_intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
         self.moe_num_shared_experts = moe_num_shared_experts

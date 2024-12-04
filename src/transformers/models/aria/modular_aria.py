@@ -119,8 +119,8 @@ class AriaTextConfig(LlamaConfig):
             `inputs_ids` passed when calling [`LlamaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            The size of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -205,8 +205,6 @@ class AriaTextConfig(LlamaConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
-        moe_intermediate_size (`int`, *optional*, defaults to 4096):
-            The intermediate size for MoE layers.
         moe_num_experts (`int`, *optional*, defaults to 8):
             The number of experts in the MoE layer.
         moe_topk (`int`, *optional*, defaults to 2):
@@ -220,7 +218,7 @@ class AriaTextConfig(LlamaConfig):
 
     def __init__(
         self,
-        moe_intermediate_size: int = 4096,
+        intermediate_size: int = 4096,
         moe_num_experts: int = 8,
         moe_topk: int = 2,
         moe_num_shared_experts: int = 2,
@@ -228,11 +226,10 @@ class AriaTextConfig(LlamaConfig):
         **super_kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **super_kwargs)
-        self.moe_intermediate_size = moe_intermediate_size
+        self.intermediate_size = intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
         self.moe_num_shared_experts = moe_num_shared_experts
-        self.intermediate_size = moe_intermediate_size * moe_num_shared_experts
 
 
 class AriaConfig(PretrainedConfig):
@@ -1010,7 +1007,19 @@ class AriaProcessor(ProcessorMixin):
 
 
 class AriaSharedExpertsMLP(LlamaMLP):
-    pass
+    """
+    Shared Expert MLP for shared experts.
+
+    Unlike routed experts, shared experts process all tokens without routing.
+    This class reconfigures the intermediate size in comparison to the LlamaMLP.
+
+    Args:
+        config (`AriaTextConfig`): Configuration object for the Aria language model.
+    """
+
+    def __init__(self, config: AriaTextConfig):
+        super().__init__(self)
+        self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
 
 
 class AriaGroupedExpertsGemm(nn.Module):

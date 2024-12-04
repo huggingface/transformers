@@ -225,11 +225,21 @@ class AriaProjector(nn.Module):
 
 
 class AriaSharedExpertsMLP(nn.Module):
-    def __init__(self, config):
+    """
+    Shared Expert MLP for shared experts.
+
+    Unlike routed experts, shared experts process all tokens without routing.
+    This class reconfigures the intermediate size in comparison to the LlamaMLP.
+
+    Args:
+        config (`AriaTextConfig`): Configuration object for the Aria language model.
+    """
+
+    def __init__(self, config: AriaTextConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
+        self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
