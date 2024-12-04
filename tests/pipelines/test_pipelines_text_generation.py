@@ -613,7 +613,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_return_dict_in_generate(self):
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
         try:
-            output = text_generator("Hello, world!")
+            output = text_generator("Hello, world!", return_dict_in_generate=True)
             self.assertIsNotNone(output)
             self.assertIsInstance(output, list)
             self.assertTrue(len(output) > 0)
