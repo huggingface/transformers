@@ -22,9 +22,6 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import torch
-from torch import nn
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
@@ -53,38 +50,9 @@ if is_torch_available():
 
 
 if is_grouped_gemm_available():
-    from grouped_gemm.ops import gmm as experts_gemm
+    from grouped_gemm.ops import gmm
 else:
-
-    def experts_gemm(token_states, expert_weights, tokens_per_expert):
-        """
-        Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
-
-        Args:
-            token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
-            expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
-            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-
-        Returns:
-            torch.Tensor: Output tensor of shape (num_tokens, out_features).
-        """
-        num_tokens = token_states.shape[0]
-        out_features = expert_weights.shape[-1]
-        output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
-
-        cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
-        # Insert zero at the begining for offset index's convenience
-        zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
-        cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
-
-        for expert_num in range(expert_weights.shape[0]):
-            start = cumsum_num_tokens[expert_num]
-            end = cumsum_num_tokens[expert_num + 1]
-            tokens = token_states[start:end]
-
-            out = torch.matmul(tokens, expert_weights[expert_num])
-            output[start:end] = out
-        return output
+    gmm = None
 
 
 logger = logging.get_logger(__name__)
@@ -280,6 +248,40 @@ class AriaSharedExpertsMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
+
+
+def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
+    """
+    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
+
+    Args:
+        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+
+    Returns:
+        torch.Tensor: Output tensor of shape (num_tokens, out_features).
+    """
+    num_tokens = token_states.shape[0]
+    out_features = expert_weights.shape[-1]
+    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
+
+    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
+    # Insert zero at the begining for offset index's convenience
+    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
+    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
+
+    for expert_num in range(expert_weights.shape[0]):
+        start = cumsum_num_tokens[expert_num]
+        end = cumsum_num_tokens[expert_num + 1]
+        tokens = token_states[start:end]
+
+        out = torch.matmul(tokens, expert_weights[expert_num])
+        output[start:end] = out
+    return output
+
+
+experts_gemm = gmm if gmm is not None else sequential_experts_gemm
 
 
 class AriaGroupedExpertsGemm(nn.Module):
@@ -1049,14 +1051,14 @@ ARIA_TEXT_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare AriaText Model outputting raw hidden-states without any specific head on top.",
+    "The bare Aria Model outputting raw hidden-states without any specific head on top.",
     ARIA_TEXT_START_DOCSTRING,
 )
 class AriaPreTrainedModel(PreTrainedModel):
     config_class = AriaTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["AriaTextDecoderLayer"]
+    _no_split_modules = ["AriaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True

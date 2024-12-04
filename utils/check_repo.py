@@ -85,7 +85,7 @@ PRIVATE_MODELS = [
     "Idefics2PerceiverResampler",
     "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
-    "AriaTextForCausal",
+    "AriaTextForCausalLM",
     "AriaTextModel",
 ]
 
