@@ -253,19 +253,21 @@ This repository is tested on Python 3.9+, Flax 0.4.1+, PyTorch 1.11+, and Tensor
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
-a) First, create a virtual environment with the version of Python you're going to use and activate it.
+**a) First, create a virtual environment with the version of Python you're going to use and activate it.**
 
-For macOS/Linux:
-
----python -m venv env
-source env/bin/activate---
-
-For Windows:
+**For macOS/Linux:**
 
 ---python -m venv env
-env\Scripts\activate---
+source env/bin/activate
+---
 
-b) Install a backend framework:
+**For Windows:**
+
+---python -m venv env
+env\Scripts\activate
+---
+
+**b) Install a backend framework:**
 To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or TensorFlow. Refer to the official installation guides for platform-specific commands:
 
 [TensorFlow installation page](https://www.tensorflow.org/install/), 
@@ -273,14 +275,14 @@ To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or Ten
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
-c) Install 🤗 Transformers:
+**c) Install 🤗 Transformers:**
 ```bash
 pip install transformers
 ```
 
 If you'd like to play with the examples or need the bleeding edge of the code and can't wait for a new release, you must [install the library from source](https://huggingface.co/docs/transformers/installation#installing-from-source).
 
-d) Optional: Install from source for the latest updates:
+**d) Optional: Install from source for the latest updates:**
 
 ---Bash
 git clone https://github.com/huggingface/transformers.git
