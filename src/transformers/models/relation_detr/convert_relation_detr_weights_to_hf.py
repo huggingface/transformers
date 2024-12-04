@@ -60,6 +60,15 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_BACKBONE = {
         r"backbone.0.features.(\d+).(\d+).attn.relative_position_index":    None,
         r"backbone.0.features.(\d+).(.*)":                                  lambda m: f"model.backbone.model._backbone.layers_{int(m.group(1)) // 2}.blocks.{m.group(2)}",
         r"backbone.0.(.*)":                                                 r"model.backbone.model._backbone.\1",
+    },
+    "focal": {
+        "backbone.0.patch_embed.(proj|norm).(weight|bias)":                r"model.backbone.model._backbone.stem.\1.\2",
+        r"backbone.0.layers.(\d+).blocks.(\d+).norm(\d+).(weight|bias)":    r"model.backbone.model._backbone.layers_\1.blocks.\2.norm\3_post.\4",
+        r"backbone.0.layers.(\d+).blocks.(\d+).gamma_(\d+)":                r"model.backbone.model._backbone.layers_\1.blocks.\2.ls\3.gamma",
+        r"backbone.0.layers.(\d+).blocks.(.*)":                             r"model.backbone.model._backbone.layers_\1.blocks.\2",
+        r"backbone.0.layers.(\d+).downsample.(proj|norm).(weight|bias)":    lambda m: f"model.backbone.model._backbone.layers_{int(m.group(1)) + 1}.downsample.{m.group(2)}.{m.group(3)}",
+        r"backbone.0.(.*)":                                                 r"model.backbone.model._backbone.\1",
+        r"backbone.1.norm(\d+).(weight|bias)":                              r"model.backbone.features_layer_norm.norms.\1.\2",
     }
 }
 # fmt: on
@@ -108,6 +117,24 @@ def split_q_k_v(state_dict):
         state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
         state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
         state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+    return state_dict
+
+
+def convert_linear_conv_for_focal(state_dict, model_name):
+    if "focal" not in model_name:
+        return state_dict
+
+    KEYS_TO_CONVERT = [
+        r"model.backbone.model._backbone.layers_(\d+).blocks.(\d+).mlp.fc(\d+).weight",
+        r"model.backbone.model._backbone.layers_(\d+).blocks.(\d+).modulation.(proj|f).weight",
+    ]
+    for key in KEYS_TO_CONVERT:
+        for k, v in state_dict.items():
+            m = re.match(key, k)
+            if m is not None and state_dict[k].dim() == 2:
+                # convert linear layer to conv layer
+                state_dict[k] = v.view(v.size(0), -1, 1, 1)
+
     return state_dict
 
 
@@ -195,6 +222,9 @@ def convert_relation_detr_checkpoint(model_name, pytorch_dump_folder_path, push_
             state_dict.pop(old_key)
         elif old_key != new_key:
             state_dict[new_key] = state_dict.pop(old_key)
+
+    # process for focalnet
+    convert_linear_conv_for_focal(state_dict, model_name)
 
     # query, key and value matrices need special treatment
     split_q_k_v(state_dict)
