@@ -43,6 +43,9 @@ class GgufQuantizationTests(unittest.TestCase):
     """
 
     example_text = "Hello"
+    original_model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    gguf_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
+    gguf_filename = "TinyLlama-1.1B-Chat-v1.0-{quant_type}.gguf"
 
     def run_gguf_model(self, gguf_model_id: str, gguf_filename: str, expected_text: str):
         tokenizer = AutoTokenizer.from_pretrained(gguf_model_id, gguf_file=gguf_filename)
@@ -77,16 +80,15 @@ class GgufQuantizationTests(unittest.TestCase):
         ],
     )
     def test_quantization_types(self, quant_type: str, expected_text: str):
-        gguf_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
-        gguf_filename = f"TinyLlama-1.1B-Chat-v1.0-{quant_type}.gguf"
-        self.run_gguf_model(gguf_model_id, gguf_filename, expected_text)
+        gguf_filename = self.gguf_filename.format(quant_type=quant_type)
+        self.run_gguf_model(self.gguf_model_id, gguf_filename, expected_text)
 
-    # TODO(Isotr0py): Fix these broken tests
     def test_tokenization_xnli(self):
         import tqdm
         from datasets import load_dataset
 
-        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
+        q8_0_gguf_model_id = self.gguf_filename.format(quant_type=QuantType.Q8_0.name)
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.gguf_model_id, gguf_file=q8_0_gguf_model_id)
         original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
 
         dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
@@ -117,7 +119,7 @@ class GgufQuantizationTests(unittest.TestCase):
                 self.assertEqual(decoded1, decoded2)
 
         # With special tokens
-        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.gguf_model_id, gguf_file=q8_0_gguf_model_id)
         original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
 
         gguf_tokenizer.add_special_tokens(
@@ -140,8 +142,10 @@ class GgufQuantizationTests(unittest.TestCase):
         self.assertEqual(decoded1, decoded2)
 
     def test_q2_k_serialization(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id).to(torch_device)
+        q2_k_gguf_model_id = self.gguf_filename.format(quant_type=QuantType.Q2_K.name)
+
+        tokenizer = AutoTokenizer.from_pretrained(self.gguf_model_id, gguf_file=q2_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.gguf_model_id, gguf_file=q2_k_gguf_model_id).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -157,9 +161,11 @@ class GgufQuantizationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q6_k_fp16(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q6_k_gguf_model_id)
+        q6_k_gguf_model_id = self.gguf_filename.format(quant_type=QuantType.Q6_K.name)
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=q6_k_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, gguf_file=self.q6_k_gguf_model_id, torch_dtype=torch.float16
+            self.gguf_model_id, gguf_file=q6_k_gguf_model_id, torch_dtype=torch.float16
         ).to(torch_device)
 
         self.assertTrue(model.lm_head.weight.dtype == torch.float16)
@@ -175,9 +181,6 @@ class GgufQuantizationTests(unittest.TestCase):
 @require_torch_gpu
 @slow
 class GgufIntegrationTests(unittest.TestCase):
-    original_model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
-    imatrix_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
     qwen2moe_model_id = "gdax/Qwen1.5-MoE-A2.7B_gguf"
