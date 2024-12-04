@@ -164,7 +164,7 @@ class TFBertTokenizer(keras.layers.Layer):
         try:
             tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         except NameError as e:  # noqa: E722
-            logger.info("BertTokenizerFast has not been imported, importing now.")
+            logger.info(f"BertTokenizerFast has not been imported, importing now: {e}")
             from .tokenization_bert_fast import BertTokenizerFast
 
             tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
