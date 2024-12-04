@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-import pytest
+from parameterized import parameterized
 
 from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
@@ -52,34 +52,33 @@ class GgufQuantizationTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), expected_text)
 
-    @pytest.mark.parametrize(
-        "quant_type, expected_text",
+    @parameterized.expand(
         [
             # standard quants
-            (QuantType.Q4_0, "Hello, World!\n\nStep 3: Add"),
-            (QuantType.Q5_0, "Hello, World!\n\n5. Use a library"),
-            (QuantType.Q8_0, "Hello, World!\n\n5. Use a library"),
+            (QuantType.Q4_0.name, "Hello, World!\n\nStep 3: Add"),
+            (QuantType.Q5_0.name, "Hello, World!\n\n5. Use a library"),
+            (QuantType.Q8_0.name, "Hello, World!\n\n5. Use a library"),
             # k-quants
-            (QuantType.Q2_K, "Hello, World!\n\n[10:0"),
-            (QuantType.Q3_K, "Hello, World!\n\n```\n<|user"),
-            (QuantType.Q4_K, "Hello, World!\n\n5. Python:\n"),
-            (QuantType.Q5_K, "Hello, World!\n\nStep 3: Add"),
-            (QuantType.Q6_K, "Hello, World!\n\nStep 3: Add"),
+            (QuantType.Q2_K.name, "Hello, World!\n\n[10:0"),
+            (QuantType.Q3_K.name, "Hello, World!\n\n```\n<|user"),
+            (QuantType.Q4_K.name, "Hello, World!\n\n5. Python:\n"),
+            (QuantType.Q5_K.name, "Hello, World!\n\nStep 3: Add"),
+            (QuantType.Q6_K.name, "Hello, World!\n\nStep 3: Add"),
             # i-matrix
-            (QuantType.IQ1_S, "Hello, I'm a friend of mine, I"),
-            (QuantType.IQ1_M, "Hello, I am interested in purching a copy of"),
-            (QuantType.IQ2_XXS, "Hello, I'm a software engineer. I'"),
-            (QuantType.IQ2_XS, "Hello World!\n\n```\n<|user|"),
-            (QuantType.IQ2_S, "Hello World!\n\n```\n<|user|"),
-            (QuantType.IQ3_XXS, "Hello, I am interested in your product. Can you"),
-            (QuantType.IQ4_XS, "Hello, world!\n\n5. Using a loop"),
-            (QuantType.IQ3_S, "Hello, World!\n\n5. Python:\n"),
-            (QuantType.IQ4_NL, "Hello, world!\n\n5. Using a loop"),
+            (QuantType.IQ1_S.name, "Hello, I'm a friend of mine, I"),
+            (QuantType.IQ1_M.name, "Hello, I am interested in purching a copy of"),
+            (QuantType.IQ2_XXS.name, "Hello, I'm a software engineer. I'"),
+            (QuantType.IQ2_XS.name, "Hello World!\n\n```\n<|user|"),
+            (QuantType.IQ2_S.name, "Hello World!\n\n```\n<|user|"),
+            (QuantType.IQ3_XXS.name, "Hello, I am interested in your product. Can you"),
+            (QuantType.IQ4_XS.name, "Hello, world!\n\n5. Using a loop"),
+            (QuantType.IQ3_S.name, "Hello, World!\n\n5. Python:\n"),
+            (QuantType.IQ4_NL.name, "Hello, world!\n\n5. Using a loop"),
         ],
     )
-    def test_quantization_types(self, quant_type: QuantType, expected_text: str):
+    def test_quantization_types(self, quant_type: str, expected_text: str):
         gguf_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
-        gguf_filename = f"TinyLlama-1.1B-Chat-v1.0-{quant_type.name}.gguf"
+        gguf_filename = f"TinyLlama-1.1B-Chat-v1.0-{quant_type}.gguf"
         self.run_gguf_model(gguf_model_id, gguf_filename, expected_text)
 
     # TODO(Isotr0py): Fix these broken tests
