@@ -23,6 +23,7 @@ class CLIPImageProcessorFast(BaseImageProcessorFast):
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     size = {"shortest_edge": 224}
+    default_to_square = False
     crop_size = {"height": 224, "width": 224}
     do_resize = True
     do_center_crop = True

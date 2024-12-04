@@ -77,6 +77,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     image_mean = None
     image_std = None
     size = None
+    default_to_square = True
     crop_size = None
     do_resize = None
     do_center_crop = None
@@ -100,11 +101,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         **kwargs,
     ) -> None:
         size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False) if size is not None else None
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = (
-            get_size_dict(crop_size, default_to_square=True, param_name="crop_size") if crop_size is not None else None
+        default_to_square = kwargs.pop(
+            "default_to_square", self.default_to_square if self.default_to_square is not None else True
         )
+        size = get_size_dict(size, default_to_square=default_to_square) if size is not None else None
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
 
         super().__init__(**kwargs)
         self.do_resize = do_resize if do_resize is not None else self.do_resize
@@ -174,8 +176,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             new_size = (size["height"], size["width"])
         else:
             raise ValueError(
-                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
-                f" {size.keys()}."
+                "Size must contain 'height' and 'width' keys or 'shortest_edge' keys. Got" f" {size.keys()}."
             )
         return F.resize(image, new_size, interpolation=resample)
 
@@ -341,13 +342,14 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size=size, default_to_square=True) if size is not None else None
+        default_to_square = kwargs.pop(
+            "default_to_square", self.default_to_square if self.default_to_square is not None else True
+        )
+        size = get_size_dict(size=size, default_to_square=default_to_square) if size is not None else None
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = (
-            get_size_dict(crop_size, default_to_square=True, param_name="crop_size") if crop_size is not None else None
-        )
+        crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize

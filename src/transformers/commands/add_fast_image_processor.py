@@ -317,8 +317,9 @@ def add_fast_image_processor_file(
         "    resample = None\n"
         "    image_mean = None\n"
         "    image_std = None\n"
-        '    size = {"height": None, "width": None}\n'
-        '    crop_size = {"height": None, "width": None}\n'
+        "    size = None\n"
+        "    default_to_square = None\n"
+        "    crop_size = None\n"
         "    do_resize = None\n"
         "    do_center_crop = None\n"
         "    do_rescale = None\n"
