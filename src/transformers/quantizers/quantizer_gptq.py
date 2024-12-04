@@ -52,7 +52,9 @@ class GptqHfQuantizer(HfQuantizer):
         if not is_optimum_available():
             raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
         if is_auto_gptq_available() and is_gptqmodel_available():
-            logger.warning("Detected gptqmodel and auto-gptq, will use gptqmodel, auto-gptq will be deprecated in the future.")
+            logger.warning(
+                "Detected gptqmodel and auto-gptq, will use gptqmodel, auto-gptq will be deprecated in the future."
+            )
 
         gptq_supports_cpu = (
             is_auto_gptq_available()
@@ -70,7 +72,10 @@ class GptqHfQuantizer(HfQuantizer):
             raise ImportError(
                 "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel`. Please notice that auto-gptq will be deprecated in the future."
             )
-        elif is_gptqmodel_available() and (version.parse(importlib.metadata.version("gptqmodel")) <= version.parse("1.3.0") or version.parse(importlib.metadata.version("optimum")) < version.parse("1.24.0")):
+        elif is_gptqmodel_available() and (
+            version.parse(importlib.metadata.version("gptqmodel")) <= version.parse("1.3.0")
+            or version.parse(importlib.metadata.version("optimum")) < version.parse("1.24.0")
+        ):
             raise ImportError("The gptqmodel version should be > 1.3.0, optimum version should >= 1.24.0")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
