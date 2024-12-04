@@ -42,6 +42,25 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DepthProConfig"
 
 
+def patch_to_batch(data: torch.Tensor, batch_size: int) -> torch.Tensor:
+    """
+    converts tensor from shape:
+    (num_patches, seq_len, hidden_size) -> (batch_size, num_patches_per_batch, seq_len, hidden_size)
+    """
+    data = data.reshape(-1, batch_size, *data.shape[1:])
+    data = data.transpose(0, 1)
+    return data
+
+def batch_to_patch(data: torch.Tensor) -> torch.Tensor:
+    """
+    converts tensor from shape:
+    (batch_size, num_patches_per_batch, seq_len, hidden_size) -> (num_patches, seq_len, hidden_size)
+    """
+    data = data.transpose(0, 1)
+    data = data.reshape(-1, *data.shape[2:])
+    return data
+
+
 class DepthProViTPatchEmbeddings(nn.Module):
     """
     Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings
@@ -135,13 +154,17 @@ class DepthProViTEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size, _, height, width = pixel_values.shape
+    def forward(
+            self,
+            pixel_values: torch.Tensor,
+            batch_size: Optional[int] = None,
+        ) -> torch.Tensor:
+        n, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        cls_tokens = self.cls_token.expand(n, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
@@ -149,11 +172,14 @@ class DepthProViTEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
+        if batch_size is not None:
+            embeddings = patch_to_batch(embeddings, batch_size)
+
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DepthPro
 class DepthProViTSelfAttention(nn.Module):
+    # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention.__init__ with ViT->DepthPro
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -172,13 +198,20 @@ class DepthProViTSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
+    # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention.transpose_for_scores with ViT->DepthPro
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
+    # Taken from transformers.models.vit.modeling_vit.ViTSelfAttention.forward with ViT->DepthPro
+    # with the addition of `batch_size`
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self,
+        hidden_states,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        batch_size: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -202,25 +235,37 @@ class DepthProViTSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        if batch_size is not None:
+            attention_probs_batched = patch_to_batch(attention_probs, batch_size)
+            attention_probs_patched = batch_to_patch(attention_probs_batched)
+        else:
+            attention_probs_patched = attention_probs_batched = attention_probs
+
+        context_layer = torch.matmul(attention_probs_patched, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (context_layer, attention_probs_batched) if output_attentions else (context_layer,)
 
         return outputs
 
 
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2SdpaSelfAttention with Dinov2Config->DepthProConfig, Dinov2->DepthProViT
 class DepthProViTSdpaSelfAttention(DepthProViTSelfAttention):
+    # Copied from transformers.models.dinov2.modeling_dinov2.Dinov2SdpaSelfAttention.__init__ with Dinov2Config->DepthProConfig, Dinov2->DepthProViT
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__(config)
         self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
 
+    # Taken from transformers.models.dinov2.modeling_dinov2.Dinov2SdpaSelfAttention.forward with Dinov2Config->DepthProConfig, Dinov2->DepthProViT
+    # with the addition of `batch_size`
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self,
+        hidden_states,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        batch_size: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -229,7 +274,7 @@ class DepthProViTSdpaSelfAttention(DepthProViTSelfAttention):
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
-                hidden_states=hidden_states, head_mask=head_mask, output_attentions=output_attentions
+                hidden_states=hidden_states, head_mask=head_mask, output_attentions=output_attentions, batch_size=batch_size,
             )
 
         mixed_query_layer = self.query(hidden_states)
@@ -274,14 +319,15 @@ class DepthProViTSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DepthProConfig, ViT->DepthProViT
 class DepthProViTAttention(nn.Module):
+    # Copied from transformers.models.vit.modeling_vit.ViTAttention.__init__ with ViTConfig->DepthProConfig, ViT->DepthProViT
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
         self.attention = DepthProViTSelfAttention(config)
         self.output = DepthProViTSelfOutput(config)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.vit.modeling_vit.ViTAttention.prune_heads
     def prune_heads(self, heads: Set[int]) -> None:
         if len(heads) == 0:
             return
@@ -300,13 +346,16 @@ class DepthProViTAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Taken from transformers.models.vit.modeling_vit.ViTAttention.prune_heads
+    # with the addition of `batch_size`
     def forward(
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        batch_size: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+        self_outputs = self.attention(hidden_states, head_mask, output_attentions, batch_size)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -411,10 +460,10 @@ DEPTHPROVIT_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Layer with Dinov2Config->DepthProConfig, Dinov2->DepthProViT all-casing
 class DepthProViTLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
+    # Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Layer.__init__ with Dinov2Config->DepthProConfig, Dinov2->DepthProViT all-casing
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
 
@@ -431,16 +480,23 @@ class DepthProViTLayer(nn.Module):
             self.mlp = DepthProViTMLP(config)
         self.layer_scale2 = DepthProViTLayerScale(config)
 
+    # Taken from transformers.models.dinov2.modeling_dinov2.Dinov2Layer.forward
+    # with the addition of `batch_size`
     def forward(
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        batch_size: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        if batch_size is not None:
+            hidden_states = batch_to_patch(hidden_states)
+
         self_attention_outputs = self.attention(
             self.norm1(hidden_states),  # in DepthProViT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
+            batch_size=batch_size,
         )
         attention_output = self_attention_outputs[0]
 
@@ -458,19 +514,24 @@ class DepthProViTLayer(nn.Module):
         # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
 
+        if batch_size is not None:
+            layer_output = patch_to_batch(layer_output, batch_size)
+
         outputs = (layer_output,) + outputs
 
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViTConfig->DepthProConfig, ViT->DepthProViT
 class DepthProViTEncoder(nn.Module):
+    # Copied from transformers.models.vit.modeling_vit.ViTEncoder.__init__ with ViTConfig->DepthProConfig, ViT->DepthProViT
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([DepthProViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    # Taken from transformers.models.vit.modeling_vit.ViTEncoder.__init__
+    # with the addition of `batch_size`
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -478,6 +539,7 @@ class DepthProViTEncoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
+        batch_size: Optional[int] = None,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -494,9 +556,10 @@ class DepthProViTEncoder(nn.Module):
                     hidden_states,
                     layer_head_mask,
                     output_attentions,
+                    batch_size,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, batch_size)
 
             hidden_states = layer_outputs[0]
 
@@ -532,6 +595,7 @@ class DepthProViT(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        batch_size: Optional[int] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -542,7 +606,7 @@ class DepthProViT(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, batch_size=batch_size)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -550,6 +614,7 @@ class DepthProViT(nn.Module):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            batch_size=batch_size,
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
@@ -871,9 +936,12 @@ class DepthProEncoder(nn.Module):
             output_attentions=output_attentions,
             output_hidden_states=True,  # required for intermediate features
             return_dict=True,
+            batch_size=B,
         )
+        last_hidden_state = patch_encodings.last_hidden_state
+        last_hidden_state = batch_to_patch(last_hidden_state)
         scaled_images_last_hidden_state = torch.split_with_sizes(
-            patch_encodings.last_hidden_state, scaled_images_num_patches[::-1]
+            last_hidden_state, scaled_images_num_patches[::-1]
         )[::-1]  # -1 as patch encoder expects high res patches first
 
         image_encodings = self.image_encoder(
@@ -917,6 +985,7 @@ class DepthProEncoder(nn.Module):
                 self.intermediate_hook_ids[i] + 1
             )  # +1 to correct index position as hidden_states contain embedding output as well
             hidden_state = patch_encodings.hidden_states[layer_id]
+            hidden_state = batch_to_patch(hidden_state)
             hidden_state = hidden_state[
                 : scaled_images_num_patches[-1]
             ]  # num_patches to be of same length as highest resolution
@@ -984,17 +1053,6 @@ class DepthProEncoder(nn.Module):
         last_hidden_state = patch_encodings.last_hidden_state
         hidden_states = patch_encodings.hidden_states if output_hidden_states else None
         attentions = patch_encodings.attentions if output_attentions else None
-
-        num_patches = sum(scaled_images_num_patches)
-        # [0, 3, 6], [1, 4, 7], [2, 5, 8] when num_patches=9 and B=3
-        indexes = torch.arange(num_patches).reshape(num_patches//B, -1).T
-        indexes = indexes.to(last_hidden_state.device)
-
-        last_hidden_state = last_hidden_state[indexes].mean(1)
-        if hidden_states is not None:
-            hidden_states = tuple([state[indexes].mean(1) for state in hidden_states])
-        if attentions is not None:
-            attentions = tuple([state[indexes].mean(1) for state in attentions])
 
         if not return_dict:
             return tuple(v for v in [last_hidden_state, features, hidden_states, attentions] if v is not None)
