@@ -344,8 +344,8 @@ class AriaGroupedExpertsMLP(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
-        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.moe_intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedExpertsGemm(config.moe_intermediate_size, config.hidden_size, config.moe_num_experts)
+        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
+        self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
 
     def forward(self, permuted_tokens, tokens_per_expert):
         """
