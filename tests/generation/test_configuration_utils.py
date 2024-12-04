@@ -57,7 +57,7 @@ from transformers.generation import (
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
     WatermarkLogitsProcessor,
 )
-from transformers.testing_utils import TemporaryHubRepo, TOKEN, USER, is_staging_test, torch_device
+from transformers.testing_utils import TemporaryHubRepo, TOKEN, is_staging_test, torch_device
 
 
 class GenerationConfigTest(unittest.TestCase):
