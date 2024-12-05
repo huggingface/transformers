@@ -95,6 +95,11 @@ if is_torch_available():
     from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
     from transformers.generation.utils import _speculative_sampling
 
+from unittest.mock import patch
+
+from transformers.generation.candidate_generator import AssistedCandidateGenerator
+from transformers.utils import is_sklearn_available
+
 
 class GenerationTesterMixin:
     input_name = "input_ids"
@@ -4312,12 +4317,6 @@ class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
         self.assertEqual(discrep_length, 0)
         np.testing.assert_array_equal(new_tokens_only, np.array([[]]))
         np.testing.assert_array_equal(discrep_only, np.array([[]]))
-
-
-from unittest.mock import patch
-
-from transformers.generation.candidate_generator import AssistedCandidateGenerator
-from transformers.utils import is_sklearn_available
 
 
 class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
