@@ -103,6 +103,7 @@ _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
+_q_galore_torch_available = _is_package_available("q_galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
 _schedulefree_available = _is_package_available("schedulefree")
@@ -383,6 +384,10 @@ def is_torchvision_v2_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_q_galore_torch_available():
+    return _q_galore_torch_available
 
 
 def is_lomo_available():
