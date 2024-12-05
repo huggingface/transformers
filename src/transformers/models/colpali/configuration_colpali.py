@@ -18,7 +18,7 @@ import logging
 from copy import deepcopy
 
 from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,8 @@ class ColPaliConfig(PretrainedConfig):
     Args:
         vlm_config (`PretrainedConfig`, *optional*):
             Configuration of the VLM backbone model.
+        text_config (`PretrainedConfig`, *optional*):
+            Configuration of the text backbone model. Overrides the `text_config` attribute of the `vlm_config` if provided.
         embedding_dim (`int`, *optional*, defaults to 128):
             Dimension of the multi-vector embeddings produced by the model.
 
@@ -58,11 +60,12 @@ class ColPaliConfig(PretrainedConfig):
     """
 
     model_type = "colpali"
-    sub_configs = {"vlm_config": PretrainedConfig}
+    sub_configs = {"vlm_config": PretrainedConfig, "text_config": AutoConfig}
 
     def __init__(
         self,
         vlm_config=None,
+        text_config=None,
         embedding_dim: int = 128,
         **kwargs,
     ):
@@ -90,6 +93,11 @@ class ColPaliConfig(PretrainedConfig):
             )
 
         self.vlm_config = vlm_config
+        self.text_config = text_config = text_config if text_config is not None else vlm_config.text_config
+        if isinstance(self.text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+
         self.embedding_dim = embedding_dim
 
         super().__init__(**kwargs)

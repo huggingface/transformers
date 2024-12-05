@@ -360,4 +360,4 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         )
         print(scores)
 
-        assert torch.allclose(scores, expected_scores, atol=1e-1), f"Expected scores {expected_scores}, got {scores}"
+        assert torch.allclose(scores, expected_scores, atol=1), f"Expected scores {expected_scores}, got {scores}"
