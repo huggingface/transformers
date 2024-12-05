@@ -456,7 +456,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                                         processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
 
                                     with torch.no_grad():
-                                        with torch.backends.cuda.sdp_kernel(
+                                        with sdpa_kernel(
                                             enable_flash=enable_kernels,
                                             enable_math=True,
                                             enable_mem_efficient=enable_kernels,
@@ -470,6 +470,12 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                                     if torch_device in ["cpu", "cuda"]:
                                         atol = atols[torch_device, enable_kernels, torch_dtype]
                                         rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                    elif torch_device == "xpu":
+                                        # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                        # which is implemented on PyTorch level using aten operators and is
+                                        # device agnostic with respect to implementation of each aten operator.
+                                        atol = atols["cuda", False, torch_dtype]
+                                        rtol = rtols["cuda", False, torch_dtype]
                                     else:
                                         atol = 1e-7
                                         rtol = 1e-4
