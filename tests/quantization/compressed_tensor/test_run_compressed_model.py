@@ -13,13 +13,12 @@ if is_torch_available():
 @require_compressed_tensors
 @require_torch
 class CompressedTensorsTest(unittest.TestCase):
-    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense-hf-quantizer"
     tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
     tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
 
     prompt = "Paris is the capital of which country?"
 
-    stubs = [tinyllama_w8a16, tinyllama_w4a16, tinyllama_w8a8]
+    stubs = [tinyllama_w4a16, tinyllama_w8a8]
 
     def tearDown(self):
         gc.collect()

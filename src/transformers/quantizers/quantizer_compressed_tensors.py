@@ -16,7 +16,7 @@
 import os
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
+from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
 
 
@@ -35,7 +35,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     requires_calibration = True
     required_packages = ["compressed_tensors"]
 
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
+    def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
         from compressed_tensors.compressors import ModelCompressor
         from compressed_tensors.quantization import QuantizationStatus
