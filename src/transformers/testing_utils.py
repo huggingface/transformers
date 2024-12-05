@@ -1589,7 +1589,7 @@ class TemporaryHubRepo:
     ```
     """
 
-    def __init__(self, namespace=None, token=None):
+    def __init__(self, namespace: Optional[str]=None, token: Optiona[str]=None) -> None:
         self.token = token
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_id = Path(tmp_dir).name
