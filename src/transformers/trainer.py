@@ -5142,6 +5142,6 @@ class Trainer:
             except (TypeError, AttributeError):
                 pass
 
-        if self.args.average_tokens_across_devices:
+        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
         return batch_samples, num_items_in_batch
