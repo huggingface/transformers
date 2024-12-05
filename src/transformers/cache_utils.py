@@ -1981,13 +1981,16 @@ class OffloadedStaticCache(StaticCache):
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
+        layer_device_map=None,
         **kwargs,
     ) -> None:
+        Cache.__init__(self)
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
         self.dtype = dtype if dtype is not None else torch.float32
+        self.layer_device_map = layer_device_map
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
@@ -2003,25 +2006,21 @@ class OffloadedStaticCache(StaticCache):
         # Create offloaded CPU tensors.
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self._offloaded_key_cache: List[torch.Tensor] = []
+        self._offloaded_value_cache: List[torch.Tensor] = []
 
         for i in range(config.num_hidden_layers):
-            # First layer is always on-device.
-            device = self.device if i == 0 else self.offload_device
+            cpu_key_cache, cpu_value_cache = self._create_key_value_cache_tensors(cache_shape, self.offload_device)
 
+            device = "cuda:0" if i == 0 else "meta"
             key_cache, value_cache = self._create_key_value_cache_tensors(cache_shape, device)
 
             self.key_cache.append(key_cache)
             self.value_cache.append(value_cache)
 
-        # Create device tensors.
-        self._device_key_cache: List[torch.Tensor] = []
-        self._device_value_cache: List[torch.Tensor] = []
-
-        for i in range(2):
-            key_cache, value_cache = self._create_key_value_cache_tensors(cache_shape, self.device)
-
-            self._device_key_cache.append(key_cache)
-            self._device_value_cache.append(value_cache)
+            # Create device tensors.
+            self._offloaded_key_cache.append(cpu_key_cache)
+            self._offloaded_value_cache.append(cpu_value_cache)
 
         # For backwards compatibility.
         # TODO(gante): Remove this.
@@ -2057,32 +2056,24 @@ class OffloadedStaticCache(StaticCache):
         """
 
         if layer_idx == 0:
-            # Update seen tokens.
             # TODO(gante): Remove this.
             self._seen_tokens += key_states.shape[-2]
 
-            # Always there.
-            k_out = self.key_cache[0]
-            v_out = self.value_cache[0]
-        else:
-            # Wait for prefetch stream.
-            if self._prefetch_stream is not None:
-                torch.cuda.default_stream(self.device).wait_stream(self._prefetch_stream)
+        # Wait for prefetch stream.
+        if self._prefetch_stream is not None:
+            torch.cuda.default_stream(key_states.device).wait_stream(self._prefetch_stream)
 
-            k_out = self._device_key_cache[layer_idx & 1]
-            v_out = self._device_value_cache[layer_idx & 1]
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+        # print(layer_idx, (k_out[0, 0].any(dim=-1)).sum(), (v_out[0, 0].any(dim=-1)).sum())
 
-        self._prefetch_layer(layer_idx + 1)
+        prefetch_layer_idx = (layer_idx + 1) % (len(self.key_cache))
+        self._prefetch_layer(prefetch_layer_idx)
 
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
         if cache_position is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
-
-            # Copy the values to the offloaded device as well.
-            if layer_idx == 0:
-                self.key_cache[layer_idx].copy_(key_states.to(self.offload_device))
-                self.value_cache[layer_idx].copy_(value_states.to(self.offload_device))
         else:
             # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does
@@ -2096,20 +2087,11 @@ class OffloadedStaticCache(StaticCache):
                 k_out[:, :, cache_position] = key_states
                 v_out[:, :, cache_position] = value_states
 
-            # Copy the values to the offloaded device as well.
-            if layer_idx != 0:
-                cache_position = cache_position.to(self.offload_device)
-                key_states = key_states.to(self.offload_device)
-                value_states = value_states.to(self.offload_device)
-
-                try:
-                    self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
-                    self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
-                except NotImplementedError:
-                    # The operator 'aten::index_copy.out' is not currently implemented for the MPS
-                    # device.
-                    self.key_cache[layer_idx][:, :, cache_position] = key_states
-                    self.value_cache[layer_idx][:, :, cache_position] = value_states
+        # Copy the values to the offloaded device as well.
+        self._offloaded_key_cache[layer_idx].copy_(k_out.to(self.offload_device))
+        self._offloaded_value_cache[layer_idx].copy_(v_out.to(self.offload_device))
+        self.key_cache[layer_idx] = k_out.to("meta")
+        self.value_cache[layer_idx] = v_out.to("meta")
 
         return k_out, v_out
 
@@ -2134,8 +2116,8 @@ class OffloadedStaticCache(StaticCache):
         # Zero out cache.
         for layer_idx in range(len(self.key_cache)):
             # In-place ops prevent breaking the static address.
-            self.key_cache[layer_idx].zero_()
-            self.value_cache[layer_idx].zero_()
+            self._offloaded_key_cache[layer_idx].zero_()
+            self._offloaded_value_cache[layer_idx].zero_()
 
     @property
     def seen_tokens(self) -> int:
@@ -2190,5 +2172,6 @@ class OffloadedStaticCache(StaticCache):
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
 
-        self._device_key_cache[layer_idx & 1].copy_(self.key_cache[layer_idx], non_blocking=True)
-        self._device_value_cache[layer_idx & 1].copy_(self.value_cache[layer_idx], non_blocking=True)
+        execution_device = self.layer_device_map[layer_idx]  # "cuda:0"
+        self.key_cache[layer_idx] = self._offloaded_key_cache[layer_idx].to(execution_device, non_blocking=True)
+        self.value_cache[layer_idx] = self._offloaded_value_cache[layer_idx].to(execution_device, non_blocking=True)
