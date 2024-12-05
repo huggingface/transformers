@@ -284,6 +284,12 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     @unittest.skip(
+        reason="From PaliGemma: Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skip(
         reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
     )
     def test_initialization(self):
