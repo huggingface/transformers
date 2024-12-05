@@ -24,7 +24,7 @@
 import logging
 import math
 from dataclasses import dataclass
-from typing import Any, List, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -452,10 +452,13 @@ def timesfm_shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Ten
 
 
 def timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-    """Calculates the moving average using NumPy's convolution function."""
+    """Calculates the moving average using PyTorch's convolution function."""
     # Pad with zeros to handle initial window positions
-    arr_padded = np.pad(arr, (window_size - 1, 0), "constant")
-    smoothed_arr = np.convolve(arr_padded, np.ones(window_size), "valid") / window_size
+    arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+    # Create a convolution kernel
+    kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+    # Apply convolution to calculate the moving average
+    smoothed_arr = F.conv1d(arr_padded.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0)).squeeze()
     return [smoothed_arr, arr - smoothed_arr]
 
 
@@ -700,14 +703,16 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _preprocess(self, inputs: Sequence[np.array], freq: Sequence[int]) -> tuple[np.array, np.array, int]:
+    def _preprocess(
+        self, inputs: Sequence[torch.Tensor], freq: Sequence[int]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Formats and pads raw inputs to feed into the model.
 
         This function both pads each time series to match the context length, and
         pads the inputs to meet the SPMD shape requirement.
 
         Args:
-          inputs: A list of 1d Tensors. Each JTensor is the context time series of
+          inputs: A list of 1d Tensors. Each Tensor is the context time series of
             a single forecast task.
           freq: list of frequencies
 
@@ -722,11 +727,11 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
         for i, ts in enumerate(inputs):
             input_len = ts.shape[0]
-            padding = np.zeros(shape=(input_len + self.horizon_len,), dtype=float)
+            padding = torch.zeros(input_len + self.horizon_len, dtype=torch.float32)
             if input_len < self.context_len:
                 num_front_pad = self.context_len - input_len
-                ts = np.concatenate([np.zeros(shape=(num_front_pad,), dtype=float), ts], axis=0)
-                padding = np.concatenate([np.ones(shape=(num_front_pad,), dtype=float), padding], axis=0)
+                ts = torch.cat([torch.zeros(num_front_pad, dtype=torch.float32), ts], dim=0)
+                padding = torch.cat([torch.ones(num_front_pad, dtype=torch.float32), padding], dim=0)
             elif input_len > self.context_len:
                 ts = ts[-self.context_len :]
                 padding = padding[-(self.context_len + self.horizon_len) :]
@@ -736,9 +741,9 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             inp_freq.append(freq[i])
 
         return (
-            np.stack(input_ts, axis=0),
-            np.stack(input_padding, axis=0),
-            np.array(inp_freq).astype(np.int32).reshape(-1, 1),
+            torch.stack(input_ts, dim=0),
+            torch.stack(input_padding, dim=0),
+            torch.tensor(inp_freq, dtype=torch.int32).reshape(-1, 1),
         )
 
     def _postprocess_output(
@@ -857,8 +862,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
     def forward(
         self,
-        inputs: Sequence[Any],
-        freq: Sequence[int] | None = None,
+        inputs: Sequence[torch.Tensor],
+        freq: Sequence[torch.Tensor | int] | None = None,
         window_size: int | None = None,
         forecast_context_len: int | None = None,
         return_forecast_on_context: bool = False,
@@ -899,8 +904,13 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             fcontext_len = self.context_len
         else:
             fcontext_len = forecast_context_len
-        inputs = [np.array(ts)[-fcontext_len:] for ts in inputs]
-        inp_min = np.min([np.min(ts) for ts in inputs])
+
+        # Get device from first input tensor
+        device = inputs[0].device
+
+        # Truncate inputs to forecast_context_len
+        inputs = [ts[-fcontext_len:] for ts in inputs]
+        inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
 
         if window_size is not None:
             new_inputs = []
@@ -919,13 +929,15 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
         input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
 
-        input_ts_in = torch.from_numpy(np.array(input_ts, dtype=np.float32))
-        input_padding_in = torch.from_numpy(np.array(input_padding, dtype=np.float32))
-        inp_freq_in = torch.from_numpy(np.array(inp_freq, dtype=np.int32)).long()
+        # Move tensors to the same device as input
+        input_ts = input_ts.to(device)
+        input_padding = input_padding.to(device)
+        inp_freq = inp_freq.to(device)
+
         mean_outputs, full_outputs, last_hidden_state, all_attentions, all_hidden_states = self.decode(
-            input_ts=input_ts_in,
-            paddings=input_padding_in,
-            freq=inp_freq_in,
+            input_ts=input_ts,
+            paddings=input_padding,
+            freq=inp_freq,
             horizon_len=self.horizon_len,
             return_forecast_on_context=return_forecast_on_context,
             output_attentions=output_attentions,

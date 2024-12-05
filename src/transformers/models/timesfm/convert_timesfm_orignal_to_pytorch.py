@@ -164,9 +164,13 @@ def check_outputs(model_path):
         freq=frequency_input,
     )
 
+    # Convert inputs to sequence of tensors
+    forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32) for ts in forecast_input]
+    frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long)
+
     # Get predictions from converted model
     with torch.no_grad():
-        outputs = converted_model(inputs=forecast_input, freq=frequency_input, return_dict=True)
+        outputs = converted_model(inputs=forecast_input_tensor, freq=frequency_input_tensor, return_dict=True)
         point_forecast_conv = outputs.mean_predictions.numpy()
         quantile_forecast_conv = outputs.full_predictions.numpy()
 
@@ -213,7 +217,9 @@ def main():
         required=True,
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
+    parser.add_argument(
+        "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
+    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
