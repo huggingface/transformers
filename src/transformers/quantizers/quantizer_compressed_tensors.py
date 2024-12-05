@@ -38,15 +38,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
         from compressed_tensors.compressors import ModelCompressor
-        from compressed_tensors.quantization import QuantizationStatus
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
         self.run_compressed = quantization_config.run_compressed
-
-        self.is_compressed = (
-            quantization_config.quantization_config is not None
-            and quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
-        )
+        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -101,9 +96,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             from compressed_tensors.quantization import QuantizationStatus
 
             self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
-
             self.compressor.decompress(model_path=cache_path, model=model)
-            self.is_compressed = False
+
+    @property
+    def is_compressed(self):
+        from compressed_tensors.quantization import QuantizationStatus
+
+        return (
+            self.quantization_config.quantization_config is not None
+            and self.quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        )
 
     @property
     def is_trainable(self):
