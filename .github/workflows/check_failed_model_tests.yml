@@ -106,7 +106,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Send processed report
-        if: ${{ env.REPORT_TEXT != '' }}
+        if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
           # Slack channel id, channel name, or user id to post message.
