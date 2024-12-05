@@ -142,7 +142,7 @@ class Zamba2Config(PretrainedConfig):
         time_step_max=0.1,
         time_step_floor=1e-4,
         time_step_limit=None,
-        n_mamba_heads=1,
+        n_mamba_heads=8,
         use_conv_bias=True,
         chunk_size=256,
         add_bias_linear=False,
@@ -231,3 +231,6 @@ class Zamba2Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
+
+
+__all__ = ["Zamba2Config"]

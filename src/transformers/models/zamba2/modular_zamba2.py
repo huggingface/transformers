@@ -36,6 +36,7 @@ from ...utils.import_utils import (
 )
 from ..llama.modeling_llama import apply_rotary_pos_emb
 from ..mamba2.modeling_mamba2 import MambaRMSNormGated, pad_tensor_by_size, reshape_into_chunks, segment_sum
+from ..gemma.modeling_gemma import GemmaRotaryEmbedding
 from ..zamba.modeling_zamba import (
     ZambaAttention,
     ZambaAttentionDecoderLayer,
@@ -189,7 +190,7 @@ class Zamba2Config(PretrainedConfig):
         time_step_max=0.1,
         time_step_floor=1e-4,
         time_step_limit=None,
-        n_mamba_heads=1,
+        n_mamba_heads=8,
         use_conv_bias=True,
         chunk_size=256,
         add_bias_linear=False,
@@ -303,13 +304,11 @@ def layer_type_list(config: Zamba2Config):
     """
     Returns list of layer ids containing hybrid layers
     """
-    ll = []
-    i = 0
-    for val in config.layers_block_type:
-        if val == "hybrid":
-            ll.append(i)
-        i += 1
-    return ll
+    output_list = []
+    for index, type in enumerate(config.layers_block_type):
+        if type == "hybrid":
+            output_list.append(index)
+    return output_list
 
 
 class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
@@ -379,33 +378,8 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
         self.ssm_states.zero_()
 
 
-class Zamba2RotaryEmbedding(nn.Module):
-    def __init__(self, config, dim, max_position_embeddings=4096, base=10000, device=None):
-        super().__init__()
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        if config.use_long_context:
-            a = 8
-            base = base * a ** (dim / (dim - 2))
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class Zamba2RotaryEmbedding(GemmaRotaryEmbedding):
+    pass
 
 
 class Zamba2Attention(ZambaAttention):
@@ -433,6 +407,9 @@ class Zamba2Attention(ZambaAttention):
         super().__init__(config, layer_idx)
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.rope_theta = config.rope_theta
+        if config.use_long_context:
+            a = 8
+            self.rope_theta = self.rope_theta * a ** (self.head_dim / (self.head_dim - 2))
         self.layer_block_map = layer_type_list(config)
         self.block_id = block_id
         self.is_causal = True
@@ -1668,71 +1645,8 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         self.post_init()
 
 
-# Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
-class Zamba2ForCausalLM(ZambaForCausalLM, Zamba2PreTrainedModel, GenerationMixin):
-    def __init__(self, config: Zamba2Config):
-        super().__init__(config)
-        self.model = Zamba2Model(config)
-        self._tied_weights_keys = ["lm_head.weight", *self.model._tied_weights_keys]
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    # Adapted from transformers.models.zamba.modeling_zamba.ZambaForCausalLM.prepare_inputs_for_generation
-    # with `Zamba2HybridDynamicCache` -> `Zamba2HybridDynamicCache`
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        **kwargs,
-    ):
-        # Overwitten -- has a unique cache type, `Zamba2HybridDynamicCache`
-
-        empty_past_kv = past_key_values is None
-
-        # Omit tokens covered by past_key_values
-        if not empty_past_kv:
-            # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-            # Exception 1: when passing input_embeds, input_ids may be missing entries
-            # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-            if inputs_embeds is not None:  # Exception 1
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-        else:
-            past_key_values = Zamba2HybridDynamicCache(
-                self.config, input_ids.shape[0], dtype=self.dtype, device=self.device
-            )
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if not empty_past_kv:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and empty_past_kv:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-                "num_logits_to_keep": self.config.num_logits_to_keep,
-                "cache_position": cache_position,
-            }
-        )
-        return model_inputs
+class Zamba2ForCausalLM(ZambaForCausalLM):
+    pass
 
 
 @add_start_docstrings(
@@ -1750,11 +1664,8 @@ class Zamba2ForCausalLM(ZambaForCausalLM, Zamba2PreTrainedModel, GenerationMixin
     """,
     ZAMBA2_START_DOCSTRING,
 )
-class Zamba2ForSequenceClassification(ZambaForSequenceClassification, Zamba2PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Zamba2Model(config)
-        self._tied_weights_keys = self.model._tied_weights_keys
+class Zamba2ForSequenceClassification(ZambaForSequenceClassification):  
+    pass 
 
-        # Initialize weights and apply final processing
-        self.post_init()
+
+__all__ = ["Zamba2Config", "Zamba2ForCausalLM", "Zamba2ForSequenceClassification", "Zamba2Model", "Zamba2PreTrainedModel",]
