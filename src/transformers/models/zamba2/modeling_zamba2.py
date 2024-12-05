@@ -1303,14 +1303,14 @@ ZAMBA2_ATTENTION_CLASSES = {
 class Zamba2AttentionDecoderLayer(nn.Module):
     def __init__(self, config: Zamba2Config, block_id: int = None, layer_idx: Optional[int] = None):
         super().__init__()
-        self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
-        self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        num_gs = count_mem_blocks_in_config(config)
         self.block_id = block_id
+        num_gs = count_mem_blocks_in_config(config)
         self.self_attn = ZAMBA2_ATTENTION_CLASSES[config._attn_implementation](
             config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id
         )
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
+        self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
+        self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

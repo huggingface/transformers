@@ -1289,11 +1289,9 @@ class Zamba2MLP(ZambaMLP):
 
 class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
     def __init__(self, config: Zamba2Config, block_id: int = None, layer_idx: Optional[int] = None):
-        super().__init__(config, layer_idx)
-        num_gs = count_mem_blocks_in_config(config)
         self.block_id = block_id
-        del self.self_attn
-        del self.feed_forward
+        num_gs = count_mem_blocks_in_config(config)
+        super().__init__(config, layer_idx)
         self.self_attn = ZAMBA2_ATTENTION_CLASSES[config._attn_implementation](
             config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id
         )
