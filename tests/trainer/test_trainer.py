@@ -32,10 +32,9 @@ from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, ModelCard, create_branch, delete_repo, list_repo_commits, list_repo_files
+from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
-from requests.exceptions import HTTPError
 
 from transformers import (
     AutoFeatureExtractor,
@@ -4152,25 +4151,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def setUpClass(cls):
         cls._token = TOKEN
         HfFolder.save_token(TOKEN)
-
-    @classmethod
-    def tearDownClass(cls):
-        for model in [
-            "test-trainer",
-            "test-trainer-epoch",
-            "test-trainer-step",
-            "test-trainer-tensorboard",
-            "test-trainer-tags",
-        ]:
-            try:
-                delete_repo(token=cls._token, repo_id=model)
-            except HTTPError:
-                pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-trainer-org")
-        except HTTPError:
-            pass
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
