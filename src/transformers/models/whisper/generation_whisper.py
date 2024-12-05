@@ -884,15 +884,12 @@ class WhisperGenerationMixin(GenerationMixin):
             model_output_type = type(seek_outputs)
 
             # post-process sequence tokens and outputs to be in list form
-            is_first_segment = (seek == 0.0).all()
-
             seek_sequences, seek_outputs = self._postprocess_outputs(
                 seek_outputs=seek_outputs,
                 decoder_input_ids=decoder_input_ids,
                 return_token_timestamps=return_token_timestamps,
                 generation_config=generation_config,
                 is_shortform=is_shortform,
-                is_first_segment=is_first_segment,
             )
 
             if cur_bsz < batch_size:
@@ -927,8 +924,6 @@ class WhisperGenerationMixin(GenerationMixin):
                     generation_config,
                     self.config.vocab_size,
                     temperature,
-                    is_first_segment,
-                    decoder_input_ids,
                 )
 
                 # remove eos token
@@ -985,7 +980,6 @@ class WhisperGenerationMixin(GenerationMixin):
         return_token_timestamps,
         generation_config,
         is_shortform,
-        is_first_segment,
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
@@ -1098,8 +1092,6 @@ class WhisperGenerationMixin(GenerationMixin):
         generation_config,
         vocab_size,
         temperature,
-        is_first_segment,
-        decoder_input_ids,
     ):
         needs_fallback = False
         should_skip = False
@@ -1117,10 +1109,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 logprobs = self._retrieve_avg_logprobs(
                     scores,
                     seek_sequence,
-                    generation_config.eos_token_id,
                     temperature,
-                    is_first_segment,
-                    decoder_input_ids,
                 )
 
             if logprobs < generation_config.logprob_threshold:
@@ -1805,7 +1794,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return compression_ratio
 
     @staticmethod
-    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature, is_first_segment, decoder_input_ids):
+    def _retrieve_avg_logprobs(scores, tokens, temperature):
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
 
