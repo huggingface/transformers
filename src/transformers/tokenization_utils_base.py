@@ -1890,7 +1890,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
         gguf_file = kwargs.get("gguf_file", None)
-        dduf_reader = kwargs.get("dduf_reader", None)
+        dduf_entries = kwargs.get("dduf_entries", None)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -1949,11 +1949,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
                     fast_tokenizer_file = FULL_TOKENIZER_FILE
-                    if dduf_reader:
+                    if dduf_entries:
                         tokenizer_config = json.loads(
-                            dduf_reader.read_file(
-                                os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE), encoding="utf-8"
-                            )
+                            dduf_entries[
+                                os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
+                            ].read_text()
                         )
                         if "fast_tokenizer_files" in tokenizer_config:
                             fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
@@ -1989,8 +1989,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         resolved_vocab_files = {}
         unresolved_files = []
         for file_id, file_path in vocab_files.items():
-            if dduf_reader:
-                if dduf_reader.has_file(os.path.join(pretrained_model_name_or_path, file_path)):
+            if dduf_entries:
+                # We don't necessarily have the file
+                if os.path.join(pretrained_model_name_or_path, file_path) in dduf_entries:
                     resolved_vocab_files[file_id] = os.path.join(pretrained_model_name_or_path, file_path)
             elif file_path is None:
                 resolved_vocab_files[file_id] = None
@@ -2018,12 +2019,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     _commit_hash=commit_hash,
                 )
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
-        # if dduf_reader:
+        # if dduf_entries:
         #     # preload files that are going to be opened in the tokenizer so that we don't need to modify each tokenizer with dduf ?
-        #     -> still need to modify in the end
         #     for file in cls.vocab_files_names:
         #         # e.g vocab_file, merges ...
-        #         resolved_vocab_files[file] = dduf_reader.read_file(resolved_vocab_files[file])
 
         if len(unresolved_files) > 0:
             logger.info(
@@ -2083,7 +2082,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
         gguf_file = kwargs.get("gguf_file", None)
-        dduf_reader = kwargs.get("dduf_reader", None)
+        dduf_entries = kwargs.get("dduf_entries", None)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
 
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
@@ -2107,8 +2106,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
         if tokenizer_config_file is not None:
-            if dduf_reader:
-                init_kwargs = json.loads(dduf_reader.read_file(tokenizer_config_file, encoding="utf-8"))
+            if dduf_entries:
+                init_kwargs = json.loads(dduf_entries[tokenizer_config_file].read_text())
             else:
                 with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                     init_kwargs = json.load(tokenizer_config_handle)
@@ -2127,8 +2126,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # If an independent chat template file exists, it takes priority over template entries in the tokenizer config
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         if chat_template_file is not None:
-            if dduf_reader:
-                init_kwargs["chat_template"] = dduf_reader.read_file(chat_template_file)
+            if dduf_entries:
+                # TODO: check that it works
+                init_kwargs["chat_template"] = dduf_entries[chat_template_file].read_text()
             else:
                 with open(chat_template_file) as chat_template_handle:
                     init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
@@ -2231,8 +2231,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
             if special_tokens_map_file is not None:
-                if dduf_reader:
-                    special_tokens_map = json.loads(dduf_reader.read_file(special_tokens_map_file, encoding="utf-8"))
+                if dduf_entries:
+                    special_tokens_map = json.loads(dduf_entries[special_tokens_map_file].read_text())
                 else:
                     with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                         special_tokens_map = json.load(special_tokens_map_handle)
@@ -2266,8 +2266,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         else:
                             special_tokens.append(str(init_kwargs[key]))
 
-                if dduf_reader:
-                    added_tok_encoder = json.loads(dduf_reader.read_file(added_tokens_file, encoding="utf-8"))
+                if dduf_entries:
+                    added_tok_encoder = json.loads(dduf_entries[added_tokens_file].read_text())
                 else:
                     with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                         added_tok_encoder = json.load(added_tokens_handle)
@@ -2283,8 +2283,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # if `tokenizer_config.json` is `None`
             if tokenizer_file is not None:
                 # This is for slow so can be done before
-                if dduf_reader:
-                    tokenizer_file_handle = json.loads(dduf_reader.read_file(tokenizer_file, encoding="utf-8"))
+                if dduf_entries:
+                    tokenizer_file_handle = json.loads(dduf_entries[tokenizer_file].read_text())
                 else:
                     with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
                         tokenizer_file_handle = json.load(tokenizer_file_handle)

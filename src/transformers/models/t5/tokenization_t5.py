@@ -137,7 +137,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         add_prefix_space=True,
         **kwargs,
     ) -> None:
-        dduf_reader = kwargs.get("dduf_reader", None)
+        dduf_entries = kwargs.get("dduf_entries", None)
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
         unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
         eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
@@ -147,8 +147,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if dduf_reader:
-            self.sp_model.load_from_serialized_proto(dduf_reader.read_file(self.vocab_file))
+        if dduf_entries:
+            self.sp_model.load_from_serialized_proto(dduf_entries[self.vocab_file].read())
         else:
             self.sp_model.Load(vocab_file)
 
@@ -184,7 +184,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             legacy = True
 
         self.legacy = legacy
-        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False), dduf_reader=dduf_reader)
+        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False), dduf_entries=dduf_entries)
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
         self.add_prefix_space = add_prefix_space
@@ -202,17 +202,17 @@ class T5Tokenizer(PreTrainedTokenizer):
         )
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
-    def get_spm_processor(self, from_slow=False, dduf_reader=None):
+    def get_spm_processor(self, from_slow=False, dduf_entries=None):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if self.legacy or from_slow:  # no dependency on protobuf
-            if dduf_reader:
-                tokenizer.load_from_serialized_proto(dduf_reader.read_file(self.vocab_file))
+            if dduf_entries:
+                tokenizer.load_from_serialized_proto(dduf_entries[self.vocab_file].read())
             else:
                 tokenizer.Load(self.vocab_file)
             return tokenizer
 
-        if dduf_reader:
-            sp_model = dduf_reader.read_file(self.vocab_file)
+        if dduf_entries:
+            sp_model = dduf_entries[self.vocab_file].read()
         else:
             with open(self.vocab_file, "rb") as f:
                 sp_model = f.read()

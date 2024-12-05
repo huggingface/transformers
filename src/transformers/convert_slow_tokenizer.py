@@ -548,14 +548,14 @@ class SpmConverter(Converter):
         requires_backends(self, "protobuf")
 
         super().__init__(*args)
-        dduf_reader = kwargs.get("dduf_reader", None)
+        dduf_entries = kwargs.get("dduf_entries", None)
 
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
         m = model_pb2.ModelProto()
-        if dduf_reader:
-            m.ParseFromString(dduf_reader.read_file(self.original_tokenizer.vocab_file))
+        if dduf_entries:
+            m.ParseFromString(dduf_entries[self.original_tokenizer.vocab_file].read())
         else:
             with open(self.original_tokenizer.vocab_file, "rb") as f:
                 m.ParseFromString(f.read())

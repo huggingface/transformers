@@ -1044,7 +1044,7 @@ def get_checkpoint_shard_files(
     revision=None,
     subfolder="",
     _commit_hash=None,
-    dduf_reader=None,
+    dduf_entries=None,
     **deprecated_kwargs,
 ):
     """
@@ -1069,8 +1069,8 @@ def get_checkpoint_shard_files(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    if dduf_reader:
-        index = json.loads(dduf_reader.read_file(index_filename))
+    if dduf_entries:
+        index = json.loads(dduf_entries[index_filename].read_text())
     else:
         if not os.path.isfile(index_filename):
             raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
@@ -1083,7 +1083,7 @@ def get_checkpoint_shard_files(
     sharded_metadata["weight_map"] = index["weight_map"].copy()
 
     # First, let's deal with local folder and dduf
-    if os.path.isdir(pretrained_model_name_or_path) or dduf_reader:
+    if os.path.isdir(pretrained_model_name_or_path) or dduf_entries:
         shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
         return shard_filenames, sharded_metadata
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub
