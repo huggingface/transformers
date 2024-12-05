@@ -33,21 +33,14 @@ from torch import nn
 import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache  # we need __iter__ and __len__ of pkv
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ...utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
@@ -591,6 +584,42 @@ class BambaSdpaAttention(BambaAttention):
         return attn_output, None, past_key_value
 
 
+class BambaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        BambaRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class BambaMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
 BAMBA_ATTENTION_CLASSES = {
     "eager": BambaAttention,
     "flash_attention_2": BambaFlashAttention2,
@@ -601,6 +630,13 @@ BAMBA_ATTENTION_CLASSES = {
 class BambaDecoderLayer(nn.Module):
     def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "mamba"):
         super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = BAMBA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+
+        self.mlp = BambaMLP(config)
+        self.input_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_type = layer_type
         if layer_type == "mamba":
@@ -609,10 +645,6 @@ class BambaDecoderLayer(nn.Module):
             self.self_attn = BAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         else:
             raise ValueError("Invalid layer_type")
-
-        self.feed_forward = LlamaMLP(config)
-        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_ff_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -668,8 +700,8 @@ class BambaDecoderLayer(nn.Module):
 
         # feed-forward
         residual = hidden_states
-        hidden_states = self.pre_ff_layernorm(hidden_states)
-        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -1062,13 +1094,13 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         >>> model = BambaForCausalLM.from_pretrained("...")
         >>> tokenizer = AutoTokenizer.from_pretrained("...")
 
-        >>> prompt = "Hey, how have you been doing?"
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        ""Hey, how have you been doing? I'm doing well, I'm just working a lot. I'm just trying to get my name out"
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

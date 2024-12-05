@@ -310,12 +310,6 @@ SCALER_NAME = "scaler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
-def trace_handler(prof):
-    if os.getenv("RANK", "0") == "0":
-        print("Exporting trace")
-        prof.export_chrome_trace("train_step_" + str(prof.step_num) + ".json")
-
-
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
@@ -2247,7 +2241,6 @@ class Trainer:
                 "args.max_steps must be set to a positive value if dataloader does not have a length, was"
                 f" {args.max_steps}"
             )
-        logger.warning(num_train_tokens)
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -2440,221 +2433,201 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        with torch.profiler.profile(
-            activities=[torch.profiler.ProfilerActivity.CUDA, torch.profiler.ProfilerActivity.CPU],
-            schedule=torch.profiler.schedule(wait=5, warmup=5, active=3, repeat=1),
-            record_shapes=True,
-            with_stack=True,
-            on_trace_ready=trace_handler,
-        ) as prof:
-            for epoch in range(epochs_trained, num_train_epochs):
-                epoch_dataloader = train_dataloader
-                if hasattr(epoch_dataloader, "set_epoch"):
-                    epoch_dataloader.set_epoch(epoch)
+        for epoch in range(epochs_trained, num_train_epochs):
+            epoch_dataloader = train_dataloader
+            if hasattr(epoch_dataloader, "set_epoch"):
+                epoch_dataloader.set_epoch(epoch)
 
-                # Reset the past mems state at the beginning of each epoch if necessary.
-                if args.past_index >= 0:
-                    self._past = None
+            # Reset the past mems state at the beginning of each epoch if necessary.
+            if args.past_index >= 0:
+                self._past = None
 
-                steps_in_epoch = (
-                    len(epoch_dataloader)
-                    if len_dataloader is not None
-                    else args.max_steps * args.gradient_accumulation_steps
-                )
-                self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
+            steps_in_epoch = (
+                len(epoch_dataloader)
+                if len_dataloader is not None
+                else args.max_steps * args.gradient_accumulation_steps
+            )
+            self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
-                if (
-                    epoch == epochs_trained
-                    and resume_from_checkpoint is not None
-                    and steps_trained_in_current_epoch == 0
-                ):
-                    self._load_rng_state(resume_from_checkpoint)
+            if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
+                self._load_rng_state(resume_from_checkpoint)
 
-                rng_to_sync = False
-                steps_skipped = 0
-                if steps_trained_in_current_epoch > 0:
-                    epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
-                    steps_skipped = steps_trained_in_current_epoch
-                    steps_trained_in_current_epoch = 0
-                    rng_to_sync = True
+            rng_to_sync = False
+            steps_skipped = 0
+            if steps_trained_in_current_epoch > 0:
+                epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
+                steps_skipped = steps_trained_in_current_epoch
+                steps_trained_in_current_epoch = 0
+                rng_to_sync = True
 
-                step = -1
-                epoch_iterator = iter(epoch_dataloader)
-                # We chunkify the epoch iterator into gradient accumulation steps `n` batches
-                remainder = num_examples % args.gradient_accumulation_steps
-                if remainder == 0:
-                    remainder = args.gradient_accumulation_steps
-                update_step = -1
-                total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
-                for _ in range(total_updates):
-                    update_step += 1
-                    num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
-                    batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
-                    for i, inputs in enumerate(batch_samples):
-                        step += 1
-                        print("Starting compute step!")
-                        do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (
-                            step + 1
-                        ) == steps_in_epoch
-                        # Since we perform prefetching, we need to manually set sync_gradients
-                        if not do_sync_step:
-                            self.accelerator.gradient_state._set_sync_gradients(False)
-                        else:
-                            self.accelerator.gradient_state._set_sync_gradients(True)
+            step = -1
+            epoch_iterator = iter(epoch_dataloader)
+            # We chunkify the epoch iterator into gradient accumulation steps `n` batches
+            remainder = num_examples % args.gradient_accumulation_steps
+            if remainder == 0:
+                remainder = args.gradient_accumulation_steps
+            update_step = -1
+            total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
+            for _ in range(total_updates):
+                update_step += 1
+                num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
+                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
+                for i, inputs in enumerate(batch_samples):
+                    step += 1
+                    do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
+                    # Since we perform prefetching, we need to manually set sync_gradients
+                    if not do_sync_step:
+                        self.accelerator.gradient_state._set_sync_gradients(False)
+                    else:
+                        self.accelerator.gradient_state._set_sync_gradients(True)
 
-                        if self.args.include_num_input_tokens_seen:
-                            main_input_name = getattr(self.model, "main_input_name", "input_ids")
-                            if main_input_name not in inputs:
-                                logger.warning(
-                                    "Tried to track the number of tokens seen, however the current model is "
-                                    "not configured properly to know what item is the input. To fix this, add "
-                                    "a `main_input_name` attribute to the model class you are using."
-                                )
-                            else:
-                                input_tokens = inputs[main_input_name].numel()
-                                input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-                                self.state.num_input_tokens_seen += (
-                                    self.accelerator.gather(input_tokens).sum().cpu().item()
-                                )
-                        if rng_to_sync:
-                            self._load_rng_state(resume_from_checkpoint)
-                            rng_to_sync = False
-
-                        # Skip past any already trained steps if resuming training
-                        if steps_trained_in_current_epoch > 0:
-                            steps_trained_in_current_epoch -= 1
-                            if steps_trained_progress_bar is not None:
-                                steps_trained_progress_bar.update(1)
-                            if steps_trained_in_current_epoch == 0:
-                                self._load_rng_state(resume_from_checkpoint)
-                            continue
-                        elif steps_trained_progress_bar is not None:
-                            steps_trained_progress_bar.close()
-                            steps_trained_progress_bar = None
-
-                        if step % args.gradient_accumulation_steps == 0:
-                            self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
-
-                        # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
-                        context = (
-                            functools.partial(self.accelerator.no_sync, model=model)
-                            if i != len(batch_samples) - 1
-                            else contextlib.nullcontext
-                        )
-                        with context():
-                            tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
-
-                        if (
-                            args.logging_nan_inf_filter
-                            and not is_torch_xla_available()
-                            and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
-                        ):
-                            # if loss is nan or inf simply add the average of previous logged losses
-                            tr_loss = tr_loss + tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
-                        else:
-                            if tr_loss.device != tr_loss_step.device:
-                                raise ValueError(
-                                    f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
-                                )
-                            tr_loss = tr_loss + tr_loss_step
-
-                        self.current_flos += float(self.floating_point_ops(inputs))
-
-                        if do_sync_step:
-                            # Since we perform prefetching, we need to manually set sync_gradients to True
-                            self.accelerator.gradient_state._set_sync_gradients(True)
-
-                            # Gradient clipping
-                            if args.max_grad_norm is not None and args.max_grad_norm > 0:
-                                # deepspeed does its own clipping
-
-                                if is_sagemaker_mp_enabled() and args.fp16:
-                                    _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
-                                elif self.use_apex:
-                                    # Revert to normal clipping otherwise, handling Apex or full precision
-                                    _grad_norm = nn.utils.clip_grad_norm_(
-                                        amp.master_params(self.optimizer),
-                                        args.max_grad_norm,
-                                    )
-                                else:
-                                    _grad_norm = self.accelerator.clip_grad_norm_(
-                                        model.parameters(),
-                                        args.max_grad_norm,
-                                    )
-
-                                if (
-                                    is_accelerate_available()
-                                    and self.accelerator.distributed_type == DistributedType.DEEPSPEED
-                                ):
-                                    grad_norm = model.get_global_grad_norm()
-                                    # In some cases the grad norm may not return a float
-                                    if hasattr(grad_norm, "item"):
-                                        grad_norm = grad_norm.item()
-                                else:
-                                    grad_norm = _grad_norm
-
-                            self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
-
-                            self.optimizer.step()
-
-                            self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
-
-                            optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
-                            if optimizer_was_run:
-                                # Delay optimizer scheduling until metrics are generated
-                                if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                                    self.lr_scheduler.step()
-
-                            model.zero_grad()
-                            self.state.global_step += 1
-                            self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
-                            self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-                            self._maybe_log_save_evaluate(
-                                tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time
+                    if self.args.include_num_input_tokens_seen:
+                        main_input_name = getattr(self.model, "main_input_name", "input_ids")
+                        if main_input_name not in inputs:
+                            logger.warning(
+                                "Tried to track the number of tokens seen, however the current model is "
+                                "not configured properly to know what item is the input. To fix this, add "
+                                "a `main_input_name` attribute to the model class you are using."
                             )
                         else:
-                            self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
+                            input_tokens = inputs[main_input_name].numel()
+                            input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
+                            self.state.num_input_tokens_seen += (
+                                self.accelerator.gather(input_tokens).sum().cpu().item()
+                            )
+                    if rng_to_sync:
+                        self._load_rng_state(resume_from_checkpoint)
+                        rng_to_sync = False
 
-                        print("Advancing profiler step!")
-                        prof.step()
+                    # Skip past any already trained steps if resuming training
+                    if steps_trained_in_current_epoch > 0:
+                        steps_trained_in_current_epoch -= 1
+                        if steps_trained_progress_bar is not None:
+                            steps_trained_progress_bar.update(1)
+                        if steps_trained_in_current_epoch == 0:
+                            self._load_rng_state(resume_from_checkpoint)
+                        continue
+                    elif steps_trained_progress_bar is not None:
+                        steps_trained_progress_bar.close()
+                        steps_trained_progress_bar = None
 
-                        # PyTorch/XLA relies on the data loader to insert the mark_step for
-                        # each step. Since we are breaking the loop early, we need to manually
-                        # insert the mark_step here.
-                        if self.control.should_epoch_stop or self.control.should_training_stop:
-                            if is_torch_xla_available():
-                                xm.mark_step()
-                            break
+                    if step % args.gradient_accumulation_steps == 0:
+                        self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                    # We also need to break out of the nested loop
+                    # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
+                    context = (
+                        functools.partial(self.accelerator.no_sync, model=model)
+                        if i != len(batch_samples) - 1
+                        else contextlib.nullcontext
+                    )
+                    with context():
+                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+
+                    if (
+                        args.logging_nan_inf_filter
+                        and not is_torch_xla_available()
+                        and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                    ):
+                        # if loss is nan or inf simply add the average of previous logged losses
+                        tr_loss = tr_loss + tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    else:
+                        if tr_loss.device != tr_loss_step.device:
+                            raise ValueError(
+                                f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
+                            )
+                        tr_loss = tr_loss + tr_loss_step
+
+                    self.current_flos += float(self.floating_point_ops(inputs))
+
+                    if do_sync_step:
+                        # Since we perform prefetching, we need to manually set sync_gradients to True
+                        self.accelerator.gradient_state._set_sync_gradients(True)
+
+                        # Gradient clipping
+                        if args.max_grad_norm is not None and args.max_grad_norm > 0:
+                            # deepspeed does its own clipping
+
+                            if is_sagemaker_mp_enabled() and args.fp16:
+                                _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
+                            elif self.use_apex:
+                                # Revert to normal clipping otherwise, handling Apex or full precision
+                                _grad_norm = nn.utils.clip_grad_norm_(
+                                    amp.master_params(self.optimizer),
+                                    args.max_grad_norm,
+                                )
+                            else:
+                                _grad_norm = self.accelerator.clip_grad_norm_(
+                                    model.parameters(),
+                                    args.max_grad_norm,
+                                )
+
+                            if (
+                                is_accelerate_available()
+                                and self.accelerator.distributed_type == DistributedType.DEEPSPEED
+                            ):
+                                grad_norm = model.get_global_grad_norm()
+                                # In some cases the grad norm may not return a float
+                                if hasattr(grad_norm, "item"):
+                                    grad_norm = grad_norm.item()
+                            else:
+                                grad_norm = _grad_norm
+
+                        self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
+
+                        self.optimizer.step()
+
+                        self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
+
+                        optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
+                        if optimizer_was_run:
+                            # Delay optimizer scheduling until metrics are generated
+                            if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                                self.lr_scheduler.step()
+
+                        model.zero_grad()
+                        self.state.global_step += 1
+                        self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
+                        self.control = self.callback_handler.on_step_end(args, self.state, self.control)
+                        self._maybe_log_save_evaluate(
+                            tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time
+                        )
+                    else:
+                        self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
+
+                    # PyTorch/XLA relies on the data loader to insert the mark_step for
+                    # each step. Since we are breaking the loop early, we need to manually
+                    # insert the mark_step here.
                     if self.control.should_epoch_stop or self.control.should_training_stop:
                         if is_torch_xla_available():
                             xm.mark_step()
                         break
-                if step < 0:
-                    logger.warning(
-                        "There seems not to be a single sample in your epoch_iterator, stopping training at step"
-                        f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
-                        f" num_steps ({max_steps}) higher than the number of available samples."
-                    )
-                    self.control.should_training_stop = True
-
-                self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-                self._maybe_log_save_evaluate(
-                    tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time
-                )
-
-                if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
+                # We also need to break out of the nested loop
+                if self.control.should_epoch_stop or self.control.should_training_stop:
                     if is_torch_xla_available():
-                        # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
-                        xm.master_print(met.metrics_report())
-                    else:
-                        logger.warning(
-                            "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
-                            "configured. Check your training configuration if this is unexpected."
-                        )
-                if self.control.should_training_stop:
+                        xm.mark_step()
                     break
+            if step < 0:
+                logger.warning(
+                    "There seems not to be a single sample in your epoch_iterator, stopping training at step"
+                    f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
+                    f" num_steps ({max_steps}) higher than the number of available samples."
+                )
+                self.control.should_training_stop = True
+
+            self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
+            self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time)
+
+            if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
+                if is_torch_xla_available():
+                    # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
+                    xm.master_print(met.metrics_report())
+                else:
+                    logger.warning(
+                        "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
+                        "configured. Check your training configuration if this is unexpected."
+                    )
+            if self.control.should_training_stop:
+                break
 
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training

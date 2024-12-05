@@ -28,7 +28,7 @@ from torch import nn
 
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 import transformers.models.jamba.modeling_jamba as modeling_jamba
-from transformers.models.llama.modeling_llama import LlamaAttention, LlamaFlashAttention2, LlamaMLP, LlamaRMSNorm, LlamaSdpaAttention, repeat_kv, rotate_half
+from transformers.models.llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaFlashAttention2, LlamaMLP, LlamaRMSNorm, LlamaSdpaAttention, repeat_kv, rotate_half
 from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer
 
 from ...cache_utils import Cache, DynamicCache, StaticCache  # we need __iter__ and __len__ of pkv
@@ -458,7 +458,7 @@ BAMBA_ATTENTION_CLASSES = {
 }
 
 
-class BambaDecoderLayer(nn.Module):
+class BambaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = 'mamba'):
         super().__init__()
 
@@ -469,10 +469,6 @@ class BambaDecoderLayer(nn.Module):
             self.self_attn = BAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         else:
             raise ValueError("Invalid layer_type")
-
-        self.feed_forward = LlamaMLP(config)
-        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_ff_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -528,8 +524,8 @@ class BambaDecoderLayer(nn.Module):
 
         # feed-forward
         residual = hidden_states
-        hidden_states = self.pre_ff_layernorm(hidden_states)
-        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
