@@ -391,12 +391,12 @@ class ProcessorPushToHubTester(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 processor.save_pretrained(
                     tmp_dir,
-                    repo_id=tmp_repo,
+                    repo_id=tmp_repo.repo_id,
                     push_to_hub=True,
                     token=self._token,
                 )
 
-            new_processor = Wav2Vec2Processor.from_pretrained(tmp_repo)
+            new_processor = Wav2Vec2Processor.from_pretrained(tmp_repo.repo_id)
             for k, v in processor.feature_extractor.__dict__.items():
                 self.assertEqual(v, getattr(new_processor.feature_extractor, k))
             self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
@@ -448,6 +448,6 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
                 repo.push_to_hub()
 
-                new_processor = AutoProcessor.from_pretrained(tmp_repo, trust_remote_code=True)
+                new_processor = AutoProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
                 # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
                 self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
