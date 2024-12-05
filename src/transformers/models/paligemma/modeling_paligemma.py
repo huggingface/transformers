@@ -360,7 +360,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         inputs_lead_dim = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
         sequence_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         elif isinstance(past_key_values, HybridCache):
             target_length = past_key_values.get_max_cache_shape()
         else:
