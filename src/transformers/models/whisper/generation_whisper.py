@@ -1856,11 +1856,11 @@ class WhisperGenerationMixin(GenerationMixin):
             last_timestamp_pos = int(seek_num_frames[prev_idx] * time_precision_features / time_precision)
             if timestamps.numel() > 0 and timestamps[-1] != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
-                last_timestamp_pos = timestamps[-1] - timestamp_begin
+                last_timestamp_pos = (timestamps[-1] - timestamp_begin).to(torch.float64)
             segments = [
                 {
                     "start": time_offset[prev_idx],
-                    "end": time_offset[prev_idx] + last_timestamp_pos.to(torch.float64) * time_precision,
+                    "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
                     "tokens": seek_sequence,
                     "result": seek_outputs[idx],
                 }
