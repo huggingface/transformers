@@ -21,24 +21,15 @@ import numpy as np
 import torch
 
 from transformers import TimesFMConfig, is_torch_available
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_fx_available
 
-# from ...generation.test_utils import GenerationTesterMixin
-# define our own GenerationTesters
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 
 
-# from ...test_pipeline_mixin import PipelineTesterMixin
-
-
 if is_torch_fx_available():
     pass
-
 
 if is_torch_available():
     from transformers import TimesFMModelForPrediction
