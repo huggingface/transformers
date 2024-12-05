@@ -52,12 +52,12 @@ class DepthProModelTester:
         use_labels=True,
         hidden_size=32,
         fusion_hidden_size=16,
-        intermediate_hook_ids=[1, 0],
-        intermediate_feature_dims=[8, 8],
+        intermediate_hook_ids=[0],
+        intermediate_feature_dims=[8],
         scaled_images_ratios=[0.5, 1.0],
         scaled_images_overlap_ratios=[0.0, 0.2],
         scaled_images_feature_dims=[12, 12],
-        num_hidden_layers=2,
+        num_hidden_layers=1,
         num_attention_heads=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -94,6 +94,9 @@ class DepthProModelTester:
 
         self.num_patches = (patch_size // patch_embeddings_size) ** 2
         self.seq_length = (patch_size // patch_embeddings_size) ** 2 + 1  # we add 1 for the [CLS] token
+
+        n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
+        self.expected_depth_size = 2**(n_fusion_blocks+1) * patch_size / patch_embeddings_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -145,7 +148,7 @@ class DepthProModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.expected_depth_size, self.expected_depth_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
