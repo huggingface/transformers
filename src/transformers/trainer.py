@@ -623,9 +623,7 @@ class Trainer:
             else unwrapped_model.get_base_model().forward
         )
         forward_params = inspect.signature(model_forward).parameters
-        self.model_accepts_loss_kwargs = (
-            "loss_kwargs" in forward_params and forward_params["loss_kwargs"].kind == inspect.Parameter.VAR_KEYWORD
-        )
+        self.model_accepts_loss_kwargs = any(k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values())
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -3651,7 +3649,10 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            if self.model_accepts_loss_kwargs:
+                loss = self.compute_loss(model, inputs)
+            else:
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
         if (

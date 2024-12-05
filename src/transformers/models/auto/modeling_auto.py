@@ -135,6 +135,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("idefics2", "Idefics2Model"),
         ("idefics3", "Idefics3Model"),
         ("idefics3_vision", "Idefics3VisionTransformer"),
+        ("ijepa", "IJepaModel"),
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
         ("jamba", "JambaModel"),
@@ -582,6 +583,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetModel"),
         ("glpn", "GLPNModel"),
         ("hiera", "HieraModel"),
+        ("ijepa", "IJepaModel"),
         ("imagegpt", "ImageGPTModel"),
         ("levit", "LevitModel"),
         ("mllama", "MllamaVisionModel"),
@@ -659,6 +661,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("efficientnet", "EfficientNetForImageClassification"),
         ("focalnet", "FocalNetForImageClassification"),
         ("hiera", "HieraForImageClassification"),
+        ("ijepa", "IJepaForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
         (
             "levit",
