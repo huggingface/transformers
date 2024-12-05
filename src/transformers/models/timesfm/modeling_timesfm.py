@@ -133,11 +133,11 @@ class TimesFMPositionalEmbedding(nn.Module):
     """Generates position embedding for a given 1-d sequence.
 
     Attributes:
-        min_timescale: Start of the geometric index. Determines the periodicity of
-          the added signal.
-        max_timescale: End of the geometric index. Determines the frequency of the
-          added signal.
         embedding_dims: Dimension of the embedding to be generated.
+        min_timescale: Start of the geometric index. Determines the periodicity of
+          the added signal. Defaults to 1.
+        max_timescale: End of the geometric index. Determines the frequency of the
+          added signal. Defaults to 10_000.
     """
 
     def __init__(
@@ -889,10 +889,9 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
         Args:
           inputs: list of time series forecast contexts. Each context time series
-            should be in a format convertible to Tensor.
-          freq: frequency of each context time series. 0 for high frequency
-            (default), 1 for medium, and 2 for low. Notice this is different from
-            the `freq` required by `forecast_on_df`.
+            should be a torch Tensor of potentially different context lengths.
+          freq: frequency of each context time series in the inputs. 0 for high frequency
+            (default), 1 for medium, and 2 for low.
           window_size: window size of trend + residual decomposition. If None then
             we do not do decomposition.
           forecast_context_len: optional max context length.
@@ -927,9 +926,15 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
         if window_size is not None:
             new_inputs = []
-            for ts in inputs:
+            if freq is not None:
+                new_freqs = []  
+            for i, ts in enumerate(inputs):
                 new_inputs.extend(timesfm_moving_average(ts, window_size))
+                if freq is not None:
+                    new_freqs.extend([freq[i]] * 2)
             inputs = new_inputs
+            if freq is not None:
+                freq = new_freqs
 
         if freq is None:
             logging.info("No frequency provided via `freq`. Default to high (0).")
