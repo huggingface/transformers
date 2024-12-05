@@ -52,4 +52,4 @@ Currently, HIGGS doesn't support `torch.compile` because `fast_hadamard_transfor
 
 **Quantized training**
 
-Currently, HIGGS doesn't support quantized traninig (and backward passes in general). We're working on adding support for it.
+Currently, HIGGS doesn't support quantized training (and backward passes in general). We're working on adding support for it.
