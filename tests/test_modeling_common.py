@@ -86,6 +86,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
@@ -217,6 +218,7 @@ class ModelTesterMixin:
     test_mismatched_shapes = True
     test_missing_keys = True
     test_model_parallel = False
+    test_torch_exportable = False
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -4828,6 +4830,64 @@ class ModelTesterMixin:
 
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
             self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
+
+    @slow
+    @require_torch_greater_or_equal("2.3")
+    def test_torch_export(self):
+        if not self.test_torch_exportable:
+            self.skipTest(reason="Torch export test is not enabled for this model.")
+
+        def recursively_check(eager_outputs, exported_outputs):
+            is_tested = False
+            if isinstance(eager_outputs, torch.Tensor):
+                self.assertEqual(eager_outputs.shape, exported_outputs.shape)
+                self.assertTrue(torch.allclose(eager_outputs, exported_outputs, atol=1e-4))
+                return True
+            elif isinstance(eager_outputs, (tuple, list)):
+                for eager_output, exported_output in zip(eager_outputs, exported_outputs):
+                    is_tested = is_tested or recursively_check(eager_output, exported_output)
+                return is_tested
+            return is_tested
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                inputs_dict["return_dict"] = False
+                model = model_class(config).eval().to(torch_device)
+
+                # Prepare exported program inputs based on model.forward function signature
+                signature = inspect.signature(model.forward)
+                kwarg_names = [
+                    name
+                    for name, param in signature.parameters.items()
+                    if param.default is not inspect.Parameter.empty
+                ]
+                arg_names = [name for name in signature.parameters.keys() if name not in kwarg_names]
+                inputs_args = tuple(inputs_dict[name] for name in arg_names if name in inputs_dict)
+                inputs_kwargs = {name: inputs_dict[name] for name in kwarg_names if name in inputs_dict}
+
+                # Export model
+                exported_model = torch.export.export(
+                    model,
+                    args=inputs_args,
+                    kwargs=inputs_kwargs,
+                    strict=True,
+                )
+
+                # Test save-restore
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    save_path = os.path.join(tmpdirname, "exported_model.pt2")
+                    torch.export.save(exported_model, save_path)
+                    exported_model = torch.export.load(save_path)
+
+                # Run exported model and eager model
+                with torch.no_grad():
+                    eager_outputs = model(**inputs_dict)
+                    exported_outputs = exported_model.module().forward(*inputs_args, **inputs_kwargs)
+
+                # Check if outputs are close
+                is_tested = recursively_check(eager_outputs, exported_outputs)
+                self.assertTrue(is_tested)
 
 
 global_rng = random.Random()
