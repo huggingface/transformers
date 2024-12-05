@@ -1371,7 +1371,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             dimension=1,
             size=self.vision_tower.config.patch_size,
             step=self.vision_tower.config.patch_size,
-        ).unfold(
+        )
+        patches_subgrid = patches_subgrid.unfold(
             dimension=2,
             size=self.vision_tower.config.patch_size,
             step=self.vision_tower.config.patch_size,
