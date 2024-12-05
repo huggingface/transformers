@@ -206,10 +206,7 @@ class PixtralProcessor(ProcessorMixin):
             if is_image_or_image_url(images):
                 images = [[images]]
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
-                if isinstance(text, list):
-                    images = [[im] for im in images]
-                else:
-                    images = [images]
+                images = [images]
             elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
                 pass
             else:
