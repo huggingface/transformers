@@ -546,6 +546,51 @@ class TimesFMPreTrainedModel(PreTrainedModel):
         elif isinstance(module, TimesFMRMSNorm):
             nn.init.zeros_(module.weight)
 
+        elif isinstance(module, TimesFMTransformerMLP):
+            # Initialize gate projection
+            module.gate_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            if module.gate_proj.bias is not None:
+                nn.init.zeros_(module.gate_proj.bias)
+
+            # Initialize down projection
+            module.down_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            if module.down_proj.bias is not None:
+                nn.init.zeros_(module.down_proj.bias)
+
+            # Initialize layer norm
+            nn.init.ones_(module.layer_norm.weight)
+            nn.init.zeros_(module.layer_norm.bias)
+
+        elif isinstance(module, TimesFMAttention):
+            # Initialize qkv projection
+            module.qkv_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            if module.qkv_proj.bias is not None:
+                nn.init.zeros_(module.qkv_proj.bias)
+
+            # Initialize output projection
+            module.o_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            if module.o_proj.bias is not None:
+                nn.init.zeros_(module.o_proj.bias)
+
+            # Initialize scaling parameter
+            nn.init.ones_(module.scaling)
+
+        elif isinstance(module, TimesFMResidualBlock):
+            # Initialize hidden layer
+            module.hidden_layer[0].weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            if module.hidden_layer[0].bias is not None:
+                nn.init.zeros_(module.hidden_layer[0].bias)
+
+            # Initialize output layer
+            module.output_layer.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            if module.output_layer.bias is not None:
+                nn.init.zeros_(module.output_layer.bias)
+
+            # Initialize residual layer
+            module.residual_layer.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            if module.residual_layer.bias is not None:
+                nn.init.zeros_(module.residual_layer.bias)
+
         elif isinstance(module, TimesFMPositionalEmbedding):
             pass
 
