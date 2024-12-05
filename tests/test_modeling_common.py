@@ -2603,11 +2603,18 @@ class ModelTesterMixin:
         set_model_for_less_flaky_test(tf_model)
 
         import unittest
-        with unittest.mock.patch.object(nn.functional, "normalize", side_effect=foo1(nn.functional.normalize)):
-            with unittest.mock.patch.object(tf.math, "l2_normalize", side_effect=foo2(tf.math.l2_normalize)):
-        with torch.no_grad():
-            pt_outputs = pt_model(**pt_inputs_dict)
-        tf_outputs = tf_model(tf_inputs_dict)
+        @contextmanager
+        def patched_norm_layers():
+            with unittest.mock.patch.object(nn.functional, "normalize", side_effect=foo1(nn.functional.normalize)):
+                with unittest.mock.patch.object(tf.math, "l2_normalize", side_effect=foo2(tf.math.l2_normalize)):
+                    yield
+
+        # with unittest.mock.patch.object(nn.functional, "normalize", side_effect=foo1(nn.functional.normalize)):
+        #     with unittest.mock.patch.object(tf.math, "l2_normalize", side_effect=foo2(tf.math.l2_normalize)):
+        with patched_norm_layers():
+            with torch.no_grad():
+                pt_outputs = pt_model(**pt_inputs_dict)
+            tf_outputs = tf_model(tf_inputs_dict)
 
         # tf models returned loss is usually a tensor rather than a scalar.
         # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
