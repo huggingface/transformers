@@ -74,7 +74,9 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                feature_extractor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                feature_extractor.save_pretrained(
+                    tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token
+                )
 
             new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(tmp_repo.repo_id)
             for k, v in feature_extractor.__dict__.items():
@@ -94,7 +96,9 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                feature_extractor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                feature_extractor.save_pretrained(
+                    tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token
+                )
 
             new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(tmp_repo.repo_id)
             for k, v in feature_extractor.__dict__.items():

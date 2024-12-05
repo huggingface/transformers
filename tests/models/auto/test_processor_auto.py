@@ -403,7 +403,6 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_dynamic_processor(self):
         with TemporaryHubRepo() as tmp_repo:
-
             CustomFeatureExtractor.register_for_auto_class()
             CustomTokenizer.register_for_auto_class()
             CustomProcessor.register_for_auto_class()
