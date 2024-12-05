@@ -14,13 +14,6 @@
 # limitations under the License.
 """PyTorch TimesFM model."""
 
-
-####################################################
-# PyTorch Models are constructed by sub-classing
-# - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of nn.Module)
-####################################################
-
 import logging
 import math
 from dataclasses import dataclass
