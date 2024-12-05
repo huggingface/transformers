@@ -92,12 +92,11 @@ if is_torch_available():
         WatermarkDetector,
         WatermarkingConfig,
     )
-    from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
+    from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers, AssistedCandidateGenerator
     from transformers.generation.utils import _speculative_sampling
 
 from unittest.mock import patch
 
-from transformers.generation.candidate_generator import AssistedCandidateGenerator
 from transformers.utils import is_sklearn_available
 
 
