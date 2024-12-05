@@ -55,6 +55,7 @@ from transformers import (
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
+    TemporaryHubRepo,
     TOKEN,
     USER,
     CaptureLogger,
