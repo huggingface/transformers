@@ -97,7 +97,7 @@ def _parse_type_hint(hint: str) -> Dict:
                 "Couldn't parse this type hint, likely due to a custom class or object: ", hint
             )
 
-    elif origin is Union:
+    elif origin is Union or origin is types.UnionType:
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
         subtypes = [_parse_type_hint(t) for t in args if t is not type(None)]
         if len(subtypes) == 1:
