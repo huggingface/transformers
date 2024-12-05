@@ -210,7 +210,9 @@ class PixtralProcessor(ProcessorMixin):
                     # If there's a single sample, all images must belong to it
                     images = [images]
                 else:
-                    raise ValueError("You have supplied multiple text samples, but only a flat list of images. When processing multiple samples, `images` should be a list of lists of images, one list per sample.")
+                    raise ValueError(
+                        "You have supplied multiple text samples, but only a flat list of images. When processing multiple samples, `images` should be a list of lists of images, one list per sample."
+                    )
             elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
                 pass
             else:
