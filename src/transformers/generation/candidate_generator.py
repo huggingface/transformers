@@ -319,7 +319,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
-        self.prev_target_ids = None
+        self.prev_target_ids_len: Optional[int] = None
         self.prev_assistant_ids = None
         self.target_lookbehind = assistant_model.generation_config.target_lookbehind
         self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
@@ -465,11 +465,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences, assistant_input_ids)
 
         # Update state
-        self.prev_target_ids = input_ids
+        self.prev_target_ids_len = input_ids.shape[1]
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         self.prev_assistant_ids = assistant_output.sequences
 
-        if input_ids.shape[1] >= new_target_ids.shape[1]:
+        if self.prev_target_ids_len >= new_target_ids.shape[1]:
             return input_ids, None
 
         return new_target_ids, None
@@ -482,9 +482,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         }
         remove_from_pkv = 0
 
-        if self.prev_assistant_ids is not None and self.prev_target_ids.shape[1] > self.target_lookbehind:
+        if self.prev_assistant_ids is not None and self.prev_target_ids_len > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
-            start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
+            start_index_in_target_window = self.prev_target_ids_len - self.target_lookbehind
 
             new_assistant_ids = self.convert_source_tokens_to_target_tokens(
                 input_ids[:, start_index_in_target_window:], **convert_kwargs
@@ -516,7 +516,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 assistant_input_ids = torch.cat([assistant_input_ids, new_assistant_ids], dim=-1)
         else:
             assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
-            self.prev_target_ids = input_ids
+            self.prev_target_ids_len = input_ids.shape[1]
 
         return assistant_input_ids, remove_from_pkv
 
