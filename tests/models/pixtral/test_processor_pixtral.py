@@ -276,6 +276,8 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return [[super().prepare_image_inputs()]] * batch_size
 
     def test_batch_feature_mix_to(self):
+        # This test is here because BatchFeatureMix.to() was breaking the structure of some inputs
+        # so we ensure it doesn't regress
         processor = self.processor_class.from_pretrained(self.tmpdirname)
         prompt_string = "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:"
 
