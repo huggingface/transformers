@@ -14,16 +14,20 @@
 import argparse
 import json
 import os
+
 import requests
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--workflow_id', type=str, required=True)
+    parser.add_argument("--workflow_id", type=str, required=True)
     args = parser.parse_args()
     workflow_id = args.workflow_id
 
-    r = requests.get(f"https://circleci.com/api/v2/workflow/{workflow_id}/job", headers={"Circle-Token": os.environ.get('CIRCLE_TOKEN', "")})
+    r = requests.get(
+        f"https://circleci.com/api/v2/workflow/{workflow_id}/job",
+        headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")},
+    )
     jobs = r.json()["items"]
 
     os.makedirs("outputs", exist_ok=True)
@@ -31,12 +35,10 @@ if __name__ == '__main__':
     workflow_summary = {}
     # for each job, download artifacts
     for job in jobs:
-
         project_slug = job["project_slug"]
         if job["name"].startswith(("tests_", "examples_", "pipelines_")):
-
             url = f'https://circleci.com/api/v2/project/{project_slug}/{job["job_number"]}/artifacts'
-            r = requests.get(url, headers={"Circle-Token": os.environ.get('CIRCLE_TOKEN', "")})
+            r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
             job_artifacts = r.json()["items"]
 
             os.makedirs(job["name"], exist_ok=True)
@@ -47,7 +49,7 @@ if __name__ == '__main__':
                 if artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt"):
                     node_index = artifact["node_index"]
                     url = artifact["url"]
-                    r = requests.get(url, headers={"Circle-Token": os.environ.get('CIRCLE_TOKEN', "")})
+                    r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     test_summary = r.text
                     job_test_summaries[node_index] = test_summary
 
@@ -55,13 +57,13 @@ if __name__ == '__main__':
             for node_index, node_test_summary in job_test_summaries.items():
                 for line in node_test_summary.splitlines():
                     if line.startswith("PASSED "):
-                        test = line[len("PASSED "):]
+                        test = line[len("PASSED ") :]
                         summary[test] = "passed"
                     elif line.startswith("FAILED "):
-                        test = line[len("FAILED "):].split()[0]
+                        test = line[len("FAILED ") :].split()[0]
                         summary[test] = "failed"
             # failed before passed
-            summary = {k: v for k, v in sorted(summary.items(), key=lambda x: (x[1], x[0]))}
+            summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
 
             # collected version
@@ -76,8 +78,8 @@ if __name__ == '__main__':
             new_workflow_summary[test][job_name] = status
 
     for test, result in new_workflow_summary.items():
-        new_workflow_summary[test] = {k: v for k, v in sorted(result.items())}
-    new_workflow_summary = {k: v for k, v in sorted(new_workflow_summary.items())}
+        new_workflow_summary[test] = dict(sorted(result.items()))
+    new_workflow_summary = dict(sorted(new_workflow_summary.items()))
 
-    with open(f'outputs/test_summary.json', "w") as fp:
+    with open("outputs/test_summary.json", "w") as fp:
         json.dump(new_workflow_summary, fp, indent=4)
