@@ -29,8 +29,8 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
-from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from multiprocessing import Process
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 from zipfile import is_zipfile
 
 import torch
@@ -43,7 +43,7 @@ from torch.utils.checkpoint import checkpoint
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import GenerationConfig, GenerationMixin
+from .generation import CompileConfig, GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -89,6 +89,7 @@ from .utils import (
     is_peft_available,
     is_remote_url,
     is_safetensors_available,
+    is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_sdpa_available,
     is_torch_xla_available,
@@ -169,6 +170,10 @@ else:
 
 if is_peft_available():
     from .utils import find_adapter_config_file
+
+
+SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
+
 
 TORCH_INIT_FUNCTIONS = {
     "uniform_": nn.init.uniform_,
@@ -1338,6 +1343,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # SDPA support
     _supports_sdpa = False
 
+    # Flex Attention support
+    _supports_flex_attn = False
+
     # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
     _supports_cache_class = False
     _supports_static_cache = False
@@ -1544,6 +1552,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
                 if cls._supports_sdpa:
                     message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+                if cls._supports_flex_attn:
+                    message += (
+                        ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
+                    )
                 raise ValueError(message + ".")
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
@@ -1578,6 +1590,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 hard_check_only=False,
                 check_device_map=check_device_map,
             )
+        elif requested_attn_implementation == "flex_attention":
+            config = cls._check_and_enable_flex_attn(config, hard_check_only=True)
         elif requested_attn_implementation in [None, "sdpa"] and not is_torch_xla_available():
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(
@@ -1774,7 +1788,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Checks the availability of SDPA for a given model.
 
-        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "sdpa" so that the model can initialize the correct attention module.
         """
         if hard_check_only:
             if not cls._supports_sdpa:
@@ -1797,6 +1811,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not hard_check_only:
             config._attn_implementation = "sdpa"
+        return config
+
+    @classmethod
+    def _check_and_enable_flex_attn(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+        """
+        Checks the availability of Flex Attention for a given model.
+
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flex_attention" so that the model can initialize the correct attention module.
+        """
+        if hard_check_only:
+            if not cls._supports_flex_attn:
+                raise ValueError(
+                    f"{cls.__name__} does not support an attention implementation through torch's flex_attention."
+                    " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/34809."
+                    " If you believe this error is a bug, please open an issue in Transformers GitHub repository"
+                    ' and load your model with the argument `attn_implementation="eager"` meanwhile.'
+                    ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
+                )
+            if not is_torch_flex_attn_available():
+                raise ImportError(
+                    "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0."
+                )
+
+        if not is_torch_flex_attn_available() or not cls._supports_flex_attn:
+            return config
+
+        if not hard_check_only:
+            config._attn_implementation = "flex_attention"
+
         return config
 
     def enable_input_require_grads(self):
@@ -2960,7 +3003,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if module_map:
             filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: state_dict[tensor].contiguous() for tensor in tensors}
+            shard = {}
+            for tensor in tensors:
+                shard[tensor] = state_dict[tensor].contiguous()
+                # delete reference, see https://github.com/huggingface/transformers/pull/34890
+                del state_dict[tensor]
+
             # remake shard with onloaded parameters if necessary
             if module_map:
                 if accelerate_version < version.parse("0.31"):
@@ -2986,6 +3034,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
+
+        del state_dict
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
@@ -3135,7 +3185,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: Type[SpecificPreTrainedModelType],
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
         *model_args,
         config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
@@ -3145,10 +3195,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
-        use_safetensors: bool = None,
+        use_safetensors: Optional[bool] = None,
         weights_only: bool = True,
         **kwargs,
-    ) -> "PreTrainedModel":
+    ) -> SpecificPreTrainedModelType:
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -3839,11 +3889,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     **has_file_kwargs,
                                 }
                                 if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                                    Thread(
+                                    Process(
                                         target=auto_conversion,
                                         args=(pretrained_model_name_or_path,),
                                         kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
-                                        name="Thread-autoconversion",
+                                        name="Process-auto_conversion",
                                     ).start()
                         else:
                             # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
@@ -5082,6 +5132,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             loss_type = "ForCausalLM"
         return LOSS_MAPPING[loss_type]
+
+    def get_compiled_call(self, compile_config: CompileConfig):
+        """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
+        non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
+        want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
+        (where we want the speed-ups of compiled version with static shapes)."""
+        # Only reset it if not present or different from previous config
+        default_config = getattr(self.generation_config, "compile_config", CompileConfig())
+        if (
+            not hasattr(self, "_compiled_call")
+            or getattr(self, "_last_compile_config", default_config) != compile_config
+        ):
+            self._last_compile_config = compile_config
+            self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
+        return self._compiled_call
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
