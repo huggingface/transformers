@@ -1823,13 +1823,13 @@ class WhisperGenerationMixin(GenerationMixin):
             for i, current_slice in enumerate(slices):
                 is_last_slice = i == len(slices) - 1
                 sliced_tokens = seek_sequence[last_slice:current_slice]
-                start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
+                start_timestamp_pos = sliced_tokens[0] - timestamp_begin
                 idx_sliced_tokens = -1 if not is_last_slice or single_timestamp_ending else -2
-                end_timestamp_pos = sliced_tokens[idx_sliced_tokens].item() - timestamp_begin
+                end_timestamp_pos = sliced_tokens[idx_sliced_tokens] - timestamp_begin
                 segments.append(
                     {
-                        "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
-                        "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
+                        "start": time_offset[prev_idx] + start_timestamp_pos.to(torch.float64) * time_precision,
+                        "end": time_offset[prev_idx] + end_timestamp_pos.to(torch.float64) * time_precision,
                         "tokens": sliced_tokens,
                         "result": seek_outputs[idx],
                     }
@@ -1854,13 +1854,13 @@ class WhisperGenerationMixin(GenerationMixin):
             # the whole decoding is considered a segment and we add it to the list of segments
             timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
             last_timestamp_pos = int(seek_num_frames[prev_idx] * time_precision_features / time_precision)
-            if timestamps.numel() > 0 and timestamps[-1].item() != timestamp_begin:
+            if timestamps.numel() > 0 and timestamps[-1] != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
-                last_timestamp_pos = timestamps[-1].item() - timestamp_begin
+                last_timestamp_pos = timestamps[-1] - timestamp_begin
             segments = [
                 {
                     "start": time_offset[prev_idx],
-                    "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
+                    "end": time_offset[prev_idx] + last_timestamp_pos.to(torch.float64) * time_precision,
                     "tokens": seek_sequence,
                     "result": seek_outputs[idx],
                 }
