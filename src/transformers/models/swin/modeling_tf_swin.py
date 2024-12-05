@@ -742,7 +742,14 @@ class TFSwinOutput(keras.layers.Layer):
 
 class TFSwinLayer(keras.layers.Layer):
     def __init__(
-        self, config, dim, input_resolution: Tuple[int, int], num_heads: int, shift_size: int = 0, **kwargs
+        self,
+        config,
+        dim,
+        input_resolution: Tuple[int, int],
+        num_heads: int,
+        drop_path_rate: float = 0.0,
+        shift_size: int = 0,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -754,8 +761,8 @@ class TFSwinLayer(keras.layers.Layer):
         self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
         self.attention = TFSwinAttention(config, dim, num_heads, name="attention")
         self.drop_path = (
-            TFSwinDropPath(config.drop_path_rate, name="drop_path")
-            if config.drop_path_rate > 0.0
+            TFSwinDropPath(drop_path_rate, name="drop_path")
+            if drop_path_rate > 0.0
             else keras.layers.Activation("linear", name="drop_path")
         )
         self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
@@ -913,6 +920,7 @@ class TFSwinStage(keras.layers.Layer):
                 input_resolution=input_resolution,
                 num_heads=num_heads,
                 shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                drop_path_rate=drop_path[i],
                 name=f"blocks.{i}",
             )
             for i in range(depth)

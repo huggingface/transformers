@@ -52,6 +52,8 @@
     title: 导出为 TorchScript
   - local: gguf
     title: 与 GGUF 格式的互操作性
+  - local: tiktoken
+    title: 与 Tiktoken 文件的互操作性
   title: 开发者指南
 - sections:
   - local: performance
@@ -86,6 +88,8 @@
     title: 🤗Transformers能做什么
   - local: tokenizer_summary
     title: 分词器的摘要
+  - local: attention
+    title: 注意力机制
   title: 概念指南
 - sections:
   - sections:

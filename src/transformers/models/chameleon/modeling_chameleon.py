@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -1288,7 +1288,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
             n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum().item()
-            n_image_features = image_tokens.shape[0]
+            n_image_features = image_tokens.shape[0] * image_tokens.shape[1]
             if n_image_tokens_in_text != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens_in_text}, features {n_image_features}"
@@ -1299,6 +1299,10 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        # torch.jit.trace() doesn't support cache objects in the output
+        if use_cache and past_key_values is None and not torch.jit.is_tracing():
+            past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

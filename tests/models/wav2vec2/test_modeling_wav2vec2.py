@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Wav2Vec2 model."""
 
-import gc
 import math
 import multiprocessing
 import os
@@ -30,7 +29,7 @@ from pytest import mark
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
     CaptureLogger,
-    backend_empty_cache,
+    cleanup,
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
@@ -1460,8 +1459,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

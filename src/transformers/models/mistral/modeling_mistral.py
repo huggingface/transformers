@@ -227,9 +227,9 @@ class MistralAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -619,7 +619,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
@@ -666,6 +666,10 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices indicating the position of the input sequence tokens in the sequence. Unlike `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -961,7 +965,7 @@ class MistralModel(MistralPreTrainedModel):
                     sliding_attend_mask = torch.arange(target_length, device=device) <= (
                         cache_position.reshape(-1, 1) - config.sliding_window
                     )
-                    diagonal_attend_mask |= sliding_attend_mask
+                    diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
@@ -979,6 +983,7 @@ class MistralModel(MistralPreTrainedModel):
 
 class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)

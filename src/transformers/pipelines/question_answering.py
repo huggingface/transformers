@@ -540,8 +540,14 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
-            start_ = output["start"]
-            end_ = output["end"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                start_ = output["start"].to(torch.float32)
+            else:
+                start_ = output["start"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                end_ = output["end"].to(torch.float32)
+            else:
+                end_ = output["end"]
             example = output["example"]
             p_mask = output["p_mask"]
             attention_mask = (

@@ -28,7 +28,18 @@ if __name__ == "__main__":
         data = json.load(fp)
 
     # TODO: extend
-    team_members = ["ydshieh", "zucchini-nlp", "ArthurZucker", "gante", "LysandreJik", "molbap", "qubvel"]
+    team_members = [
+        "ydshieh",
+        "zucchini-nlp",
+        "ArthurZucker",
+        "gante",
+        "LysandreJik",
+        "molbap",
+        "qubvel",
+        "Rocketknight1",
+        "muellerzr",
+        "SunMarc",
+    ]
 
     # Counting the number of failures grouped by authors
     new_data = {}
@@ -53,6 +64,8 @@ if __name__ == "__main__":
             for device, failed_tests in model_result.items():
                 failed_tests = [x for x in failed_tests if x["author"] == author or x["merged_by"] == author]
                 model_result[device] = failed_tests
+            _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
+        new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
 
     # Upload to Hub and get the url
     with open("new_model_failures_with_bad_commit_grouped_by_authors.json", "w") as fp:

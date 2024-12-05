@@ -1059,7 +1059,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
                     sliding_attend_mask = torch.arange(target_length, device=device) <= (
                         cache_position.reshape(-1, 1) - config.sliding_window
                     )
-                    diagonal_attend_mask |= sliding_attend_mask
+                    diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
