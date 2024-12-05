@@ -325,7 +325,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # FIXME: Currnetly this implementation is only for flan-t5 architecture.
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
-        parsed_parameters["config"]["tie_word_embeddings"] = False
         parsed_parameters["config"]["is_gated_act"] = True
         updated_architecture = "t5"
     else:
