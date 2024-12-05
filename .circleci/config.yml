@@ -51,13 +51,9 @@ jobs:
                 # `CIRCLE_TOKEN` is defined as an environment variables set within a context, see `https://circleci.com/docs/contexts/`
                 command: |
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
-                    echo $project_slug
                     job_number=${CIRCLE_BUILD_NUM}
-                    echo $job_number
                     url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
-                    echo $url
                     curl -o test_preparation/artifacts.json ${url} --header "Circle-Token: $CIRCLE_TOKEN"
-                    tail -100 test_preparation/artifacts.json
             - run:
                 name: "Prepare pipeline parameters"
                 command: |
@@ -189,11 +185,28 @@ jobs:
 workflows:
     version: 2
     setup_and_quality:
+        when:
+            and:
+                - equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+                - not: <<pipeline.parameters.nightly>>
         jobs:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
+
+    setup_and_quality_2:
+        when:
+            not:
+                 equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+        jobs:
+            - check_circleci_user
+            - check_code_quality
+            - check_repository_consistency
+            - fetch_tests:
+                # [reference] https://circleci.com/docs/contexts/
+                context:
+                    - TRANSFORMERS_CONTEXT
 
     nightly:
         when: <<pipeline.parameters.nightly>>
