@@ -396,14 +396,9 @@ def get_fast_image_processing_content_header(content: str) -> str:
     return content_header
 
 
-def add_fast_image_processor_file(
+def write_default_fast_image_processor_file(
     fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
 ):
-    # if the file already exists, do nothing
-    if os.path.exists(fast_image_processing_module_file):
-        print(f"{fast_image_processing_module_file} already exists. Skipping.")
-        return
-
     imports = "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n\n\n"
     content_header = get_fast_image_processing_content_header(content_base_file)
     content_base_file = (
@@ -423,6 +418,117 @@ def add_fast_image_processor_file(
     )
 
     content = content_header + imports + content_base_file
+
+    with open(fast_image_processing_module_file, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def add_fast_image_processor_file(
+    fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
+):
+    # if the file already exists, do nothing
+    if os.path.exists(fast_image_processing_module_file):
+        print(f"{fast_image_processing_module_file} already exists. Skipping.")
+        return
+
+    regex = rf"class {fast_image_processor_name[:-4]}.*?(\n\S|$)"
+    match = re.search(regex, content_base_file, re.DOTALL)
+    if not match:
+        print(f"Couldn't find the {fast_image_processor_name[:-4]} class in {fast_image_processing_module_file}")
+        print("Creating a new file with the default content.")
+        return write_default_fast_image_processor_file(
+            fast_image_processing_module_file, fast_image_processor_name, content_base_file
+        )
+    # Exclude the last unindented line
+    slow_class_content = match.group(0).rstrip()
+    # get class docstring
+    match = re.search(r'r"""(.*?)"""', slow_class_content, re.DOTALL)
+    print("class_docstring")
+    print(match.group(0))
+    if not match:
+        print(
+            f"Couldn't find the docstring for {fast_image_processor_name[:-4]} in {fast_image_processing_module_file}"
+        )
+        print("Skipping writing the docstring.")
+        class_docstring = ""
+    else:
+        class_docstring = match.group(0)
+        class_docstring = class_docstring.replace("Constructs a", "Constructs a fast")
+
+    content_header = get_fast_image_processing_content_header(content_base_file)
+
+    # get default args:
+    # find the __init__ block which start with def __init__ and ends with def
+    match = re.search(r"def __init__.*?def ", slow_class_content, re.DOTALL)
+    if not match:
+        print(
+            f"Couldn't find the __init__ block for {fast_image_processor_name[:-4]} in {fast_image_processing_module_file}"
+        )
+        print("Creating a new file with the default content.")
+        return write_default_fast_image_processor_file(
+            fast_image_processing_module_file, fast_image_processor_name, content_base_file
+        )
+    init = match.group(0)
+    init_signature_block = init.split(")")[0]
+    arg_names = init_signature_block.split(":")
+    arg_names = [arg_name.split("\n")[-1].strip() for arg_name in arg_names]
+    # get the default values
+    default_args = re.findall(r"= (.*?)(?:,|\))", init_signature_block)
+
+    # build default args dict
+    default_args_dict = dict(zip(arg_names, default_args))
+    print("init", init)
+    pattern_default_size = r"size = size if size is not None else\s+(.*)"
+    match_default_size = re.findall(pattern_default_size, init)
+    default_args_dict["size"] = match_default_size[0] if match_default_size else None
+    pattern_default_crop_size = r"crop_size = crop_size if crop_size is not None else\s+(.*)"
+    match_default_crop_size = re.findall(pattern_default_crop_size, init)
+    default_args_dict["crop_size"] = match_default_crop_size[0] if match_default_crop_size else None
+    pattern_default_image_mean = r"self.image_mean = image_mean if image_mean is not None else\s+(.*)"
+    match_default_image_mean = re.findall(pattern_default_image_mean, init)
+    default_args_dict["image_mean"] = match_default_image_mean[0] if match_default_image_mean else None
+    pattern_default_image_std = r"self.image_std = image_std if image_std is not None else\s+(.*)"
+    match_default_image_std = re.findall(pattern_default_image_std, init)
+    default_args_dict["image_std"] = match_default_image_std[0] if match_default_image_std else None
+    default_args_dict["default_to_square"] = False if "(size, default_to_square=False" in init else None
+
+    content_base_file = (
+        f"class {fast_image_processor_name}(BaseImageProcessorFast):\n"
+        f"    {class_docstring}\n\n"
+        "    # To be checked against the slow image processor\n"
+        "    # None values left after checking can be removed\n"
+        f'    resample = {default_args_dict.get("resample")}\n'
+        f'    image_mean = {default_args_dict.get("image_mean")}\n'
+        f'    image_std = {default_args_dict.get("image_std")}\n'
+        f'    size = {default_args_dict.get("size")}\n'
+        f'    default_to_square = {default_args_dict.get("default_to_square")}\n'
+        f'    crop_size = {default_args_dict.get("crop_size")}\n'
+        f'    do_resize = {default_args_dict.get("do_resize")}\n'
+        f'    do_center_crop = {default_args_dict.get("do_center_crop")}\n'
+        f'    do_rescale = {default_args_dict.get("do_rescale")}\n'
+        f'    do_normalize = {default_args_dict.get("do_normalize")}\n'
+        f'    do_convert_rgb = {default_args_dict.get("do_convert_rgb")}\n'
+    )
+
+    imports = "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n"
+    image_utils_imports = []
+    if default_args_dict.get("resample") is not None and "PILImageResampling" in default_args_dict.get("resample"):
+        image_utils_imports.append("PILImageResampling")
+    if default_args_dict.get("image_mean") is not None and not any(
+        char.isdigit() for char in default_args_dict.get("image_mean")
+    ):
+        image_utils_imports.append(default_args_dict.get("image_mean"))
+    if default_args_dict.get("image_std") is not None and not any(
+        char.isdigit() for char in default_args_dict.get("image_std")
+    ):
+        image_utils_imports.append(default_args_dict.get("image_std"))
+
+    if image_utils_imports:
+        # sort imports
+        image_utils_imports.sort()
+        imports += f"from ...image_utils import {', '.join(image_utils_imports)}\n"
+
+    content = content_header + imports + "\n\n" + content_base_file
 
     with open(fast_image_processing_module_file, "w", encoding="utf-8") as f:
         f.write(content)
