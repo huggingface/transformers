@@ -171,6 +171,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [IDEFICS](model_doc/idefics)                       |       ✅        |         ✅         |      ❌      |
 |                      [Idefics2](model_doc/idefics2)                      |       ✅        |         ❌         |      ❌      |
 |                      [Idefics3](model_doc/idefics3)                      |       ✅        |         ❌         |      ❌      |
+|                     [ImageBind](model_doc/imagebind)                     |       ✅        |         ❌         |      ❌      |
 |                      [ImageGPT](model_doc/imagegpt)                      |       ✅        |         ❌         |      ❌      |
 |                      [Informer](model_doc/informer)                      |       ✅        |         ❌         |      ❌      |
 |                  [InstructBLIP](model_doc/instructblip)                  |       ✅        |         ❌         |      ❌      |

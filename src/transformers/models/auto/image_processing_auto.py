@@ -90,6 +90,7 @@ else:
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("idefics3", ("Idefics3ImageProcessor",)),
+            ("imagebind", ("ImageBindImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),

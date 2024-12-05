@@ -117,6 +117,7 @@ from . import (
     idefics,
     idefics2,
     idefics3,
+    imagebind,
     imagegpt,
     informer,
     instructblip,
