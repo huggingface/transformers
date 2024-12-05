@@ -204,14 +204,20 @@ class PixtralProcessor(ProcessorMixin):
 
         if images is not None:
             if is_image_or_image_url(images):
-                images = [[images]]
+                if isinstance(text, str) or isinstance(text, list) and len(text) == 1:
+                    # If there's a single sample, the image must belong to it
+                    images = [[images]]
+                else:
+                    raise ValueError(
+                        "You have supplied multiple text samples, but `images` is not a nested list. When processing multiple samples, `images` should be a list of lists of images, one list per sample."
+                    )
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
                 if isinstance(text, str) or isinstance(text, list) and len(text) == 1:
                     # If there's a single sample, all images must belong to it
                     images = [images]
                 else:
                     raise ValueError(
-                        "You have supplied multiple text samples, but only a flat list of images. When processing multiple samples, `images` should be a list of lists of images, one list per sample."
+                        "You have supplied multiple text samples, but `images` is not a nested list. When processing multiple samples, `images` should be a list of lists of images, one list per sample."
                     )
             elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
                 pass
