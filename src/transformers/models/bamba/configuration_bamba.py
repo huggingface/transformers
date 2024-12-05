@@ -80,8 +80,15 @@ class BambaConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+<<<<<<< HEAD
         attn_layer_indices (`<fill_type>`, *optional*): <fill_docstring>
         attn_rotary_emb (`<fill_type>`, *optional*): <fill_docstring>
+=======
+        attn_layer_indices (`list`, *optional*, defaults to None):
+            Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
+        attn_rotary_emb (`int`, *optional*, defaults to 64):
+            The embedding dimension of RoPE. Must be smaller than hidden_size / num_attention_heads.
+>>>>>>> 5671778d0b654c96d5ef2f5fe86ca02a7fd15819
         use_mamba_kernels (`bool`, *optional*, defaults to `True`):
             Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
             `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
@@ -127,10 +134,10 @@ class BambaConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        # max_position_embeddings=262144,
+        max_position_embeddings=262144,
         attention_dropout=0.0,
         attn_layer_indices=None,
-        attn_rotary_emb=None,
+        attn_rotary_emb=64,
         use_mamba_kernels=True,
         mamba_n_heads=128,
         mamba_d_head="auto",
@@ -150,9 +157,9 @@ class BambaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        # self.max_position_embeddings = max_position_embeddings
-        self.attention_bias = False
+        self.max_position_embeddings = max_position_embeddings
         self.attention_dropout = attention_dropout
+        self.attention_bias = False
         self.mlp_bias = False
 
         # for backward compatibility
