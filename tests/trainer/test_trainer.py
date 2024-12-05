@@ -4175,7 +4175,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             self.assertEqual(model.b.item(), trainer.model.b.item())
 
     def test_push_to_hub_in_organization(self):
-        with TemporaryHubRepo(token=self._token) as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 trainer = get_regression_trainer(output_dir=tmp_dir)
                 trainer.save_model()

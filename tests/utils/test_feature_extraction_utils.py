@@ -83,7 +83,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
                 self.assertEqual(v, getattr(new_feature_extractor, k))
 
     def test_push_to_hub_in_organization(self):
-        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
             feature_extractor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
@@ -92,7 +92,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
                 self.assertEqual(v, getattr(new_feature_extractor, k))
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:

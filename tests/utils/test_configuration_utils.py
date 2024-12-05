@@ -125,7 +125,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_in_organization(self):
-        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             config = BertConfig(
                 vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
             )
@@ -137,7 +137,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             config = BertConfig(
                 vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
             )

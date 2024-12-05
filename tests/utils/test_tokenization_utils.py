@@ -145,7 +145,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
     def test_push_to_hub_in_organization(self):
-        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 vocab_file = os.path.join(tmp_dir, "vocab.txt")
                 with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
@@ -157,7 +157,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 vocab_file = os.path.join(tmp_dir, "vocab.txt")
                 with open(vocab_file, "w", encoding="utf-8") as vocab_writer:

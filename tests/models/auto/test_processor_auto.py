@@ -385,7 +385,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
             self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
