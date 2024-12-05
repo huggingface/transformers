@@ -261,7 +261,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
-        )
+        )git 
         image_embeds = vision_outputs[0]
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
@@ -441,11 +441,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         if input_ids is None:
             start_tokens = [self.config.text_config.bos_token_id]
             if getattr(self.config, "video_token_index", None) is not None:
-<<<<<<< HEAD
-                start_tokens += [self.config.video_token_index] * self.config.num_query_tokens * 4
-=======
                 start_tokens = [self.config.video_token_index] * self.config.num_query_tokens * 4 + start_tokens
->>>>>>> upstream/main
             input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
             input_ids = input_ids.repeat(batch_size, 1)
 
