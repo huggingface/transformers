@@ -1574,7 +1574,7 @@ def LoggingLevel(level):
 
 class TemporaryHubRepo:
     """Create a temporary Hub repository and return its `RepoUrl` object. This is similar to
-    `tempfile.TemporaryDirectory` and can be used as a context manager.  For example:
+    `tempfile.TemporaryDirectory` and can be used as a context manager. For example:
 
         with TemporaryHubRepo(token=self._token) as temp_repo:
             ...
