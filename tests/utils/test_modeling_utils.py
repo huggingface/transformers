@@ -2002,7 +2002,7 @@ class ModelPushToHubTester(unittest.TestCase):
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             config = BertConfig(
                 vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
             )
@@ -2015,7 +2015,7 @@ class ModelPushToHubTester(unittest.TestCase):
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_via_save_pretrained(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             config = BertConfig(
                 vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
             )
@@ -2029,7 +2029,7 @@ class ModelPushToHubTester(unittest.TestCase):
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_with_description(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             config = BertConfig(
                 vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
             )
@@ -2075,7 +2075,7 @@ The commit description supports markdown synthax see:
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             CustomConfig.register_for_auto_class()
             CustomModel.register_for_auto_class()
 
@@ -2100,7 +2100,7 @@ The commit description supports markdown synthax see:
             self.assertEqual(new_model.__class__.__name__, "CustomModel")
 
     def test_push_to_hub_with_tags(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             from huggingface_hub import ModelCard
 
             new_tags = ["tag-1", "tag-2"]

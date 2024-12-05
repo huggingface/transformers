@@ -373,7 +373,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
         HfFolder.save_token(TOKEN)
 
     def test_push_to_hub_via_save_pretrained(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -402,7 +402,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
             self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
 
     def test_push_to_hub_dynamic_processor(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             CustomFeatureExtractor.register_for_auto_class()
             CustomTokenizer.register_for_auto_class()
             CustomProcessor.register_for_auto_class()

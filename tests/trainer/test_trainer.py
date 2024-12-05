@@ -4173,7 +4173,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             pass
 
     def test_push_to_hub(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             output_dir_name = tmp_repo.repo_name
             with tempfile.TemporaryDirectory() as tmp_dir:
                 trainer = get_regression_trainer(
@@ -4195,7 +4195,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             self.assertEqual(model.b.item(), trainer.model.b.item())
 
     def test_push_to_hub_in_organization(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 trainer = get_regression_trainer(output_dir=tmp_dir)
                 trainer.save_model()
@@ -4231,7 +4231,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         return [commit.strip() for commit in commits]
 
     def test_push_to_hub_with_saves_each_epoch(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 with self.assertLogs(level="WARNING") as logs:
                     output_dir_name = tmp_repo.repo_name
@@ -4258,7 +4258,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         if num_gpus > 2:
             self.skipTest(reason="More than 2 GPUs available")
 
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 with self.assertLogs(level="WARNING") as logs:
                     output_dir_name = tmp_repo.repo_name
@@ -4293,7 +4293,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     @require_tensorboard
     def test_push_to_hub_with_tensorboard_logs(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 output_dir_name = tmp_repo.repo_name
                 trainer = get_regression_trainer(
@@ -4319,7 +4319,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         # Checks if `trainer.push_to_hub()` works correctly by adding the desired
         # tag without having to pass `tags` in `push_to_hub`
         # see:
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 output_dir_name = tmp_repo.repo_name
                 trainer = get_regression_trainer(
@@ -4344,7 +4344,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_revision(self):
         # Checks if `trainer.push_to_hub()` works correctly by adding revision
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 output_dir_name = tmp_repo.repo_name
                 trainer = get_regression_trainer(

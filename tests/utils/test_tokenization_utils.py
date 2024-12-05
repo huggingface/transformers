@@ -119,7 +119,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
         HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 vocab_file = os.path.join(tmp_dir, "vocab.txt")
                 with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
@@ -131,7 +131,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
     def test_push_to_hub_via_save_pretrained(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 vocab_file = os.path.join(tmp_dir, "vocab.txt")
                 with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
@@ -172,7 +172,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
     @require_tokenizers
     def test_push_to_hub_dynamic_tokenizer(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             CustomTokenizer.register_for_auto_class()
             with tempfile.TemporaryDirectory() as tmp_dir:
                 vocab_file = os.path.join(tmp_dir, "vocab.txt")
@@ -189,7 +189,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
     @require_tokenizers
     def test_push_to_hub_dynamic_tokenizer_with_both_slow_and_fast_classes(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             CustomTokenizer.register_for_auto_class()
 
             # Fast and slow custom tokenizer

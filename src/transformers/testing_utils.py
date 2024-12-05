@@ -1576,7 +1576,7 @@ class TemporaryHubRepo:
     """Create a temporary Hub repository and return its `RepoUrl` object. This is similar to
     `tempfile.TemporaryDirectory` and can be used as a context manager.  For example:
 
-        with TemporaryHubRepo() as temp_repo:
+        with TemporaryHubRepo(token=self._token) as temp_repo:
             ...
 
     Upon exiting the context, the repository and everything contained in it are removed.

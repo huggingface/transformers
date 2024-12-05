@@ -72,7 +72,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
             image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
@@ -81,7 +81,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 self.assertEqual(v, getattr(new_image_processor, k))
 
     def test_push_to_hub_via_save_pretrained(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -112,7 +112,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 self.assertEqual(v, getattr(new_image_processor, k))
 
     def test_push_to_hub_dynamic_image_processor(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             CustomImageProcessor.register_for_auto_class()
             image_processor = CustomImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
 

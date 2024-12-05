@@ -679,7 +679,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             config = GenerationConfig(
                 do_sample=True,
                 temperature=0.7,
@@ -693,7 +693,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_via_save_pretrained(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             config = GenerationConfig(
                 do_sample=True,
                 temperature=0.7,
@@ -739,7 +739,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_on_pr_revision(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
             # create a PR
             pr = create_pull_request(repo_id=tmp_repo.repo_id, title="Test PR", token=self._token)
             revision = f"refs/pr/{pr.num}"
