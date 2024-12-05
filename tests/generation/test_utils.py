@@ -2088,13 +2088,16 @@ class GenerationTesterMixin:
             without_all_logits = model.generate(**inputs_dict, **generation_kwargs)
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
+    @parameterized.expand([("static", False), (None, True)])
     @pytest.mark.generate
-    def test_assisted_decoding_with_num_logits_to_keep(self):
+    def test_assisted_decoding_with_num_logits_to_keep(self, cache_implementation, return_legacy_cache):
         for model_class in self.all_generative_model_classes:
             if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
                 self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
+            if cache_implementation == "static" and not model_class._supports_static_cache:
+                self.skipTest(reason="This model does not support `cache_implementation=static`.")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
             # NOTE: assisted generation only works with cache on at the moment.
@@ -2114,6 +2117,8 @@ class GenerationTesterMixin:
                 "assistant_model": assistant_model,
                 "return_dict_in_generate": True,
                 "output_scores": True,
+                "cache_implementation": cache_implementation,
+                "return_legacy_cache": return_legacy_cache,
             }
 
             # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
