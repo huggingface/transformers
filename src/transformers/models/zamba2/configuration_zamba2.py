@@ -58,7 +58,7 @@ class Zamba2Config(PretrainedConfig):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
         time_step_limit (`tuple`, *optional*):
             Accepted range of time step values.
-        n_mamba_heads (`int`, *optional*, defaults to 1):
+        n_mamba_heads (`int`, *optional*, defaults to 8):
             Number of heads for the evolution matrices of mamba 2.
         use_conv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to use bias in the convolution layer of the mixer block.

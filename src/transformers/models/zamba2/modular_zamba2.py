@@ -22,12 +22,12 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_utils import PreTrainedModel
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
@@ -35,9 +35,9 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
 )
+from ..gemma.modeling_gemma import GemmaRotaryEmbedding
 from ..llama.modeling_llama import apply_rotary_pos_emb
 from ..mamba2.modeling_mamba2 import MambaRMSNormGated, pad_tensor_by_size, reshape_into_chunks, segment_sum
-from ..gemma.modeling_gemma import GemmaRotaryEmbedding
 from ..zamba.modeling_zamba import (
     ZambaAttention,
     ZambaAttentionDecoderLayer,
@@ -107,7 +107,7 @@ class Zamba2Config(PretrainedConfig):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
         time_step_limit (`tuple`, *optional*):
             Accepted range of time step values.
-        n_mamba_heads (`int`, *optional*, defaults to 1):
+        n_mamba_heads (`int`, *optional*, defaults to 8):
             Number of heads for the evolution matrices of mamba 2.
         use_conv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to use bias in the convolution layer of the mixer block.
@@ -440,7 +440,7 @@ class Zamba2Attention(ZambaAttention):
                 self.linear_k_lora_B_list.append(linear_k_lora_B)
                 self.linear_v_lora_A_list.append(linear_v_lora_A)
                 self.linear_v_lora_B_list.append(linear_v_lora_B)
-                
+
         if config.use_mem_rope:
             rope_theta = config.rope_theta
             if config.use_long_context:
@@ -1903,8 +1903,14 @@ class Zamba2ForCausalLM(ZambaForCausalLM):
     """,
     ZAMBA2_START_DOCSTRING,
 )
-class Zamba2ForSequenceClassification(ZambaForSequenceClassification):  
-    pass 
+class Zamba2ForSequenceClassification(ZambaForSequenceClassification):
+    pass
 
 
-__all__ = ["Zamba2Config", "Zamba2ForCausalLM", "Zamba2ForSequenceClassification", "Zamba2Model", "Zamba2PreTrainedModel",]
+__all__ = [
+    "Zamba2Config",
+    "Zamba2ForCausalLM",
+    "Zamba2ForSequenceClassification",
+    "Zamba2Model",
+    "Zamba2PreTrainedModel",
+]
