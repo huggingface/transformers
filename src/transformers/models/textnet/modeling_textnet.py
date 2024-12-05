@@ -137,7 +137,7 @@ class TextNetRepConvLayer(nn.Module):
                 out_channels=out_channels,
                 kernel_size=(kernel_size[0], 1),
                 stride=stride,
-                padding=ver_pad,
+                padding=vertical_padding,
                 bias=False,
             )
             self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
@@ -150,7 +150,7 @@ class TextNetRepConvLayer(nn.Module):
                 out_channels=out_channels,
                 kernel_size=(1, kernel_size[1]),
                 stride=stride,
-                padding=hor_pad,
+                padding=horizontal_padding,
                 bias=False,
             )
             self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
