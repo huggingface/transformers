@@ -412,6 +412,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
     if num_tokens is not None:
         tokens_per_second = num_tokens / runtime
         result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
+    print(result)
     return result
 
 

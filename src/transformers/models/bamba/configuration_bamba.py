@@ -29,7 +29,7 @@ class BambaConfig(PretrainedConfig):
     BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with defaults taken from the IBM checkpoint.
 
-    The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU. 
+    The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
     The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -78,31 +78,26 @@ class BambaConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
-        max_position_embeddings (`int`, *optional*, defaults to 262144):
-            This value doesn't have any real effect. The maximum sequence length that this model is intended to be
-            used with. It can be used with longer sequences, but performance may degrade.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        attn_layer_period (`int`, *optional*, defaults to 8):
-            Once in this many layers, we will have a vanilla attention layer
-        attn_layer_offset (`int`, *optional*, defaults to 4):
-            The first layer index that contains a vanilla attention mlp layer
+        attn_layer_indices (`<fill_type>`, *optional*): <fill_docstring>
+        attn_rotary_emb (`<fill_type>`, *optional*): <fill_docstring>
         use_mamba_kernels (`bool`, *optional*, defaults to `True`):
             Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
             `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
             `True` and kernels are not available
         mamba_n_heads (`int`, *optional*, defaults to 128):
             The number of mamba heads used in the v2 implementation.
-        mamba_d_heads (`int`, *optional*, defaults to 64):
-            The dimension of the mamba heads used in the v2 implementation.
+        mamba_d_head (`<fill_type>`, *optional*, defaults to `"auto"`): <fill_docstring>
         mamba_n_groups (`int`, *optional*, defaults to 1):
             The number of the mamba groups used in the v2 implementation.
-        mamba_d_state (`int`, *optional*, defaults to 16):
+        mamba_d_state (`int`, *optional*, defaults to 256):
             The dimension the mamba state space latents
         mamba_d_conv (`int`, *optional*, defaults to 4):
             The size of the mamba convolution kernel
         mamba_expand (`int`, *optional*, defaults to 2):
             Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
+        mamba_chunk_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
         mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
             Rank of the the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         mamba_conv_bias (`bool`, *optional*, defaults to `True`):
@@ -156,7 +151,9 @@ class BambaConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         # self.max_position_embeddings = max_position_embeddings
+        self.attention_bias = False
         self.attention_dropout = attention_dropout
+        self.mlp_bias = False
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -172,11 +169,12 @@ class BambaConfig(PretrainedConfig):
 
         self.attn_layer_indices = attn_layer_indices
         self.attn_rotary_emb = attn_rotary_emb
+        self.rope_theta = 10000.0
+        self.partial_rotary_factor = 0.5
 
         mamba_intermediate = mamba_expand * hidden_size
-        
-        assert mamba_intermediate % mamba_n_heads == 0, \
-            "mamba_n_heads must divide mamba_expand * hidden_size"
+
+        assert mamba_intermediate % mamba_n_heads == 0, "mamba_n_heads must divide mamba_expand * hidden_size"
 
         # for the mamba_v2, must satisfy the following
         if mamba_d_head == "auto":
@@ -195,7 +193,6 @@ class BambaConfig(PretrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
 
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -207,8 +204,6 @@ class BambaConfig(PretrainedConfig):
     @property
     def layers_block_type(self):
         return [
-            "attention" if (
-                self.attn_layer_indices and i in self.attn_layer_indices 
-            ) else "mamba"
+            "attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
             for i in range(self.num_hidden_layers)
         ]
