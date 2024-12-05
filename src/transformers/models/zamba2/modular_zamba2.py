@@ -15,7 +15,7 @@
 # limitations under the License.
 import math
 from itertools import cycle
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...utils import (
     add_start_docstrings,
     is_flash_attn_greater_or_equal_2_10,
@@ -406,10 +407,6 @@ class Zamba2Attention(ZambaAttention):
     ):
         super().__init__(config, layer_idx)
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
-        self.rope_theta = config.rope_theta
-        if config.use_long_context:
-            a = 8
-            self.rope_theta = self.rope_theta * a ** (self.head_dim / (self.head_dim - 2))
         self.layer_block_map = layer_type_list(config)
         self.block_id = block_id
         self.is_causal = True
@@ -443,13 +440,16 @@ class Zamba2Attention(ZambaAttention):
                 self.linear_k_lora_B_list.append(linear_k_lora_B)
                 self.linear_v_lora_A_list.append(linear_v_lora_A)
                 self.linear_v_lora_B_list.append(linear_v_lora_B)
-
+                
         if config.use_mem_rope:
+            rope_theta = config.rope_theta
+            if config.use_long_context:
+                a = 8
+                rope_theta = rope_theta * a ** (config.attention_head_dim / (config.attention_head_dim - 2))
             self.rotary_emb = Zamba2RotaryEmbedding(
-                config,
-                self.head_dim,
+                config.attention_head_dim,
                 max_position_embeddings=config.max_position_embeddings,
-                base=self.rope_theta,
+                base=rope_theta,
             )
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
@@ -464,6 +464,7 @@ class Zamba2Attention(ZambaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -498,7 +499,16 @@ class Zamba2Attention(ZambaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         if self.config.use_mem_rope:
-            cos, sin = self.rotary_emb(value_states, position_ids)
+            if position_embeddings is None:
+                logger.warning_once(
+                    "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                    "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                    "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                    "removed and `position_embeddings` will be mandatory."
+                )
+                cos, sin = self.rotary_emb(value_states, position_ids)
+            else:
+                cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -564,6 +574,7 @@ class Zamba2FlashAttention2(Zamba2Attention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -601,7 +612,16 @@ class Zamba2FlashAttention2(Zamba2Attention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         if self.config.use_mem_rope:
-            cos, sin = self.rotary_emb(value_states, position_ids)
+            if position_embeddings is None:
+                logger.warning_once(
+                    "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                    "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                    "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                    "removed and `position_embeddings` will be mandatory."
+                )
+                cos, sin = self.rotary_emb(value_states, position_ids)
+            else:
+                cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -680,6 +700,7 @@ class Zamba2SdpaAttention(Zamba2Attention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -727,7 +748,16 @@ class Zamba2SdpaAttention(Zamba2Attention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         if self.config.use_mem_rope:
-            cos, sin = self.rotary_emb(value_states, position_ids)
+            if position_embeddings is None:
+                logger.warning_once(
+                    "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                    "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                    "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
+                    "removed and `position_embeddings` will be mandatory."
+                )
+                cos, sin = self.rotary_emb(value_states, position_ids)
+            else:
+                cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -1280,6 +1310,7 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -1300,6 +1331,9 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
                 (see `past_key_values`).
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
         """
         hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
         hidden_states = self.input_layernorm(hidden_states)
@@ -1312,6 +1346,7 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
 
@@ -1335,6 +1370,72 @@ class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
         self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        original_hidden_states: Optional[torch.Tensor] = None,
+        layer_idx: int = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.LongTensor] = None,
+        transformer_hidden_states: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            transformer_hidden_states (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Output of the previous shared transformer layer (if present) of shape `(batch_size, seq_len, embed_dim)`.
+        """
+
+        residual = hidden_states
+
+        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
+        hidden_states = (
+            hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
+        )
+        hidden_states = self.input_layernorm(hidden_states)
+
+        hidden_states = self.mamba(
+            hidden_states=hidden_states,
+            cache_params=past_key_value,
+            attention_mask=attention_mask,
+        )
+
+        self_attn_weights = None
+
+        # residual connection after mamba
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (past_key_value,)
+
+        return outputs
+
 
 class Zamba2HybridLayer(ZambaHybridLayer):
     def __init__(
@@ -1356,6 +1457,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1374,6 +1476,9 @@ class Zamba2HybridLayer(ZambaHybridLayer):
                 (see `past_key_values`).
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
         """
 
         layer_outputs = self.shared_transformer(
@@ -1386,6 +1491,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
         )
 
         transformer_hidden_states = layer_outputs[0]
@@ -1404,6 +1510,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
         )
 
         if output_attentions:
@@ -1554,6 +1661,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
 
     def __init__(self, config: Zamba2Config):
         Zamba2PreTrainedModel.__init__(self, config)
+        self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -1638,11 +1746,144 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
 
         self._attn_implementation = config._attn_implementation
         self.final_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        if config.use_mem_rope:
+            rope_theta = config.rope_theta
+            if config.use_long_context:
+                a = 8
+                rope_theta = rope_theta * a ** (config.attention_head_dim / (config.attention_head_dim - 2))
+            self.rotary_emb = Zamba2RotaryEmbedding(
+                config.attention_head_dim,
+                max_position_embeddings=config.max_position_embeddings,
+                base=rope_theta,
+            )
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @add_start_docstrings_to_model_forward(ZAMBA2_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        hidden_states = inputs_embeds
+
+        original_hidden_states = torch.clone(inputs_embeds)
+        # original_hidden_states: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
+
+        if use_cache and past_key_values is None:
+            logger.warning_once(
+                "Zamba2 requires an initialized `Zamba2HybridDynamicCache` to return a cache. None was "
+                "provided, so no cache will be returned."
+            )
+
+        if cache_position is None:
+            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+
+        # create position embeddings to be shared across the decoder layers
+        if self.config.use_mem_rope:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        else:
+            position_embeddings = None
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+
+        for layer_idx, layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    original_hidden_states,
+                    layer_idx,
+                    attention_mask,
+                    causal_mask,
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
+                    position_embeddings,
+                )
+            else:
+                layer_outputs = layer(
+                    hidden_states,
+                    original_hidden_states=original_hidden_states,
+                    layer_idx=layer_idx,
+                    attention_mask=attention_mask,
+                    causal_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                    position_embeddings=position_embeddings,
+                )
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                if layer_outputs[1] is not None:
+                    # append attentions only of attention layers. Mamba layers return `None` as the attention weights
+                    all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.final_layernorm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        if past_key_values and not past_key_values.has_previous_state:
+            past_key_values.has_previous_state = True
+
+        next_cache = None if not use_cache else past_key_values
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
 
 
 class Zamba2ForCausalLM(ZambaForCausalLM):
