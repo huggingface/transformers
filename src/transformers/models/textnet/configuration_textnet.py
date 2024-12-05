@@ -48,10 +48,12 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The activation function for the initial convolution layer.
         image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             The size (resolution) of each image.
-        conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*, defaults to `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`):
-            A list of stage wise kernel sizes.
-        conv_layer_strides (`List[List[int]]`, *optional*, defaults to `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`):
-            A list of stage wise strides.
+        conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*, defaults to `None`):
+            A list of stage-wise kernel sizes. If `None`, defaults to:
+            `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`.
+        conv_layer_strides (`List[List[int]]`, *optional*, defaults to `None`):
+            A list of stage-wise strides. If `None`, defaults to:
+            `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`.
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
             Dimensionality (hidden size) at each stage.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -95,13 +97,8 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         stem_out_channels=64,
         stem_act_func="relu",
         image_size=[640, 640],
-        conv_layer_kernel_sizes=[
-            [[3, 3], [3, 3], [3, 3]],
-            [[3, 3], [1, 3], [3, 3], [3, 1]],
-            [[3, 3], [3, 3], [3, 1], [1, 3]],
-            [[3, 3], [3, 1], [1, 3], [3, 3]],
-        ],
-        conv_layer_strides=[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]],
+        conv_layer_kernel_sizes=None,
+        conv_layer_strides=None,
         hidden_sizes=[64, 64, 128, 256, 512],
         batch_norm_eps=1e-5,
         initializer_range=0.02,
@@ -110,6 +107,16 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        if conv_layer_kernel_sizes is None:
+            conv_layer_kernel_sizes = [
+                [[3, 3], [3, 3], [3, 3]],
+                [[3, 3], [1, 3], [3, 3], [3, 1]],
+                [[3, 3], [3, 3], [3, 1], [1, 3]],
+                [[3, 3], [3, 1], [1, 3], [3, 3]],
+            ]
+        if conv_layer_strides is None:
+            conv_layer_strides = [[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]
 
         self.stem_kernel_size = stem_kernel_size
         self.stem_stride = stem_stride
