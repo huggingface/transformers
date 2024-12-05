@@ -1584,7 +1584,7 @@ class TemporaryHubRepo:
     Example:
 
     ```python
-    with TemporaryHubRepo() as temp_repo:
+    with TemporaryHubRepo(token=self._token) as temp_repo:
         model.push_to_hub(tmp_repo.repo_id, token=self._token)
     ```
     """
