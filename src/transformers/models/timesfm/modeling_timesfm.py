@@ -26,7 +26,6 @@ import math
 from dataclasses import dataclass
 from typing import List, Sequence, Tuple
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -38,14 +37,15 @@ from .configuration_timesfm import TimesFMConfig
 
 @dataclass
 class TimesFMDecoderOutput(BaseModelOutput):
-    loc: np.ndarray | None = None
-    scale: np.ndarray | None = None
+    loc: torch.Tensor | None = None
+    scale: torch.Tensor | None = None
 
 
 @dataclass
 class TimesFMOutputForPrediction(BaseModelOutput):
-    mean_predictions: np.ndarray | None = None
-    full_predictions: np.ndarray | None = None
+    mean_predictions: torch.Tensor | None = None
+    full_predictions: torch.Tensor | None = None
+    loss: float | None = None
 
 
 class TimesFMTransformerMLP(nn.Module):
@@ -873,11 +873,21 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             decoder_output.hidden_states,
         )
 
+    @staticmethod
+    def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor, quantiles: List[float]) -> torch.Tensor:
+        losses = []
+        for q in quantiles:
+            errors = targets - predictions
+            loss = torch.max((q - 1) * errors, q * errors)
+            losses.append(loss.mean())
+        return torch.stack(losses).mean()
+
     def forward(
         self,
         inputs: Sequence[torch.Tensor],
         freq: Sequence[torch.Tensor | int] | None = None,
         window_size: int | None = None,
+        future_target: torch.Tensor | None = None,
         forecast_context_len: int | None = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
@@ -894,6 +904,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             (default), 1 for medium, and 2 for low.
           window_size: window size of trend + residual decomposition. If None then
             we do not do decomposition.
+          future_target: optional future target time series to be used for loss computation.
           forecast_context_len: optional max context length.
           return_forecast_on_context: True to return the forecast on the context
             when available, i.e. after the first input patch.
@@ -908,6 +919,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
           - the mean forecast of size (# inputs, # forecast horizon),
           - the full forecast (mean + quantiles) of size
             (# inputs,  # forecast horizon, 1 + # quantiles).
+          - loss: the mean squared error loss + quantile loss if future_target is provided.
         """
         if return_dict is None:
             return_dict = self.config.use_return_dict
@@ -927,7 +939,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
         if window_size is not None:
             new_inputs = []
             if freq is not None:
-                new_freqs = []  
+                new_freqs = []
             for i, ts in enumerate(inputs):
                 new_inputs.extend(timesfm_moving_average(ts, window_size))
                 if freq is not None:
@@ -969,6 +981,12 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             mean_outputs = torch.maximum(mean_outputs, 0.0)
             full_outputs = torch.maximum(full_outputs, 0.0)
 
+        loss = None
+        if future_target is not None:
+            mse_loss = torch.nn.functional.mse_loss(mean_outputs, future_target)
+            quantile_loss = self._quantile_loss(full_outputs, future_target, self.config.quantiles)
+            loss = mse_loss + quantile_loss
+
         if return_dict:
             return TimesFMOutputForPrediction(
                 last_hidden_state=last_hidden_state,
@@ -976,6 +994,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
                 hidden_states=all_hidden_states if output_hidden_states else None,
                 mean_predictions=mean_outputs,
                 full_predictions=full_outputs,
+                loss=loss,
             )
         else:
             return_tuple = [last_hidden_state]
@@ -983,5 +1002,5 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
                 return_tuple.append(all_hidden_states)
             if output_attentions:
                 return_tuple.append(all_attentions)
-            return_tuple += [mean_outputs, full_outputs]
+            return_tuple += [mean_outputs, full_outputs, loss]
             return tuple(return_tuple)
