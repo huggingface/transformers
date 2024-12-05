@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GPTQConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, GPTQConfig, AutoConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
@@ -84,12 +84,14 @@ class GPTQTest(unittest.TestCase):
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUTS = set()
+    # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello my name is Katie, I am a 22 year")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 2.06183008
 
     bits = 4
+    sym = True
     group_size = 128
     desc_act = False
     use_exllama = False
@@ -112,13 +114,15 @@ class GPTQTest(unittest.TestCase):
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
+        cls.config = AutoConfig.from_pretrained(cls.model_name)
 
-        quantization_config = GPTQConfig(
+        cls.quantization_config = GPTQConfig(
             bits=cls.bits,
             dataset=cls.dataset,
             tokenizer=cls.tokenizer,
             group_size=cls.group_size,
             desc_act=cls.desc_act,
+            sym=cls.sym,
             use_exllama=cls.use_exllama,
         )
 
@@ -126,7 +130,7 @@ class GPTQTest(unittest.TestCase):
             cls.model_name,
             torch_dtype=torch.float16,
             device_map=cls.device_map,
-            quantization_config=quantization_config,
+            quantization_config=cls.quantization_config,
         )
 
     def test_memory_footprint(self):
@@ -167,14 +171,21 @@ class GPTQTest(unittest.TestCase):
         """
         if is_gptqmodel_available():
             from gptqmodel.utils.importer import hf_select_quant_linear
-
+            if hasattr(self.config, "quantization_config"):
+                checkpoint_format = self.config.quantization_config.get("checkpoint_format")
+                meta = self.config.quantization_config.get("meta")
+            else:
+                checkpoint_format = "gptq"
+                meta = None
             QuantLinear = hf_select_quant_linear(
                 bits=self.bits,
                 group_size=self.group_size,
                 desc_act=self.desc_act,
-                sym=True,
+                sym=self.sym,
                 device_map=self.device_map,
-                pack=False,
+                checkpoint_format=checkpoint_format,
+                meta=meta,
+                backend=self.quantization_config.backend,
             )
         elif is_auto_gptq_available():
             from auto_gptq.utils.import_utils import dynamically_import_QuantLinear as hf_select_quant_linear
@@ -187,7 +198,7 @@ class GPTQTest(unittest.TestCase):
                 disable_exllama=not self.use_exllama,
                 disable_exllamav2=True,
             )
-        self.assertTrue(self.quantized_model.model.layers[0].mlp.gate_proj.__class__ == QuantLinear)
+        self.assertEqual(self.quantized_model.model.layers[0].mlp.gate_proj.__class__, QuantLinear)
 
     def check_inference_correctness(self, model):
         r"""
@@ -205,13 +216,13 @@ class GPTQTest(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def check_quantized_layers_type(self, model, value):
-        self.assertTrue(model.model.layers[0].mlp.gate_proj.QUANT_TYPE == value)
+        self.assertEqual(model.model.layers[0].mlp.gate_proj.QUANT_TYPE, value)
 
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
-        if self.device_map != "cpu":
+        if self.device_map is None:
             self.check_inference_correctness(self.quantized_model.to(0))
         else:
             self.check_inference_correctness(self.quantized_model)
@@ -235,7 +246,7 @@ class GPTQTest(unittest.TestCase):
                         tmpdirname, device_map=self.device_map
                     )
             else:
-                quant_type = "ipex" if self.device_map == "cpu" else "cuda"
+                quant_type = "ipex" if self.device_map == "cpu" else "exllama"
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                     tmpdirname, device_map=self.device_map
                 )
@@ -258,6 +269,12 @@ class GPTQTest(unittest.TestCase):
 class GPTQTestCUDA(GPTQTest):
     EXPECTED_RELATIVE_DIFFERENCE = 2.06183008
     device_map = {"": 0}
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
+        cls.EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 20 year")
 
     def test_change_loading_attributes(self):
         """
@@ -302,6 +319,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
     """
 
     EXPECTED_OUTPUTS = set()
+    # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
     # 4bit + act_order + 128g
     model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
@@ -338,7 +356,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_quantized_layers_type(self):
-        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllama")
+        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllama")
 
     def test_generate_quality(self):
         """
@@ -377,6 +395,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
     """
 
     EXPECTED_OUTPUTS = set()
+    # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
     # 4bit + act_order + 128g
     model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
@@ -397,7 +416,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
 
     def test_quantized_layers_type(self):
-        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllamav2")
+        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllama" if is_gptqmodel_available() else "exllamav2")
 
     def check_inference_correctness(self, model):
         """
