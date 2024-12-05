@@ -23,18 +23,17 @@ import random
 import tempfile
 import unittest
 import unittest.mock as mock
-from pathlib import Path
 
-from huggingface_hub import HfFolder, Repository, delete_repo, snapshot_download
+from huggingface_hub import HfFolder, Repository, snapshot_download
 from requests.exceptions import HTTPError
 
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import (  # noqa: F401
     TOKEN,
-    TemporaryHubRepo,
     USER,
     CaptureLogger,
+    TemporaryHubRepo,
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,

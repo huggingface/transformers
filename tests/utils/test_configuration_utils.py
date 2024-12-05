@@ -22,12 +22,12 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo
+from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
 from transformers import AutoConfig, BertConfig, GPT2Config
 from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, USER, is_staging_test
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))

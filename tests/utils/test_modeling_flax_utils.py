@@ -14,17 +14,15 @@
 
 import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, snapshot_download
+from huggingface_hub import HfFolder, snapshot_download
 
 from transformers import BertConfig, BertModel, is_flax_available, is_torch_available
 from transformers.testing_utils import (
     TOKEN,
-    TemporaryHubRepo,
-    USER,
     CaptureLogger,
+    TemporaryHubRepo,
     is_pt_flax_cross_test,
     is_staging_test,
     require_flax,

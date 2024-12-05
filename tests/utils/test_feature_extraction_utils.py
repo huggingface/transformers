@@ -20,11 +20,11 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo
+from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, USER, get_tests_dir, is_staging_test
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))

@@ -28,7 +28,7 @@ import warnings
 from pathlib import Path
 
 import requests
-from huggingface_hub import HfApi, HfFolder, delete_repo
+from huggingface_hub import HfApi, HfFolder
 from pytest import mark
 from requests.exceptions import HTTPError
 
@@ -44,10 +44,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     TOKEN,
-    TemporaryHubRepo,
-    USER,
     CaptureLogger,
     LoggingLevel,
+    TemporaryHubRepo,
     TestCasePlus,
     is_staging_test,
     require_accelerate,
