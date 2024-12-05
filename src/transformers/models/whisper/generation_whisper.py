@@ -571,8 +571,11 @@ class WhisperGenerationMixin(GenerationMixin):
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
-        num_beams = (
-            generation_config.num_beams if generation_config.num_beams is not None else kwargs.get("num_beams", 1)
+        num_beams = kwargs.get(
+            "num_beams",
+            generation_config.num_beams
+            if hasattr(generation_config, "num_beams") and generation_config.num_beams is not None
+            else 1,
         )
         if "assistant_model" in kwargs:
             # speculative decoding: the model should be able to return
