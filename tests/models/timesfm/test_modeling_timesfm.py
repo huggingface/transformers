@@ -56,7 +56,6 @@ class TimesFMModelTester:
         intermediate_size: int = 32,
         head_dim: int = 2,
         num_heads: int = 2,
-        dropout_rate: float = 0.1,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
@@ -78,7 +77,6 @@ class TimesFMModelTester:
         self.head_dim = head_dim
         self.num_hidden_layers = num_layers
         self.num_attention_heads = num_heads
-        self.dropout_rate = dropout_rate
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
         self.use_positional_embedding = use_positional_embedding
@@ -106,7 +104,6 @@ class TimesFMModelTester:
             head_dim=self.head_dim,
             num_layers=self.num_hidden_layers,
             num_heads=self.num_attention_heads,
-            dropout_rate=self.dropout_rate,
             tolerance=self.tolerance,
             rms_norm_eps=self.rms_norm_eps,
             use_positional_embedding=self.use_positional_embedding,
@@ -126,18 +123,10 @@ class TimesFMModelTester:
 
         config = self.get_config()
 
-        return (
-            config,
-            forecast_input,
-            frequency_input,
-        )
+        return (config, forecast_input, frequency_input)
 
     def prepare_config_and_inputs_for_common(self):
-        (
-            config,
-            forecast_input,
-            frequency_input,
-        ) = self.prepare_config_and_inputs()
+        (config, forecast_input, frequency_input) = self.prepare_config_and_inputs()
 
         inputs_dict = {
             "inputs": forecast_input,
