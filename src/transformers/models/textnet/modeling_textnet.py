@@ -128,8 +128,8 @@ class TextNetRepConvLayer(nn.Module):
         )
         self.main_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
 
-        ver_pad = ((kernel_size[0] - 1) // 2, 0)
-        hor_pad = (0, (kernel_size[1] - 1) // 2)
+        vertical_padding = ((kernel_size[0] - 1) // 2, 0)
+        horizontal_padding = (0, (kernel_size[1] - 1) // 2)
 
         if kernel_size[1] != 1:
             self.vertical_conv = nn.Conv2d(
