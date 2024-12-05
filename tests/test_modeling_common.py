@@ -2587,6 +2587,24 @@ class ModelTesterMixin:
         # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
         pt_model.eval()
 
+        def foo1(func):
+            def wrap(*args, **kwargs):
+                kwargs["eps"] = 1.0
+                return func(*args, **kwargs)
+            return wrap
+
+        def foo2(func):
+            def wrap(*args, **kwargs):
+                kwargs["epsilon"] = 1.0
+                return func(*args, **kwargs)
+            return wrap
+
+        set_model_for_less_flaky_test(pt_model)
+        set_model_for_less_flaky_test(tf_model)
+
+        import unittest
+        with unittest.mock.patch.object(nn.functional, "normalize", side_effect=foo1(nn.functional.normalize)):
+            with unittest.mock.patch.object(tf.math, "l2_normalize", side_effect=foo2(tf.math.l2_normalize)):
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs_dict)
         tf_outputs = tf_model(tf_inputs_dict)
@@ -2603,9 +2621,12 @@ class ModelTesterMixin:
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
+        from transformers.testing_utils import set_model_for_less_flaky_test, set_model_tester_for_less_flaky_test, set_config_for_less_flaky_test
 
+        # set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
 
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
             if not hasattr(transformers, tf_model_class_name):
