@@ -580,6 +580,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         token_type_ids=None,
         use_cache=True,
         num_logits_to_keep=None,
+        labels=None,
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
@@ -603,11 +604,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
+        is_training = token_type_ids is not None and labels is not None
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
-            # we set the attention mask to be 4D directly to avoid Gemma2 wrongly shaped causal mask.
-            # FIXME is_training is set to False, `generate` with fineètuning will likely fail
             causal_mask = self._update_causal_mask(
-                attention_mask, token_type_ids, input_ids, past_key_values, cache_position, False
+                attention_mask, token_type_ids, input_ids, past_key_values, cache_position, is_training
             )
             model_inputs["attention_mask"] = causal_mask
         return model_inputs
