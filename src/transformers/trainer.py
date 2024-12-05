@@ -272,6 +272,25 @@ def _get_fsdp_ckpt_kwargs():
         return {}
 
 
+def safe_globals():
+    # Starting from version 2.4 PyTorch introduces a check for the objects loaded
+    # with torch.load(weights_only=True). Starting from 2.6 weights_only=True becomes
+    # a default and requires allowlisting of objects being loaded.
+    # See: https://github.com/pytorch/pytorch/pull/137602
+    # See: https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals
+    # See: https://github.com/huggingface/accelerate/pull/3036
+    if version.parse(torch.__version__).release < version.parse("2.6").release:
+        return contextlib.nullcontext()
+
+    np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
+    allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
+    # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for
+    # all versions of numpy
+    allowlist += [type(np.dtype(np.uint32))]
+
+    return torch.serialization.safe_globals(allowlist)
+
+
 if TYPE_CHECKING:
     import optuna
 
@@ -341,8 +360,7 @@ class Trainer:
             inner layers, dropout probabilities etc).
         compute_loss_func (`Callable`, *optional*):
             A function that accepts the raw model outputs, labels, and the number of items in the entire accumulated
-            batch (batch_size * gradient_accumulation_steps) and returns the loss. For example, here is one using
-            the loss function from `transformers`
+            batch (batch_size * gradient_accumulation_steps) and returns the loss. For example, see the default [loss function](https://github.com/huggingface/transformers/blob/052e652d6d53c2b26ffde87e039b723949a53493/src/transformers/trainer.py#L3618) used by [`Trainer`].
         compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
             a dictionary string to metric values. *Note* When passing TrainingArgs with `batch_eval_metrics` set to
@@ -521,6 +539,10 @@ class Trainer:
             getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
         )
 
+        _is_model_quantized_and_qat_trainable = getattr(model, "hf_quantizer", None) is not None and getattr(
+            model.hf_quantizer, "is_qat_trainable", False
+        )
+
         # Filter out quantized + compiled models
         if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
             raise ValueError(
@@ -528,7 +550,7 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if _is_quantized_and_base_model and not _is_peft_model(model):
+        if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_qat_trainable:
             raise ValueError(
                 "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
@@ -661,7 +683,7 @@ class Trainer:
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
         if args.max_steps > 0 and args.num_train_epochs > 0:
-            logger.warning("max_steps is given, it will override any value given in num_train_epochs")
+            logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
         if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
             raise ValueError(
@@ -1671,21 +1693,21 @@ class Trainer:
         except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
             return len(dataloader) * self.args.per_device_train_batch_size
 
-    def num_tokens(self, train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
+    @staticmethod
+    def num_tokens(train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
         """
         Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
         """
         train_tokens = 0
         try:
-            for step, batch in enumerate(train_dl):
+            for batch in train_dl:
                 tokens = batch["input_ids"].numel()
                 if max_steps is not None:
                     return tokens * max_steps
                 train_tokens += tokens
-            return train_tokens
         except KeyError:
             logger.warning("Cannot get num_tokens from dataloader")
-            return train_tokens
+        return train_tokens
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """HP search setup code"""
@@ -1725,6 +1747,9 @@ class Trainer:
         if self.is_deepspeed_enabled:
             if self.args.deepspeed is None:
                 raise ValueError("For sweeps with deepspeed, `args.deepspeed` must be set")
+
+            self.accelerator.free_memory()
+
             # Rebuild the deepspeed config to reflect the updated training parameters
             from accelerate.utils import DeepSpeedPlugin
 
@@ -1748,7 +1773,7 @@ class Trainer:
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            if not trial.study._is_multi_objective():
+            if hasattr(trial, "study") and not trial.study._is_multi_objective():
                 trial.report(self.objective, step)
                 if trial.should_prune():
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
@@ -2087,7 +2112,7 @@ class Trainer:
                 FutureWarning,
             )
         if len(kwargs) > 0:
-            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
+            raise TypeError(f"train() got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
         self._train_batch_size = self.args.train_batch_size
@@ -2439,7 +2464,6 @@ class Trainer:
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = num_examples % args.gradient_accumulation_steps
-            num_items_in_batch = None
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
             update_step = -1
@@ -2468,7 +2492,9 @@ class Trainer:
                         else:
                             input_tokens = inputs[main_input_name].numel()
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-                            self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).cpu().item()
+                            self.state.num_input_tokens_seen += (
+                                self.accelerator.gather(input_tokens).sum().cpu().item()
+                            )
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
                         rng_to_sync = False
@@ -2562,7 +2588,9 @@ class Trainer:
                         self.state.global_step += 1
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-                        self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+                        self._maybe_log_save_evaluate(
+                            tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time
+                        )
                     else:
                         self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
@@ -2587,7 +2615,7 @@ class Trainer:
                 self.control.should_training_stop = True
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+            self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time)
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_xla_available():
@@ -2992,7 +3020,7 @@ class Trainer:
                 ) from exc
         return metrics
 
-    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
+    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time):
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
             if is_torch_xla_available():
                 xm.mark_step()
@@ -3014,7 +3042,7 @@ class Trainer:
             self._globalstep_last_logged = self.state.global_step
             self.store_flos()
 
-            self.log(logs)
+            self.log(logs, start_time)
 
         metrics = None
         if self.control.should_evaluate:
@@ -3051,7 +3079,8 @@ class Trainer:
                 )
                 return
 
-        checkpoint_rng_state = torch.load(rng_file)
+        with safe_globals():
+            checkpoint_rng_state = torch.load(rng_file)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
@@ -3517,7 +3546,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float], start_time: Optional[float] = None) -> None:
         """
         Log `logs` on the various objects watching training.
 
@@ -3526,11 +3555,15 @@ class Trainer:
         Args:
             logs (`Dict[str, float]`):
                 The values to log.
+            start_time (`Optional[float]`):
+                The start of training.
         """
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
         if self.args.include_num_input_tokens_seen:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
+            if start_time is not None:
+                speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen)
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
