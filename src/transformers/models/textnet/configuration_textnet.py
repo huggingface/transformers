@@ -48,10 +48,10 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The activation function for the initial convolution layer.
         image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             The size (resolution) of each image.
-        conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*, defaults to `None`):
+        conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*):
             A list of stage-wise kernel sizes. If `None`, defaults to:
             `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`.
-        conv_layer_strides (`List[List[int]]`, *optional*, defaults to `None`):
+        conv_layer_strides (`List[List[int]]`, *optional*):
             A list of stage-wise strides. If `None`, defaults to:
             `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`.
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
