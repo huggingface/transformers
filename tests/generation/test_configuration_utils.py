@@ -709,7 +709,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_in_organization(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
             config = GenerationConfig(
                 do_sample=True,
                 temperature=0.7,
@@ -723,7 +723,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
             config = GenerationConfig(
                 do_sample=True,
                 temperature=0.7,

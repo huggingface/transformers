@@ -2048,7 +2048,7 @@ The commit description supports markdown synthax see:
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
             config = BertConfig(
                 vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
             )
@@ -2061,7 +2061,7 @@ The commit description supports markdown synthax see:
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with TemporaryHubRepo() as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org") as tmp_repo:
             config = BertConfig(
                 vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
             )
