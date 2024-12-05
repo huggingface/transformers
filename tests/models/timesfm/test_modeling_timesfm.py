@@ -18,6 +18,7 @@ import unittest
 from typing import List
 
 import numpy as np
+import torch
 
 from transformers import TimesFMConfig, is_torch_available
 from transformers.testing_utils import (
@@ -115,9 +116,9 @@ class TimesFMModelTester:
 
     def prepare_config_and_inputs(self):
         forecast_input = [
-            np.sin(np.linspace(0, 20, 100)),
-            np.sin(np.linspace(0, 20, 200)),
-            np.sin(np.linspace(0, 20, 400)),
+            torch.tensor(np.sin(np.linspace(0, 20, 100)), dtype=torch.float32),
+            torch.tensor(np.sin(np.linspace(0, 20, 200)), dtype=torch.float32),
+            torch.tensor(np.sin(np.linspace(0, 20, 400)), dtype=torch.float32),
         ]
         frequency_input = [0, 1, 2]
 
