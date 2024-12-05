@@ -163,24 +163,25 @@ class TextNetRepConvLayer(nn.Module):
             else None
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         main_outputs = self.main_conv(hidden_states)
         main_outputs = self.main_batch_norm(main_outputs)
 
-        vertical_outputs = 0
         if self.vertical_conv is not None:
             vertical_outputs = self.vertical_conv(hidden_states)
             vertical_outputs = self.vertical_batch_norm(vertical_outputs)
-        horizontal_outputs = 0
+            main_outputs = main_outputs + vertical_outputs
+
         if self.horizontal_conv is not None:
             horizontal_outputs = self.horizontal_conv(hidden_states)
             horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
+            main_outputs = main_outputs + horizontal_outputs
 
-        id_out = 0
         if self.rbr_identity is not None:
             id_out = self.rbr_identity(hidden_states)
+            main_outputs = main_outputs + id_out
 
-        return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
+        return self.nonlinearity(main_outputs)
 
 
 class TextNetStage(nn.Module):
