@@ -13,7 +13,7 @@ from transformers import TimesFMConfig, TimesFMModelForPrediction
 Sample usage:
 
 ```
-python src/transformers/models/timesfm/convert_timesfm_orignal_to_pytorch.py \
+python src/transformers/models/timesfm/convert_timesfm_orignal_to_hf.py \
     --output_dir /output/path
 ```
 """
