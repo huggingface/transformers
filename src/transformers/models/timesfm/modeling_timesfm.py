@@ -45,7 +45,7 @@ class TimesFMDecoderOutput(BaseModelOutput):
 class TimesFMOutputForPrediction(BaseModelOutput):
     mean_predictions: torch.Tensor | None = None
     full_predictions: torch.Tensor | None = None
-    loss: float | None = None
+    loss: torch.Tensor | float | None = None
 
 
 class TimesFMTransformerMLP(nn.Module):
@@ -74,12 +74,7 @@ class TimesFMTransformerMLP(nn.Module):
 class TimesFMResidualBlock(nn.Module):
     """TimesFM residual block."""
 
-    def __init__(
-        self,
-        input_dims,
-        hidden_dims,
-        output_dims,
-    ):
+    def __init__(self, input_dims, hidden_dims, output_dims):
         super().__init__()
         self.input_dims = input_dims
         self.hidden_dims = hidden_dims
@@ -572,7 +567,7 @@ class TimesFMDecoder(TimesFMPreTrainedModel):
         self.input_ff_layer = TimesFMResidualBlock(
             input_dims=2 * config.patch_len,
             output_dims=config.model_dim,
-            hidden_dims=config.model_dim,
+            hidden_dims=config.intermediate_size,
         )
         self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.model_dim)
         self.stacked_transformer = TimesFMStackedDecoder(config=config)
@@ -605,15 +600,8 @@ class TimesFMDecoder(TimesFMPreTrainedModel):
         return outputs, (mu, sigma)
 
     def _preprocess_input(
-        self,
-        input_ts: torch.Tensor,
-        input_padding: torch.Tensor,
-    ) -> tuple[
-        torch.Tensor,
-        torch.Tensor,
-        tuple[torch.Tensor, torch.Tensor] | None,
-        torch.Tensor,
-    ]:
+        self, input_ts: torch.Tensor, input_padding: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """Preprocess input for stacked transformer."""
 
         # Reshape into patches (using view for efficiency)
@@ -707,7 +695,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
         self.horizon_ff_layer = TimesFMResidualBlock(
             input_dims=config.model_dim,
             output_dims=config.horizon_len * (1 + len(config.quantiles)),
-            hidden_dims=config.model_dim,
+            hidden_dims=config.intermediate_size,
         )
 
         # Initialize weights and apply final processing
@@ -757,9 +745,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
         )
 
     def _postprocess_output(
-        self,
-        model_output: torch.Tensor,
-        stats: tuple[torch.Tensor, torch.Tensor],
+        self, model_output: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]
     ) -> torch.Tensor:
         """Postprocess output of stacked transformer."""
 
@@ -873,10 +859,9 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             decoder_output.hidden_states,
         )
 
-    @staticmethod
-    def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor, quantiles: List[float]) -> torch.Tensor:
+    def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         losses = []
-        for q in quantiles:
+        for q in self.config.quantiles:
             errors = targets - predictions
             loss = torch.max((q - 1) * errors, q * errors)
             losses.append(loss.mean())
@@ -972,6 +957,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             return_forecast_on_context=return_forecast_on_context,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            max_len=fcontext_len,
         )
 
         if window_size is not None:
@@ -983,8 +969,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
         loss = None
         if future_target is not None:
-            mse_loss = torch.nn.functional.mse_loss(mean_outputs, future_target)
-            quantile_loss = self._quantile_loss(full_outputs, future_target, self.config.quantiles)
+            mse_loss = F.mse_loss(mean_outputs, future_target)
+            quantile_loss = self._quantile_loss(full_outputs[:, :, 1:], future_target)
             loss = mse_loss + quantile_loss
 
         if return_dict:
