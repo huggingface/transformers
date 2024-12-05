@@ -2,7 +2,9 @@ import argparse
 import os
 import shutil
 
+import numpy as np
 import timesfm
+import torch
 
 from transformers import TimesFMConfig, TimesFMModelForPrediction
 
@@ -23,13 +25,12 @@ def write_model(model_path, safe_serialization=True):
     os.makedirs(tmp_model_path, exist_ok=True)
 
     tfm = timesfm.TimesFm(
-      hparams=timesfm.TimesFmHparams(
-          backend="cpu",
-          per_core_batch_size=32,
-          horizon_len=128,
-      ),
-      checkpoint=timesfm.TimesFmCheckpoint(
-          huggingface_repo_id="google/timesfm-1.0-200m-pytorch"),
+        hparams=timesfm.TimesFmHparams(
+            backend="cpu",
+            per_core_batch_size=32,
+            horizon_len=128,
+        ),
+        checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id="google/timesfm-1.0-200m-pytorch"),
     )
 
     timesfm_config = TimesFMConfig(
@@ -39,20 +40,170 @@ def write_model(model_path, safe_serialization=True):
         num_layers=tfm.hparams.num_layers,
         model_dim=tfm.hparams.model_dims,
         intermediate_size=tfm.hparams.model_dims,
-        head_dim=tfm.hparams.model_dims//tfm.hparams.num_heads,
+        head_dim=tfm.hparams.model_dims // tfm.hparams.num_heads,
         num_heads=tfm.hparams.num_heads,
     )
     timesfm_config.save_pretrained(tmp_model_path)
     timesfm_model = TimesFMModelForPrediction(timesfm_config)
 
     # copy the weights from the original model to the new model making
-    import pdb; pdb.set_trace()
-    orignal_model = tfm._model
+    original_model = tfm._model
 
+    # Map decoder input_ff_layer
+    timesfm_model.decoder.input_ff_layer.hidden_layer[0].weight.data = original_model.input_ff_layer.hidden_layer[
+        0
+    ].weight.data
+    timesfm_model.decoder.input_ff_layer.hidden_layer[0].bias.data = original_model.input_ff_layer.hidden_layer[
+        0
+    ].bias.data
+    timesfm_model.decoder.input_ff_layer.output_layer.weight.data = (
+        original_model.input_ff_layer.output_layer.weight.data
+    )
+    timesfm_model.decoder.input_ff_layer.output_layer.bias.data = original_model.input_ff_layer.output_layer.bias.data
+    timesfm_model.decoder.input_ff_layer.residual_layer.weight.data = (
+        original_model.input_ff_layer.residual_layer.weight.data
+    )
+    timesfm_model.decoder.input_ff_layer.residual_layer.bias.data = (
+        original_model.input_ff_layer.residual_layer.bias.data
+    )
 
-    timesfm_model.load_state_dict(tfm.state_dict())
+    # Map freq embedding
+    timesfm_model.decoder.freq_emb.weight.data = original_model.freq_emb.weight.data
+
+    # Map horizon_ff_layer
+    timesfm_model.horizon_ff_layer.hidden_layer[0].weight.data = original_model.horizon_ff_layer.hidden_layer[
+        0
+    ].weight.data
+    timesfm_model.horizon_ff_layer.hidden_layer[0].bias.data = original_model.horizon_ff_layer.hidden_layer[
+        0
+    ].bias.data
+    timesfm_model.horizon_ff_layer.output_layer.weight.data = original_model.horizon_ff_layer.output_layer.weight.data
+    timesfm_model.horizon_ff_layer.output_layer.bias.data = original_model.horizon_ff_layer.output_layer.bias.data
+    timesfm_model.horizon_ff_layer.residual_layer.weight.data = (
+        original_model.horizon_ff_layer.residual_layer.weight.data
+    )
+    timesfm_model.horizon_ff_layer.residual_layer.bias.data = original_model.horizon_ff_layer.residual_layer.bias.data
+
+    # Map transformer layers
+    for i in range(len(timesfm_model.decoder.stacked_transformer.layers)):
+        # Map attention layers
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].self_attn.qkv_proj.weight.data = original_model.stacked_transformer.layers[i].self_attn.qkv_proj.weight.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].self_attn.qkv_proj.bias.data = original_model.stacked_transformer.layers[i].self_attn.qkv_proj.bias.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].self_attn.o_proj.weight.data = original_model.stacked_transformer.layers[i].self_attn.o_proj.weight.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].self_attn.o_proj.bias.data = original_model.stacked_transformer.layers[i].self_attn.o_proj.bias.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].self_attn.scaling.data = original_model.stacked_transformer.layers[i].self_attn.scaling.data
+
+        # Map MLP layers
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].mlp.gate_proj.weight.data = original_model.stacked_transformer.layers[i].mlp.gate_proj.weight.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].mlp.gate_proj.bias.data = original_model.stacked_transformer.layers[i].mlp.gate_proj.bias.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].mlp.down_proj.weight.data = original_model.stacked_transformer.layers[i].mlp.down_proj.weight.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].mlp.down_proj.bias.data = original_model.stacked_transformer.layers[i].mlp.down_proj.bias.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].mlp.layer_norm.weight.data = original_model.stacked_transformer.layers[i].mlp.layer_norm.weight.data
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].mlp.layer_norm.bias.data = original_model.stacked_transformer.layers[i].mlp.layer_norm.bias.data
+
+        # Map layer norms
+        timesfm_model.decoder.stacked_transformer.layers[
+            i
+        ].input_layernorm.weight.data = original_model.stacked_transformer.layers[i].input_layernorm.weight.data
+
     timesfm_model.save_pretrained(model_path, safe_serialization=safe_serialization)
     shutil.rmtree(tmp_model_path)
+
+
+def check_outputs(model_path):
+    """Compares outputs between original and converted models."""
+    print("\nChecking model outputs...")
+
+    # Load original model
+    tfm = timesfm.TimesFm(
+        hparams=timesfm.TimesFmHparams(
+            backend="cpu",
+            per_core_batch_size=32,
+            horizon_len=128,
+        ),
+        checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id="google/timesfm-1.0-200m-pytorch"),
+    )
+
+    # Load converted model
+    converted_model = TimesFMModelForPrediction.from_pretrained(model_path)
+    converted_model.eval()  # Set to evaluation mode
+
+    # Create test inputs
+    forecast_input = [
+        np.sin(np.linspace(0, 20, 100)),
+        np.sin(np.linspace(0, 20, 200)),
+        np.sin(np.linspace(0, 20, 400)),
+    ]
+    frequency_input = [0, 1, 2]
+
+    # Get predictions from original model
+    point_forecast_orig, quantile_forecast_orig = tfm.forecast(
+        forecast_input,
+        freq=frequency_input,
+    )
+
+    # Get predictions from converted model
+    with torch.no_grad():
+        outputs = converted_model(inputs=forecast_input, freq=frequency_input, return_dict=True)
+        point_forecast_conv = outputs.mean_predictions.numpy()
+        quantile_forecast_conv = outputs.full_predictions.numpy()
+
+    # Compare outputs
+    point_forecast_diff = np.abs(point_forecast_orig - point_forecast_conv)
+    quantile_forecast_diff = np.abs(quantile_forecast_orig - quantile_forecast_conv)
+
+    max_point_diff = point_forecast_diff.max()
+    mean_point_diff = point_forecast_diff.mean()
+    max_quantile_diff = quantile_forecast_diff.max()
+    mean_quantile_diff = quantile_forecast_diff.mean()
+
+    print("\nOutput comparison:")
+    print(f"Point forecast - Max difference: {max_point_diff:.6f}")
+    print(f"Point forecast - Mean difference: {mean_point_diff:.6f}")
+    print(f"Quantile forecast - Max difference: {max_quantile_diff:.6f}")
+    print(f"Quantile forecast - Mean difference: {mean_quantile_diff:.6f}")
+
+    # Define acceptable thresholds
+    POINT_THRESHOLD = 1e-5
+    QUANTILE_THRESHOLD = 1e-5
+
+    if max_point_diff > POINT_THRESHOLD or max_quantile_diff > QUANTILE_THRESHOLD:
+        raise ValueError(
+            f"Output mismatch detected!\n"
+            f"Point forecast max diff: {max_point_diff} (threshold: {POINT_THRESHOLD})\n"
+            f"Quantile forecast max diff: {max_quantile_diff} (threshold: {QUANTILE_THRESHOLD})"
+        )
+
+    print("\n✓ All outputs match within acceptable tolerance!")
+
+    # Optional: Print shapes for verification
+    print("\nOutput shapes:")
+    print(f"Original point forecast: {point_forecast_orig.shape}")
+    print(f"Converted point forecast: {point_forecast_conv.shape}")
+    print(f"Original quantile forecast: {quantile_forecast_orig.shape}")
+    print(f"Converted quantile forecast: {quantile_forecast_conv.shape}")
 
 
 def main():
