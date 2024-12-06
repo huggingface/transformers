@@ -393,10 +393,11 @@ class DepthProImageProcessor(BaseImageProcessor):
                     outputs["fov"].append(fov)
 
                 # interpolate
-                predicted_depth = self.resize(
-                    predicted_depth.unsqueeze(0).unsqueeze(1),
+                predicted_depth = torch.nn.functional.interpolate(
+                    # input should be (B, C, H, W)
+                    input=predicted_depth.unsqueeze(0).unsqueeze(1),
                     size=target_size,
-                    resample=self.resample,
+                    mode=pil_torch_interpolation_mapping[self.resample].value,
                     antialias=self.antialias,
                 ).squeeze()
 
