@@ -585,8 +585,6 @@ def flex_attention_forward(
             score += causal_mask[b][0][q_idx][kv_idx]
         return score
 
-    print(f"DEBUG: {key_states.shape=} {value_states.shape=}")
-
     attn_output, attn_weights = flex_attention(
         query,
         key_states,
@@ -598,8 +596,6 @@ def flex_attention_forward(
 
     # lse is returned in float32
     attn_weights = attn_weights.to(value_states.dtype)
-
-    print(f"DEBUG: {attn_output.shape=} {attn_weights.shape=}")
 
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
