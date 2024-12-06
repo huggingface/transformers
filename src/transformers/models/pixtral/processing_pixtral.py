@@ -231,7 +231,7 @@ class PixtralProcessor(ProcessorMixin):
         if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
             images = image_inputs["pixel_values"]
-            image_sizes = image_inputs.pop("image_sizes")
+            image_sizes = image_inputs.get("image_sizes")
             prompt_strings = []
 
             for sample_images, sample_image_sizes, sample in zip(images, image_sizes, text):
