@@ -215,6 +215,9 @@ class HfQuantizer(ABC):
 
         # Delete quantizer and quantization config
         del model.hf_quantizer
+        del model.config.quantization_config
+        del model.config._pre_quantization_dtype
+        model.is_quantized = False
 
         return model
 
@@ -222,6 +225,11 @@ class HfQuantizer(ABC):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
+
+    @property
+    def is_qat_trainable(self) -> bool:
+        """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return False
 
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs): ...
