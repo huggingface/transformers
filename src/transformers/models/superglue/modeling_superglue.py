@@ -180,10 +180,10 @@ class KeypointMatchingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    mask: torch.IntTensor = None
-    matches: torch.FloatTensor = None
-    matching_scores: torch.FloatTensor = None
-    keypoints: torch.FloatTensor = None
+    matches: Optional[torch.FloatTensor] = None
+    matching_scores: Optional[torch.FloatTensor] = None
+    keypoints: Optional[torch.FloatTensor] = None
+    mask: Optional[torch.IntTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -856,16 +856,16 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, mask, matches, matching_scores, keypoints, hidden_states, attentions]
+                for v in [loss, matches, matching_scores, keypoints, mask, hidden_states, attentions]
                 if v is not None
             )
 
         return KeypointMatchingOutput(
             loss=loss,
-            mask=mask,
             matches=matches,
             matching_scores=matching_scores,
             keypoints=keypoints,
+            mask=mask,
             hidden_states=hidden_states,
             attentions=attentions,
         )
