@@ -444,7 +444,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
                 If the passed input is > 30 seconds / > 3000 mel input features and `return_segments=True` then a dictionary of generated sequence ids, called `sequences` and a list of each generated segment is returned.
 
-                else if the passed input is <= 30 seconds / >= 3000 mel input features, the possible [`~utils.ModelOutput`] types are:
+                else if the passed input is <= 30 seconds / <= 3000 mel input features, the possible [`~utils.ModelOutput`] types are:
 
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
@@ -453,7 +453,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         Example:
 
-        - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate.
+        - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate. It is necessary to set `return_timestamps=True`.
+        Indeed, long-form transcription uses a sequential algorithm based on timestamps predictions, with heuristics like compression ratio threshold, log probability threshold and temperature fallback. This algorithm is described in the [the Whisper original paper](https://cdn.openai.com/papers/whisper.pdf), section *3.8. Long-form Transcription*.
 
         ```python
         >>> import torch
@@ -484,7 +485,9 @@ class WhisperGenerationMixin(GenerationMixin):
         " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
         ```
 
-        - *Shortform transcription*: If passed mel input features are < 30 seconds, the whole audio will be transcribed with a single call to generate.
+        - *Shortform transcription*: If passed mel input features are <= 30 seconds, there are two possibilities:
+            - `return_timestamps=False`: the whole audio will be transcribed with a single call to GenerationMixin's generate.
+            - `return_timestamps=True`: the audio will be transcribed using the same logic as long-form transcription.
 
         ```python
         >>> import torch
@@ -1211,13 +1214,6 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if no_speech_threshold is not None:
             logger.warning(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
-
-        # when passing temperature as a list it cannot just be ignored => throw error in this case
-        if isinstance(temperature, (list, tuple)):
-            raise ValueError(
-                f"Audio input consists of only {total_input_frames}. Short-form transcription is activated."
-                f"temperature cannot be set to {temperature} which can only be used for temperature fallback for long-form generation. Make sure to set `temperature` to a float value or `None` for short-form generation."
-            )
 
     @staticmethod
     def _set_return_outputs(return_dict_in_generate, return_token_timestamps, logprob_threshold, generation_config):
