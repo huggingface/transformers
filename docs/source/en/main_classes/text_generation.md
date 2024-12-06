@@ -41,8 +41,6 @@ like token streaming.
 	- validate
 	- get_generation_mode
 
-[[autodoc]] generation.WatermarkingConfig
-
 ## GenerationMixin
 
 [[autodoc]] GenerationMixin

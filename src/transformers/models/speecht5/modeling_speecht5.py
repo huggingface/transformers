@@ -2114,7 +2114,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             return self.encoder.get_input_embeddings()
         if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             return self.decoder.get_input_embeddings()
-        return None
+        raise NotImplementedError
 
     def set_input_embeddings(self, value):
         if isinstance(self.encoder, SpeechT5EncoderWithTextPrenet):
@@ -2425,6 +2425,8 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
+        # Note that this model doesn't inherit from the generation mixin, has unique generate function
+
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
