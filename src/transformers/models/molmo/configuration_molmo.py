@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -246,8 +245,8 @@ class MolmoTextConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -292,16 +291,22 @@ class MolmoTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        use_qk_norm (`bool), *optional*, defaults to `False`):
+            Whther to apply layer norm to keys and queries in attention module.
         use_postnorm (`bool), *optional*, defaults to `True`):
             Whther to apply pre or post layer normalization in each decoder layer.
         use_attention_layer_norm (`bool`, *optional*, defaults to `False`):
@@ -335,37 +340,43 @@ class MolmoTextConfig(PretrainedConfig):
         hidden_act="swiglu",
         max_position_embeddings=4096,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        layer_norm_eps=1e-6,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=1000000.0,
         rope_scaling=None,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=28,
         attention_dropout=0.0,
         attention_bias=False,
+        use_qk_norm=False,
         use_postnorm=True,
         use_attention_layer_norm=False,
         **kwargs,
     ):
         super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
         self.head_dim = head_dim
+        self.attention_bias = attention_bias
+        self.use_qk_norm = use_qk_norm
+        self.use_postnorm = use_postnorm
+        self.use_attention_layer_norm = use_attention_layer_norm
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window if use_sliding_window else None
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
-        self.max_window_layers = max_window_layers
-        self.attention_bias = attention_bias
-        self.use_postnorm = use_postnorm
-        self.use_attention_layer_norm = use_attention_layer_norm
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -374,15 +385,15 @@ class MolmoTextConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
+        self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.use_qk_norm = use_qk_norm
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
 
@@ -413,7 +424,7 @@ class MolmoConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
-        vision_feature_layers (`List[int]`, *optional*, defaults to `(-2, -9)`):
+        vision_feature_layers (`List[int]`, *optional*, defaults to (-2, -9)):
             The indices of the layers to select the vision feature.
 
     Example:
