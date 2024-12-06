@@ -1731,7 +1731,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         # class logits + predicted bounding boxes
         logits = self.class_labels_classifier(sequence_output)
 
-        reference = outputs.reference_points if return_dict else outputs[-1]
+        reference = outputs.reference_points if return_dict else outputs[-2]
         reference_before_sigmoid = inverse_sigmoid(reference).transpose(0, 1)
 
         hs = sequence_output
@@ -2101,7 +2101,7 @@ class ConditionalDetrMHAttentionMap(nn.Module):
         weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
 
         if mask is not None:
-            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
+            weights = weights.masked_fill(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
         weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
         weights = self.dropout(weights)
         return weights
