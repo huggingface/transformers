@@ -4850,7 +4850,6 @@ class ModelTesterMixin:
             return is_tested
 
         for model_class in self.all_model_classes:
-
             if model_class.__name__.endswith("ForPreTraining"):
                 continue
 
