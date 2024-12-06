@@ -571,7 +571,6 @@ def flex_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     mask: Optional[torch.Tensor],
-    output_attentions: bool = False,
     **_kwargs,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     def tanh_softcap(score, b, h, q_idx, kv_idx):
@@ -581,18 +580,14 @@ def flex_attention_forward(
             return score + mask[b][0][q_idx][kv_idx]
         return score
 
-    attn_output = flex_attention(
+    attn_output, attn_weights = flex_attention(
         query,
         key,
         value,
         score_mod=tanh_softcap,
         enable_gqa=True,
-        return_lse=output_attentions,
+        return_lse=True,
     )
-    if not output_attentions:
-        attn_weights = None
-    else:
-        attn_output, attn_weights = attn_output
 
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -744,7 +739,14 @@ class Qwen2VLAttention(nn.Module):
         #else:
             #attention_type = self.config._attn_implementation
 
-        attention_type = self.config._attn_implementation
+        if output_attentions:
+            logger.warning_once(
+                f"Qwen2VLModel is using {self.config._attn_implementation}, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            attention_type = "eager"
+        else:
+            attention_type = self.config._attn_implementation
 
         attention_output, attention_weights = QWEN2_VL_ATTENTION_FUNCTION[attention_type](
             self,
