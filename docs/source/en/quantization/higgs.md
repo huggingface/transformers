@@ -20,7 +20,7 @@ HIGGS is a 0-shot quantization algorithm that combines Hadamard preprocessing wi
 
 Runtime support for HIGGS is implemented through [FLUTE](https://arxiv.org/abs/2407.10960), and its [library](https://github.com/HanGuo97/flute).
 
-## Usage Example
+## Quantization Example
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, HiggsConfig
@@ -39,6 +39,10 @@ tokenizer.decode(model.generate(
     top_p=0.80,
 )[0])
 ```
+
+## Pre-quantized models
+
+Some pre-quantized models can be found in the [official collection](https://huggingface.co/collections/ISTA-DASLab/higgs-675308e432fd56b7f6dab94e) on Hugging Face Hub.
 
 ## Current Limitations
 
