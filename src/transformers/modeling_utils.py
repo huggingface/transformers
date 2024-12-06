@@ -3516,7 +3516,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if _adapter_model_path is None:
                 if dduf_entries:
                     # TODO: use the global var from peft utils
-                    if os.path.join(pretrained_model_name_or_path,"adapter_config.json") in dduf_entries:
+                    if os.path.join(pretrained_model_name_or_path, "adapter_config.json") in dduf_entries:
                         _adapter_model_path = os.path.join(pretrained_model_name_or_path, "adapter_config.json")
                 else:
                     _adapter_model_path = find_adapter_config_file(
@@ -3688,20 +3688,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if is_local:
                 if from_tf and (
                     os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index"))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
-                    in dduf_entries
+                    or (
+                        dduf_entries
+                        and os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
+                        in dduf_entries
+                    )
                 ):
                     # Load from a TF 1.0 checkpoint in priority if from_tf
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
                 elif from_tf and (
                     os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME) in dduf_entries
+                    or (
+                        dduf_entries
+                        and os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME) in dduf_entries
+                    )
                 ):
                     # Load from a TF 2.0 checkpoint in priority if from_tf
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME)
                 elif from_flax and (
                     os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME) in dduf_entries
+                    or (
+                        dduf_entries
+                        and os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME) in dduf_entries
+                    )
                 ):
                     # Load from a Flax checkpoint in priority if from_flax
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
@@ -3711,8 +3720,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)
                         )
                     )
-                    or os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
-                    in dduf_entries
+                    or (
+                        dduf_entries
+                        and os.path.join(
+                            pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)
+                        )
+                        in dduf_entries
+                    )
                 ):
                     # Load from a safetensors checkpoint
                     archive_file = os.path.join(
@@ -3724,10 +3738,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)
                         )
                     )
-                    or os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)
+                    or (
+                        dduf_entries
+                        and os.path.join(
+                            pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)
+                        )
+                        in dduf_entries
                     )
-                    in dduf_entries
                 ):
                     # Load from a sharded safetensors checkpoint
                     archive_file = os.path.join(
@@ -3738,8 +3755,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     os.path.isfile(
                         os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant))
                     )
-                    or os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant))
-                    in dduf_entries
+                    or (
+                        dduf_entries
+                        and os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant))
+                        in dduf_entries
+                    )
                 ):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(
@@ -3751,10 +3771,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
                         )
                     )
-                    or os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
+                    or (
+                        dduf_entries
+                        and os.path.join(
+                            pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
+                        )
+                        in dduf_entries
                     )
-                    in dduf_entries
                 ):
                     # Load from a sharded PyTorch checkpoint
                     archive_file = os.path.join(
@@ -3765,9 +3788,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 elif not use_safetensors and (
                     os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index"))
                     or os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
-                    in dduf_entries
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME) in dduf_entries
+                    or (
+                        dduf_entries
+                        and (
+                            os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
+                            in dduf_entries
+                            or os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME) in dduf_entries
+                        )
+                    )
                 ):
                     raise EnvironmentError(
                         f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
@@ -3776,7 +3804,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 elif not use_safetensors and (
                     os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME) in dduf_entries
+                    or (
+                        dduf_entries
+                        and os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME) in dduf_entries
+                    )
                 ):
                     raise EnvironmentError(
                         f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"

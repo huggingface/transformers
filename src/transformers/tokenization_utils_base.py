@@ -2515,6 +2515,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop("tokenizer_file", None)
         if "device_map" in tokenizer_config:
             tokenizer_config.pop("device_map")
+        if "dduf_entries" in tokenizer_config:
+            tokenizer_config.pop("dduf_entries", None)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
