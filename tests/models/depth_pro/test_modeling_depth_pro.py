@@ -63,8 +63,7 @@ class DepthProModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
-        use_fov_model=True,
-        num_fov_head_layers=0,
+        use_fov_model=False,
         num_labels=3,
     ):
         self.parent = parent
@@ -89,7 +88,6 @@ class DepthProModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.use_fov_model = use_fov_model
-        self.num_fov_head_layers = num_fov_head_layers
         self.num_labels = num_labels
 
         self.num_patches = (patch_size // patch_embeddings_size) ** 2
@@ -129,7 +127,6 @@ class DepthProModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
             use_fov_model=self.use_fov_model,
-            num_fov_head_layers=self.num_fov_head_layers,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -150,6 +147,36 @@ class DepthProModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(
             result.predicted_depth.shape, (self.batch_size, self.expected_depth_size, self.expected_depth_size)
+        )
+
+    def create_and_check_for_fov(self, config, pixel_values, labels):
+        model = DepthProForDepthEstimation(config, use_fov_model=True)
+        model.to(torch_device)
+        model.eval()
+
+        # check if the fov_model (DinoV2-based encoder) is created
+        self.parent.assertIsNotNone(model.fov_model)
+
+        batched_pixel_values = pixel_values
+        row_pixel_values = pixel_values[:1]
+
+        with torch.no_grad():
+            model_batched_output_fov = model(batched_pixel_values).fov
+            model_row_output_fov = model(row_pixel_values).fov
+
+        # check if fov is returned
+        self.parent.assertIsNotNone(model_batched_output_fov)
+        self.parent.assertIsNotNone(model_row_output_fov)
+
+        # check output shape consistency for fov
+        self.parent.assertEqual(model_batched_output_fov.shape, (self.batch_size,))
+
+        # check equivalence between batched and single row outputs for fov
+        diff = torch.max(torch.abs(model_row_output_fov - model_batched_output_fov[:1]))
+        model_name = model.__class__.__name__
+        self.parent.assertTrue(
+            diff <= 1e-03,
+            msg=(f"Batched and Single row outputs are not equal in {model_name} for fov. " f"Difference={diff}."),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -207,6 +234,10 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
+
+    def test_for_fov(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_fov(*config_and_inputs)
 
     def test_training(self):
         for model_class in self.all_model_classes:
