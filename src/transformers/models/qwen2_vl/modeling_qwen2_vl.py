@@ -605,7 +605,7 @@ def sdpa_attention_forward(
     value: torch.Tensor,
     mask: Optional[torch.Tensor],
     **_kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, None]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -638,7 +638,7 @@ def sdpa_attention_forward(
 
 QWEN2_VL_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    "flex_attention": sdpa_attention_forward,  # TODO: fix errors
+    "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -738,11 +738,13 @@ class Qwen2VLAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
-            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            attention_type = "flex_attention"
-        else:
-            attention_type = self.config._attn_implementation
+        #if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+            #logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
+            #attention_type = "flex_attention"
+        #else:
+            #attention_type = self.config._attn_implementation
+
+        attention_type = self.config._attn_implementation
 
         attention_output, attention_weights = QWEN2_VL_ATTENTION_FUNCTION[attention_type](
             self,
