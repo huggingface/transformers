@@ -1,0 +1,358 @@
+# coding=utf-8
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Fast Image processor class for ConvNeXT."""
+
+from typing import Dict, List, Optional, Union
+
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_transforms import get_resize_output_image_size
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    ImageInput,
+    ImageType,
+    PILImageResampling,
+    get_image_type,
+    infer_channel_dimension_format,
+    make_list_of_images,
+    validate_fast_preprocess_arguments,
+)
+from ...utils import (
+    TensorType,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    from ...image_utils import pil_torch_interpolation_mapping
+
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
+
+
+class ConvNextImageProcessorFast(BaseImageProcessorFast):
+    r"""
+    Constructs a fast ConvNeXT image processor.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
+            by `do_resize` in the `preprocess` method.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
+            Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
+            resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
+            be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
+            `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
+            be overriden by `size` in the `preprocess` method.
+        crop_pct (`float` *optional*, defaults to 224 / 256):
+            Percentage of the image to crop. Only has an effect if `do_resize` is `True` and size < 384. Can be
+            overriden by `crop_pct` in the `preprocess` method.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
+            the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+    """
+
+    # To be checked against the slow image processor
+    # None values left after checking can be removed
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"shortest_edge": 384}
+    default_to_square = False
+    crop_size = None
+    do_resize = True
+    do_center_crop = None
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = None
+
+    def __init__(
+        self,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        crop_pct: float = None,
+        resample: PILImageResampling = None,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            **kwargs,
+        )
+        self.crop_pct = crop_pct if crop_pct is not None else 224 / 256
+
+    def resize(
+        self,
+        image: "torch.Tensor",
+        size: Dict[str, int],
+        crop_pct: float,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Resize an image.
+
+        Args:
+            image (`np.ndarray`):
+                Image to resize.
+            size (`Dict[str, int]`):
+                Dictionary of the form `{"shortest_edge": int}`, specifying the size of the output image. If
+                `size["shortest_edge"]` >= 384 image is resized to `(size["shortest_edge"], size["shortest_edge"])`.
+                Otherwise, the smaller edge of the image will be matched to `int(size["shortest_edge"] / crop_pct)`,
+                after which the image is cropped to `(size["shortest_edge"], size["shortest_edge"])`.
+            crop_pct (`float`):
+                Percentage of the image to crop. Only has an effect if size < 384.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                Resampling filter to use when resizing the image.
+        """
+        if not size.shortest_edge:
+            raise ValueError(f"Size dictionary must contain 'shortest_edge' key. Got {size.keys()}")
+        shortest_edge = size["shortest_edge"]
+
+        if shortest_edge < 384:
+            # maintain same ratio, resizing shortest edge to shortest_edge/crop_pct
+            resize_shortest_edge = int(shortest_edge / crop_pct)
+            resize_size = get_resize_output_image_size(
+                image, size=resize_shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
+            )
+            image = F.resize(
+                image,
+                resize_size,
+                interpolation=resample,
+                **kwargs,
+            )
+            # then crop to (shortest_edge, shortest_edge)
+            return F.center_crop(
+                image,
+                (shortest_edge, shortest_edge),
+                **kwargs,
+            )
+        else:
+            # warping (no cropping) when evaluated at 384 or larger
+            return self.resize(
+                image,
+                (shortest_edge, shortest_edge),
+                interpolation=resample,
+                **kwargs,
+            )
+
+    def preprocess(
+        self,
+        images: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        crop_pct: float = None,
+        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Preprocess an image or batch of images.
+
+        Args:
+            images (`ImageInput`):
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the output image after `resize` has been applied. If `size["shortest_edge"]` >= 384, the image
+                is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
+                image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
+                `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
+            crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+                Percentage of the image to crop if size < 384.
+            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
+                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+                has an effect if `do_resize` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+                `True`.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Default to `"pt"` for PyTorch tensors if unset.
+                Fast image processors only support PyTorch tensors.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
+        default_to_square = kwargs.pop(
+            "default_to_square", self.default_to_square if self.default_to_square is not None else True
+        )
+        size = get_size_dict(size=size, default_to_square=default_to_square) if size is not None else None
+        crop_pct = crop_pct if crop_pct is not None else self.crop_pct
+        resample = resample if resample is not None else self.resample
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        return_tensors = "pt" if return_tensors is None else return_tensors
+        device = kwargs.pop("device", None)
+
+        # Make hashable for cache
+        size = SizeDict(**size) if size is not None else None
+        crop_size = SizeDict(**crop_size) if crop_size is not None else None
+        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
+        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
+
+        # TODO: add better kwargs handling
+        # validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
+        images = make_list_of_images(images)
+        image_type = get_image_type(images[0])
+
+        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
+            raise ValueError(f"Unsupported input image type {image_type}")
+
+        validate_fast_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            return_tensors=return_tensors,
+            data_format=data_format,
+        )
+
+        if do_convert_rgb:
+            images = [self.convert_to_rgb(image) for image in images]
+
+        if image_type == ImageType.PIL:
+            images = [F.pil_to_tensor(image) for image in images]
+        elif image_type == ImageType.NUMPY:
+            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+            images = [torch.from_numpy(image).contiguous() for image in images]
+
+        # Now that we have torch tensors, we can move them to the right device
+        if device is not None:
+            images = [image.to(device) for image in images]
+
+        # We assume that all images have the same channel dimension format.
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(images[0])
+        if input_data_format == ChannelDimension.LAST:
+            # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
+            images = [image.permute(2, 0, 1).contiguous() for image in images]
+            input_data_format = ChannelDimension.FIRST
+
+        if do_rescale and do_normalize:
+            # fused rescale and normalize
+            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
+            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
+
+        processed_images = []
+        for image in images:
+            if do_resize:
+                interpolation = (
+                    pil_torch_interpolation_mapping[resample]
+                    if isinstance(resample, (PILImageResampling, int))
+                    else resample
+                )
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    crop_pct=crop_pct,
+                    resample=interpolation,
+                )
+
+            if do_center_crop:
+                image = self.center_crop(image, crop_size)
+
+            if do_rescale and do_normalize:
+                # fused rescale and normalize
+                image = self.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+            elif do_rescale:
+                image = image * rescale_factor
+            elif do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+
+            processed_images.append(image)
+        images = processed_images
+
+        return BatchFeature(data={"pixel_values": torch.stack(images, dim=0)}, tensor_type=return_tensors)
+
+
+__all__ = ["ConvNextImageProcessorFast"]
