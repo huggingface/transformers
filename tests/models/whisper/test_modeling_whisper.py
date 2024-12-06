@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,
     require_non_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -1984,7 +1983,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
-    @require_read_token
     @slow
     def test_large_batched_generation_multilingual(self):
         torch_device = "cpu"
@@ -1993,12 +1991,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
+        token = os.getenv("HF_HUB_READ_TOKEN", True)
         ds = load_dataset(
             "mozilla-foundation/common_voice_6_1",
             "ja",
             split="test",
             streaming=True,
             trust_remote_code=True,
+            token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
@@ -2257,7 +2257,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             },
             {
                 "text": " can discover in it but little of rocky Ithaca.",
-                "timestamp": (45.36, 49.0),
+                # "timestamp": (45.36, 49.0),
+                # see above
+                "timestamp": (45.38, 49.0),
             },
             {
                 "text": " Lenell's pictures are a sort of up-guards-and-atom paintings, and Mason's exquisite ittles",
