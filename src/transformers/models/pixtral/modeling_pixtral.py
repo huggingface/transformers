@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Pixtral model."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -425,6 +425,8 @@ PIXTRAL_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`]
             for details.
+        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
+            The sizes of the images in the batch, being (height, width) for each image.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -469,6 +471,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             stride=config.patch_size,
             bias=False,
         )
+        self.patch_size = config.patch_size
         self.ln_pre = PixtralRMSNorm(config.hidden_size, eps=1e-5)
         self.transformer = PixtralTransformer(config)
         self.patch_positional_embedding = PixtralRotaryEmbedding(config, device=self.device)
@@ -476,7 +479,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
-        pixel_values: List[torch.Tensor],
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -489,10 +493,14 @@ class PixtralVisionModel(PixtralPreTrainedModel):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in pixel_values]
+        patch_embeds = self.patch_conv(pixel_values)
+        patch_embeds_list = [
+            embed[..., : (size[0] // self.patch_size), : (size[1] // self.patch_size)]
+            for embed, size in zip(patch_embeds, image_sizes)
+        ]
 
         # flatten to a single sequence
-        patch_embeds = torch.cat([p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
+        patch_embeds = torch.cat([p.unsqueeze(0).flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
         patch_embeds = self.ln_pre(patch_embeds)
 
         # positional embeddings
