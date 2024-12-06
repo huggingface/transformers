@@ -611,11 +611,11 @@ def sdpa_attention_forward(
 
     causal_mask = mask
     if mask is not None:  # no matter the length, we just slice it
-        causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+        causal_mask = mask[:, :, :, : key_states.shape[-2]]
 
     # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
     # Reference: https://github.com/pytorch/pytorch/issues/112577.
-    if query.device.type == "cuda" and causal_mask is not None:
+    if query.device.type == "cuda" and mask is not None:
         query = query.contiguous()
         key_states = key_states.contiguous()
         value_states = value_states.contiguous()
