@@ -885,3 +885,30 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
         return target_module_found, is_regex
 
     return target_module_found
+
+
+def shard_tensor(tensor, num_shards, rank, dim=1):
+    seq_length = tensor.shape[dim]
+    sub_seq_length = seq_length // num_shards
+    indices = [slice(None)] * tensor.ndim
+    indices[dim] = slice(rank * sub_seq_length, (rank + 1) * sub_seq_length)
+    return tensor[tuple(indices)]
+
+
+def prepare_inputs_for_sequence_parallel(inputs, sequence_parallel_size, sequence_parallel_rank):
+    for k in inputs:
+        print(f"{k}", inputs[k] if not isinstance(inputs[k], torch.Tensor) else inputs[k].shape)
+    if ("position_ids" not in inputs or inputs["position_ids"] is None) and "input_ids" in inputs:
+        # expand the position_ids to match batch size
+        position_ids = torch.arange(inputs["input_ids"].shape[1], dtype=torch.long, device=inputs["input_ids"].device)
+        position_ids = position_ids.unsqueeze(0).expand(inputs["input_ids"].shape[0], -1)
+        inputs["position_ids"] = position_ids
+    for key in ["input_ids", "attention_mask", "loss_mask", "inputs_embeds", "position_ids"]:
+        if key in inputs:
+            if inputs[key] is None:
+                continue
+            print(f"{key} before", inputs[key].shape)
+            inputs[key] = shard_tensor(inputs[key], sequence_parallel_size, sequence_parallel_rank)
+            print(f"{key} after", inputs[key].shape)
+
+    return inputs

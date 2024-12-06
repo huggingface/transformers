@@ -140,10 +140,10 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     def trainer_config_process(self, args, auto_find_batch_size=False):
         """
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
-        creation.
+        creation., sequence_parallel_size, sequence_parallel_rank)
         """
-        if getattr(args, "sequence_parallel_size", 1) > 1:
-            world_size = getattr(args, "data_parallel_size", args.world.size // args.sequence_parallel_size)
+        if getattr(self, "sequence_parallel_size") and self.sequence_parallel_size() > 1:
+            world_size = getattr(self, "data_parallel_size", args.world_size // self.sequence_parallel_size())()
         else:
             world_size = args.world_size
         # DeepSpeed does:
@@ -497,8 +497,7 @@ def support_deepspeed_ulysses(module):
     def wrapped_forward(*args, **kwargs):
         # lazily set if sequence parallelism is enabled to ensure deepspeed is initialized first
         if is_deepspeed_sp_enabled():
-            sp_size = deepspeed_mpu._get_sequence_parallel_world_size()
-            module.q_len_multiplier = sp_size
+            module.q_len_multiplier = deepspeed_mpu._get_sequence_parallel_world_size()
 
         return original_forward(*args, **kwargs)
 
