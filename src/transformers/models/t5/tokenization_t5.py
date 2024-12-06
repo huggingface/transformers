@@ -148,7 +148,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         self._extra_ids = extra_ids
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if dduf_entries:
-            self.sp_model.load_from_serialized_proto(dduf_entries[self.vocab_file].read())
+            with dduf_entries[self.vocab_file].as_mmap() as mm:
+                self.sp_model.load_from_serialized_proto(mm)
         else:
             self.sp_model.Load(vocab_file)
 
@@ -206,13 +207,15 @@ class T5Tokenizer(PreTrainedTokenizer):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if self.legacy or from_slow:  # no dependency on protobuf
             if dduf_entries:
-                tokenizer.load_from_serialized_proto(dduf_entries[self.vocab_file].read())
+                with dduf_entries[self.vocab_file].as_mmap() as mm:
+                    tokenizer.load_from_serialized_proto(mm)
             else:
                 tokenizer.Load(self.vocab_file)
             return tokenizer
 
         if dduf_entries:
-            sp_model = dduf_entries[self.vocab_file].read()
+            with dduf_entries[self.vocab_file].as_mmap() as mm:
+                tokenizer.load_from_serialized_proto(mm)
         else:
             with open(self.vocab_file, "rb") as f:
                 sp_model = f.read()

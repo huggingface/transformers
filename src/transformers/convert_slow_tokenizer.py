@@ -555,7 +555,8 @@ class SpmConverter(Converter):
 
         m = model_pb2.ModelProto()
         if dduf_entries:
-            m.ParseFromString(dduf_entries[self.original_tokenizer.vocab_file].read())
+            with dduf_entries[self.original_tokenizer.vocab_file].as_mmap() as mm:
+                m.ParseFromString(mm)
         else:
             with open(self.original_tokenizer.vocab_file, "rb") as f:
                 m.ParseFromString(f.read())
