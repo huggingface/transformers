@@ -490,9 +490,9 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * math.sqrt(config.head_dim)
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) / math.sqrt(config.head_dim)
 
-    if mask is not None:  # no matter the length, we just slice it
+    if mask is not None and len(mask.shape) == 4:  # no matter the length, we just slice it
         causal_mask = mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
@@ -505,8 +505,6 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
     attn_output = torch.matmul(attn_weights, value_states)
-
-
 
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -716,7 +714,6 @@ class Qwen2VLAttention(nn.Module):
             position_ids=position_ids,
         )
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
 
