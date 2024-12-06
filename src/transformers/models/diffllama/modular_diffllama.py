@@ -429,51 +429,23 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         return attn_output, None, past_key_value
 
 
-DIFFLLAMA_ATTENTION_CLASSES = {
-    "eager": DiffLlamaAttention,
-    "flash_attention_2": DiffLlamaFlashAttention2,
-    "sdpa": DiffLlamaSdpaAttention,
-}
+# DIFFLLAMA_ATTENTION_CLASSES = {
+#     "eager": DiffLlamaAttention,
+#     "flash_attention_2": DiffLlamaFlashAttention2,
+#     "sdpa": DiffLlamaSdpaAttention,
+# }
 
 
 class DiffLlamaDecoderLayer(LlamaDecoderLayer):
     pass
-    # def __init__(self, config: DiffLlamaConfig, layer_idx: int):
-    #     super().__init__(config, layer_idx)
-
-    #     self.self_attn = DIFFLLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
-
-    #     self.mlp = DiffLlamaMLP(config)
-    #     self.input_layernorm = DiffLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-    #     self.post_attention_layernorm = DiffLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     pass
-    # config_class = DiffLlamaConfig
-    # _no_split_modules = ["DiffLlamaDecoderLayer"]
 
 
 class DiffLlamaModel(DiffLlamaPreTrainedModel, LlamaModel):
     pass
-    # """
-    # Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`DiffLlamaDecoderLayer`]
-
-    # Args:
-    #     config: DiffLlamaConfig
-    # """
-
-    # def __init__(self, config: DiffLlamaConfig):
-    #     super().__init__(config)
-
-    #     self.layers = nn.ModuleList(
-    #         [DiffLlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-    #     )
-    #     self.norm = DiffLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-    #     self.rotary_emb = DiffLlamaRotaryEmbedding(config=config)
-
-    #     # Initialize weights and apply final processing
-    #     self.post_init()
 
 
 class DiffLlamaForCausalLM(GemmaForCausalLM):
