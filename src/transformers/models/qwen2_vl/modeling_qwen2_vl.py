@@ -45,7 +45,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal,
+    is_flash_attn_greater_or_equal_2_10,
     is_torch_greater_or_equal,
     logging,
     replace_return_docstrings,
@@ -55,7 +55,6 @@ from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLVisionConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
-
     from ...modeling_flash_attention_utils import _flash_attention_forward
 else:
     flash_attn_varlen_func = None
@@ -350,7 +349,7 @@ class VisionAttention(nn.Module):
         q = q.transpose(0, 1)
         k = k.transpose(0, 1)
         v = v.transpose(0, 1)
-        attn_weights = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(config.head_dim)
         attn_weights = attn_weights + attention_mask
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
         attn_output = torch.matmul(attn_weights, v)
@@ -491,7 +490,7 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * math.sqrt(key_states.shape[-1])
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * math.sqrt(config.head_dim)
 
     if mask is not None:  # no matter the length, we just slice it
         causal_mask = mask[:, :, :, : key_states.shape[-2]]
@@ -507,58 +506,48 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
     attn_output = torch.matmul(attn_weights, value_states)
 
+
+
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
 
 def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
-    _, _, q_len, _ = query.size()
+    key_states = repeat_kv(key, config.num_key_value_groups)
+    value_states = repeat_kv(value, config.num_key_value_groups)
+    dropout_rate = 0.0 if not config.training else config.attention_dropout
+    use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    # TODO: These transpose are quite inefficient but Flash Attention requires the layout
-    # [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor rotary embedding
+    # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+    # therefore the input hidden states gets silently casted in float32. Hence, we need
+    # cast them back in float16 just to be sure everything works as expected.
+    input_dtype = query.dtype
+    if input_dtype != target_dtype:
+         query = query.to(target_dtype)
+         key_states = key_states.to(target_dtype)
+         value_states = value_states.to(target_dtype)
+
+    # Reashape to the expected shape for Flash Attention
     query_states = query.transpose(1, 2)
-    key_states = key.transpose(1, 2)
-    value_states = value.transpose(1, 2)
+    key_states = key_states.transpose(1, 2)
+    value_states = value_states.transpose(1, 2)
 
-    dropout_rate = config.attention_dropout if config.training else 0.0
+    position_ids = _kwargs["position_ids"]
 
     attn_output = _flash_attention_forward(
         query_states,
         key_states,
         value_states,
         mask,
-        q_len,
+        query_states.shape[1],
+        position_ids=position_ids,
         dropout=dropout_rate,
+        sliding_window=config.sliding_window,
         is_causal=config.is_causal,
-        softcap=config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
-    )
+        use_top_left_mask=use_top_left_mask,
+    ).to(input_dtype)
 
     return attn_output, None
-
-
-def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
-    def tanh_softcap(score, b, h, q_idx, kv_idx):
-        soft_cap = config.attn_logit_softcapping
-        score = soft_cap * torch.tanh(score / soft_cap)
-        if mask is not None:
-            return score + mask[b][0][q_idx][kv_idx]
-        return score
-
-    attn_output = flex_attention(
-        query,
-        key,
-        value,
-        score_mod=tanh_softcap,
-        enable_gqa=True,
-        return_lse=output_attentions,
-    )
-    if not output_attentions:
-        attn_weights = None
-    else:
-        attn_output, attn_weights = attn_output
-
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
 
 
 def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
@@ -592,6 +581,31 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
     return attn_output, None
 
 
+def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
+    def tanh_softcap(score, b, h, q_idx, kv_idx):
+        soft_cap = config.attn_logit_softcapping
+        score = soft_cap * torch.tanh(score / soft_cap)
+        if mask is not None:
+            return score + mask[b][0][q_idx][kv_idx]
+        return score
+
+    attn_output = flex_attention(
+        query,
+        key,
+        value,
+        score_mod=tanh_softcap,
+        enable_gqa=True,
+        return_lse=output_attentions,
+    )
+    if not output_attentions:
+        attn_weights = None
+    else:
+        attn_output, attn_weights = attn_output
+
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 QWEN2_VL_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
     "flex_attention": flex_attention_forward,
@@ -621,6 +635,16 @@ class Qwen2VLAttention(nn.Module):
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
         self.rope_scaling = config.rope_scaling
+
+        if (
+            self.config.use_sliding_window
+            and getattr(self.config, "sliding_window", None) is not None
+            and self.layer_idx >= self.config.max_window_layers
+        ):
+            self.sliding_window = self.config.sliding_window
+        else:
+            self.sliding_window = None
+
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -683,10 +707,17 @@ class Qwen2VLAttention(nn.Module):
             attention_type = self.config._attn_implementation
 
         attn_output, attn_weights = QWEN2_VL_ATTENTION_FUNCTION[attention_type](
-            self, query_states, key_states, value_states, attention_mask, output_attentions=output_attentions
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            output_attentions=output_attentions,
+            position_ids=position_ids,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -915,7 +946,12 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype
+            dim=0,
+            # Select dtype based on the following factors:
+            #  - FA2 requires that cu_seqlens_q must have dtype int32
+            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+            # See https://github.com/huggingface/transformers/pull/34852 for more information
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
