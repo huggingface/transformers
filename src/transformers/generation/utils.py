@@ -45,7 +45,6 @@ from ..utils import (
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
-    is_quanto_available,
     is_torchdynamo_compiling,
     logging,
 )
@@ -1466,6 +1465,7 @@ class GenerationMixin:
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
+            and input_ids_length != 0
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
@@ -1787,7 +1787,7 @@ class GenerationMixin:
                 )
                 cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
 
-                if cache_config.backend == "quanto" and not (is_optimum_quanto_available() or is_quanto_available()):
+                if cache_config.backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
                         "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
                         "Please install it via  with `pip install optimum-quanto`"
@@ -1866,8 +1866,8 @@ class GenerationMixin:
                         "The attention mask and the pad token id were not set. As a consequence, you may observe "
                         "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                     )
-                logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
             pad_token_tensor = eos_token_tensor[0]
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
