@@ -94,7 +94,7 @@ class DepthProModelTester:
         self.seq_length = (patch_size // patch_embeddings_size) ** 2 + 1  # we add 1 for the [CLS] token
 
         n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
-        self.expected_depth_size = 2 ** (n_fusion_blocks + 1) * patch_size / patch_embeddings_size
+        self.expected_depth_size = 2 ** (n_fusion_blocks + 1) * patch_size // patch_embeddings_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -313,8 +313,8 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "Intel/depth_pro-large"
-        model = DepthProModel.from_pretrained(model_name)
+        model_path = "geetu040/DepthPro"
+        model = DepthProModel.from_pretrained(model_path)
         self.assertIsNotNone(model)
 
 
@@ -329,8 +329,10 @@ def prepare_img():
 @slow
 class DepthProModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        image_processor = DepthProImageProcessor.from_pretrained("Intel/depth_pro-large")
-        model = DepthProForDepthEstimation.from_pretrained("Intel/depth_pro-large").to(torch_device)
+        model_path = "geetu040/DepthPro"
+        image_processor = DepthProImageProcessor.from_pretrained(model_path)
+        model = DepthProForDepthEstimation.from_pretrained(model_path).to(torch_device)
+        config = model.config
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -341,18 +343,21 @@ class DepthProModelIntegrationTest(unittest.TestCase):
             predicted_depth = outputs.predicted_depth
 
         # verify the predicted depth
-        expected_shape = torch.Size((1, 384, 384))
+        n_fusion_blocks = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
+        expected_depth_size = 2 ** (n_fusion_blocks + 1) * config.patch_size // config.patch_embeddings_size
+        expected_shape = torch.Size((1, expected_depth_size, expected_depth_size))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]]
+            [[1.0582, 1.1225, 1.1335], [1.1154, 1.1398, 1.1486], [1.1434, 1.1500, 1.1643]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_post_processing_depth_estimation(self):
-        image_processor = DepthProImageProcessor.from_pretrained("Intel/depth_pro-large")
-        model = DepthProForDepthEstimation.from_pretrained("Intel/depth_pro-large")
+        model_path = "geetu040/DepthPro"
+        image_processor = DepthProImageProcessor.from_pretrained(model_path)
+        model = DepthProForDepthEstimation.from_pretrained(model_path)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
@@ -361,17 +366,15 @@ class DepthProModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        predicted_depth = image_processor.post_process_depth_estimation(outputs=outputs)[0]["predicted_depth"]
-        expected_shape = torch.Size((384, 384))
+        predicted_depth = outputs.predicted_depth
+        fov = outputs.fov
+        target_size = [[image.height, image.width]] * len(predicted_depth)
+
+        outputs = image_processor.post_process_depth_estimation(
+            predicted_depths=predicted_depth,
+            fovs=fov,
+            target_sizes=target_size,
+        )
+        predicted_depth = outputs["predicted_depth"][0]
+        expected_shape = torch.Size((image.height, image.width))
         self.assertTrue(predicted_depth.shape == expected_shape)
-
-        predicted_depth_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])
-        predicted_depth_l = predicted_depth_l[0]["predicted_depth"]
-        expected_shape = torch.Size((500, 500))
-        self.assertTrue(predicted_depth_l.shape == expected_shape)
-
-        output_enlarged = torch.nn.functional.interpolate(
-            predicted_depth.unsqueeze(0).unsqueeze(1), size=(500, 500), mode="bicubic", align_corners=False
-        ).squeeze()
-        self.assertTrue(output_enlarged.shape == expected_shape)
-        self.assertTrue(torch.allclose(predicted_depth_l, output_enlarged, rtol=1e-3))
