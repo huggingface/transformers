@@ -1636,7 +1636,7 @@ class GenerationMixin:
             def get_layer_device_map(execution_device_map: Optional[dict] = None):
                 num_hidden_layers = self.config.get_text_config().num_hidden_layers
                 if execution_device_map is None:
-                    return None
+                    return {i: self.device for i in range(num_hidden_layers)}
                 elif len(execution_device_map) == 1 and "" in execution_device_map:
                     return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
                 layer_device_map = {}
@@ -1669,7 +1669,6 @@ class GenerationMixin:
                 "config": self.config.get_text_config(),
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
-                "device": device if cache_implementation == "offloaded_static" else None,
                 "dtype": cache_dtype,
                 "layer_device_map": layer_device_map,
             }

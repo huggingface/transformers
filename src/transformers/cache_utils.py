@@ -1845,6 +1845,7 @@ class MambaCache:
         dtype: torch.dtype = torch.float16,
         device: Optional[Union[torch.device, str]] = None,
         max_batch_size: Optional[int] = None,
+        **kwargs,
     ):
         if batch_size is not None:
             logger.warning_once(
@@ -1928,13 +1929,16 @@ class OffloadedStaticCache(StaticCache):
             The maximum batch size with which the model will be used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
-        device (`Union[str, torch.device]`):
-            The device on which the cache should be initialized. Should be the same as the
-            layer device.
+        device (`Union[str, torch.device]`, *optional*):
+            The device on which the cache should be initialized. Should be the same as the layer device.
+            If not provided, cache will be prefetched based on `layer_device_map` argument.
         dtype (`torch.dtype`, *optional*):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, *optional*):
+            Mapping between the layers and its device. This is required if no `device` is passed, because the cache needs to prefetch future layers
+            in their corresponding devices. You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Attributes:
         key_cache (`List[torch.Tensor]`):
@@ -1978,19 +1982,27 @@ class OffloadedStaticCache(StaticCache):
         config: PretrainedConfig,
         max_batch_size: int,
         max_cache_len: Optional[int],
-        device: Union[str, torch.device],
+        device: Union[str, torch.device] = None,
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
-        layer_device_map=None,
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
         **kwargs,
     ) -> None:
         Cache.__init__(self)
+        if device is None and layer_device_map is None:
+            raise ValueError(
+                f"You have to pass either `device` or `layer_device_map` to {self.__class__.__name__} "
+                "because the cache needs to prefetch layers ahead of time and has no option to infer the device "
+                "from input keys and values"
+            )
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
-        self.device = torch.device(device)
+        self.device = torch.device(device) if device is not None else torch.device(layer_device_map[0])
         self.offload_device = torch.device(offload_device)
         self.dtype = dtype if dtype is not None else torch.float32
-        self.layer_device_map = layer_device_map
+        self.layer_device_map = (
+            layer_device_map if layer_device_map is not None else {i: device for i in range(config.num_hidden_layers)}
+        )
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
@@ -2012,7 +2024,7 @@ class OffloadedStaticCache(StaticCache):
         for i in range(config.num_hidden_layers):
             cpu_key_cache, cpu_value_cache = self._create_key_value_cache_tensors(cache_shape, self.offload_device)
 
-            device = "cuda:0" if i == 0 else "meta"
+            device = self.device if i == 0 else "meta"
             key_cache, value_cache = self._create_key_value_cache_tensors(cache_shape, device)
 
             self.key_cache.append(key_cache)
@@ -2144,10 +2156,6 @@ class OffloadedStaticCache(StaticCache):
         key_cache = torch.zeros(shape, dtype=self.dtype, device=device, pin_memory=is_cpu_device)
         value_cache = torch.zeros(shape, dtype=self.dtype, device=device, pin_memory=is_cpu_device)
 
-        # if not is_cpu_device:
-        #     self.register_buffer(f"_device_key_cache_", key_cache)
-        #     self.register_buffer(f"_device_value_cache_", value_cache)
-
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
         # preventing compiled graph breaks when updating the cache.
         torch._dynamo.mark_static_address(key_cache)
@@ -2172,6 +2180,6 @@ class OffloadedStaticCache(StaticCache):
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
 
-        execution_device = self.layer_device_map[layer_idx]  # "cuda:0"
+        execution_device = self.layer_device_map[layer_idx]
         self.key_cache[layer_idx] = self._offloaded_key_cache[layer_idx].to(execution_device, non_blocking=True)
         self.value_cache[layer_idx] = self._offloaded_value_cache[layer_idx].to(execution_device, non_blocking=True)
