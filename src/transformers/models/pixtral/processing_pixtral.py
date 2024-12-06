@@ -22,7 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -48,57 +48,6 @@ def is_url(val) -> bool:
 # Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
 def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
-
-
-# Copied from transformers.models.pixtral.image_processing_pixtral.BatchMixFeature
-class BatchMixFeature(BatchFeature):
-    def to(self, *args, **kwargs) -> "BatchMixFeature":
-        """
-        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
-        different `dtypes` and sending the `BatchFeature` to a different `device`.
-
-        Args:
-            args (`Tuple`):
-                Will be passed to the `to(...)` function of the tensors.
-            kwargs (`Dict`, *optional*):
-                Will be passed to the `to(...)` function of the tensors.
-
-        Returns:
-            [`BatchFeature`]: The same instance after modification.
-        """
-        requires_backends(self, ["torch"])
-        import torch  # noqa
-
-        new_data = {}
-        device = kwargs.get("device")
-        # Check if the args are a device or a dtype
-        if device is None and len(args) > 0:
-            # device should be always the first argument
-            arg = args[0]
-            if is_torch_dtype(arg):
-                # The first argument is a dtype
-                pass
-            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
-                device = arg
-            else:
-                # it's something else
-                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
-            # check if v is a floating point
-            if isinstance(v, list):
-                new_data[k] = [
-                    element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
-                ]
-            elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
-                # cast and send to device
-                new_data[k] = v.to(*args, **kwargs)
-            elif isinstance(v, torch.Tensor) and device is not None:
-                new_data[k] = v.to(device=device)
-            else:
-                new_data[k] = v
-        self.data = new_data
-        return self
 
 
 class PixtralProcessor(ProcessorMixin):
@@ -160,7 +109,7 @@ class PixtralProcessor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[PixtralProcessorKwargs],
-    ) -> BatchMixFeature:
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -252,7 +201,7 @@ class PixtralProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
 
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchMixFeature(
+        return BatchFeature(
             data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
         )
 
