@@ -487,7 +487,14 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def eager_attention_forward(config, query, key, value, mask, **_kwargs):
+def eager_attention_forward(
+    config: Qwen2VLConfig,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -511,7 +518,15 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     return attn_output, attn_weights
 
 
-def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
+def flash_attention_forward(
+    config: Qwen2VLConfig,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    target_dtype: torch.dtype = torch.float16,
+    **_kwargs,
+) -> Tuple[torch.Tensor, None]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
     dropout_rate = 0.0 if not config.training else config.attention_dropout
@@ -549,7 +564,47 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
     return attn_output, None
 
 
-def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
+def flex_attention_forward(
+    config: Qwen2VLConfig,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    output_attentions: bool = False,
+    **_kwargs,
+) -> Tuple[torch.Tensor, None]:
+    def tanh_softcap(score, b, h, q_idx, kv_idx):
+        soft_cap = config.attn_logit_softcapping
+        score = soft_cap * torch.tanh(score / soft_cap)
+        if mask is not None:
+            return score + mask[b][0][q_idx][kv_idx]
+        return score
+
+    attn_output = flex_attention(
+        query,
+        key,
+        value,
+        score_mod=tanh_softcap,
+        enable_gqa=True,
+        return_lse=output_attentions,
+    )
+    if not output_attentions:
+        attn_weights = None
+    else:
+        attn_output, attn_weights = attn_output
+
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
+def sdpa_attention_forward(
+    config: Qwen2VLConfig,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+):
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
 
@@ -578,31 +633,6 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, None
-
-
-def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
-    def tanh_softcap(score, b, h, q_idx, kv_idx):
-        soft_cap = config.attn_logit_softcapping
-        score = soft_cap * torch.tanh(score / soft_cap)
-        if mask is not None:
-            return score + mask[b][0][q_idx][kv_idx]
-        return score
-
-    attn_output = flex_attention(
-        query,
-        key,
-        value,
-        score_mod=tanh_softcap,
-        enable_gqa=True,
-        return_lse=output_attentions,
-    )
-    if not output_attentions:
-        attn_weights = None
-    else:
-        attn_output, attn_weights = attn_output
-
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
 
 
 QWEN2_VL_ATTENTION_FUNCTION = {
