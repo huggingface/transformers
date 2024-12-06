@@ -23,6 +23,7 @@ import unittest
 import numpy as np
 import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import AutoProcessor, Kosmos2_5Config
 from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
@@ -545,6 +546,14 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip("Kosmos 2.5 is multimodel and has specific input shapes.")
     def test_flash_attn_2_generate_reuse_cache(self):
+        pass
+
+    @pytest.mark.generate
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip(
+        "KOSMOS-2.5 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten",
+    )
+    def test_generate_from_inputs_embeds(self):
         pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
