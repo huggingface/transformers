@@ -87,9 +87,14 @@ class BatchMixFeature(BatchFeature):
         for k, v in self.items():
             # check if v is a floating point
             if isinstance(v, list):
-                new_data[k] = [
-                    element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
-                ]
+                if isinstance(v[0], list):
+                    new_data[k] = [
+                        element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
+                    ]
+                else:
+                    new_data[k] = [
+                        element.to(*args, **kwargs) for element in v if is_torch_tensor(element)
+                    ]
             elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
