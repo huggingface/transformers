@@ -46,7 +46,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    is_torch_greater_or_equal,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
@@ -59,7 +59,7 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
-if is_torch_greater_or_equal("2.5"):
+if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import flex_attention
 
 
@@ -515,7 +515,6 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
     dropout_rate = 0.0 if not config.training else config.attention_dropout
-    use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     # In PEFT, usually we cast the layer norms in float32 for training stability reasons
     # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -543,9 +542,10 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
         dropout=dropout_rate,
         sliding_window=config.sliding_window,
         is_causal=config.is_causal,
-        use_top_left_mask=use_top_left_mask,
-    ).to(input_dtype)
+        use_top_left_mask=config._flash_attn_uses_top_left_mask,
+    )
 
+    attn_output = attn_output.to(input_dtype)
     return attn_output, None
 
 
@@ -641,6 +641,15 @@ class Qwen2VLAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.rope_scaling = config.rope_scaling
 
+        if (
+             self.config.use_sliding_window
+             and getattr(self.config, "sliding_window", None) is not None
+             and self.layer_idx >= self.config.max_window_layers
+         ):
+            self.sliding_window = self.config.sliding_window
+        else:
+            self.sliding_window = None
+
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -656,6 +665,8 @@ class Qwen2VLAttention(nn.Module):
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
+
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
