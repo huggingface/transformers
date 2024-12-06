@@ -2250,7 +2250,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             },
             {
                 "text": " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and",
-                "timestamp": (39.80, 45.36),
+                # "timestamp": (39.80, 45.36),
+                # above is the expected output on A100.
+                # on CI T4s, due to sligth difference in floating points operations, expected is below
+                "timestamp": (39.80, 45.38),
             },
             {
                 "text": " can discover in it but little of rocky Ithaca.",
