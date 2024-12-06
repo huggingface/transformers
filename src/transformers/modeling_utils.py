@@ -3514,16 +3514,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
             if _adapter_model_path is None:
-                _adapter_model_path = find_adapter_config_file(
-                    pretrained_model_name_or_path,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    resume_download=resume_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    _commit_hash=commit_hash,
-                    **adapter_kwargs,
-                )
+                if dduf_entries:
+                    # TODO: use the global var from peft utils
+                    if os.path.join(pretrained_model_name_or_path,"adapter_config.json") in dduf_entries:
+                        _adapter_model_path = os.path.join(pretrained_model_name_or_path, "adapter_config.json")
+                else:
+                    _adapter_model_path = find_adapter_config_file(
+                        pretrained_model_name_or_path,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        resume_download=resume_download,
+                        proxies=proxies,
+                        local_files_only=local_files_only,
+                        _commit_hash=commit_hash,
+                        **adapter_kwargs,
+                    )
             if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
                 with open(_adapter_model_path, "r", encoding="utf-8") as f:
                     _adapter_model_path = pretrained_model_name_or_path
