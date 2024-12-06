@@ -88,6 +88,8 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextModel",
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
+    "AriaTextForCausalLM",
+    "AriaTextModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.

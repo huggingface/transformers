@@ -54,6 +54,7 @@ else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("align", ("EfficientNetImageProcessor",)),
+            ("aria", ("AriaImageProcessor")),
             ("beit", ("BeitImageProcessor",)),
             ("bit", ("BitImageProcessor",)),
             ("blip", ("BlipImageProcessor",)),
