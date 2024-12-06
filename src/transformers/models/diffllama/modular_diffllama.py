@@ -429,13 +429,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         return attn_output, None, past_key_value
 
 
-# DIFFLLAMA_ATTENTION_CLASSES = {
-#     "eager": DiffLlamaAttention,
-#     "flash_attention_2": DiffLlamaFlashAttention2,
-#     "sdpa": DiffLlamaSdpaAttention,
-# }
-
-
 class DiffLlamaDecoderLayer(LlamaDecoderLayer):
     pass
 
