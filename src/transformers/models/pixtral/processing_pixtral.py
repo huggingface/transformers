@@ -204,19 +204,16 @@ class PixtralProcessor(ProcessorMixin):
 
         if images is not None:
             if is_image_or_image_url(images):
-                images = [[images]]
+                images = [images]
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
-                if isinstance(text, list):
-                    images = [[im] for im in images]
-                else:
-                    images = [images]
-            elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
                 pass
+            elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
+                images = [image for sublist in images for image in sublist]
             else:
                 raise ValueError(
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
-            images = [[load_image(im) for im in sample] for sample in images]
+            images = [load_image(im) for im in images]
             image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
@@ -230,15 +227,13 @@ class PixtralProcessor(ProcessorMixin):
         prompt_strings = text
         if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
-            images = image_inputs["pixel_values"]
-            image_sizes = image_inputs.pop("image_sizes")
+            image_sizes = iter(image_inputs["image_sizes"])
             prompt_strings = []
+            replace_strings = []
 
-            for sample_images, sample_image_sizes, sample in zip(images, image_sizes, text):
-                replace_strings = []
-                # First calculate the number of tokens needed for each image and put in a placeholder
-                for image, image_size in zip(sample_images, sample_image_sizes):
-                    height, width = image_size
+            for sample in text:
+                while self.image_token in sample:
+                    height, width = next(image_sizes)
                     num_height_tokens = height // self.patch_size
                     num_width_tokens = width // self.patch_size
                     replace_tokens = [
@@ -257,7 +252,9 @@ class PixtralProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
 
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchMixFeature(data={**text_inputs, **image_inputs})
+        return BatchMixFeature(
+            data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
+        )
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

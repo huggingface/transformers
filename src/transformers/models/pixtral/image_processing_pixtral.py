@@ -21,6 +21,7 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    pad,
     resize,
     to_channel_dimension_format,
 )
@@ -367,6 +368,49 @@ class PixtralImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    def _pad_for_batching(
+        self,
+        pixel_values: List[np.ndarray],
+        image_sizes: List[List[int]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """
+        Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
+        Args:
+            pixel_values (`List[np.ndarray]`):
+                An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
+            image_sizes (`List[List[int]]`):
+                A list of sizes for each image in `pixel_values` in (height, width) format.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
+        Returns:
+            List[`np.ndarray`]: The padded images.
+        """
+
+        max_shape = (
+            max([size[0] for size in image_sizes]),
+            max([size[1] for size in image_sizes]),
+        )
+        pixel_values = [
+            pad(
+                image,
+                padding=((0, max_shape[0] - size[0]), (0, max_shape[1] - size[1])),
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+            for image, size in zip(pixel_values, image_sizes)
+        ]
+        return pixel_values
+
     def preprocess(
         self,
         images: ImageInput,
@@ -516,6 +560,17 @@ class PixtralImageProcessor(BaseImageProcessor):
             for images in batch_images
         ]
 
+        images_list = [size for l in images_list for size in l]
+        image_sizes_list = [im for l in batch_image_sizes for im in l]
+        pixel_values = self._pad_for_batching(
+            pixel_values=images_list,
+            image_sizes=image_sizes_list,
+            input_data_format=data_format,
+            data_format=data_format,
+        )
+
         # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
-        images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
-        return BatchMixFeature(data={"pixel_values": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)
+        # images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
+        return BatchMixFeature(
+            data={"pixel_values": pixel_values, "image_sizes": image_sizes_list}, tensor_type=return_tensors
+        )
