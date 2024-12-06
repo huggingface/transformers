@@ -606,19 +606,19 @@ def sdpa_attention_forward(
     mask: Optional[torch.Tensor],
     **_kwargs,
 ):
-    key = repeat_kv(key, config.num_key_value_groups)
-    value = repeat_kv(value, config.num_key_value_groups)
+    key_states = repeat_kv(key, config.num_key_value_groups)
+    value_states = repeat_kv(value, config.num_key_value_groups)
 
     causal_mask = mask
     if mask is not None:  # no matter the length, we just slice it
-        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+        causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
     # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
     # Reference: https://github.com/pytorch/pytorch/issues/112577.
     if query.device.type == "cuda" and causal_mask is not None:
         query = query.contiguous()
-        key = key.contiguous()
-        value = value.contiguous()
+        key_states = key_states.contiguous()
+        value_states = value_states.contiguous()
 
     # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
@@ -626,8 +626,8 @@ def sdpa_attention_forward(
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
-        key,
-        value,
+        key_states,
+        value_states,
         attn_mask=causal_mask,
         dropout_p=config.attention_dropout if config.training else 0.0,
         is_causal=is_causal,
@@ -638,7 +638,7 @@ def sdpa_attention_forward(
 
 QWEN2_VL_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    "flex_attention": eager_attention_forward, # TODO: fix errors
+    "flex_attention": sdpa_attention_forward, # TODO: fix errors
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
