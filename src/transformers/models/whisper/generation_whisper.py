@@ -631,6 +631,9 @@ class WhisperGenerationMixin(GenerationMixin):
         )
 
         # 5bis speculative decoding: patch generate to make sure the assistant model returns the input tokens
+        # Whisper's generate method does not return the decoder input token ids.
+        # In Transformers, assisted decoding logic does a call to the generate method of the assistant model and expects the decoder input token ids to be returned.
+        # This patch is used to make sure the assistant model returns the decoder input token ids.
         if "assistant_model" in kwargs:
             from .modeling_whisper import WhisperForCausalLM
 
@@ -638,9 +641,13 @@ class WhisperGenerationMixin(GenerationMixin):
             if assistant_model is self:
                 assistant_model = copy.deepcopy(kwargs["assistant_model"])
             if (
-                not hasattr(assistant_model, "_generate_with_input_tokens")
-                and type(assistant_model) != WhisperForCausalLM
+                not hasattr(
+                    assistant_model, "_generate_with_input_tokens"
+                )  # make sure the assistant model does not already have the patch
+                and type(assistant_model)
+                != WhisperForCausalLM  # such a patch is not necessary for WhisperForCausalLM that uses directly GenerationMixin's generate
             ):
+                # patch
                 assistant_model.generate = types.MethodType(
                     self.generate_add_decoder_input_ids(assistant_model.generate.__func__), assistant_model
                 )
