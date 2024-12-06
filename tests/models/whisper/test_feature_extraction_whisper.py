@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class WhisperFeatureExtractionTester():
+class WhisperFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -203,10 +203,10 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
     def test_dither(self):
         # Tests that features with and without little dithering are similar, but not the same
         dict_no_dither = self.feat_extract_tester.prepare_feat_extract_dict()
-        dict_no_dither['dither'] = 0.0
+        dict_no_dither["dither"] = 0.0
 
         dict_dither = self.feat_extract_tester.prepare_feat_extract_dict()
-        dict_dither['dither'] = 0.00003  # approx. 1/32k
+        dict_dither["dither"] = 0.00003  # approx. 1/32k
 
         feature_extractor_no_dither = self.feature_extraction_class(**dict_no_dither)
         feature_extractor_dither = self.feature_extraction_class(**dict_dither)
@@ -216,8 +216,12 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # compute features
-        input_features_no_dither = feature_extractor_no_dither(np_speech_inputs, padding=True, return_tensors="np").input_features
-        input_features_dither = feature_extractor_dither(np_speech_inputs, padding=True, return_tensors="np").input_features
+        input_features_no_dither = feature_extractor_no_dither(
+            np_speech_inputs, padding=True, return_tensors="np"
+        ).input_features
+        input_features_dither = feature_extractor_dither(
+            np_speech_inputs, padding=True, return_tensors="np"
+        ).input_features
 
         # test there is a difference between features (there's added noise to input signal)
         diff = input_features_dither - input_features_no_dither

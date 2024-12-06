@@ -48,7 +48,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 @require_torchaudio
-class Speech2TextFeatureExtractionTester():
+class Speech2TextFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -147,10 +147,10 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
     def test_dither(self):
         # Tests that features with and without little dithering are similar, but not the same
         dict_no_dither = self.feat_extract_tester.prepare_feat_extract_dict()
-        dict_no_dither['dither'] = 0.0
+        dict_no_dither["dither"] = 0.0
 
         dict_dither = self.feat_extract_tester.prepare_feat_extract_dict()
-        dict_dither['dither'] = 1.0
+        dict_dither["dither"] = 1.0
 
         feature_extractor_no_dither = self.feature_extraction_class(**dict_no_dither)
         feature_extractor_dither = self.feature_extraction_class(**dict_dither)
@@ -160,8 +160,12 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # compute features
-        input_features_no_dither = feature_extractor_no_dither(np_speech_inputs, padding=True, return_tensors="np").input_features
-        input_features_dither = feature_extractor_dither(np_speech_inputs, padding=True, return_tensors="np").input_features
+        input_features_no_dither = feature_extractor_no_dither(
+            np_speech_inputs, padding=True, return_tensors="np"
+        ).input_features
+        input_features_dither = feature_extractor_dither(
+            np_speech_inputs, padding=True, return_tensors="np"
+        ).input_features
 
         # test there is a difference between features (there's added noise to input signal)
         diff = input_features_dither - input_features_no_dither
