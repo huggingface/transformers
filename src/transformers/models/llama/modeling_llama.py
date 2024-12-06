@@ -1160,7 +1160,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # remove num_items_in_batch otherwise self.model attempts to pass it to flash_attention
-        num_items_in_batch = kwargs.pop("num_items_in_batch")
+        num_items_in_batch = kwargs.pop("num_items_in_batch", None)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
