@@ -247,26 +247,47 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 
 ## Installation
 
-### With pip
+### 1. With pip
 
 This repository is tested on Python 3.9+, Flax 0.4.1+, PyTorch 1.11+, and TensorFlow 2.6+.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
-First, create a virtual environment with the version of Python you're going to use and activate it.
+**a) First, create a virtual environment with the version of Python you're going to use and activate it.**
 
-Then, you will need to install at least one of Flax, PyTorch, or TensorFlow.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) installation pages regarding the specific installation command for your platform.
+**For macOS/Linux:**
+```python -m venv env
+source env/bin/activate
+```
+**For Windows:**
+``` python -m venv env
+env\Scripts\activate
+```
+
+**b) Install a backend framework:**
+To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or TensorFlow. Refer to the official installation guides for platform-specific commands:
+
+[TensorFlow installation page](https://www.tensorflow.org/install/), 
+[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) 
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
-```bash
+**c) Install 🤗 Transformers:**
+```
 pip install transformers
 ```
 
 If you'd like to play with the examples or need the bleeding edge of the code and can't wait for a new release, you must [install the library from source](https://huggingface.co/docs/transformers/installation#installing-from-source).
 
-### With conda
+**d) Optional: Install from source for the latest updates:**
+
+```
+git clone https://github.com/huggingface/transformers.git
+cd transformers
+pip install
+```
+
+### 2. With conda
 
 🤗 Transformers can be installed using conda as follows:
 
@@ -280,6 +301,39 @@ Follow the installation pages of Flax, PyTorch or TensorFlow to see how to insta
 
 > **_NOTE:_**  On Windows, you may be prompted to activate Developer Mode in order to benefit from caching. If this is not an option for you, please let us know in [this issue](https://github.com/huggingface/huggingface_hub/issues/1062).
 
+### 3. GPU Setup (Optional)
+
+For GPU acceleration, install the appropriate CUDA drivers for your system:
+
+a) PyTorch CUDA Compatibility: ( https://pytorch.org/get-started/locally)
+
+b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)
+
+**Verify GPU availability:**
+```
+nvidia-smi
+```
+### 4. Troubleshooting
+**a) Error: Python Version Not Supported:**
+
+Ensure you’re using Python 3.9 or later:
+```
+python --version
+```
+**b) Error: Missing Dependencies:**
+
+Install all required dependencies:
+```
+pip install -r requirements.txt
+```
+**c) Windows-Specific Issues:**
+
+Activate Developer Mode if prompted. Alternatively, use a virtual environment:
+```
+Copy code
+python -m venv env
+env\Scripts\activate
+```
 ## Model architectures
 
 **[All the model checkpoints](https://huggingface.co/models)** provided by 🤗 Transformers are seamlessly integrated from the huggingface.co [model hub](https://huggingface.co/models), where they are uploaded directly by [users](https://huggingface.co/users) and [organizations](https://huggingface.co/organizations).
