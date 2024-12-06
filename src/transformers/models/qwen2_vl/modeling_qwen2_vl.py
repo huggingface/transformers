@@ -527,7 +527,7 @@ def flash_attention_forward(
     mask: Optional[torch.Tensor],
     target_dtype: torch.dtype = torch.float16,
     **_kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
     dropout_rate = 0.0 if not config.training else config.attention_dropout
@@ -605,7 +605,7 @@ def sdpa_attention_forward(
     value: torch.Tensor,
     mask: Optional[torch.Tensor],
     **_kwargs,
-):
+) -> Tuple[torch.Tensor, torch.Tensor]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
