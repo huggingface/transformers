@@ -4290,6 +4290,7 @@ class GenerationMixin:
                     dim=0,
                 )
 
+            candidate_input_ids = candidate_input_ids.to(self.device)
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
             if "num_logits_to_keep" in model_inputs:
                 model_inputs["num_logits_to_keep"] = candidate_length + 1
