@@ -527,7 +527,7 @@ def flash_attention_forward(
     mask: Optional[torch.Tensor],
     target_dtype: torch.dtype = torch.float16,
     **_kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, None]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
     dropout_rate = 0.0 if not config.training else config.attention_dropout
@@ -572,7 +572,7 @@ def flex_attention_forward(
     value: torch.Tensor,
     mask: Optional[torch.Tensor],
     **_kwargs,
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -585,6 +585,8 @@ def flex_attention_forward(
             score += causal_mask[b][0][q_idx][kv_idx]
         return score
 
+    print(f"DEBUG: {key_states.shape=} {value_states.shape=}")
+
     attn_output, attn_weights = flex_attention(
         query,
         key_states,
@@ -594,6 +596,12 @@ def flex_attention_forward(
         return_lse=True,
     )
 
+    # lse is returned in float32
+    attn_weights = attn_weights.to(value_states.dtype)
+
+    print(f"DEBUG: {attn_output.shape=} {attn_weights.shape=}")
+
+    attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
 
