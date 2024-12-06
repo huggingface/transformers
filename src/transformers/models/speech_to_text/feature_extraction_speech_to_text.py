@@ -53,7 +53,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors.
         dither (`float`, *optional*, defaults to 0.0):
-            Adds dithering. In other words, adds a small Gaussian noise to each frame).
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
             E.g. use 4.0 to add dithering with a normal distribution centered
             around 0.0 with standard deviation 4.0 (assuming [-32k,+32k] range of kaldi waveform).
             The value 0.0 means no dithering.

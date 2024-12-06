@@ -58,7 +58,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         dither (`float`, *optional*, defaults to 0.0):
-            Adds dithering. In other words, adds a small Gaussian noise to each frame).
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
             E.g. use 0.0001 to add dithering with a normal distribution centered
             around 0.0 with standard deviation 0.0001 (assuming [-1,+1] range of raw_speech).
             The value 0.0 means no dithering.
