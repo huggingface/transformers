@@ -80,15 +80,10 @@ class BambaConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-<<<<<<< HEAD
-        attn_layer_indices (`<fill_type>`, *optional*): <fill_docstring>
-        attn_rotary_emb (`<fill_type>`, *optional*): <fill_docstring>
-=======
         attn_layer_indices (`list`, *optional*, defaults to None):
             Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
         attn_rotary_emb (`int`, *optional*, defaults to 64):
             The embedding dimension of RoPE. Must be smaller than hidden_size / num_attention_heads.
->>>>>>> 5671778d0b654c96d5ef2f5fe86ca02a7fd15819
         use_mamba_kernels (`bool`, *optional*, defaults to `True`):
             Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
             `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
@@ -177,6 +172,7 @@ class BambaConfig(PretrainedConfig):
         self.attn_layer_indices = attn_layer_indices
         self.attn_rotary_emb = attn_rotary_emb
         self.rope_theta = 10000.0
+        self.rope_scaling = None
         self.partial_rotary_factor = 0.5
 
         mamba_intermediate = mamba_expand * hidden_size

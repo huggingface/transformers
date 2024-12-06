@@ -45,16 +45,16 @@ def convert_state_dict_from_mamba_ssm(original_sd: Dict) -> Dict[str, torch.Tens
 
         # for block layernorm
         k = re.sub(r"(\d+)\.norm\.", r"\1.input_layernorm.", k)
-        k = re.sub(r"(\d+)\.norm2\.", r"\1.pre_ff_layernorm.", k)
+        k = re.sub(r"(\d+)\.norm2\.", r"\1.post_attention_layernorm.", k)
 
         # for mlp
-        k = k.replace("mlp.fc2", "feed_forward.down_proj")
+        k = k.replace("mlp.fc2", "mlp.down_proj")
 
         if "mlp.fc1" in k:
             param, param2 = torch.chunk(param, 2, dim=0)
-            k2 = k.replace("mlp.fc1", "feed_forward.gate_proj")
+            k2 = k.replace("mlp.fc1", "mlp.gate_proj")
             state_dict[k2] = param2
-            k = k.replace("mlp.fc1", "feed_forward.up_proj")
+            k = k.replace("mlp.fc1", "mlp.up_proj")
 
         if (
             ('in_proj' in k and orig_k.replace('in_proj', 'conv1d') in original_sd)
