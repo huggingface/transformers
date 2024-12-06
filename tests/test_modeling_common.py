@@ -187,6 +187,22 @@ def _deepspeed_zero3(ds_config):
         unset_hf_deepspeed_config()
 
 
+def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
+    if version.parse(torch.__version__).release < version.parse("2.3").release:
+        return torch.backends.cuda.sdp_kernel(
+            enable_flash=enable_flash, enable_math=enable_math, enable_mem_efficient=enable_mem_efficient
+        )
+
+    backends = []
+    if enable_flash:
+        backends += [torch.nn.attention.SDPBackend.FLASH_ATTENTION]
+    if enable_math:
+        backends += [torch.nn.attention.SDPBackend.MATH]
+    if enable_mem_efficient:
+        backends += [torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION]
+    return torch.nn.attention.sdpa_kernel(backends)
+
+
 @require_torch
 class ModelTesterMixin:
     model_tester = None
@@ -2343,7 +2359,8 @@ class ModelTesterMixin:
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
-                    else:
+                    # model might return non-tensors objects (e.g. Cache class)
+                    elif isinstance(tuple_object, torch.Tensor):
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
@@ -2538,7 +2555,11 @@ class ModelTesterMixin:
             tf_outputs[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}).")
+            self.assertLessEqual(
+                max_diff,
+                tol,
+                f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}",
+            )
         else:
             raise ValueError(
                 "`tf_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `tf.Tensor`. Got"
@@ -2614,7 +2635,7 @@ class ModelTesterMixin:
 
             tf_model_class = getattr(transformers, tf_model_class_name)
 
-            pt_model = model_class(config)
+            pt_model = model_class(config).eval()
             tf_model = tf_model_class(config)
 
             pt_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
@@ -4170,7 +4191,7 @@ class ModelTesterMixin:
 
                                     # TODO: test gradients as well (& for FA2 as well!)
                                     with torch.no_grad():
-                                        with torch.backends.cuda.sdp_kernel(
+                                        with sdpa_kernel(
                                             enable_flash=enable_kernels,
                                             enable_math=True,
                                             enable_mem_efficient=enable_kernels,
@@ -4193,6 +4214,12 @@ class ModelTesterMixin:
                                     if torch_device in ["cpu", "cuda"]:
                                         atol = atols[torch_device, enable_kernels, torch_dtype]
                                         rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                    elif torch_device == "xpu":
+                                        # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                        # which is implemented on PyTorch level using aten operators and is
+                                        # device agnostic with respect to implementation of each aten operator.
+                                        atol = atols["cuda", False, torch_dtype]
+                                        rtol = rtols["cuda", False, torch_dtype]
                                     else:
                                         atol = 1e-7
                                         rtol = 1e-4
