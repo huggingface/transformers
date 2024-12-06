@@ -317,7 +317,6 @@ def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: 
 def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name: str):
     tests_path = REPO_PATH / "tests" / "models" / model_name
     test_file = tests_path / f"test_image_processing_{model_name}.py"
-    print(test_file)
     if not os.path.exists(test_file):
         logger.warning(f"No test file found for {model_name}. Skipping.")
         return
@@ -443,8 +442,6 @@ def add_fast_image_processor_file(
     slow_class_content = match.group(0).rstrip()
     # get class docstring
     match = re.search(r'r"""(.*?)"""', slow_class_content, re.DOTALL)
-    print("class_docstring")
-    print(match.group(0))
     if not match:
         print(
             f"Couldn't find the docstring for {fast_image_processor_name[:-4]} in {fast_image_processing_module_file}"
@@ -477,7 +474,6 @@ def add_fast_image_processor_file(
 
     # build default args dict
     default_args_dict = dict(zip(arg_names, default_args))
-    print("init", init)
     pattern_default_size = r"size = size if size is not None else\s+(.*)"
     match_default_size = re.findall(pattern_default_size, init)
     default_args_dict["size"] = match_default_size[0] if match_default_size else None

@@ -225,11 +225,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def resize(
         self,
-        image: np.ndarray,
+        image: "torch.Tensor",
         size: Dict[str, int],
         resample: "F.InterpolationMode" = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> "torch.Tensor":
         """
         Resize an image to `(size["height"], size["width"])`.
 
@@ -422,8 +422,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Describes the maximum input dimensions to the model.
-            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
-                Patch size in the model. Used to calculate the image after resizing.
             resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
