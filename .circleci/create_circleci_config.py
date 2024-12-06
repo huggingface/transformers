@@ -391,9 +391,14 @@ def create_circleci_config(folder=None):
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
-        "jobs": {j.job_name: j.to_dict() for j in jobs},
-        "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+        "jobs": {j.job_name: j.to_dict() for j in jobs}
     }
+    if "CIRCLE_TOKEN" in os.environ:
+        # For private forked repo. (e.g. new model addition)
+        config["workflows"] = {"version": 2, "run_tests": {"jobs": [{j.job_name: {"context": ["TRANSFORMERS_CONTEXT"]}} for j in jobs]}}
+    else:
+        # For public repo. (e.g. `transformers`)
+        config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
         f.write(yaml.dump(config, sort_keys=False, default_flow_style=False).replace("' << pipeline", " << pipeline").replace(">> '", " >>"))
 
