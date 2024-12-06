@@ -55,6 +55,7 @@ from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLVisionConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
+
     from ...modeling_flash_attention_utils import _flash_attention_forward
 else:
     flash_attn_varlen_func = None
