@@ -638,7 +638,7 @@ def sdpa_attention_forward(
 
 QWEN2_VL_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    "flex_attention": eager_attention_forward,
+    "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
