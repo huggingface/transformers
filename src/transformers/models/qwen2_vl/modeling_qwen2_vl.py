@@ -62,6 +62,7 @@ else:
 if is_torch_greater_or_equal("2.5"):
     from torch.nn.attention.flex_attention import flex_attention
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Qwen2VLConfig"
@@ -349,7 +350,7 @@ class VisionAttention(nn.Module):
         q = q.transpose(0, 1)
         k = k.transpose(0, 1)
         v = v.transpose(0, 1)
-        attn_weights = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(config.head_dim)
+        attn_weights = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(self.head_dim)
         attn_weights = attn_weights + attention_mask
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
         attn_output = torch.matmul(attn_weights, v)
@@ -606,7 +607,7 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
 
 QWEN2_VL_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    "flex_attention": flex_attention_forward,
+    "flex_attention": eager_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -622,6 +623,12 @@ class Qwen2VLAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -634,25 +641,16 @@ class Qwen2VLAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.rope_scaling = config.rope_scaling
 
-        if (
-            self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            self.sliding_window = self.config.sliding_window
-        else:
-            self.sliding_window = None
-
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+
         self.rotary_emb = Qwen2VLRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
@@ -700,11 +698,11 @@ class Qwen2VLAttention(nn.Module):
 
         if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
             logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            attention_type = "eager"
+            attention_type = "flex_attention"
         else:
             attention_type = self.config._attn_implementation
 
-        attn_output, attn_weights = QWEN2_VL_ATTENTION_FUNCTION[attention_type](
+        attention_output, attention_weights = QWEN2_VL_ATTENTION_FUNCTION[attention_type](
             self,
             query_states,
             key_states,
@@ -714,31 +712,32 @@ class Qwen2VLAttention(nn.Module):
             position_ids=position_ids,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-        attn_output = self.o_proj(attn_output)
+        attention_output = attention_output.reshape(bsz, q_len, -1)
+        attention_output = self.o_proj(attention_output)
 
         if not output_attentions:
-            attn_weights = None
+            attention_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attention_output, attention_weights, past_key_value
 
 
 class Qwen2VLFlashAttention2(Qwen2VLAttention):
-    def __init__(self, config: Qwen2VLConfig, layer_idx: Optional[int] = None):
-        super().__init__(config, layer_idx)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.config._attn_implementation = "flash_attention_2"
         logger.warning_once(
-            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
+            "The `Qwen2VLFlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
+            "attribute of the `Qwen2VLAttention` class! It will be removed in v4.48"
         )
 
+
 class Qwen2VLSdpaAttention(Qwen2VLAttention):
-    def __init__(self, config: Qwen2VLConfig, layer_idx: Optional[int] = None):
-        super().__init__(config, layer_idx)
-        self.config._attn_implementation = "flash_attention_2"
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.config._attn_implementation = "sdpa"
         logger.warning_once(
-            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
+            "The `Qwen2VLSdpaAttention` class is deprecated in favor of simply modifying the `config._attn_implementation`"
+            "attribute of the `Qwen2VLAttention` class! It will be removed in v4.48"
         )
 
 
