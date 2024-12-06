@@ -73,24 +73,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
-
         if self.is_compressed and not self.run_compressed:
             config = kwargs.get("config", None)
             cache_path = config._name_or_path
             if not os.path.exists(cache_path):
-                from huggingface_hub import hf_hub_download
+                from transformers.utils import cached_file
 
-                from transformers import TRANSFORMERS_CACHE
-                from transformers.utils import http_user_agent
-
-                user_agent = http_user_agent()
-                config_file_path = hf_hub_download(
-                    repo_id=cache_path,
-                    filename="config.json",
-                    cache_dir=TRANSFORMERS_CACHE,
-                    force_download=False,
-                    user_agent=user_agent,
-                )
+                config_file_path = cached_file(cache_path, "config.json")
                 cache_path = os.path.sep.join(config_file_path.split(os.path.sep)[:-1])
 
             from compressed_tensors.quantization import QuantizationStatus
