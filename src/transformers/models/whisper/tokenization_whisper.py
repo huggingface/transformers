@@ -673,7 +673,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def decode(
         self,
         token_ids,
-        skip_special_tokens: bool = False,
+        skip_special_tokens: bool = True,
         clean_up_tokenization_spaces: bool = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
@@ -692,9 +692,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Args:
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
-            skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
-                if present.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whisper's generate does not output special tokens. This argument is kept for compatibility.
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
@@ -720,6 +719,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence.
         """
+        if skip_special_tokens is False:
+            logger.warning(
+                "You have passed skip_special_tokens=False, but Whisper's generate does not output special tokens. This argument will have no effect."
+            )
+
         filtered_ids = self._preprocess_token_ids(
             token_ids,
             skip_special_tokens=skip_special_tokens,
