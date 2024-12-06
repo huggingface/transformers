@@ -501,7 +501,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) / math.sqrt(config.head_dim)
 
-    if mask is not None and len(mask.shape) == 4:  # no matter the length, we just slice it
+    if mask is not None:  # no matter the length, we just slice it
         causal_mask = mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
