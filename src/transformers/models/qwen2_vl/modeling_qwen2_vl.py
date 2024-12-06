@@ -537,9 +537,9 @@ def flash_attention_forward(
     # cast them back in float16 just to be sure everything works as expected.
     input_dtype = query.dtype
     if input_dtype != target_dtype:
-         query = query.to(target_dtype)
-         key_states = key_states.to(target_dtype)
-         value_states = value_states.to(target_dtype)
+        query = query.to(target_dtype)
+        key_states = key_states.to(target_dtype)
+        value_states = value_states.to(target_dtype)
 
     # Reashape to the expected shape for Flash Attention
     query_states = query.transpose(1, 2)
@@ -638,7 +638,7 @@ def sdpa_attention_forward(
 
 QWEN2_VL_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    "flex_attention": sdpa_attention_forward, # TODO: fix errors
+    "flex_attention": sdpa_attention_forward,  # TODO: fix errors
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -673,10 +673,10 @@ class Qwen2VLAttention(nn.Module):
         self.rope_scaling = config.rope_scaling
 
         if (
-             self.config.use_sliding_window
-             and getattr(self.config, "sliding_window", None) is not None
-             and self.layer_idx >= self.config.max_window_layers
-         ):
+            self.config.use_sliding_window
+            and getattr(self.config, "sliding_window", None) is not None
+            and self.layer_idx >= self.config.max_window_layers
+        ):
             self.sliding_window = self.config.sliding_window
         else:
             self.sliding_window = None
