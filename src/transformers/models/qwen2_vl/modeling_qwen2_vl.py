@@ -573,7 +573,7 @@ def flex_attention_forward(
     mask: Optional[torch.Tensor],
     output_attentions: bool = False,
     **_kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
         score = soft_cap * torch.tanh(score / soft_cap)
