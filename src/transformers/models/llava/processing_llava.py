@@ -162,7 +162,7 @@ class LlavaProcessor(ProcessorMixin):
                     width // self.patch_size
                 ) + self.num_additional_image_tokens
                 if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= self.num_additional_image_tokens
+                    num_image_tokens -= 1
 
                 prompt_strings = []
                 for sample in text:
