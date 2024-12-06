@@ -766,7 +766,6 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         image_processor_class = image_processor_classes[0]  # we take the slow image processor class.
     else:
         image_processor_class = image_processor_classes
-
     feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
     processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
