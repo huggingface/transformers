@@ -45,7 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_grouped_gemm_available, is_torch_available
+from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -96,14 +96,6 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
         out = torch.matmul(tokens, expert_weights[expert_num])
         output[start:end] = out
     return output
-
-
-if is_grouped_gemm_available():
-    from grouped_gemm.ops import gmm
-else:
-    gmm = None
-
-experts_gemm = gmm if gmm is not None else sequential_experts_gemm
 
 
 class AriaTextConfig(LlamaConfig):
@@ -1044,7 +1036,7 @@ class AriaGroupedExpertsGemm(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
-        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features, dtype=torch.bfloat16))
+        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
 
     def forward(self, input, tokens_per_expert):
         """
@@ -1059,15 +1051,11 @@ class AriaGroupedExpertsGemm(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (num_tokens, out_features).
         """
-        # Ensure the CUDA device matches the input tensor's device.
-        # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
-        # with `device_map="auto"` on a multi-GPU setup.
-        original_dtype = input.dtype
-        return experts_gemm(
-            input.to(device=self.weight.device, dtype=torch.bfloat16),
-            self.weight.to(dtype=torch.bfloat16),
+        return sequential_experts_gemm(
+            input,
+            self.weight,
             tokens_per_expert.cpu(),
-        ).to(dtype=original_dtype)
+        )
 
 
 class AriaGroupedExpertsMLP(nn.Module):

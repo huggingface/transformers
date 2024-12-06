@@ -448,10 +448,6 @@ def is_mamba_2_ssm_available():
     return False
 
 
-def is_grouped_gemm_available():
-    return _is_package_available("grouped_gemm")
-
-
 def is_causal_conv1d_available():
     if is_torch_available():
         import torch

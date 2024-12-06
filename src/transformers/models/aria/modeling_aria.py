@@ -39,7 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_grouped_gemm_available, is_torch_available
+from ...utils.import_utils import is_torch_available
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_aria import AriaConfig, AriaTextConfig
 
@@ -47,12 +47,6 @@ from .configuration_aria import AriaConfig, AriaTextConfig
 if is_torch_available():
     import torch
     from torch import nn
-
-
-if is_grouped_gemm_available():
-    from grouped_gemm.ops import gmm
-else:
-    gmm = None
 
 
 logger = logging.get_logger(__name__)
@@ -281,9 +275,6 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     return output
 
 
-experts_gemm = gmm if gmm is not None else sequential_experts_gemm
-
-
 class AriaGroupedExpertsGemm(nn.Module):
     """
     Grouped GEMM (General Matrix Multiplication) module for efficient expert computation.
@@ -306,7 +297,7 @@ class AriaGroupedExpertsGemm(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
-        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features, dtype=torch.bfloat16))
+        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
 
     def forward(self, input, tokens_per_expert):
         """
@@ -321,15 +312,11 @@ class AriaGroupedExpertsGemm(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (num_tokens, out_features).
         """
-        # Ensure the CUDA device matches the input tensor's device.
-        # This mismatch can occur when using `transformers.AutoModel.from_pretrained`
-        # with `device_map="auto"` on a multi-GPU setup.
-        original_dtype = input.dtype
-        return experts_gemm(
-            input.to(device=self.weight.device, dtype=torch.bfloat16),
-            self.weight.to(dtype=torch.bfloat16),
+        return sequential_experts_gemm(
+            input,
+            self.weight,
             tokens_per_expert.cpu(),
-        ).to(dtype=original_dtype)
+        )
 
 
 class AriaGroupedExpertsMLP(nn.Module):
