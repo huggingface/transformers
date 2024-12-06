@@ -573,23 +573,27 @@ def flex_attention_forward(
     mask: Optional[torch.Tensor],
     **_kwargs,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-    def tanh_softcap(score, b, h, q_idx, kv_idx):
-        soft_cap = config.attn_logit_softcapping
-        score = soft_cap * torch.tanh(score / soft_cap)
-        if mask is not None:
-            return score + mask[b][0][q_idx][kv_idx]
+    key_states = repeat_kv(key, config.num_key_value_groups)
+    value_states = repeat_kv(value, config.num_key_value_groups)
+
+    causal_mask = mask
+    if causal_mask is not None:
+        causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+    def causal_mod(score, b, h, q_idx, kv_idx):
+        if causal_mask is not None:
+            score += causal_mask[b][0][q_idx][kv_idx]
         return score
 
     attn_output, attn_weights = flex_attention(
         query,
-        key,
-        value,
-        score_mod=tanh_softcap,
+        key_states,
+        value_states,
+        score_mod=causal_mod,
         enable_gqa=True,
         return_lse=True,
     )
 
-    attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
 
@@ -733,18 +737,9 @@ class Qwen2VLAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        #if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
-            #logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            #attention_type = "flex_attention"
-        #else:
-            #attention_type = self.config._attn_implementation
-
-        if output_attentions:
-            logger.warning_once(
-                f"Qwen2VLModel is using {self.config._attn_implementation}, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            attention_type = "eager"
+        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
+            attention_type = "flex_attention"
         else:
             attention_type = self.config._attn_implementation
 
