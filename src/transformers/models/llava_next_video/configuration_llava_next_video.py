@@ -104,7 +104,6 @@ class LlavaNextVideoConfig(PretrainedConfig):
         spatial_pool_stride=2,
         image_seq_length=576,
         video_seq_length=288,
-        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.video_token_index = video_token_index

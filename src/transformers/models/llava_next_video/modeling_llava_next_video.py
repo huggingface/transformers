@@ -1148,7 +1148,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         video_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_video_features = video_features.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
-            selected_video_features = selected_video_features[:, self.num_additional_image_tokens :]
+            selected_video_features = selected_video_features[:, 1:]
         elif vision_feature_select_strategy == "full":
             selected_video_features = selected_video_features
 

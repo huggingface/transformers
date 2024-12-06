@@ -92,7 +92,6 @@ class LlavaNextConfig(PretrainedConfig):
         image_grid_pinpoints=None,
         tie_word_embeddings=False,
         image_seq_length=576,
-        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.ignore_index = ignore_index
