@@ -1063,8 +1063,6 @@ class AriaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedExpertsGemm):
-            module.weight.data.normal_(mean=0.0, std=std)
         elif isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=std)
 
