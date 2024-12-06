@@ -18,8 +18,11 @@ def parse_pytest_output(file_path):
 def parse_pytest_failure_output(file_path):
     failed_tests = {}
     failed_count = 0
+    has_error = False
     with open(file_path, 'r') as file:
         for line in file:
+            if "==== ERRORS ===" in line:
+                has_error = True
             match = re.match(r'^FAILED (tests/.*) - (.*): (.*)$', line)
             if match:
                 failed_count += 1
@@ -28,7 +31,8 @@ def parse_pytest_failure_output(file_path):
     for k,v in sorted(failed_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} failed because `{v[0]}` -> {k}")
     print("Number of failed tests:", failed_count)
-    if failed_count>0:
+    print("Error encountered:", has_error)
+    if failed_count > 0 or has_error:
         exit(1)
 
 def parse_pytest_errors_output(file_path):
