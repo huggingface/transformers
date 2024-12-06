@@ -15,6 +15,7 @@
 # limitations under the License.
 import copy
 import inspect
+import os
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
@@ -44,7 +45,6 @@ from ..utils import (
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
-    is_quanto_available,
     is_torchdynamo_compiling,
     logging,
 )
@@ -54,6 +54,7 @@ from .candidate_generator import (
     AssistedCandidateGenerator,
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
+    EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
     _crop_past_key_values,
     _prepare_attention_mask,
@@ -378,10 +379,14 @@ class GenerationMixin:
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None or cache_position[-1] >= input_ids.shape[1]:  # Exception 1 or Exception 3
+            if (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -414,8 +419,13 @@ class GenerationMixin:
         for model_input_name in ["position_ids", "token_type_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
-                if past_key_values:
-                    model_input = model_input[:, -input_ids.shape[1] :]
+                if past_key_values is not None:
+                    current_input_length = (
+                        model_inputs["inputs_embeds"].shape[1]
+                        if model_inputs["inputs_embeds"] is not None
+                        else model_inputs[input_ids_key].shape[1]
+                    )
+                    model_input = model_input[:, -current_input_length:]
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input
 
@@ -568,27 +578,34 @@ class GenerationMixin:
 
     def _prepare_attention_mask_for_generation(
         self,
-        inputs: torch.Tensor,
-        pad_token_id: Optional[torch.Tensor],
-        eos_token_id: Optional[torch.Tensor],
+        inputs_tensor: torch.Tensor,
+        generation_config: GenerationConfig,
+        model_kwargs: Dict[str, Any],
     ) -> torch.LongTensor:
+        pad_token_id = generation_config._pad_token_tensor
+        eos_token_id = generation_config._eos_token_tensor
+
+        # `input_ids` may be present in the model kwargs, instead of being the main input (e.g. multimodal model)
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
         # No information for attention mask inference -> return default attention mask
-        default_attention_mask = torch.ones(inputs.shape[:2], dtype=torch.long, device=inputs.device)
+        default_attention_mask = torch.ones(inputs_tensor.shape[:2], dtype=torch.long, device=inputs_tensor.device)
         if pad_token_id is None:
             return default_attention_mask
 
-        is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
         if not is_input_ids:
             return default_attention_mask
 
         is_pad_token_in_inputs = (pad_token_id is not None) and (
-            isin_mps_friendly(elements=inputs, test_elements=pad_token_id).any()
+            isin_mps_friendly(elements=inputs_tensor, test_elements=pad_token_id).any()
         )
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
             isin_mps_friendly(elements=eos_token_id, test_elements=pad_token_id).any()
         )
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
-        attention_mask_from_padding = inputs.ne(pad_token_id).long()
+        attention_mask_from_padding = inputs_tensor.ne(pad_token_id).long()
 
         attention_mask = (
             attention_mask_from_padding * can_infer_attention_mask + default_attention_mask * ~can_infer_attention_mask
@@ -811,7 +828,16 @@ class GenerationMixin:
         """
         different_tokenizers = all(v is not None for v in (assistant_model, target_tokenizer, assistant_tokenizer))
 
-        if generation_config.prompt_lookup_num_tokens is not None:
+        if generation_config.assistant_early_exit is not None:
+            candidate_generator = EarlyExitCandidateGenerator(
+                input_ids=input_ids,
+                assistant_model=self,
+                generation_config=generation_config,
+                model_kwargs=model_kwargs,
+                inputs_tensor=inputs_tensor,
+                logits_processor=logits_processor,
+            )
+        elif generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
                 eos_token_id=generation_config._eos_token_tensor,
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
@@ -1008,10 +1034,6 @@ class GenerationMixin:
                 "You have explicitly specified `forced_decoder_ids`. Please remove the `forced_decoder_ids` argument "
                 "in favour of `input_ids` or `decoder_input_ids` respectively.",
             )
-        if generation_config.watermarking_config is not None:
-            processors.append(
-                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
-            )
 
         # TODO (joao): find a strategy to specify the order of the processors
         processors = self._merge_criteria_processor_list(processors, logits_processor)
@@ -1063,6 +1085,12 @@ class GenerationMixin:
                         epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
                     )
                 )
+
+        # Watermarking should be after all logits processing is finished (see #34630)
+        if generation_config.watermarking_config is not None:
+            processors.append(
+                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
+            )
 
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -1441,10 +1469,11 @@ class GenerationMixin:
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
-            generation_config.max_length = generation_config.max_length + input_ids_length
-            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
-            if max_position_embeddings is not None:
-                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+            if generation_config.max_length == GenerationConfig().max_length:
+                generation_config.max_length = generation_config.max_length + input_ids_length
+                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+                if max_position_embeddings is not None:
+                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1580,7 +1609,7 @@ class GenerationMixin:
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
-            or cache_to_check.batch_size != batch_size
+            or cache_to_check.max_batch_size != batch_size
         )
         if cache_implementation != "mamba":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
@@ -1624,7 +1653,10 @@ class GenerationMixin:
             # This is needed here if we don't want to make changes in accelerate in order to save execution_device
             # For offloaded case, we need to get the execution device, not just the device where it is offloaded
             if hasattr(self, "hf_device_map"):
-                main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
+                if set(self.hf_device_map.values()) == {"cpu"} or set(self.hf_device_map.values()) == {"cpu", "disk"}:
+                    main_device = "cpu"
+                else:
+                    main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
                 execution_device_map = {
                     name: main_device if device in ["cpu", "disk"] else device
                     for name, device in self.hf_device_map.items()
@@ -1633,7 +1665,7 @@ class GenerationMixin:
 
             cache_kwargs = {
                 "config": self.config.get_text_config(),
-                "batch_size": batch_size,
+                "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,
@@ -1754,7 +1786,7 @@ class GenerationMixin:
                 )
                 cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
 
-                if cache_config.backend == "quanto" and not (is_optimum_quanto_available() or is_quanto_available()):
+                if cache_config.backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
                         "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
                         "Please install it via  with `pip install optimum-quanto`"
@@ -1833,8 +1865,8 @@ class GenerationMixin:
                         "The attention mask and the pad token id were not set. As a consequence, you may observe "
                         "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                     )
-                logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
             pad_token_tensor = eos_token_tensor[0]
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
@@ -2020,7 +2052,7 @@ class GenerationMixin:
 
         if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                inputs_tensor, generation_config._pad_token_tensor, generation_config._eos_token_tensor
+                inputs_tensor, generation_config, model_kwargs
             )
         elif kwargs_has_attention_mask:
             # TODO (joao): generalize this check with other types of inputs
@@ -3197,6 +3229,14 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
+        model_forward = self.__call__
+        if isinstance(model_kwargs.get("past_key_values"), StaticCache):
+            if self.device.type == "cuda":
+                logger.warning_once("Using `torch.compile`.")
+                os.environ["TOKENIZERS_PARALLELISM"] = "0"
+                model_forward = self.get_compiled_call(generation_config.compile_config)
+
+        is_prefill = True
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -3207,8 +3247,11 @@ class GenerationMixin:
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
-            # forward pass to get next token
-            outputs = self(**model_inputs, return_dict=True)
+            if is_prefill:
+                outputs = self(**model_inputs, return_dict=True)
+                is_prefill = False
+            else:
+                outputs = model_forward(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -3221,7 +3264,7 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            next_token_logits = outputs.logits.clone()[:, -1, :].float()
+            next_token_logits = outputs.logits[:, -1, :].clone().float()
             next_token_logits = next_token_logits.to(input_ids.device)
 
             # pre-process distribution
