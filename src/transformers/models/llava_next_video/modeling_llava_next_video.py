@@ -396,7 +396,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
-        self.num_additional_image_tokens = config.num_additional_image_tokens
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
@@ -783,7 +782,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, self.num_additional_image_tokens :]
+            selected_image_feature = selected_image_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
             selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)

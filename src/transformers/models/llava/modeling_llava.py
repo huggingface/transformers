@@ -240,7 +240,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self.num_additional_image_tokens = config.num_additional_image_tokens
 
         self.post_init()
 
@@ -293,7 +292,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, self.num_additional_image_tokens :]
+            selected_image_feature = selected_image_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
             selected_image_feature = selected_image_feature
         else:

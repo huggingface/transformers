@@ -371,7 +371,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.num_additional_image_tokens = config.num_additional_image_tokens
         self.post_init()
 
     # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_input_embeddings
@@ -526,7 +525,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, self.num_additional_image_tokens :]
+            selected_image_feature = selected_image_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
             selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
@@ -557,7 +556,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         selected_video_feature = video_features.hidden_states[vision_feature_layer]
 
         if vision_feature_select_strategy == "default":
-            selected_video_feature = selected_video_feature[:, self.num_additional_image_tokens :]
+            selected_video_feature = selected_video_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
             selected_video_feature = selected_video_feature
         video_features = self.multi_modal_projector(selected_video_feature)

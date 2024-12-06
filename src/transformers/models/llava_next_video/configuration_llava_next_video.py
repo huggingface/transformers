@@ -65,9 +65,6 @@ class LlavaNextVideoConfig(PretrainedConfig):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 288):
             Sequence length of one video embedding.
-        num_additional_image_tokens (`int`, *optional*, defaults to 0):
-            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
-            extra tokens appended, no need to set this arg.
 
     Example:
 
@@ -160,6 +157,5 @@ class LlavaNextVideoConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
-        self.num_additional_image_tokens = num_additional_image_tokens
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
