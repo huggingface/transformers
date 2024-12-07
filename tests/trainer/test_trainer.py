@@ -762,7 +762,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         tokenizer.pad_token = tokenizer.eos_token
-        
+
         def tokenize_function(examples):
             return tokenizer(examples["text"], max_length=128, padding="max_length", truncation=True)
 
@@ -835,7 +835,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
 
         # all diff truth should be quite close
-        self.assertLess(max(diff_truth), 0.1, f"Difference {max(diff_truth)} is not within 0.1")
+        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
         # max diff broken should be very off
         self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
@@ -845,7 +845,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         set_seed(42)
         import datasets
 
-        model_name = "distilgpt2"
+        model_name = "roneneldan/TinyStories-33M"
         dataset_name = "wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:500]")
@@ -933,7 +933,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
 
         # all diff truth should be quite close
-        self.assertLess(max(diff_truth), 0.3, f"Difference {max(diff_truth)} is not within 0.3")
+        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
         # max diff broken should be very off
         self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
