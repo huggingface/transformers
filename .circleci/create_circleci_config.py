@@ -70,7 +70,7 @@ class CircleCIJob:
             # Let's avoid changing the default list and make a copy.
             self.docker_image = copy.deepcopy(DEFAULT_DOCKER_IMAGE)
         else:
-            # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
+            # BIG HACK WILL REMOVE ONCE THE FETCHER IS UPDATED
             print(os.environ.get("GIT_COMMIT_MESSAGE"))
             if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
                 self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
@@ -322,8 +322,8 @@ non_model_job = CircleCIJob(
 
 
 # We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure. Otherwise, the pytest
-# hangs forever during test collection while showing `collecting 0 items / 21 errors`. (To see this, we have to remove
-# the bash output redirection.)
+# hangs forever during test collection while showing `collecting 0 items / 21 errors`. (To see this, we need to remove
+# the bash output re-direction.)
 py_command = 'from utils.tests_fetcher import get_doctest_files; to_test = get_doctest_files() + ["dummy.py"]; to_test = " ".join(to_test); print(to_test)'
 py_command = f"$(python3 -c '{py_command}')"
 command = f'echo """{py_command}""" > pr_documentation_tests_temp.txt'
