@@ -12,17 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for ViT."""
+"""Fast Image processor class for SigLIP."""
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 
 
-class ViTImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+class SiglipImageProcessorFast(BaseImageProcessorFast):
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 224, "width": 224}
+    default_to_square = False
     do_resize = True
     do_rescale = True
     do_normalize = True

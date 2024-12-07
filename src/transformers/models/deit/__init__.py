@@ -18,6 +18,7 @@ from ...utils import (
     _LazyModule,
     is_tf_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -32,6 +33,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_deit"] = ["DeiTFeatureExtractor"]
     _import_structure["image_processing_deit"] = ["DeiTImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_deit_fast"] = ["DeiTImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -73,6 +82,14 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_deit import DeiTFeatureExtractor
         from .image_processing_deit import DeiTImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_deit_fast import DeiTImageProcessorFast
 
     try:
         if not is_torch_available():
