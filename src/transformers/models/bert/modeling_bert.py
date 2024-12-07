@@ -1376,7 +1376,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
 
         lm_loss = None
         if labels is not None:
-            lm_loss = self.loss_function(prediction_scores, labels, self.vocab_size, **loss_kwargs)
+            lm_loss = self.loss_function(prediction_scores, labels, self.config.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
