@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import PrismTokenizer
+from transformers import PrismTokenizer, is_torch_available
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -36,7 +36,9 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 if is_sentencepiece_available():
     SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
-
+    
+if is_torch_available():
+    from transformers.models.prism.modeling_prism import shift_tokens_right
 
 EN_CODE = 37
 FR_CODE = 85
@@ -81,7 +83,7 @@ class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "</s>")
         self.assertEqual(vocab_keys[1], "<unk>")
-        self.assertEqual(vocab_keys[-1], "<s>")
+        self.assertEqual(vocab_keys[10], "<s>")
 
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
@@ -107,7 +109,9 @@ class PrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class PrismTokenizerIntegrationTest(unittest.TestCase):
     checkpoint_name = CHECKPOINT_NAME
     src_text = ["Hi world.", "This is a Test.", "Some of my Best Friends are Linguists."]
-
+    tgt_text = ['Hé, monde!',
+ "C'est un test.",
+ 'Certains de mes meilleurs amis sont linguistes.']
     expected_src_tokens = [EN_CODE, 5050, 21, 1951, 13934, 33789, 7, 269, 11348, 983, 9393, 6, 2]
 
     @classmethod
@@ -177,7 +181,27 @@ class PrismTokenizerIntegrationTest(unittest.TestCase):
             self.tokenizer.save_pretrained(tmpdirname)
             new_tok = PrismTokenizer.from_pretrained(tmpdirname)
             self.assertDictEqual(new_tok.lang_token_to_id, original_special_tokens)
+    
+    @require_torch
+    def test_batch_fairseq_parity(self):
+        self.tokenizer.src_lang = "en"
+        self.tokenizer.tgt_lang = "fr"
 
+        batch = self.tokenizer(self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt")
+
+        batch["decoder_input_ids"] = shift_tokens_right(
+            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.eos_token_id
+        )
+
+        for k in batch:
+            batch[k] = batch[k].tolist()
+        
+        assert batch.input_ids[1][0] == EN_CODE
+        assert batch.input_ids[1][-1] == 1
+        assert batch.labels[1][0] == FR_CODE
+        assert batch.labels[1][-1] == 1
+        assert batch.decoder_input_ids[1][:2] == [2, FR_CODE]
+        
     def test_decoding(self):
         text = "Hello, world!"
         encoded = self.tokenizer.encode(text)
