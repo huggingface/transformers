@@ -339,7 +339,6 @@ class TextGenerationPipeline(Pipeline):
     def _forward(self, model_inputs, **generate_kwargs):
         input_ids = model_inputs["input_ids"]
         attention_mask = model_inputs.get("attention_mask", None)
-        # Allow empty prompts
         if input_ids.shape[1] == 0:
             input_ids = None
             attention_mask = None
@@ -348,8 +347,6 @@ class TextGenerationPipeline(Pipeline):
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
 
-        # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
-        # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
         prefix_length = generate_kwargs.pop("prefix_length", 0)
         if prefix_length > 0:
             has_max_new_tokens = "max_new_tokens" in generate_kwargs or (
@@ -366,40 +363,47 @@ class TextGenerationPipeline(Pipeline):
             if not has_min_new_tokens and "min_length" in generate_kwargs:
                 generate_kwargs["min_length"] += prefix_length
 
-        # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
 
         if isinstance(output, ModelOutput):
-            generated_sequences = output.sequences
+            generated_sequence = output.sequences
             other_outputs = {k: v for k, v in output.items() if k != "sequences"}
+            out_b = generated_sequence.shape[0]
+
+            if self.framework == "pt":
+                for key, value in other_outputs.items():
+                    if isinstance(value, torch.Tensor) and value.shape[0] == out_b:
+                        other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
+                    if isinstance(value, tuple) and len(value[0]) == out_b:
+                        value = torch.stack(value).swapaxes(0, 1)
+                        other_outputs[key] = value
+            elif self.framework == "tf":
+                for key, value in other_outputs.items():
+                    if isinstance(value, tf.Tensor) and value.shape[0] == out_b:
+                        other_outputs[key] = tf.reshape(value, (in_b, out_b // in_b, *value.shape[1:]))
+                    if isinstance(value, tuple) and len(value[0]) == out_b:
+                        value = tf.stack(value).swapaxes(0, 1)
+                        other_outputs[key] = value
         else:
-            generated_sequences = output
+            generated_sequence = output
             other_outputs = {}
 
-        out_b = generated_sequences.shape[0]
+        out_b = generated_sequence.shape[0]
         if self.framework == "pt":
-            generated_sequences = generated_sequences.reshape(in_b, out_b // in_b, *generated_sequences.shape[1:])
+            generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
         elif self.framework == "tf":
-            generated_sequences = tf.reshape(
-                generated_sequences, (in_b, out_b // in_b, *generated_sequences.shape[1:])
-            )
-
-        for key, value in other_outputs.items():
-            if isinstance(value, (torch.Tensor, tf.Tensor)) and value.shape[0] == out_b:
-                if self.framework == "pt":
-                    other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
-                elif self.framework == "tf":
-                    other_outputs[key] = tf.reshape(value, (in_b, out_b // in_b, *value.shape[1:]))
+            generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
 
         model_outputs = {
-            "generated_sequences": generated_sequences,
+            "generated_sequence": generated_sequence,
             "input_ids": input_ids,
             "prompt_text": prompt_text,
         }
         model_outputs.update(other_outputs)
+        model_outputs["additional_outputs"] = other_outputs
         return model_outputs
 
     def postprocess(
@@ -409,59 +413,44 @@ class TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=True,
         continue_final_message=None,
     ):
-        generated_sequences = model_outputs["generated_sequences"]
+        generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
-        other_outputs = {
-            k: v for k, v in model_outputs.items() if k not in ["generated_sequences", "input_ids", "prompt_text"]
-        }
 
-        batch_size, num_return_sequences, sequence_length = generated_sequences.shape
-        total_sequences = batch_size * num_return_sequences
-
-        if self.framework == "pt":
-            sequences = generated_sequences.reshape(total_sequences, sequence_length)
-            sequences = sequences.cpu().numpy().tolist()
+        if self.framework == "tf":
+            generated_sequence = generated_sequence.numpy().tolist()
         else:
-            sequences = tf.reshape(generated_sequences, (total_sequences, sequence_length))
-            sequences = sequences.numpy().tolist()
-
-        if input_ids is not None:
-            if self.framework == "pt":
-                input_ids = input_ids.cpu().numpy().tolist()
-            else:
-                input_ids = input_ids.numpy().tolist()
-        else:
-            input_ids = [None] * batch_size
-
-        if isinstance(prompt_text, list):
-            prompts = prompt_text
-        else:
-            prompts = [prompt_text] * batch_size
+            generated_sequence = generated_sequence.tolist()
 
         records = []
-        for idx, sequence in enumerate(sequences):
-            batch_idx = idx // num_return_sequences
-            input_id = input_ids[batch_idx]
-            prompt = prompts[batch_idx]
+        other_outputs = model_outputs.get("additional_outputs", {})
+        splitted_keys = {}
+        if other_outputs:
+            if self.framework == "pt":
+                for k, v in other_outputs.items():
+                    if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
+                        splitted_keys[k] = v.tolist()
+            elif self.framework == "tf":
+                for k, v in other_outputs.items():
+                    if isinstance(v, tf.Tensor) and v.shape[0] == len(generated_sequence):
+                        splitted_keys[k] = v.numpy().tolist()
 
-            record = {}
+        for idx, sequence in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
-                record["generated_token_ids"] = sequence
+                record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
-                # Decode text
                 text = self.tokenizer.decode(
                     sequence,
                     skip_special_tokens=True,
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
-                if input_id is None:
+                if input_ids is None:
                     prompt_length = 0
                 else:
                     prompt_length = len(
                         self.tokenizer.decode(
-                            input_id,
+                            input_ids[0],
                             skip_special_tokens=True,
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
@@ -469,32 +458,24 @@ class TextGenerationPipeline(Pipeline):
 
                 all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
-                    if isinstance(prompt, str):
-                        all_text = prompt + all_text
-                    elif isinstance(prompt, Chat):
+                    if isinstance(prompt_text, str):
+                        all_text = prompt_text + all_text
+                    elif isinstance(prompt_text, Chat):
                         if continue_final_message is None:
-                            continue_final_message = prompt.messages[-1]["role"] == "assistant"
+                            continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                         if continue_final_message:
-                            all_text = list(prompt.messages)[:-1] + [
+                            all_text = list(prompt_text.messages)[:-1] + [
                                 {
-                                    "role": prompt.messages[-1]["role"],
-                                    "content": prompt.messages[-1]["content"] + all_text,
+                                    "role": prompt_text.messages[-1]["role"],
+                                    "content": prompt_text.messages[-1]["content"] + all_text,
                                 }
                             ]
                         else:
-                            all_text = list(prompt.messages) + [{"role": "assistant", "content": all_text}]
-                record["generated_text"] = all_text
+                            all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
+                record = {"generated_text": all_text}
+                for key, values in splitted_keys.items():
+                    record[key] = values[idx]
 
-            for key, value in other_outputs.items():
-                if isinstance(value, (list, tuple)):
-                    record[key] = value[idx]
-                elif isinstance(value, (torch.Tensor, tf.Tensor)):
-                    if value.shape[0] == total_sequences:
-                        record[key] = value[idx]
-                    else:
-                        record[key] = value
-                else:
-                    record[key] = value
-            records.append(record)
+        records.append(record)
 
         return records
