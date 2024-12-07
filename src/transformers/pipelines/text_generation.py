@@ -12,7 +12,6 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
     from .pt_utils import KeyDataset
 
-
 if is_tf_available():
     import tensorflow as tf
 
@@ -339,6 +338,7 @@ class TextGenerationPipeline(Pipeline):
     def _forward(self, model_inputs, **generate_kwargs):
         input_ids = model_inputs["input_ids"]
         attention_mask = model_inputs.get("attention_mask", None)
+        # Allow empty prompts
         if input_ids.shape[1] == 0:
             input_ids = None
             attention_mask = None
@@ -347,6 +347,8 @@ class TextGenerationPipeline(Pipeline):
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
 
+        # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
+        # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
         prefix_length = generate_kwargs.pop("prefix_length", 0)
         if prefix_length > 0:
             has_max_new_tokens = "max_new_tokens" in generate_kwargs or (
@@ -363,6 +365,7 @@ class TextGenerationPipeline(Pipeline):
             if not has_min_new_tokens and "min_length" in generate_kwargs:
                 generate_kwargs["min_length"] += prefix_length
 
+        # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
@@ -403,7 +406,6 @@ class TextGenerationPipeline(Pipeline):
             "prompt_text": prompt_text,
         }
         model_outputs.update(other_outputs)
-        model_outputs["additional_outputs"] = other_outputs
         return model_outputs
 
     def postprocess(
@@ -416,12 +418,7 @@ class TextGenerationPipeline(Pipeline):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
-
-        if self.framework == "tf":
-            generated_sequence = generated_sequence.numpy().tolist()
-        else:
-            generated_sequence = generated_sequence.tolist()
-
+        generated_sequence = generated_sequence.numpy().tolist()
         records = []
         other_outputs = model_outputs.get("additional_outputs", {})
         splitted_keys = {}
@@ -429,7 +426,7 @@ class TextGenerationPipeline(Pipeline):
             if self.framework == "pt":
                 for k, v in other_outputs.items():
                     if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
-                        splitted_keys[k] = v.tolist()
+                        splitted_keys[k] = v.numpy().tolist()
             elif self.framework == "tf":
                 for k, v in other_outputs.items():
                     if isinstance(v, tf.Tensor) and v.shape[0] == len(generated_sequence):
@@ -439,12 +436,14 @@ class TextGenerationPipeline(Pipeline):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
+                # Decode text
                 text = self.tokenizer.decode(
                     sequence,
                     skip_special_tokens=True,
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
+                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
                 if input_ids is None:
                     prompt_length = 0
                 else:
@@ -462,8 +461,11 @@ class TextGenerationPipeline(Pipeline):
                         all_text = prompt_text + all_text
                     elif isinstance(prompt_text, Chat):
                         if continue_final_message is None:
+                            # If the user passes a chat ending in an assistant message, we treat it as a prefill by
+                            # default because very few models support multiple separate, consecutive assistant messages
                             continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                         if continue_final_message:
+                            # With assistant prefill, concat onto the end of the last message
                             all_text = list(prompt_text.messages)[:-1] + [
                                 {
                                     "role": prompt_text.messages[-1]["role"],
@@ -471,11 +473,11 @@ class TextGenerationPipeline(Pipeline):
                                 }
                             ]
                         else:
+                            # When we're not starting from a prefill, the output is a new assistant message
                             all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
                 record = {"generated_text": all_text}
                 for key, values in splitted_keys.items():
                     record[key] = values[idx]
-
-        records.append(record)
+            records.append(record)
 
         return records
