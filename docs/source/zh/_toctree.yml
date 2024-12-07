@@ -100,7 +100,7 @@
 - sections:
   - sections:
     - local: main_classes/agent
-      title: Agents和工具
+      title: 智能体和工具
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
