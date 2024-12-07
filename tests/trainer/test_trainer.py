@@ -762,8 +762,9 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         tokenizer.pad_token = tokenizer.eos_token
+        
         def tokenize_function(examples):
-            return tokenizer(examples["text"], max_length=128, padding='max_length', truncation=True)
+            return tokenizer(examples["text"], max_length=128, padding="max_length", truncation=True)
 
         tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
 
