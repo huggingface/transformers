@@ -325,7 +325,10 @@ class TextNetModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         output = model(**inputs)
+
+        # verify logits
         self.assertEqual(output.logits.shape, torch.Size([1, 2]))
+        self.assertTrue(torch.allclose(output.logits[:3, :3]), torch.zeros_like((output.logits[:3, :3])), atol=1e-3)
 
 
 @require_torch
