@@ -859,7 +859,6 @@ class Idefics2PerceiverAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with MistralAttention->Idefics2PerceiverAttention,MistralFlashAttention->Idefics2PerceiverFlashAttention,Mistral->Idefics2
 class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
     """
     Idefics2 flash attention module. This module inherits from `Idefics2PerceiverAttention` as the weights of the module stays
