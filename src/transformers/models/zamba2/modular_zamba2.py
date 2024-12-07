@@ -422,15 +422,15 @@ class Zamba2Attention(ZambaAttention):
                     linear_q_adapter = nn.Sequential(
                         nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
                         nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
-                        )
+                    )
                     linear_k_adapter = nn.Sequential(
                         nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
                         nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
-                        )
+                    )
                     linear_v_adapter = nn.Sequential(
                         nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
                         nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
-                        )
+                    )
                 else:
                     linear_q_adapter = nn.Identity()
                     linear_k_adapter = nn.Identity()
@@ -1212,7 +1212,7 @@ class Zamba2MLP(ZambaMLP):
                     gate_up_proj_adapter = nn.Sequential(
                         nn.Linear(self.config.hidden_size, self.config.adapter_rank, bias=False),
                         nn.Linear(self.config.adapter_rank, 2 * self.intermediate_size, bias=False),
-                        )
+                    )
                 else:
                     gate_up_proj_adapter = nn.Identity()
                 self.gate_up_proj_adapter_list.append(gate_up_proj_adapter)
@@ -1224,7 +1224,7 @@ class Zamba2MLP(ZambaMLP):
         gate_up_state = self.gate_up_proj(hidden_state)
         if self.config.use_shared_mlp_adapter:
             layer_idx = self.layer_dic[layer_idx]
-            gate_up_state += self.gate_up_proj_adapter_list[layer_idx](hidden_state)            
+            gate_up_state += self.gate_up_proj_adapter_list[layer_idx](hidden_state)
 
         hidden_state = self.gated_act_fn(gate_up_state)
         output = self.down_proj(hidden_state)
@@ -1662,22 +1662,34 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and adapter_id % config.num_mem_blocks == block.block_id:
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_q_adapter_list." + str(adapter_id) + ".0.weight"
+                                    "shared_transformer.self_attn.linear_q_adapter_list."
+                                    + str(adapter_id)
+                                    + ".0.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_k_adapter_list." + str(adapter_id) + ".0.weight"
+                                    "shared_transformer.self_attn.linear_k_adapter_list."
+                                    + str(adapter_id)
+                                    + ".0.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_v_adapter_list." + str(adapter_id) + ".0.weight"
+                                    "shared_transformer.self_attn.linear_v_adapter_list."
+                                    + str(adapter_id)
+                                    + ".0.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_q_adapter_list." + str(adapter_id) + ".1.weight"
+                                    "shared_transformer.self_attn.linear_q_adapter_list."
+                                    + str(adapter_id)
+                                    + ".1.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_k_adapter_list." + str(adapter_id) + ".1.weight"
+                                    "shared_transformer.self_attn.linear_k_adapter_list."
+                                    + str(adapter_id)
+                                    + ".1.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_v_adapter_list." + str(adapter_id) + ".1.weight"
+                                    "shared_transformer.self_attn.linear_v_adapter_list."
+                                    + str(adapter_id)
+                                    + ".1.weight"
                                 )
                             adapter_id += 1
                         self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
