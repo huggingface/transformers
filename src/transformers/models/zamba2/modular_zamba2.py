@@ -132,12 +132,12 @@ class Zamba2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         num_mem_blocks (`int`, *optional*, defaults to 1):
             Number of unshared transformer blocks.
-        use_shared_mlp_lora (`bool`, *optional*, defaults to `False`):
-            If True, unshared LoRA's will be added to the shared MLP's.
-        use_shared_attention_lora (`bool`, *optional*, defaults to `False`):
-            If True, unshared LoRA's will be added to the q, k, v projectors in the shared attention layers.
-        lora_rank (`int`, *optional*, defaults to 128):
-            Rank of the LoRA in the shared MLP and shared attention layers.
+        use_shared_mlp_adapter (`bool`, *optional*, defaults to `False`):
+            If True, unshared adapters (formally the same as LoRA but used in the base model) will be added to the shared MLP's.
+        use_shared_attention_adapter (`bool`, *optional*, defaults to `False`):
+            If True, unshared adapters (formally the same as LoRA but used in the base model) will be added to the q, k, v projectors in the shared attention layers.
+        adapter_rank (`int`, *optional*, defaults to 128):
+            Rank of the adapter in the shared MLP and shared attention layers.
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
         rope_theta (`float`, *optional*, defaults to `10000.0`):
@@ -201,9 +201,9 @@ class Zamba2Config(PretrainedConfig):
         num_key_value_heads=None,
         attention_dropout=0.0,
         num_mem_blocks=1,
-        use_shared_mlp_lora=False,
-        use_shared_attention_lora=False,
-        lora_rank=128,
+        use_shared_mlp_adapter=False,
+        use_shared_attention_adapter=False,
+        adapter_rank=128,
         use_mem_rope=False,
         rope_theta=10000,
         initializer_range=0.02,
@@ -248,9 +248,9 @@ class Zamba2Config(PretrainedConfig):
         self.use_conv_bias = use_conv_bias
         self.chunk_size = chunk_size
         self.time_step_limit = time_step_limit
-        self.use_shared_mlp_lora = use_shared_mlp_lora
-        self.use_shared_attention_lora = use_shared_attention_lora
-        self.lora_rank = lora_rank
+        self.use_shared_mlp_adapter = use_shared_mlp_adapter
+        self.use_shared_attention_adapter = use_shared_attention_adapter
+        self.adapter_rank = adapter_rank
         self.use_long_context = use_long_context
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
@@ -395,7 +395,8 @@ class Zamba2Attention(ZambaAttention):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
     Finally, this attention layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this
-    layer is tied, un-tied LoRA modules are added to the q, k, v projectors to increase expressivity with a small memory overhead.
+    layer is tied, un-tied adapters (formally the same as LoRA but used in the base model) modules are added to the q, k, v projectors to increase
+    expressivity with a small memory overhead (see Fig. 2 of https://arxiv.org/pdf/2411.15242).
     """
 
     def __init__(
@@ -411,35 +412,35 @@ class Zamba2Attention(ZambaAttention):
         self.block_id = block_id
         self.is_causal = True
 
-        if config.use_shared_attention_lora:
-            self.linear_q_lora_A_list = nn.ModuleList([])
-            self.linear_q_lora_B_list = nn.ModuleList([])
-            self.linear_k_lora_A_list = nn.ModuleList([])
-            self.linear_k_lora_B_list = nn.ModuleList([])
-            self.linear_v_lora_A_list = nn.ModuleList([])
-            self.linear_v_lora_B_list = nn.ModuleList([])
+        if config.use_shared_attention_adapter:
+            self.linear_q_adapter_A_list = nn.ModuleList([])
+            self.linear_q_adapter_B_list = nn.ModuleList([])
+            self.linear_k_adapter_A_list = nn.ModuleList([])
+            self.linear_k_adapter_B_list = nn.ModuleList([])
+            self.linear_v_adapter_A_list = nn.ModuleList([])
+            self.linear_v_adapter_B_list = nn.ModuleList([])
 
             for i in range(self.num_fwd_mem_blocks):
                 if i % config.num_mem_blocks == block_id:
-                    linear_q_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias=False)
-                    linear_q_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias=False)
-                    linear_k_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias=False)
-                    linear_k_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias=False)
-                    linear_v_lora_A = nn.Linear(self.attention_hidden_size, self.config.lora_rank, bias=False)
-                    linear_v_lora_B = nn.Linear(self.config.lora_rank, self.attention_hidden_size, bias=False)
+                    linear_q_adapter_A = nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False)
+                    linear_q_adapter_B = nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False)
+                    linear_k_adapter_A = nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False)
+                    linear_k_adapter_B = nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False)
+                    linear_v_adapter_A = nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False)
+                    linear_v_adapter_B = nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False)
                 else:
-                    linear_q_lora_A = nn.Identity()
-                    linear_q_lora_B = nn.Identity()
-                    linear_k_lora_A = nn.Identity()
-                    linear_k_lora_B = nn.Identity()
-                    linear_v_lora_A = nn.Identity()
-                    linear_v_lora_B = nn.Identity()
-                self.linear_q_lora_A_list.append(linear_q_lora_A)
-                self.linear_q_lora_B_list.append(linear_q_lora_B)
-                self.linear_k_lora_A_list.append(linear_k_lora_A)
-                self.linear_k_lora_B_list.append(linear_k_lora_B)
-                self.linear_v_lora_A_list.append(linear_v_lora_A)
-                self.linear_v_lora_B_list.append(linear_v_lora_B)
+                    linear_q_adapter_A = nn.Identity()
+                    linear_q_adapter_B = nn.Identity()
+                    linear_k_adapter_A = nn.Identity()
+                    linear_k_adapter_B = nn.Identity()
+                    linear_v_adapter_A = nn.Identity()
+                    linear_v_adapter_B = nn.Identity()
+                self.linear_q_adapter_A_list.append(linear_q_adapter_A)
+                self.linear_q_adapter_B_list.append(linear_q_adapter_B)
+                self.linear_k_adapter_A_list.append(linear_k_adapter_A)
+                self.linear_k_adapter_B_list.append(linear_k_adapter_B)
+                self.linear_v_adapter_A_list.append(linear_v_adapter_A)
+                self.linear_v_adapter_B_list.append(linear_v_adapter_B)
 
         if config.use_mem_rope:
             rope_theta = config.rope_theta
@@ -469,26 +470,26 @@ class Zamba2Attention(ZambaAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        if self.config.use_shared_attention_lora:
-            lora_layer_idx = self.layer_dic[layer_idx]
-            linear_q_lora_A = self.linear_q_lora_A_list[lora_layer_idx]
-            linear_q_lora_B = self.linear_q_lora_B_list[lora_layer_idx]
-            q_lora_output = linear_q_lora_A(hidden_states)
-            q_lora_output = linear_q_lora_B(q_lora_output)
+        if self.config.use_shared_attention_adapter:
+            adapter_layer_idx = self.layer_dic[layer_idx]
+            linear_q_adapter_A = self.linear_q_adapter_A_list[adapter_layer_idx]
+            linear_q_adapter_B = self.linear_q_adapter_B_list[adapter_layer_idx]
+            q_adapter_output = linear_q_adapter_A(hidden_states)
+            q_adapter_output = linear_q_adapter_B(q_adapter_output)
             query_states = self.q_proj(hidden_states)
-            query_states = query_states + q_lora_output
-            linear_k_lora_A = self.linear_k_lora_A_list[lora_layer_idx]
-            linear_k_lora_B = self.linear_k_lora_B_list[lora_layer_idx]
-            k_lora_output = linear_k_lora_A(hidden_states)
-            k_lora_output = linear_k_lora_B(k_lora_output)
+            query_states = query_states + q_adapter_output
+            linear_k_adapter_A = self.linear_k_adapter_A_list[adapter_layer_idx]
+            linear_k_adapter_B = self.linear_k_adapter_B_list[adapter_layer_idx]
+            k_adapter_output = linear_k_adapter_A(hidden_states)
+            k_adapter_output = linear_k_adapter_B(k_adapter_output)
             key_states = self.k_proj(hidden_states)
-            key_states = key_states + k_lora_output
-            linear_v_lora_A = self.linear_v_lora_A_list[lora_layer_idx]
-            linear_v_lora_B = self.linear_v_lora_B_list[lora_layer_idx]
-            v_lora_output = linear_v_lora_A(hidden_states)
-            v_lora_output = linear_v_lora_B(v_lora_output)
+            key_states = key_states + k_adapter_output
+            linear_v_adapter_A = self.linear_v_adapter_A_list[adapter_layer_idx]
+            linear_v_adapter_B = self.linear_v_adapter_B_list[adapter_layer_idx]
+            v_adapter_output = linear_v_adapter_A(hidden_states)
+            v_adapter_output = linear_v_adapter_B(v_adapter_output)
             value_states = self.v_proj(hidden_states)
-            value_states = value_states + v_lora_output
+            value_states = value_states + v_adapter_output
         else:
             query_states = self.q_proj(hidden_states)
             key_states = self.k_proj(hidden_states)
@@ -579,26 +580,26 @@ class Zamba2FlashAttention2(Zamba2Attention):
     ):
         bsz, q_len, _ = hidden_states.size()
 
-        if self.config.use_shared_attention_lora:
+        if self.config.use_shared_attention_adapter:
             layer_idx = self.layer_dic[layer_idx]
-            linear_q_lora_A = self.linear_q_lora_A_list[layer_idx]
-            linear_q_lora_B = self.linear_q_lora_B_list[layer_idx]
-            q_lora_output = linear_q_lora_A(hidden_states)
-            q_lora_output = linear_q_lora_B(q_lora_output)
+            linear_q_adapter_A = self.linear_q_adapter_A_list[layer_idx]
+            linear_q_adapter_B = self.linear_q_adapter_B_list[layer_idx]
+            q_adapter_output = linear_q_adapter_A(hidden_states)
+            q_adapter_output = linear_q_adapter_B(q_adapter_output)
             query_states = self.q_proj(hidden_states)
-            query_states = query_states + q_lora_output
-            linear_k_lora_A = self.linear_k_lora_A_list[layer_idx]
-            linear_k_lora_B = self.linear_k_lora_B_list[layer_idx]
-            k_lora_output = linear_k_lora_A(hidden_states)
-            k_lora_output = linear_k_lora_B(k_lora_output)
+            query_states = query_states + q_adapter_output
+            linear_k_adapter_A = self.linear_k_adapter_A_list[layer_idx]
+            linear_k_adapter_B = self.linear_k_adapter_B_list[layer_idx]
+            k_adapter_output = linear_k_adapter_A(hidden_states)
+            k_adapter_output = linear_k_adapter_B(k_adapter_output)
             key_states = self.k_proj(hidden_states)
-            key_states = key_states + k_lora_output
-            linear_v_lora_A = self.linear_v_lora_A_list[layer_idx]
-            linear_v_lora_B = self.linear_v_lora_B_list[layer_idx]
-            v_lora_output = linear_v_lora_A(hidden_states)
-            v_lora_output = linear_v_lora_B(v_lora_output)
+            key_states = key_states + k_adapter_output
+            linear_v_adapter_A = self.linear_v_adapter_A_list[layer_idx]
+            linear_v_adapter_B = self.linear_v_adapter_B_list[layer_idx]
+            v_adapter_output = linear_v_adapter_A(hidden_states)
+            v_adapter_output = linear_v_adapter_B(v_adapter_output)
             value_states = self.v_proj(hidden_states)
-            value_states = value_states + v_lora_output
+            value_states = value_states + v_adapter_output
         else:
             query_states = self.q_proj(hidden_states)
             key_states = self.k_proj(hidden_states)
@@ -719,25 +720,25 @@ class Zamba2SdpaAttention(Zamba2Attention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        if self.config.use_shared_attention_lora:
-            linear_q_lora_A = self.linear_q_lora_A_list[layer_idx]
-            linear_q_lora_B = self.linear_q_lora_B_list[layer_idx]
-            q_lora_output = linear_q_lora_A(hidden_states)
-            q_lora_output = linear_q_lora_B(q_lora_output)
+        if self.config.use_shared_attention_adapter:
+            linear_q_adapter_A = self.linear_q_adapter_A_list[layer_idx]
+            linear_q_adapter_B = self.linear_q_adapter_B_list[layer_idx]
+            q_adapter_output = linear_q_adapter_A(hidden_states)
+            q_adapter_output = linear_q_adapter_B(q_adapter_output)
             query_states = self.q_proj(hidden_states)
-            query_states = query_states + q_lora_output
-            linear_k_lora_A = self.linear_k_lora_A_list[layer_idx]
-            linear_k_lora_B = self.linear_k_lora_B_list[layer_idx]
-            k_lora_output = linear_k_lora_A(hidden_states)
-            k_lora_output = linear_k_lora_B(k_lora_output)
+            query_states = query_states + q_adapter_output
+            linear_k_adapter_A = self.linear_k_adapter_A_list[layer_idx]
+            linear_k_adapter_B = self.linear_k_adapter_B_list[layer_idx]
+            k_adapter_output = linear_k_adapter_A(hidden_states)
+            k_adapter_output = linear_k_adapter_B(k_adapter_output)
             key_states = self.k_proj(hidden_states)
-            key_states = key_states + k_lora_output
-            linear_v_lora_A = self.linear_v_lora_A_list[layer_idx]
-            linear_v_lora_B = self.linear_v_lora_B_list[layer_idx]
-            v_lora_output = linear_v_lora_A(hidden_states)
-            v_lora_output = linear_v_lora_B(v_lora_output)
+            key_states = key_states + k_adapter_output
+            linear_v_adapter_A = self.linear_v_adapter_A_list[layer_idx]
+            linear_v_adapter_B = self.linear_v_adapter_B_list[layer_idx]
+            v_adapter_output = linear_v_adapter_A(hidden_states)
+            v_adapter_output = linear_v_adapter_B(v_adapter_output)
             value_states = self.v_proj(hidden_states)
-            value_states = value_states + v_lora_output
+            value_states = value_states + v_adapter_output
         else:
             query_states = self.q_proj(hidden_states)
             key_states = self.k_proj(hidden_states)
@@ -1235,7 +1236,7 @@ class Zamba2MLP(ZambaMLP):
     def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int = None):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
-        is tied, un-tied LoRA modules are added to the up and gate projectors to increase expressivity with a small memory overhead.
+        is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
         """
         super().__init__(config)
         self.config = config
@@ -1254,31 +1255,31 @@ class Zamba2MLP(ZambaMLP):
         self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
-        if self.config.use_shared_mlp_lora:
-            self.gate_up_proj_lora_A_list = nn.ModuleList([])
-            self.gate_up_proj_lora_B_list = nn.ModuleList([])
+        if self.config.use_shared_mlp_adapter:
+            self.gate_up_proj_adapter_A_list = nn.ModuleList([])
+            self.gate_up_proj_adapter_B_list = nn.ModuleList([])
             for i in range(self.num_fwd_mem_blocks):
                 if i % config.num_mem_blocks == block_id:
-                    gate_up_proj_lora_A = nn.Linear(self.config.hidden_size, self.config.lora_rank, bias=False)
-                    gate_up_proj_lora_B = nn.Linear(self.config.lora_rank, 2 * self.intermediate_size, bias=False)
+                    gate_up_proj_adapter_A = nn.Linear(self.config.hidden_size, self.config.adapter_rank, bias=False)
+                    gate_up_proj_adapter_B = nn.Linear(self.config.adapter_rank, 2 * self.intermediate_size, bias=False)
                 else:
-                    gate_up_proj_lora_A = nn.Identity()
-                    gate_up_proj_lora_B = nn.Identity()
-                self.gate_up_proj_lora_A_list.append(gate_up_proj_lora_A)
-                self.gate_up_proj_lora_B_list.append(gate_up_proj_lora_B)
+                    gate_up_proj_adapter_A = nn.Identity()
+                    gate_up_proj_adapter_B = nn.Identity()
+                self.gate_up_proj_adapter_A_list.append(gate_up_proj_adapter_A)
+                self.gate_up_proj_adapter_B_list.append(gate_up_proj_adapter_B)
 
         layer_block_map = layer_type_list(config)
         self.layer_dic = {value: index for index, value in enumerate(layer_block_map)}
 
     def forward(self, hidden_state, layer_idx=None):
-        if self.config.use_shared_mlp_lora:
+        if self.config.use_shared_mlp_adapter:
             layer_idx = self.layer_dic[layer_idx]
-            gate_up_proj_lora_A = self.gate_up_proj_lora_A_list[layer_idx]
-            gate_up_proj_lora_B = self.gate_up_proj_lora_B_list[layer_idx]
-            lora_output = gate_up_proj_lora_A(hidden_state)
-            lora_output = gate_up_proj_lora_B(lora_output)
+            gate_up_proj_adapter_A = self.gate_up_proj_adapter_A_list[layer_idx]
+            gate_up_proj_adapter_B = self.gate_up_proj_adapter_B_list[layer_idx]
+            adapter_output = gate_up_proj_adapter_A(hidden_state)
+            adapter_output = gate_up_proj_adapter_B(adapter_output)
             intermediate_state = self.gate_up_proj(hidden_state)
-            hidden_state = intermediate_state + lora_output
+            hidden_state = intermediate_state + adapter_output
         else:
             hidden_state = self.gate_up_proj(hidden_state)
 
@@ -1695,48 +1696,48 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         "shared_transformer.pre_ff_layernorm.weight",
                     ]
                     self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
-                    if config.use_shared_mlp_lora:
-                        tied_keys_lora = []
-                        lora_id = 0
+                    if config.use_shared_mlp_adapter:
+                        tied_keys_adapter = []
+                        adapter_id = 0
                         for _layer_type in self.layers_block_type:
-                            if _layer_type == "hybrid" and lora_id % config.num_mem_blocks == block.block_id:
-                                tied_keys_lora.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_lora_A_list."
-                                    + str(lora_id)
+                            if _layer_type == "hybrid" and adapter_id % config.num_mem_blocks == block.block_id:
+                                tied_keys_adapter.append(
+                                    "shared_transformer.feed_forward.gate_up_proj_adapter_A_list."
+                                    + str(adapter_id)
                                     + ".weight"
                                 )
-                                tied_keys_lora.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_lora_B_list."
-                                    + str(lora_id)
+                                tied_keys_adapter.append(
+                                    "shared_transformer.feed_forward.gate_up_proj_adapter_B_list."
+                                    + str(adapter_id)
                                     + ".weight"
                                 )
-                            lora_id += 1
-                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_lora]
-                    if config.use_shared_attention_lora:
-                        tied_keys_lora = []
-                        lora_id = 0
+                            adapter_id += 1
+                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
+                    if config.use_shared_attention_adapter:
+                        tied_keys_adapter = []
+                        adapter_id = 0
                         for _layer_type in self.layers_block_type:
-                            if _layer_type == "hybrid" and lora_id % config.num_mem_blocks == block.block_id:
-                                tied_keys_lora.append(
-                                    "shared_transformer.self_attn.linear_q_lora_A_list." + str(lora_id) + ".weight"
+                            if _layer_type == "hybrid" and adapter_id % config.num_mem_blocks == block.block_id:
+                                tied_keys_adapter.append(
+                                    "shared_transformer.self_attn.linear_q_adapter_A_list." + str(adapter_id) + ".weight"
                                 )
-                                tied_keys_lora.append(
-                                    "shared_transformer.self_attn.linear_k_lora_A_list." + str(lora_id) + ".weight"
+                                tied_keys_adapter.append(
+                                    "shared_transformer.self_attn.linear_k_adapter_A_list." + str(adapter_id) + ".weight"
                                 )
-                                tied_keys_lora.append(
-                                    "shared_transformer.self_attn.linear_v_lora_A_list." + str(lora_id) + ".weight"
+                                tied_keys_adapter.append(
+                                    "shared_transformer.self_attn.linear_v_adapter_A_list." + str(adapter_id) + ".weight"
                                 )
-                                tied_keys_lora.append(
-                                    "shared_transformer.self_attn.linear_q_lora_B_list." + str(lora_id) + ".weight"
+                                tied_keys_adapter.append(
+                                    "shared_transformer.self_attn.linear_q_adapter_B_list." + str(adapter_id) + ".weight"
                                 )
-                                tied_keys_lora.append(
-                                    "shared_transformer.self_attn.linear_k_lora_B_list." + str(lora_id) + ".weight"
+                                tied_keys_adapter.append(
+                                    "shared_transformer.self_attn.linear_k_adapter_B_list." + str(adapter_id) + ".weight"
                                 )
-                                tied_keys_lora.append(
-                                    "shared_transformer.self_attn.linear_v_lora_B_list." + str(lora_id) + ".weight"
+                                tied_keys_adapter.append(
+                                    "shared_transformer.self_attn.linear_v_adapter_B_list." + str(adapter_id) + ".weight"
                                 )
-                            lora_id += 1
-                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_lora]
+                            adapter_id += 1
+                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
                 layers.append(Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))
