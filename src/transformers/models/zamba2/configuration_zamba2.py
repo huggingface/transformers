@@ -83,12 +83,12 @@ class Zamba2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         num_mem_blocks (`int`, *optional*, defaults to 1):
             Number of unshared transformer blocks.
-        use_shared_mlp_lora (`bool`, *optional*, defaults to `False`):
-            If True, unshared LoRA's will be added to the shared MLP's.
-        use_shared_attention_lora (`bool`, *optional*, defaults to `False`):
-            If True, unshared LoRA's will be added to the q, k, v projectors in the shared attention layers.
-        lora_rank (`int`, *optional*, defaults to 128):
-            Rank of the LoRA in the shared MLP and shared attention layers.
+        use_shared_mlp_adapter (`bool`, *optional*, defaults to `False`):
+            If True, unshared adapters (formally the same as LoRA but used in the base model) will be added to the shared MLP's.
+        use_shared_attention_adapter (`bool`, *optional*, defaults to `False`):
+            If True, unshared adapters (formally the same as LoRA but used in the base model) will be added to the q, k, v projectors in the shared attention layers.
+        adapter_rank (`int`, *optional*, defaults to 128):
+            Rank of the adapter in the shared MLP and shared attention layers.
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
         rope_theta (`float`, *optional*, defaults to `10000.0`):
@@ -152,9 +152,9 @@ class Zamba2Config(PretrainedConfig):
         num_key_value_heads=None,
         attention_dropout=0.0,
         num_mem_blocks=1,
-        use_shared_mlp_lora=False,
-        use_shared_attention_lora=False,
-        lora_rank=128,
+        use_shared_mlp_adapter=False,
+        use_shared_attention_adapter=False,
+        adapter_rank=128,
         use_mem_rope=False,
         rope_theta=10000,
         initializer_range=0.02,
@@ -199,9 +199,9 @@ class Zamba2Config(PretrainedConfig):
         self.use_conv_bias = use_conv_bias
         self.chunk_size = chunk_size
         self.time_step_limit = time_step_limit
-        self.use_shared_mlp_lora = use_shared_mlp_lora
-        self.use_shared_attention_lora = use_shared_attention_lora
-        self.lora_rank = lora_rank
+        self.use_shared_mlp_adapter = use_shared_mlp_adapter
+        self.use_shared_attention_adapter = use_shared_attention_adapter
+        self.adapter_rank = adapter_rank
         self.use_long_context = use_long_context
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max

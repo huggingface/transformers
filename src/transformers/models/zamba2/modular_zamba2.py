@@ -413,34 +413,31 @@ class Zamba2Attention(ZambaAttention):
         self.is_causal = True
 
         if config.use_shared_attention_adapter:
-            self.linear_q_adapter_A_list = nn.ModuleList([])
-            self.linear_q_adapter_B_list = nn.ModuleList([])
-            self.linear_k_adapter_A_list = nn.ModuleList([])
-            self.linear_k_adapter_B_list = nn.ModuleList([])
-            self.linear_v_adapter_A_list = nn.ModuleList([])
-            self.linear_v_adapter_B_list = nn.ModuleList([])
+            self.linear_q_adapter_list = nn.ModuleList([])
+            self.linear_k_adapter_list = nn.ModuleList([])
+            self.linear_v_adapter_list = nn.ModuleList([])
 
             for i in range(self.num_fwd_mem_blocks):
                 if i % config.num_mem_blocks == block_id:
-                    linear_q_adapter_A = nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False)
-                    linear_q_adapter_B = nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False)
-                    linear_k_adapter_A = nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False)
-                    linear_k_adapter_B = nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False)
-                    linear_v_adapter_A = nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False)
-                    linear_v_adapter_B = nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False)
+                    linear_q_adapter = nn.Sequential(
+                        nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
+                        nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
+                        )
+                    linear_k_adapter = nn.Sequential(
+                        nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
+                        nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
+                        )
+                    linear_v_adapter = nn.Sequential(
+                        nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
+                        nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
+                        )
                 else:
-                    linear_q_adapter_A = nn.Identity()
-                    linear_q_adapter_B = nn.Identity()
-                    linear_k_adapter_A = nn.Identity()
-                    linear_k_adapter_B = nn.Identity()
-                    linear_v_adapter_A = nn.Identity()
-                    linear_v_adapter_B = nn.Identity()
-                self.linear_q_adapter_A_list.append(linear_q_adapter_A)
-                self.linear_q_adapter_B_list.append(linear_q_adapter_B)
-                self.linear_k_adapter_A_list.append(linear_k_adapter_A)
-                self.linear_k_adapter_B_list.append(linear_k_adapter_B)
-                self.linear_v_adapter_A_list.append(linear_v_adapter_A)
-                self.linear_v_adapter_B_list.append(linear_v_adapter_B)
+                    linear_q_adapter = nn.Identity()
+                    linear_k_adapter = nn.Identity()
+                    linear_v_adapter = nn.Identity()
+                self.linear_q_adapter_list.append(linear_q_adapter)
+                self.linear_k_adapter_list.append(linear_k_adapter)
+                self.linear_v_adapter_list.append(linear_v_adapter)
 
         if config.use_mem_rope:
             rope_theta = config.rope_theta
@@ -470,30 +467,14 @@ class Zamba2Attention(ZambaAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
             adapter_layer_idx = self.layer_dic[layer_idx]
-            linear_q_adapter_A = self.linear_q_adapter_A_list[adapter_layer_idx]
-            linear_q_adapter_B = self.linear_q_adapter_B_list[adapter_layer_idx]
-            q_adapter_output = linear_q_adapter_A(hidden_states)
-            q_adapter_output = linear_q_adapter_B(q_adapter_output)
-            query_states = self.q_proj(hidden_states)
-            query_states = query_states + q_adapter_output
-            linear_k_adapter_A = self.linear_k_adapter_A_list[adapter_layer_idx]
-            linear_k_adapter_B = self.linear_k_adapter_B_list[adapter_layer_idx]
-            k_adapter_output = linear_k_adapter_A(hidden_states)
-            k_adapter_output = linear_k_adapter_B(k_adapter_output)
-            key_states = self.k_proj(hidden_states)
-            key_states = key_states + k_adapter_output
-            linear_v_adapter_A = self.linear_v_adapter_A_list[adapter_layer_idx]
-            linear_v_adapter_B = self.linear_v_adapter_B_list[adapter_layer_idx]
-            v_adapter_output = linear_v_adapter_A(hidden_states)
-            v_adapter_output = linear_v_adapter_B(v_adapter_output)
-            value_states = self.v_proj(hidden_states)
-            value_states = value_states + v_adapter_output
-        else:
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+            query_states += self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
+            key_states += self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
+            value_states += self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -580,30 +561,14 @@ class Zamba2FlashAttention2(Zamba2Attention):
     ):
         bsz, q_len, _ = hidden_states.size()
 
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
-            layer_idx = self.layer_dic[layer_idx]
-            linear_q_adapter_A = self.linear_q_adapter_A_list[layer_idx]
-            linear_q_adapter_B = self.linear_q_adapter_B_list[layer_idx]
-            q_adapter_output = linear_q_adapter_A(hidden_states)
-            q_adapter_output = linear_q_adapter_B(q_adapter_output)
-            query_states = self.q_proj(hidden_states)
-            query_states = query_states + q_adapter_output
-            linear_k_adapter_A = self.linear_k_adapter_A_list[layer_idx]
-            linear_k_adapter_B = self.linear_k_adapter_B_list[layer_idx]
-            k_adapter_output = linear_k_adapter_A(hidden_states)
-            k_adapter_output = linear_k_adapter_B(k_adapter_output)
-            key_states = self.k_proj(hidden_states)
-            key_states = key_states + k_adapter_output
-            linear_v_adapter_A = self.linear_v_adapter_A_list[layer_idx]
-            linear_v_adapter_B = self.linear_v_adapter_B_list[layer_idx]
-            v_adapter_output = linear_v_adapter_A(hidden_states)
-            v_adapter_output = linear_v_adapter_B(v_adapter_output)
-            value_states = self.v_proj(hidden_states)
-            value_states = value_states + v_adapter_output
-        else:
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+            adapter_layer_idx = self.layer_dic[layer_idx]
+            query_states += self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
+            key_states += self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
+            value_states += self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -720,29 +685,14 @@ class Zamba2SdpaAttention(Zamba2Attention):
 
         bsz, q_len, _ = hidden_states.size()
 
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
-            linear_q_adapter_A = self.linear_q_adapter_A_list[layer_idx]
-            linear_q_adapter_B = self.linear_q_adapter_B_list[layer_idx]
-            q_adapter_output = linear_q_adapter_A(hidden_states)
-            q_adapter_output = linear_q_adapter_B(q_adapter_output)
-            query_states = self.q_proj(hidden_states)
-            query_states = query_states + q_adapter_output
-            linear_k_adapter_A = self.linear_k_adapter_A_list[layer_idx]
-            linear_k_adapter_B = self.linear_k_adapter_B_list[layer_idx]
-            k_adapter_output = linear_k_adapter_A(hidden_states)
-            k_adapter_output = linear_k_adapter_B(k_adapter_output)
-            key_states = self.k_proj(hidden_states)
-            key_states = key_states + k_adapter_output
-            linear_v_adapter_A = self.linear_v_adapter_A_list[layer_idx]
-            linear_v_adapter_B = self.linear_v_adapter_B_list[layer_idx]
-            v_adapter_output = linear_v_adapter_A(hidden_states)
-            v_adapter_output = linear_v_adapter_B(v_adapter_output)
-            value_states = self.v_proj(hidden_states)
-            value_states = value_states + v_adapter_output
-        else:
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+            adapter_layer_idx = self.layer_dic[layer_idx]
+            query_states += self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
+            key_states += self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
+            value_states += self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -1256,34 +1206,27 @@ class Zamba2MLP(ZambaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
         if self.config.use_shared_mlp_adapter:
-            self.gate_up_proj_adapter_A_list = nn.ModuleList([])
-            self.gate_up_proj_adapter_B_list = nn.ModuleList([])
+            self.gate_up_proj_adapter_list = nn.ModuleList([])
             for i in range(self.num_fwd_mem_blocks):
                 if i % config.num_mem_blocks == block_id:
-                    gate_up_proj_adapter_A = nn.Linear(self.config.hidden_size, self.config.adapter_rank, bias=False)
-                    gate_up_proj_adapter_B = nn.Linear(self.config.adapter_rank, 2 * self.intermediate_size, bias=False)
+                    gate_up_proj_adapter = nn.Sequential(
+                        nn.Linear(self.config.hidden_size, self.config.adapter_rank, bias=False),
+                        nn.Linear(self.config.adapter_rank, 2 * self.intermediate_size, bias=False),
+                        )
                 else:
-                    gate_up_proj_adapter_A = nn.Identity()
-                    gate_up_proj_adapter_B = nn.Identity()
-                self.gate_up_proj_adapter_A_list.append(gate_up_proj_adapter_A)
-                self.gate_up_proj_adapter_B_list.append(gate_up_proj_adapter_B)
+                    gate_up_proj_adapter = nn.Identity()
+                self.gate_up_proj_adapter_list.append(gate_up_proj_adapter)
 
         layer_block_map = layer_type_list(config)
         self.layer_dic = {value: index for index, value in enumerate(layer_block_map)}
 
     def forward(self, hidden_state, layer_idx=None):
+        gate_up_state = self.gate_up_proj(hidden_state)
         if self.config.use_shared_mlp_adapter:
             layer_idx = self.layer_dic[layer_idx]
-            gate_up_proj_adapter_A = self.gate_up_proj_adapter_A_list[layer_idx]
-            gate_up_proj_adapter_B = self.gate_up_proj_adapter_B_list[layer_idx]
-            adapter_output = gate_up_proj_adapter_A(hidden_state)
-            adapter_output = gate_up_proj_adapter_B(adapter_output)
-            intermediate_state = self.gate_up_proj(hidden_state)
-            hidden_state = intermediate_state + adapter_output
-        else:
-            hidden_state = self.gate_up_proj(hidden_state)
+            gate_up_state += self.gate_up_proj_adapter_list[layer_idx](hidden_state)            
 
-        hidden_state = self.gated_act_fn(hidden_state)
+        hidden_state = self.gated_act_fn(gate_up_state)
         output = self.down_proj(hidden_state)
         return output
 
@@ -1702,14 +1645,14 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and adapter_id % config.num_mem_blocks == block.block_id:
                                 tied_keys_adapter.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_adapter_A_list."
+                                    "shared_transformer.feed_forward.gate_up_proj_adapter_list."
                                     + str(adapter_id)
-                                    + ".weight"
+                                    + ".0.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_adapter_B_list."
+                                    "shared_transformer.feed_forward.gate_up_proj_adapter_list."
                                     + str(adapter_id)
-                                    + ".weight"
+                                    + ".1.weight"
                                 )
                             adapter_id += 1
                         self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
@@ -1719,22 +1662,22 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and adapter_id % config.num_mem_blocks == block.block_id:
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_q_adapter_A_list." + str(adapter_id) + ".weight"
+                                    "shared_transformer.self_attn.linear_q_adapter_list." + str(adapter_id) + ".0.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_k_adapter_A_list." + str(adapter_id) + ".weight"
+                                    "shared_transformer.self_attn.linear_k_adapter_list." + str(adapter_id) + ".0.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_v_adapter_A_list." + str(adapter_id) + ".weight"
+                                    "shared_transformer.self_attn.linear_v_adapter_list." + str(adapter_id) + ".0.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_q_adapter_B_list." + str(adapter_id) + ".weight"
+                                    "shared_transformer.self_attn.linear_q_adapter_list." + str(adapter_id) + ".1.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_k_adapter_B_list." + str(adapter_id) + ".weight"
+                                    "shared_transformer.self_attn.linear_k_adapter_list." + str(adapter_id) + ".1.weight"
                                 )
                                 tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_v_adapter_B_list." + str(adapter_id) + ".weight"
+                                    "shared_transformer.self_attn.linear_v_adapter_list." + str(adapter_id) + ".1.weight"
                                 )
                             adapter_id += 1
                         self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
