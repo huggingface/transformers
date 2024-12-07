@@ -354,6 +354,9 @@ def is_torch_sdpa_available():
     # NOTE: MLU is OK with non-contiguous inputs.
     if is_torch_mlu_available():
         return version.parse(_torch_version) >= version.parse("2.1.0")
+    # NOTE: Ascend NPU requires torch>=2.1.1 to use SDPA in Transformers.
+    if is_torch_npu_available():
+        return version.parse(_torch_version) >= version.parse("2.1.1")
     # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
     return version.parse(_torch_version) >= version.parse("2.1.1")
 
@@ -913,7 +916,7 @@ def is_flash_attn_2_available():
     # Let's add an extra check to see if cuda is available
     import torch
 
-    if not (torch.cuda.is_available() or is_torch_mlu_available()):
+    if not (torch.cuda.is_available() or is_torch_mlu_available() or is_torch_npu_available()):
         return False
 
     if torch.version.cuda:
