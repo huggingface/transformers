@@ -761,12 +761,12 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         dataset = dataset.train_test_split(test_size=0.2)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
+        tokenizer.pad_token = tokenizer.eos_token
         def tokenize_function(examples):
-            return tokenizer(examples["text"])
+            return tokenizer(examples["text"], max_length=128, padding='max_length', truncation=True)
 
         tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
 
-        tokenizer.pad_token = tokenizer.eos_token
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
         model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -834,7 +834,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
 
         # all diff truth should be quite close
-        self.assertLess(max(diff_truth), 0.3, f"Difference {max(diff_truth)} is not within 0.3")
+        self.assertLess(max(diff_truth), 0.1, f"Difference {max(diff_truth)} is not within 0.1")
 
         # max diff broken should be very off
         self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
