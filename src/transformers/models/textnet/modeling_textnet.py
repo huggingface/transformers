@@ -106,7 +106,7 @@ class TextNetConvLayer(nn.Module):
 
 
 class TextNetRepConvLayer(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, config: TextNetConfig, in_channels: int, out_channels: int, kernel_size: int, stride: int):
         super().__init__()
 
         self.num_channels = in_channels
@@ -185,7 +185,7 @@ class TextNetRepConvLayer(nn.Module):
 
 
 class TextNetStage(nn.Module):
-    def __init__(self, config, depth):
+    def __init__(self, config: TextNetConfig, depth: int):
         super().__init__()
         kernel_size = config.conv_layer_kernel_sizes[depth]
         stride = config.conv_layer_strides[depth]
@@ -209,7 +209,7 @@ class TextNetStage(nn.Module):
 
 
 class TextNetEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__()
 
         stages = []

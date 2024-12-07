@@ -315,15 +315,16 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class TextNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_textnet_image_classification(self):
+        processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
         model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base").to(torch_device)
+
+        # prepare image
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
-        processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
-        text = "This is a photo of a cat"
-        inputs = processor(text=text, images=image, return_tensors="pt", size={"height": 640, "width": 640})
+        inputs = processor(images=image, return_tensors="pt")
 
         # forward pass
-        output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
+        output = model(**inputs)
         self.assertEqual(output.logits.shape, torch.Size([1, 2]))
 
 
