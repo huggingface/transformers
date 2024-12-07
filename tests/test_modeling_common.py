@@ -4833,7 +4833,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_greater_or_equal("2.3")
-    def test_torch_export(self):
+    def test_torch_export(self, config_kwargs=None):
         if not self.test_torch_exportable:
             self.skipTest(reason="Torch export test is not enabled for this model.")
 
@@ -4849,13 +4849,19 @@ class ModelTesterMixin:
                 return is_tested
             return is_tested
 
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["return_dict"] = False
+
+        # override config kwargs for torch export if needed
+        config_kwargs = config_kwargs if config_kwargs is not None else {}
+        for key, value in config_kwargs.items():
+            setattr(config, key, value)
+
         for model_class in self.all_model_classes:
             if model_class.__name__.endswith("ForPreTraining"):
                 continue
 
             with self.subTest(model_class.__name__):
-                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                inputs_dict["return_dict"] = False
                 model = model_class(config).eval().to(torch_device)
 
                 # Prepare exported program inputs based on model.forward function signature
