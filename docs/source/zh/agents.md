@@ -45,7 +45,7 @@ rendered properly in your Markdown viewer.
 - [`ReactJsonAgent`] 将工具调用作为 JSON 格式输出。
 - [`ReactCodeAgent`] 是 ReactJsonAgent 的一种新型，生成工具调用的代码块，对于具备强大编程能力的 LLM 非常适用。
 
-> [!TIP]
+> [TIP]
 > 阅读 [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) 博文，了解更多关于推理智能体的信息。
 
 <div class="flex justify-center">
@@ -208,7 +208,7 @@ Python 解释器默认不允许导入不在安全列表中的模块，因此大�
 
 如果有任何代码尝试执行非法操作，或者生成的代码出现常规 Python 错误，执行将停止。
 
-> [!WARNING]
+> [WARNING]
 > The LLM can generate arbitrary code that will then be executed: do not add any unsafe imports!
 
 ### 系统提示
@@ -262,7 +262,7 @@ from transformers.agents import PythonInterpreterTool
 agent = ReactJsonAgent(tools=[PythonInterpreterTool()], system_prompt="{your_custom_prompt}")
 ```
 
-> [!WARNING]
+> [WARNING]
 > Please make sure to define the `<<tool_descriptions>>` string somewhere in the `template` so the agent is aware 
 of the available tools.
 
@@ -347,7 +347,7 @@ def model_download_tool(task: str) -> str:
 
 所有这些将自动嵌入到智能体的系统提示中，因此请尽量使它们尽可能清晰！
 
-> [!TIP]
+> [TIP]
 > This definition format is the same as tool schemas used in `apply_chat_template`, the only difference is the added `tool` decorator: read more on our tool use API [here](https://huggingface.co/blog/unified-tool-use#passing-tools-to-a-chat-template).
 
 然后，您可以直接初始化您的智能体：
@@ -398,7 +398,7 @@ agent.run(
 | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/damo.wav" type="audio/wav"/> |
 
 
-> [!WARNING]
+> [WARNING]
 > Beware when adding tools to an agent that already works well because it can bias selection towards your tool or select another tool other than the one already defined.
 
 
