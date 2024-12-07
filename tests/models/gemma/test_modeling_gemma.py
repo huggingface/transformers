@@ -20,7 +20,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     is_flaky,
@@ -615,6 +615,46 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
+    def test_model_2b_pipeline_flex_attention(self):
+        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
+        model_id = "google/gemma-2b"
+        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
+        EXPECTED_TEXTS = [
+            "Hello I am doing a little research on the subject of the 2019-01-09",
+            "Hi today I am going to be honest, I’m not sure if you’ve ever heard of the",
+        ]
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, attn_implementation="flex_attention"
+        ).to(torch_device)
+        assert model.config._attn_implementation == "flex_attn"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+
+    @unittest.skip(reason="The test will not fit our CI runners")
+    @require_read_token
+    def test_model_7b_pipeline_flex_attention(self):
+        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
+        model_id = "google/gemma-7b"
+        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
+        EXPECTED_TEXTS = [
+            "Hello I am doing a little research on the subject of the 2019-01-09",
+            "Hi today I am going to be honest, I’m not sure if you’ve ever heard of the",
+        ]
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, attn_implementation="flex_attention"
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+
     @require_bitsandbytes
     @require_read_token
     def test_model_2b_4bit(self):
@@ -653,6 +693,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @unittest.skip(reason="The test will not fit our CI runners")
     @require_read_token
     def test_model_7b_fp16(self):
         if self.cuda_compute_capability_major_version == 7:
@@ -675,7 +716,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-
+    @unittest.skip(reason="The test will not fit our CI runners")
     @require_read_token
     def test_model_7b_bf16(self):
         if self.cuda_compute_capability_major_version == 7:
@@ -712,7 +753,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
-
+    
+    @unittest.skip(reason="The test will not fit our CI runners")
     @require_read_token
     def test_model_7b_fp16_static_cache(self):
         if self.cuda_compute_capability_major_version == 7:
