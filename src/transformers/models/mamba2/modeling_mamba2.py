@@ -1040,6 +1040,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             past_len = inputs_embeds.shape[1] + input_ids.shape[1]
         else:
             past_len = input_ids.shape[1]
+
         if use_cache:
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
@@ -1048,33 +1049,18 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
                     "`model.generate`, you are responsible for passing in a valid `cache_position` if "
                     "you are calling `prepare_inputs_for_generation` directly with `use_cache=True`"
                 )
-            # how do we detect that we are in decoding without cache?
             if cache_position[0] > 0:
                 input_ids = input_ids[:, -1][..., None]
-                attention_mask = attention_mask[:, -1][..., None]
+
+                if attention_mask is not None:
+                    attention_mask = None
             else:
                 # we initialize the `cache_position` to full size of `conv_states` at prefill stage
                 # considering padding will be applied when input length is shorter, and truncation
                 # will be applied when it is longer, so it will be equivalent to always have it match
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, past_len, device=input_ids.device)
-                # if the cache is not used, we also do have to extend the attention mask here
-                # TODO there is likely a cleverer way to do this
-                extended_mask = torch.ones(
-                    attention_mask.size(0), past_len - attention_mask.shape[1], device=attention_mask.device
-                )
-                attention_mask = torch.cat([attention_mask, extended_mask], dim=1)
-                cache_params = None
 
-        if attention_mask.shape[1] < past_len:
-            # we have to update manually the attention mask if
-            # we are in decoding without cache
-            # and we don't have position_ids here
-            # TODO but we should be able to use cache_position though at a later time
-            extended_mask = torch.ones(
-                attention_mask.size(0), past_len - attention_mask.shape[1], device=attention_mask.device
-            )
-            attention_mask = torch.cat([attention_mask, extended_mask], dim=1)
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
