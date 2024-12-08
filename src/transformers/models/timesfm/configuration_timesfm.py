@@ -62,6 +62,8 @@ class TimesFMConfig(PretrainedConfig):
             The quantiles to predict.
         pad_val (`float`, *optional*, defaults to 1123581321.0):
             The value used to pad the predictions.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the attention scores.
         use_positional_embedding (`bool`, *optional*, defaults to `True`):
             Whether to add positional embeddings.
         initializer_factor (`float`, *optional*, defaults to 1.0):
@@ -93,6 +95,7 @@ class TimesFMConfig(PretrainedConfig):
         rms_norm_eps: float = 1e-6,
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
+        attention_dropout: float = 0.0,
         use_positional_embedding: bool = True,
         initializer_factor: float = 1.0,
         **kwargs,
@@ -110,6 +113,7 @@ class TimesFMConfig(PretrainedConfig):
         self.num_heads = num_heads
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
+        self.attention_dropout = attention_dropout
         self.use_positional_embedding = use_positional_embedding
         self.initializer_factor = initializer_factor
 
