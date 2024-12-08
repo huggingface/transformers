@@ -330,6 +330,14 @@ class TimesFMFlashAttention2(TimesFMAttention):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
+        # Convert attention mask to proper format for Flash Attention
+        if attention_mask is not None:
+            # Convert from [batch_size, 1, seq_length, seq_length] to [batch_size, seq_length]
+            # by checking which positions are not allowed to attend to any other position
+            attention_mask = attention_mask.squeeze(1)  # [batch_size, seq_length, seq_length]
+            attention_mask = ~attention_mask.all(dim=-1)  # [batch_size, seq_length]
+            attention_mask = attention_mask.to(query.dtype)
+
         # Run flash attention
         attn_output = _flash_attention_forward(
             query,
@@ -337,9 +345,10 @@ class TimesFMFlashAttention2(TimesFMAttention):
             value,
             attention_mask,
             seq_length,
-            dropout_p=self.attention_dropout if self.training else 0.0,
+            dropout=self.attention_dropout if self.training else 0.0,
             softmax_scale=1,  # Set to 1.0 to disable default scaling
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=False,
         )
 
         # Reshape output
@@ -699,6 +708,7 @@ class TimesFMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesfm"
     main_input_name = "inputs"
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
@@ -938,8 +948,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             padding = torch.zeros(input_len + self.horizon_len, dtype=torch.float32)
             if input_len < self.context_len:
                 num_front_pad = self.context_len - input_len
-                ts = torch.cat([torch.zeros(num_front_pad, dtype=torch.float32), ts], dim=0)
-                padding = torch.cat([torch.ones(num_front_pad, dtype=torch.float32), padding], dim=0)
+                ts = torch.cat([torch.zeros(num_front_pad, dtype=torch.float32, device=ts.device), ts], dim=0)
+                padding = torch.cat([torch.ones(num_front_pad, dtype=torch.float32, device=padding.device), padding], dim=0)
             elif input_len > self.context_len:
                 ts = ts[-self.context_len :]
                 padding = padding[-(self.context_len + self.horizon_len) :]
