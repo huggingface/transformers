@@ -400,8 +400,8 @@ class LlamaFlashAttention2(LlamaAttention):
         value_states = self.v_proj(hidden_states)
 
         # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
+        # batch_size, seq_length, num_heads, head_dim
+        # but rotary embeddings require batch_size, num_heads, seq_length, head_dim
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
