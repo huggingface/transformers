@@ -33,7 +33,6 @@ from .utils.logging import get_logger
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
 
 logger = get_logger(__name__)
 
@@ -252,7 +251,7 @@ def read_field(reader, field):
 
 
 def get_gguf_hf_weights_map(
-    hf_model: nn.Module,
+    hf_model,
     model_type: Optional[str] = None,
     num_layers: Optional[int] = None,
     qual_name: str = "",
