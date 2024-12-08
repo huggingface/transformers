@@ -2181,6 +2181,8 @@ else:
     )
     _import_structure["models.encodec"].extend(
         [
+            "EncodecDiscriminator",
+            "EncodecDiscriminatorConfig",
             "EncodecModel",
             "EncodecPreTrainedModel",
         ]
@@ -6979,6 +6981,8 @@ if TYPE_CHECKING:
             load_tf_weights_in_electra,
         )
         from .models.encodec import (
+            EncodecDiscriminator,
+            EncodecDiscriminatorConfig,
             EncodecModel,
             EncodecPreTrainedModel,
         )
