@@ -34,14 +34,14 @@ def get_dpt_config(model_name):
     num_hidden_layers = 12
     num_attention_heads = 12
     intermediate_size = 3072
-    out_features = ["stage3", "stage6", "stage9", "stage12"]  # beit-base-384 uses [2, 5, 8, 11]
+    out_indices = [3, 6, 9, 12]  # beit-base-384 uses [2, 5, 8, 11] in original implementation
 
     if "large" in model_name:
         hidden_size = 1024
         num_hidden_layers = 24
         num_attention_heads = 16
         intermediate_size = 4096
-        out_features = ["stage6", "stage12", "stage18", "stage24"]  # beit-large-512 uses [5, 11, 17, 23]
+        out_indices = [6, 12, 18, 24]  # beit-large-512 uses [5, 11, 17, 23] in original implementation
 
     if "512" in model_name:
         image_size = 512
@@ -58,7 +58,7 @@ def get_dpt_config(model_name):
         num_attention_heads=num_attention_heads,
         use_relative_position_bias=True,
         reshape_hidden_states=False,
-        out_features=out_features,
+        out_indices=out_indices,
     )
 
     neck_hidden_sizes = [256, 512, 1024, 1024] if "large" in model_name else [96, 192, 384, 768]

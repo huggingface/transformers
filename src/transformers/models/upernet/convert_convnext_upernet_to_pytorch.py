@@ -54,9 +54,7 @@ def get_upernet_config(model_name):
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
-    backbone_config = ConvNextConfig(
-        depths=depths, hidden_sizes=hidden_sizes, out_features=["stage1", "stage2", "stage3", "stage4"]
-    )
+    backbone_config = ConvNextConfig(depths=depths, hidden_sizes=hidden_sizes, out_indices=[1, 2, 3, 4])
     config = UperNetConfig(
         backbone_config=backbone_config,
         auxiliary_in_channels=auxiliary_in_channels,

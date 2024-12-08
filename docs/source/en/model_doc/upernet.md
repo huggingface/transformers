@@ -40,7 +40,7 @@ UPerNet is a general framework for semantic segmentation. It can be used with an
 ```py
 from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
 
-backbone_config = SwinConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+backbone_config = SwinConfig(out_indices=[1, 2, 3, 4])
 
 config = UperNetConfig(backbone_config=backbone_config)
 model = UperNetForSemanticSegmentation(config)
@@ -51,7 +51,7 @@ To use another vision backbone, like [ConvNeXt](convnext), simply instantiate th
 ```py
 from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
 
-backbone_config = ConvNextConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+backbone_config = ConvNextConfig(out_indices=[1, 2, 3, 4])
 
 config = UperNetConfig(backbone_config=backbone_config)
 model = UperNetForSemanticSegmentation(config)

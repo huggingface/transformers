@@ -34,9 +34,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_maskformer_config(model_name: str):
-    backbone_config = SwinConfig.from_pretrained(
-        "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
-    )
+    backbone_config = SwinConfig.from_pretrained("microsoft/swin-tiny-patch4-window7-224", out_indices=[1, 2, 3, 4])
     config = MaskFormerConfig(backbone_config=backbone_config)
 
     repo_id = "huggingface/label-files"

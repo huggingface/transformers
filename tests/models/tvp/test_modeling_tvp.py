@@ -118,7 +118,6 @@ class TVPModelTester:
             hidden_sizes=[64, 128],
             depths=[2, 2],
             hidden_act="relu",
-            out_features=["stage2"],
             out_indices=[2],
         )
         return TvpConfig(

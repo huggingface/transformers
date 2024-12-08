@@ -116,7 +116,6 @@ class ConditionalDetrModelTester:
             depths=[1, 1, 2, 1],
             hidden_act="relu",
             num_labels=3,
-            out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
         return ConditionalDetrConfig(

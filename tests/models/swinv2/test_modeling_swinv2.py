@@ -67,7 +67,6 @@ class Swinv2ModelTester:
         use_labels=True,
         type_sequence_label_size=10,
         encoder_stride=8,
-        out_features=["stage1", "stage2"],
         out_indices=[1, 2],
     ):
         self.parent = parent
@@ -94,7 +93,6 @@ class Swinv2ModelTester:
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
-        self.out_features = out_features
         self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
@@ -128,7 +126,6 @@ class Swinv2ModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
-            out_features=self.out_features,
             out_indices=self.out_indices,
         )
 
@@ -150,14 +147,14 @@ class Swinv2ModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = Swinv2Backbone(config=config)
         model.to(torch_device)
         model.eval()
