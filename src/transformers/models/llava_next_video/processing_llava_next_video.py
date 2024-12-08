@@ -196,7 +196,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                         orig_height, orig_width = image_size
                         num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                         if self.vision_feature_select_strategy == "default":
-                            num_image_tokens -= self.num_additional_image_tokens
+                            num_image_tokens -= 1
                         sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
                     prompt_strings.append(sample)
                 text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
