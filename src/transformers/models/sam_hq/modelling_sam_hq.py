@@ -26,31 +26,35 @@ _CHECKPOINT_FOR_DOC = "Uminosachi/sam-hq"
 
 class SamHQVisionEncoderOutput(ModelOutput):
     """
-    Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
-    layer to the pooler_output.
+    Base class for SAM-HQ vision model's outputs.
 
     Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        intermediate_embeddings (`list(torch.FloatTensor)`, *optional*):
+            A list of intermediate embeddings collected from certain blocks within the model, typically those without
+            windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
+    intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
 
 
 class SamHQPatchEmbeddings(nn.Module):
@@ -445,6 +449,7 @@ class SamHQVisionEncoder(nn.Module):
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+        intermediate_embeddings = []
 
         for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
@@ -453,12 +458,16 @@ class SamHQVisionEncoder(nn.Module):
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
-                    hidden_states,
+                     hidden_states,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
+
+            # Collect embeddings from non-windowed blocks
+            if hasattr(layer_module, 'window_size') and layer_module.window_size == 0:
+                intermediate_embeddings.append(hidden_states)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -466,10 +475,11 @@ class SamHQVisionEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+
         hidden_states = self.neck(hidden_states)
 
         if not return_dict:
-            outputs = (hidden_states,)
+            outputs = (hidden_states, intermediate_embeddings)
             if output_hidden_states:
                 outputs = outputs + (all_hidden_states,)
             if output_attentions:
@@ -478,9 +488,11 @@ class SamHQVisionEncoder(nn.Module):
 
         return SamHQVisionEncoderOutput(
             last_hidden_state=hidden_states,
+            intermediate_embeddings=intermediate_embeddings,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
 
 class SamHQMaskEmbedding(nn.Module):
     def __init__(self, config: SamHQPromptEncoderConfig):
@@ -776,7 +788,27 @@ class SamHQTwoWayAttentionBlock(nn.Module):
 
 
 
+class SamHQPositionalEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.hidden_size // 2
+        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
 
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
 class SamHQTwoWayTransformer(nn.Module):
@@ -1054,19 +1086,114 @@ class SamHQMaskDecoder(nn.Module):
 
         return outputs
     
-            
+
+class  SamHQPreTrainedModel(PreTrainedModel):
+    config_class = SamHQConfig
+    base_model_prefix = "sam_hq"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["SamHQVisionAttention"]
+
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d,nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module,nn.Embedding)
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 
+class SamHQModel(SamHQPreTrainedModel):
+    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
 
 
+    def __init__(self, config):
+        super().__init__(config)
+        self.shared_image_embedding = SamHQPositionalEmbedding(config.vision_config)
 
-            
+        self.vision_encoder = SamHQVisionEncoder(config.vision_config)
+        self.prompt_encoder = SamHQPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
+        self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
+
+        self.post_init()
 
 
+    def get_input_embeddings(self):
+        return self.vision_encoder.get_input_embeddings()
+    
+    def get_image_wide_positional_embeddings(self):
+        size = self.config.prompt_encoder_config.image_embedding_size
+        target_device = self.shared_image_embedding.positional_embedding.device
+        target_dtype = self.shared_image_embedding.positional_embedding.dtype
+        grid = torch.ones((size, size), device=target_device, dtype=target_dtype)
+        y_embed = grid.cumsum(dim=0) - 0.5
+        x_embed = grid.cumsum(dim=1) - 0.5
+        y_embed = y_embed / size
+        x_embed = x_embed / size
+
+        positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
+        return positional_embedding.permute(2, 0, 1).unsqueeze(0)
+    
 
 
+    @torch.no_grad()
+    def get_image_embeddings(
+        self,
+        pixel_values,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+
+    ):
+        vision_output = self.vision_encoder(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
+        if return_dict:
+            image_embeddings = vision_output.last_hidden_state
+            intermediate_embeddings = vision_output.intermediate_embeddings
+        else:
+            image_embeddings = vision_output[0]
+            intermediate_embeddings = vision_output[1]
+
+        return image_embeddings, intermediate_embeddings
+    
+
+    @torch.no_grad()
+    def get_prompt_embeddings(
+        self,
+        input_points: Optional[torch.FloatTensor]= None,
+        input_labels: Optional[torch.LongTensor]= None,
+        input_boxes: Optional[torch.FloatTensor]= None,
+        input_masks: Optional[torch.LongTensor]= None,
+    ):
+        prompt_output = self.prompt_encoder(
+            input_points=input_points,
+            input_labels=input_labels,
+            input_boxes=input_boxes,
+            input_masks=input_masks,
+        )
+        return prompt_output
+    
+
+    
         
+
+
+
+
+
+
+       
+
 
             
 
