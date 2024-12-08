@@ -56,6 +56,7 @@ from .configuration_qwen2 import Qwen2Config
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
 if is_torch_greater_or_equal("2.5"):
     from torch.nn.attention.flex_attention import flex_attention
 
@@ -490,7 +491,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
         self.config._attn_implementation = "flash_attention_2"
         logger.warning_once(
             "The `Qwen2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
+            "attribute of the `Qwen2Attention` class! It will be removed in v4.48"
         )
 
 
@@ -499,7 +500,7 @@ class Qwen2SdpaAttention(Qwen2Attention):
         super().__init__(config, layer_idx)
         self.config._attn_implementation = "sdpa"
         logger.warning_once(
-            "The `Qwen2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
+            "The `Qwen2SdpaAttention` class is deprecated in favor of simply modifying the `config._attn_implementation`"
             "attribute of the `Qwen2Attention` class! It will be removed in v4.48"
         )
 
