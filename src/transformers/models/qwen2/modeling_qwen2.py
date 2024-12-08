@@ -327,17 +327,27 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
 
 
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
-    attn_output = flex_attention(
+    causal_mask = mask
+    if causal_mask is not None:
+        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+
+    def causal_mod(score, b, h, q_idx, kv_idx):
+        if causal_mask is not None:
+            score += causal_mask[b][0][q_idx][kv_idx]
+        return score
+    
+    attn_output, attn_weights = flex_attention(
         query,
         key,
         value,
+        score_mod=causal_mod,
         enable_gqa=True,
-        return_lse=output_attentions,
+        return_lse=True,
     )
-    if not output_attentions:
-        return attn_output, None
-    else:
-        return attn_output[0], attn_output[1]
+    attn_weights = attn_weights.to(value.dtype)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    
+    return attn_output, attn_weights
 
 
 QWEN2_ATTENTION_FUNCTION = {
