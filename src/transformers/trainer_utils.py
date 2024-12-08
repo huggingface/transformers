@@ -896,8 +896,6 @@ def shard_tensor(tensor, num_shards, rank, dim=1):
 
 
 def prepare_inputs_for_sequence_parallel(inputs, sequence_parallel_size, sequence_parallel_rank):
-    for k in inputs:
-        print(f"{k}", inputs[k] if not isinstance(inputs[k], torch.Tensor) else inputs[k].shape)
     if ("position_ids" not in inputs or inputs["position_ids"] is None) and "input_ids" in inputs:
         # expand the position_ids to match batch size
         position_ids = torch.arange(inputs["input_ids"].shape[1], dtype=torch.long, device=inputs["input_ids"].device)
