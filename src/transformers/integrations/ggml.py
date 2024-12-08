@@ -90,20 +90,6 @@ GGUF_TENSOR_MAPPING = {
         "output_norm": "backbone.norm_f",
         "output.weight": "lm_head.weight",
     },
-    "nemotron": {
-        "token_embd": "model.embed_tokens",
-        "blk": "model.layers",
-        "ffn_up": "mlp.up_proj",
-        "ffn_down": "mlp.down_proj",
-        "ffn_norm": "post_attention_layernorm",
-        "attn_norm": "input_layernorm",
-        "attn_q": "self_attn.q_proj",
-        "attn_v": "self_attn.v_proj",
-        "attn_k": "self_attn.k_proj",
-        "attn_output": "self_attn.o_proj",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.norm",
-    },
 }
 
 
