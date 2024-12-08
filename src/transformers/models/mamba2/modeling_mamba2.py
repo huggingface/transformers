@@ -489,7 +489,7 @@ class Mamba2Mixer(nn.Module):
             )
             if self.use_conv_bias:
                 hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
-            hidden_states_B_C = self.act(hidden_states_B_C).unsqueeze(1)
+            hidden_states_B_C = self.act(hidden_states_B_C)
         else:
             # Init cache
             if cache_params is not None:
