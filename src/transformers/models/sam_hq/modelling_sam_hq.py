@@ -979,6 +979,91 @@ class SamHQMaskDecoder(nn.Module):
         mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
 
 
+        image_embeddings = image_embeddings.transpose(2, 3).reshape(
+            batch_size * point_batch_size, num_channels, height, width
+        )
+
+
+        upscaled_embedding = self.upscale_conv1(image_embeddings)
+        upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
+        upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding))
+
+        upscaled_embedding_hq = self.mask_conv1(upscaled_embedding)
+        upscaled_embedding_hq = self.activation(self.mask_norm(upscaled_embedding_hq))
+        upscaled_embedding_hq = self.mask_conv2(upscaled_embedding_hq)
+
+        upscaled_embedding_hq = upscaled_embedding_hq + hq_features.repeat(batch_size, 1, 1, 1)
+
+
+        hyper_in_list = []
+        for i in range(self.num_mask_tokens):
+            if i < self.num_mask_tokens - 1:
+                current_mlp = self.output_hypernetworks_mlps[i]
+                hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
+            else:
+                current_mlp = self.hf_mlp
+                hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
+
+        
+
+        hyper_in = torch.stack(hyper_in_list, dim=2)
+        _, num_channels, height, width = upscaled_embedding.shape
+        upscaled_embedding = upscaled_embedding.reshape(batch_size, point_batch_size, num_channels, height * width)
+        upscaled_embedding_hq = upscaled_embedding_hq.reshape(batch_size, point_batch_size, num_channels, height * width)
+
+        masks_sam = (hyper_in[:, :, :self.num_mask_tokens-1] @ upscaled_embedding).reshape(batch_size, point_batch_size, -1, height, width)
+        masks_hq = (hyper_in[:, :, self.num_mask_tokens-1:] @ upscaled_embedding_hq).reshape(batch_size, point_batch_size, -1, height, width)
+        masks = torch.cat([masks_sam, masks_hq], dim=2)
+
+
+        iou_pred = self.iou_prediction_head(iou_token_out)
+
+
+
+        if multimask_output:
+            mask_slice = slice(1,self.num_mask_tokens-1)
+            iou_pred = iou_pred[:, :, mask_slice]
+
+
+            iou_pred, max_iou_idx = torch.max(iou_pred, dim=2)
+            iou_pred = iou_pred.unsqueeze(2)
+
+
+            masks_multi = masks[:, :, mask_slice, :, :]
+            batch_indices = torch.arange(masks_multi.size(0)).unsqueeze(1).expand(-1, masks_multi.size(1))
+            point_indices = torch.arange(masks_multi.size(1)).unsqueeze(0).expand(masks_multi.size(0), -1)
+            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(2)
+        else:
+            mask_slice = slice(0, 1)
+            iou_pred = iou_pred[:, :, mask_slice]
+            masks_sam = masks[:, :, mask_slice, :, :]
+            masks_hq = masks[:, :, slice(self.num_mask_tokens-1, self.num_mask_tokens), :, :]
+
+
+            if hq_token_only:
+                masks = masks_hq
+            else:
+                masks = masks_sam + masks_hq
+
+        
+        outputs = (masks, iou_pred)
+        if output_attentions:
+            outputs = outputs + (attentions,)
+        else:
+            outputs = outputs + (None,)
+
+        return outputs
+    
+            
+
+
+
+
+
+
+            
+
+
 
 
         
