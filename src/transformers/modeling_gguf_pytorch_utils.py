@@ -52,7 +52,7 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
     "tokenizer_config": {"tokenizer": GGUF_TOKENIZER_MAPPING["tokenizer_config"]},
 }
 
-GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["tensors"].keys())
+GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys())
 
 
 class GGUFTensor(NamedTuple):
@@ -254,7 +254,7 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
-def get_gguf_hf_weights_map(hf_model):
+def get_gguf_hf_weights_map(hf_model, model_type=None, num_layers=None, qual_name=""):
     """
     GGUF uses this naming convention for their tensors from HF checkpoint:
     `blk.N.BB.weight` and `blk.N.BB.bias`
@@ -265,7 +265,8 @@ def get_gguf_hf_weights_map(hf_model):
     """
     from gguf import MODEL_ARCH_NAMES, get_tensor_name_map
 
-    model_type = hf_model.config.model_type
+    model_type = hf_model.config.model_type if model_type is None else model_type
+    num_layers = hf_model.config.num_hidden_layers if num_layers is None else num_layers
     # hack: ggufs have a different name for cohere
     if model_type == "cohere":
         model_type = "command-r"
@@ -276,15 +277,26 @@ def get_gguf_hf_weights_map(hf_model):
             break
     if arch is None:
         raise RuntimeError(f"Unknown gguf model_type: {model_type}")
-    num_layers = hf_model.config.num_hidden_layers
     name_map = get_tensor_name_map(arch, num_layers)
-    state_dict = hf_model.state_dict()
 
     gguf_to_hf_name_map = {}
+    state_dict = hf_model.state_dict()
     for hf_name in state_dict.keys():
-        name, suffix = hf_name.rsplit(".", 1)
+        splited_name = hf_name.rsplit(".", 1)
+        if len(splited_name) != 2:
+            continue
+        name, suffix = splited_name
         gguf_name = name_map.get_name(name)
-        gguf_to_hf_name_map[f"{gguf_name}.{suffix}"] = hf_name
+        if gguf_name is None:
+            continue
+        gguf_to_hf_name_map[f"{gguf_name}.{suffix}"] = qual_name+hf_name
+
+    # Some model like Bloom converted from BloomModel instead of BloomForCausalLM
+    # Therefore, we need to check submodule as well to get a correct mapping
+    if (named_children := hf_model.named_children()):
+        for name, child in named_children:
+            gguf_to_hf_name_map.update(get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}."))
+
     return gguf_to_hf_name_map
 
 
