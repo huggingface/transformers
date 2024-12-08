@@ -81,6 +81,8 @@ class MistralConfig(PretrainedConfig):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        embedding_scale (`float`, *optional*, defaults to 1.0):
+            A scaling factor applied to the model's embeddings. If not specified, will default to `1.0`.
 
     ```python
     >>> from transformers import MistralModel, MistralConfig
@@ -129,6 +131,7 @@ class MistralConfig(PretrainedConfig):
         rope_theta=10000.0,
         sliding_window=4096,
         attention_dropout=0.0,
+        embedding_scale=1.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -151,6 +154,7 @@ class MistralConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
+        self.embedding_scale = embedding_scale
 
         super().__init__(
             pad_token_id=pad_token_id,
