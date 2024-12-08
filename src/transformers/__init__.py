@@ -426,6 +426,7 @@ _import_structure = {
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
+    "models.exaone": ["ExaoneConfig"],
     "models.falcon": ["FalconConfig"],
     "models.falcon_mamba": ["FalconMambaConfig"],
     "models.fastspeech2_conformer": [
@@ -2209,6 +2210,15 @@ else:
             "EsmForTokenClassification",
             "EsmModel",
             "EsmPreTrainedModel",
+        ]
+    )
+    _import_structure["models.exaone"].extend(
+        [
+            "ExaoneForCausalLM",
+            "ExaoneForQuestionAnswering",
+            "ExaoneForSequenceClassification",
+            "ExaoneModel",
+            "ExaonePreTrainedModel",
         ]
     )
     _import_structure["models.falcon"].extend(
@@ -5329,6 +5339,7 @@ if TYPE_CHECKING:
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ErnieConfig
     from .models.esm import EsmConfig, EsmTokenizer
+    from .models.exaone import ExaoneConfig
     from .models.falcon import FalconConfig
     from .models.falcon_mamba import FalconMambaConfig
     from .models.fastspeech2_conformer import (
@@ -7003,6 +7014,13 @@ if TYPE_CHECKING:
             EsmForTokenClassification,
             EsmModel,
             EsmPreTrainedModel,
+        )
+        from .models.exaone import (
+            ExaoneForCausalLM,
+            ExaoneForQuestionAnswering,
+            ExaoneForSequenceClassification,
+            ExaoneModel,
+            ExaonePreTrainedModel,
         )
         from .models.falcon import (
             FalconForCausalLM,
