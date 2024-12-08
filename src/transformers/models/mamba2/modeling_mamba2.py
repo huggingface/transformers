@@ -1036,11 +1036,6 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     ):
         # Overwitten -- uses `cache_params` as opposed to `past_key_values`
 
-        if inputs_embeds is not None:
-            past_len = inputs_embeds.shape[1] + input_ids.shape[1]
-        else:
-            past_len = input_ids.shape[1]
-
         if use_cache:
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
@@ -1059,7 +1054,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
                 # considering padding will be applied when input length is shorter, and truncation
                 # will be applied when it is longer, so it will be equivalent to always have it match
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
-                cache_position = torch.arange(0, past_len, device=input_ids.device)
+                cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
