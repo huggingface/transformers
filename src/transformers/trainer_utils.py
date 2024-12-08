@@ -907,8 +907,6 @@ def prepare_inputs_for_sequence_parallel(inputs, sequence_parallel_size, sequenc
         if key in inputs:
             if inputs[key] is None:
                 continue
-            print(f"{key} before", inputs[key].shape)
             inputs[key] = shard_tensor(inputs[key], sequence_parallel_size, sequence_parallel_rank)
-            print(f"{key} after", inputs[key].shape)
 
     return inputs
