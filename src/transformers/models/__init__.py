@@ -222,6 +222,7 @@ from . import (
     roformer,
     rt_detr,
     rwkv,
+    rwkv6,
     sam,
     seamless_m4t,
     seamless_m4t_v2,
