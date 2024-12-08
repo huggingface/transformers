@@ -223,10 +223,6 @@ class MambaTensorProcessor(TensorProcessor):
         super().__init__(config=config)
 
     def process(self, weights, name, **kwargs):
-        if "ssm_d" in name and "bias" not in name and "weight" not in name:
-            # ssm_d has conflicts with ssm_dt in name checking
-            # we have to explicitly check that name is exactly ssm_d
-            name = name.replace("ssm_d", "mixer.D")
         if "ssm_conv1d.weight" in name:
             # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
             # quantized one is (5120, 4)

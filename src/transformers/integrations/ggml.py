@@ -77,19 +77,6 @@ GGUF_TENSOR_MAPPING = {
         ".output.": ".lm_head.",
         "output_norm": "ln_f",
     },
-    "mamba": {
-        "token_embd": "backbone.embeddings",
-        "blk": "backbone.layers",
-        "ssm_a": "mixer.A_log",
-        "ssm_conv1d": "mixer.conv1d",
-        "ssm_in": "mixer.in_proj",
-        "ssm_out": "mixer.out_proj",
-        "ssm_x": "mixer.x_proj",
-        "ssm_dt": "mixer.dt_proj",
-        "attn_norm": "norm",
-        "output_norm": "backbone.norm_f",
-        "output.weight": "lm_head.weight",
-    },
 }
 
 
