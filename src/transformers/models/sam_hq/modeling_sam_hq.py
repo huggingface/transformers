@@ -1186,8 +1186,7 @@ class SamHQModel(SamHQPreTrainedModel):
 
     
         
-class sam():
-    pass
+
 
 
 
