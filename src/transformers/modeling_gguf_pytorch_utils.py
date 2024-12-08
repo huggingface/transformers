@@ -282,14 +282,16 @@ def get_gguf_hf_weights_map(hf_model, model_type=None, num_layers=None, qual_nam
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
     for hf_name in state_dict.keys():
-        splited_name = hf_name.rsplit(".", 1)
-        if len(splited_name) != 2:
-            continue
-        name, suffix = splited_name
+        name, suffix = hf_name, ""
+        if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
+            name, suffix = hf_name.rsplit(".", 1)
+            suffix = "." + suffix
+
         gguf_name = name_map.get_name(name)
         if gguf_name is None:
             continue
-        gguf_to_hf_name_map[f"{gguf_name}.{suffix}"] = qual_name+hf_name
+
+        gguf_to_hf_name_map[gguf_name + suffix] = qual_name+hf_name
 
     # Some model like Bloom converted from BloomModel instead of BloomForCausalLM
     # Therefore, we need to check submodule as well to get a correct mapping
