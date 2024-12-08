@@ -949,7 +949,9 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             if input_len < self.context_len:
                 num_front_pad = self.context_len - input_len
                 ts = torch.cat([torch.zeros(num_front_pad, dtype=torch.float32, device=ts.device), ts], dim=0)
-                padding = torch.cat([torch.ones(num_front_pad, dtype=torch.float32, device=padding.device), padding], dim=0)
+                padding = torch.cat(
+                    [torch.ones(num_front_pad, dtype=torch.float32, device=padding.device), padding], dim=0
+                )
             elif input_len > self.context_len:
                 ts = ts[-self.context_len :]
                 padding = padding[-(self.context_len + self.horizon_len) :]
