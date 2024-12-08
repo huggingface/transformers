@@ -33,6 +33,7 @@ from .utils.logging import get_logger
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 logger = get_logger(__name__)
 
@@ -250,7 +251,12 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
-def get_gguf_hf_weights_map(hf_model, model_type=None, num_layers=None, qual_name=""):
+def get_gguf_hf_weights_map(
+    hf_model: nn.Module,
+    model_type: Optional[str] = None,
+    num_layers: Optional[int] = None,
+    qual_name: str = "",
+):
     """
     GGUF uses this naming convention for their tensors from HF checkpoint:
     `blk.N.BB.weight` and `blk.N.BB.bias`
@@ -275,6 +281,8 @@ def get_gguf_hf_weights_map(hf_model, model_type=None, num_layers=None, qual_nam
         raise RuntimeError(f"Unknown gguf model_type: {model_type}")
     name_map = get_tensor_name_map(arch, num_layers)
 
+    # Use a dummy conversion to get the mapping, because
+    # hf => gguf and gguf => hf mappings are reversed
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
     for hf_name in state_dict.keys():
@@ -287,13 +295,15 @@ def get_gguf_hf_weights_map(hf_model, model_type=None, num_layers=None, qual_nam
         if gguf_name is None:
             continue
 
-        gguf_to_hf_name_map[gguf_name + suffix] = qual_name+hf_name
+        gguf_to_hf_name_map[gguf_name + suffix] = qual_name + hf_name
 
     # Some model like Bloom converted from BloomModel instead of BloomForCausalLM
     # Therefore, we need to check submodule as well to get a correct mapping
-    if (named_children := hf_model.named_children()):
+    if named_children := hf_model.named_children():
         for name, child in named_children:
-            gguf_to_hf_name_map.update(get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}."))
+            gguf_to_hf_name_map.update(
+                get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
+            )
 
     return gguf_to_hf_name_map
 
