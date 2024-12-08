@@ -123,7 +123,7 @@ def remove_padding_influence(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    if hidden_states.ndim < 3 or attention_mask is None:
+    if hidden_states.shape[1] < 2 or attention_mask is None:
         return hidden_states
 
     if attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
@@ -489,7 +489,7 @@ class Mamba2Mixer(nn.Module):
             )
             if self.use_conv_bias:
                 hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
-            hidden_states_B_C = self.act(hidden_states_B_C)
+            hidden_states_B_C = self.act(hidden_states_B_C).unsqueeze(1)
         else:
             # Init cache
             if cache_params is not None:
@@ -501,7 +501,7 @@ class Mamba2Mixer(nn.Module):
 
             hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2))
 
-        hidden_states_B_C = remove_padding_influence(hidden_states_B_C, attention_mask)
+        hidden_states_B_C = remove_padding_influence(hidden_states_B_C, attention_mask).squeeze(1)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
             [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
