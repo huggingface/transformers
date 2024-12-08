@@ -163,6 +163,7 @@ class SamHQConfig(PretrainedConfig):
         self,
         vision_config=None,
         prompt_encoder_config=None,
+        mask_decoder_config=None,
         intializer_range=0.02,
         **kwargs,
     ):
@@ -175,11 +176,12 @@ class SamHQConfig(PretrainedConfig):
             vision_config = vision_config.to_dict()
         if isinstance(prompt_encoder_config, SamHQPromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, SamHQMaskDecoder):
+        if isinstance(mask_decoder_config, SamHQMaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
 
 
         
         self.vision_config = SamHQVisionConfig(**vision_config)
         self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
+        self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
         self.intializer_range = intializer_range
