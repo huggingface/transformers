@@ -52,7 +52,7 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
     "tokenizer_config": {"tokenizer": GGUF_TOKENIZER_MAPPING["tokenizer_config"]},
 }
 
-GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["tensors"].keys())
+GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys())
 
 
 class GGUFTensor(NamedTuple):
@@ -223,10 +223,6 @@ class MambaTensorProcessor(TensorProcessor):
         super().__init__(config=config)
 
     def process(self, weights, name, **kwargs):
-        if "ssm_d" in name and "bias" not in name and "weight" not in name:
-            # ssm_d has conflicts with ssm_dt in name checking
-            # we have to explicitly check that name is exactly ssm_d
-            name = name.replace("ssm_d", "mixer.D")
         if "ssm_conv1d.weight" in name:
             # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
             # quantized one is (5120, 4)
@@ -254,7 +250,64 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
+def get_gguf_hf_weights_map(
+    hf_model,
+    model_type: Optional[str] = None,
+    num_layers: Optional[int] = None,
+    qual_name: str = "",
+):
+    """
+    GGUF uses this naming convention for their tensors from HF checkpoint:
+    `blk.N.BB.weight` and `blk.N.BB.bias`
+    where N signifies the block number of a layer, and BB signifies the
+    attention/mlp layer components.
+    See "Standardized tensor names" in
+    https://github.com/ggerganov/ggml/blob/master/docs/gguf.md for details.
+    """
+    from gguf import MODEL_ARCH_NAMES, get_tensor_name_map
+
+    model_type = hf_model.config.model_type if model_type is None else model_type
+    num_layers = hf_model.config.num_hidden_layers if num_layers is None else num_layers
+    # hack: ggufs have a different name for cohere
+    if model_type == "cohere":
+        model_type = "command-r"
+    arch = None
+    for key, value in MODEL_ARCH_NAMES.items():
+        if value == model_type:
+            arch = key
+            break
+    if arch is None:
+        raise RuntimeError(f"Unknown gguf model_type: {model_type}")
+    name_map = get_tensor_name_map(arch, num_layers)
+
+    # Use a dummy conversion to get the mapping, because
+    # hf => gguf and gguf => hf mappings are reversed
+    gguf_to_hf_name_map = {}
+    state_dict = hf_model.state_dict()
+    for hf_name in state_dict.keys():
+        name, suffix = hf_name, ""
+        if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
+            name, suffix = hf_name.rsplit(".", 1)
+            suffix = "." + suffix
+
+        gguf_name = name_map.get_name(name)
+        if gguf_name is None:
+            continue
+
+        gguf_to_hf_name_map[gguf_name + suffix] = qual_name + hf_name
+
+    # Some model like Bloom converted from BloomModel instead of BloomForCausalLM
+    # Therefore, we need to check submodule as well to get a correct mapping
+    if named_children := hf_model.named_children():
+        for name, child in named_children:
+            gguf_to_hf_name_map.update(
+                get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
+            )
+
+    return gguf_to_hf_name_map
+
+
+def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
@@ -307,7 +360,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         ffn_norm_name = "ffn_norm"
         qkv_bias = any(bias_name in tensor.name for tensor in reader.tensors for bias_name in attn_bias_name)
         use_parallel_residual = any(ffn_norm_name in tensor.name for tensor in reader.tensors)
-        parsed_parameters["config"]["qkv_bias"] = qkv_bias
+        parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
     model_size = ""
@@ -375,7 +428,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             )
 
     if return_tensors:
-        tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
+        # tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
+        tensor_key_mapping = get_gguf_hf_weights_map(model_to_load)
         config = parsed_parameters.get("config", {})
 
         ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
@@ -394,14 +448,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
             weights = result.weights
             name = result.name
-            bid = result.metadata.get("bid")
 
-            if name is None:
+            if name not in tensor_key_mapping:
                 continue
 
-            for tensor_name in tensor_key_mapping:
-                if tensor_name.format(bid=bid) in name:
-                    name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
+            name = tensor_key_mapping[name]
+            # for tensor_name in tensor_key_mapping:
+            #     if tensor_name.format(bid=bid) in name:
+            #         name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
 
             # Use copy to avoid errors with numpy and pytorch
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
