@@ -17,19 +17,15 @@
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
-    ImageType,
     PILImageResampling,
-    get_image_type,
-    infer_channel_dimension_format,
-    make_list_of_images,
-    validate_fast_preprocess_arguments,
+    validate_kwargs,
 )
 from ...utils import (
     TensorType,
@@ -87,19 +83,14 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
-    # To be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"shortest_edge": 384}
     default_to_square = False
-    crop_size = None
     do_resize = True
-    do_center_crop = None
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = None
 
     def __init__(
         self,
@@ -139,7 +130,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         Resize an image.
 
         Args:
-            image (`np.ndarray`):
+            image (`torch.Tensor`):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary of the form `{"shortest_edge": int}`, specifying the size of the output image. If
@@ -150,6 +141,9 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
                 Percentage of the image to crop. Only has an effect if size < 384.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resizing the image.
+
+        Returns:
+            `torch.Tensor`: Resized image.
         """
         if not size.shortest_edge:
             raise ValueError(f"Size dictionary must contain 'shortest_edge' key. Got {size.keys()}")
@@ -249,6 +243,8 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         default_to_square = kwargs.pop(
@@ -269,59 +265,24 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         return_tensors = "pt" if return_tensors is None else return_tensors
         device = kwargs.pop("device", None)
 
-        # Make hashable for cache
-        size = SizeDict(**size) if size is not None else None
-        crop_size = SizeDict(**crop_size) if crop_size is not None else None
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        # TODO: add better kwargs handling
-        # validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        images = make_list_of_images(images)
-        image_type = get_image_type(images[0])
-
-        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
-            raise ValueError(f"Unsupported input image type {image_type}")
-
-        validate_fast_preprocess_arguments(
+        images, image_mean, image_std, size, crop_size, interpolation = self.prepare_process_arguments(
+            images=images,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+            do_convert_rgb=do_convert_rgb,
             return_tensors=return_tensors,
             data_format=data_format,
+            input_data_format=input_data_format,
+            device=device,
         )
-
-        if do_convert_rgb:
-            images = [self.convert_to_rgb(image) for image in images]
-
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images = [torch.from_numpy(image).contiguous() for image in images]
-
-        # Now that we have torch tensors, we can move them to the right device
-        if device is not None:
-            images = [image.to(device) for image in images]
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-        if input_data_format == ChannelDimension.LAST:
-            # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
-            images = [image.permute(2, 0, 1).contiguous() for image in images]
-            input_data_format = ChannelDimension.FIRST
-
-        if do_rescale and do_normalize:
-            # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
 
         processed_images = []
         for image in images:
@@ -343,7 +304,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
 
             if do_rescale and do_normalize:
                 # fused rescale and normalize
-                image = self.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+                image = self.normalize(image.to(dtype=torch.float32), image_mean, image_std)
             elif do_rescale:
                 image = image * rescale_factor
             elif do_normalize:

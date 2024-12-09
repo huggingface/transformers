@@ -36,6 +36,12 @@ class LlavaOnevisionImageProcessorFast(LlavaPatchingMixin, BaseImageProcessorFas
             method. Not used for processinf videos.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
+            `preprocess` method.
+        crop_size (`Dict[str, int]` *optional*, defaults to 224):
+            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
+            method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
@@ -65,9 +71,7 @@ class LlavaOnevisionImageProcessorFast(LlavaPatchingMixin, BaseImageProcessorFas
     image_std = OPENAI_CLIP_STD
     size = {"height": 384, "width": 384}
     default_to_square = False
-    crop_size = None
     do_resize = True
-    do_center_crop = None
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
