@@ -305,6 +305,10 @@ _import_structure = {
         "CodeGenTokenizer",
     ],
     "models.cohere": ["CohereConfig"],
+    "models.colpali": [
+        "ColPaliConfig",
+        "ColPaliProcessor",
+    ],
     "models.conditional_detr": ["ConditionalDetrConfig"],
     "models.convbert": [
         "ConvBertConfig",
@@ -1454,6 +1458,7 @@ else:
             "MODEL_FOR_OBJECT_DETECTION_MAPPING",
             "MODEL_FOR_PRETRAINING_MAPPING",
             "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "MODEL_FOR_RETRIEVAL_MAPPING",
             "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
             "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
@@ -1774,6 +1779,12 @@ else:
         ]
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
+    _import_structure["models.colpali"].extend(
+        [
+            "ColPaliForRetrieval",
+            "ColPaliPreTrainedModel",
+        ]
+    )
     _import_structure["models.conditional_detr"].extend(
         [
             "ConditionalDetrForObjectDetection",
@@ -5188,6 +5199,10 @@ if TYPE_CHECKING:
         CodeGenTokenizer,
     )
     from .models.cohere import CohereConfig
+    from .models.colpali import (
+        ColPaliConfig,
+        ColPaliProcessor,
+    )
     from .models.conditional_detr import (
         ConditionalDetrConfig,
     )
@@ -6385,6 +6400,7 @@ if TYPE_CHECKING:
             MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_RETRIEVAL_MAPPING,
             MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -6655,6 +6671,10 @@ if TYPE_CHECKING:
             CohereForCausalLM,
             CohereModel,
             CoherePreTrainedModel,
+        )
+        from .models.colpali import (
+            ColPaliForRetrieval,
+            ColPaliPreTrainedModel,
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
