@@ -112,6 +112,7 @@ class GemmaConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         bos_token_id=2,
+        query_pre_attn_scalar=224,
         tie_word_embeddings=True,
         rope_theta=10000.0,
         attention_bias=False,
@@ -132,8 +133,10 @@ class GemmaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.query_pre_attn_scalar =query_pre_attn_scalar,
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+     
 
         super().__init__(
             pad_token_id=pad_token_id,
