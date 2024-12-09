@@ -57,7 +57,7 @@ class SpQRHfQuantizer(HfQuantizer):
             )
         elif torch_dtype != torch.float16:
             raise ValueError(
-                "You cannot any type other than torch.float16 for SpQR. Please either leave it None or set it to"
+                "You cannot use any type other than torch.float16 for SpQR. Please either leave it None or set it to"
                 "torch.float16 explicitly."
             )
         return torch_dtype
