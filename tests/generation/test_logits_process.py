@@ -57,7 +57,11 @@ if is_torch_available():
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
         WatermarkLogitsProcessor,
     )
-    from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
+    from transformers.generation.logits_process import (
+        AllowOnlyTokensInRelativeWindowLogitsProcessor,
+        BarkEosPrioritizerLogitsProcessor,
+        SuppressTokensInIndexRangeLogitsProcessor,
+    )
 
 
 @require_torch
@@ -708,6 +712,33 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == filtered_scores))
+
+    def test_chameleon_processors(self):
+        batch_size = 4
+        sequence_length = 10
+        vocab_size = 15
+
+        # dummy input_ids and scores
+        input_ids = ids_tensor((batch_size, sequence_length), vocab_size)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        suppress_tokens_proc = SuppressTokensInIndexRangeLogitsProcessor(
+            suppress_tokens=[0], start_index=sequence_length - 2, device=torch_device
+        )
+        scores = suppress_tokens_proc(input_ids, scores)
+        self.assertTrue(torch.isinf(scores[:, 0]).all())
+
+        input_ids[:, -1] = 1
+        allow_tokens_proc = AllowOnlyTokensInRelativeWindowLogitsProcessor(
+            trigger_token_id=0, allowed_token_ids=[1, 2, 3], window_width=2, device=torch_device
+        )
+        scores = allow_tokens_proc(input_ids, scores)
+        self.assertFalse(torch.isinf(scores).all())
+
+        input_ids[:, -1] = 0
+        scores = allow_tokens_proc(input_ids, scores)
+        self.assertTrue(torch.isinf(scores[:, [4, 5, 6]]).all())
+        self.assertFalse(torch.isinf(scores[:, [1, 2, 3]]).all())
 
     def test_hamming_diversity(self):
         vocab_size = 4

@@ -48,6 +48,7 @@ if is_vision_available():
         rgb_to_id,
         to_channel_dimension_format,
         to_pil_image,
+        unnormalize,
     )
 
 
@@ -345,6 +346,75 @@ class ImageTransformsTester(unittest.TestCase):
         normalized_image = normalize(image, mean=mean, std=std)
         self.assertEqual(normalized_image.dtype, np.float32)
         self.assertTrue(np.allclose(normalized_image, expected_image, atol=1e-6))
+
+    def test_unnormalize(self):
+        image = np.random.randint(0, 256, (224, 224, 3)) / 255
+
+        # Test that exception is raised if inputs are incorrect
+        # Not a numpy array image
+        with self.assertRaises(ValueError):
+            unnormalize(5, 5, 5)
+
+        # Number of mean values != number of channels
+        with self.assertRaises(ValueError):
+            unnormalize(image, mean=(0.5, 0.6), std=1)
+
+        # Number of std values != number of channels
+        with self.assertRaises(ValueError):
+            unnormalize(image, mean=1, std=(0.5, 0.6))
+
+        # Test result is correct - output data format is channels_first and normalization
+        # correctly computed
+        mean = (0.5, 0.6, 0.7)
+        std = (0.1, 0.2, 0.3)
+        expected_image = (image * std + mean).transpose((2, 0, 1))
+
+        unnormalized_image = unnormalize(image, mean=mean, std=std, data_format="channels_first")
+        self.assertIsInstance(unnormalized_image, np.ndarray)
+        self.assertEqual(unnormalized_image.shape, (3, 224, 224))
+        self.assertTrue(np.allclose(unnormalized_image, expected_image, atol=1e-6))
+
+        # Test image with 4 channels is unnormalized_image correctly
+        image = np.random.randint(0, 256, (224, 224, 4)) / 255
+        mean = (0.5, 0.6, 0.7, 0.8)
+        std = (0.1, 0.2, 0.3, 0.4)
+        expected_image = (image * std) + mean
+        self.assertTrue(
+            np.allclose(
+                unnormalize(image, mean=mean, std=std, input_data_format="channels_last"), expected_image, atol=1e-6
+            )
+        )
+
+        # Test float32 image input keeps float32 dtype
+        image = np.random.randint(0, 256, (224, 224, 3)).astype(np.float32) / 255
+        mean = (0.5, 0.6, 0.7)
+        std = (0.1, 0.2, 0.3)
+        expected_image = ((image * std) + mean).astype(np.float32)
+        unnormalized_image = unnormalize(image, mean=mean, std=std)
+        self.assertEqual(unnormalized_image.dtype, np.float32)
+        self.assertTrue(np.allclose(unnormalized_image, expected_image, atol=1e-6))
+
+        # Test float16 image input keeps float16 dtype
+        image = np.random.randint(0, 256, (224, 224, 3)).astype(np.float16) / 255
+        mean = (0.5, 0.6, 0.7)
+        std = (0.1, 0.2, 0.3)
+
+        # The mean and std are cast to match the dtype of the input image
+        cast_mean = np.array(mean, dtype=np.float16)
+        cast_std = np.array(std, dtype=np.float16)
+        expected_image = (image * cast_std) + cast_mean
+        unnormalized_image = unnormalize(image, mean=mean, std=std)
+        self.assertEqual(unnormalized_image.dtype, np.float16)
+        self.assertTrue(np.allclose(unnormalized_image, expected_image, atol=1e-3))
+
+        # Test int image input is converted to float32
+        image = np.random.randint(0, 2, (224, 224, 3), dtype=np.uint8)
+        mean = (0.5, 0.6, 0.7)
+        std = (0.1, 0.2, 0.3)
+        expected_image = (image.astype(np.float32) * std) + mean
+        unnormalized_image = unnormalize(image, mean=mean, std=std)
+        self.assertEqual(unnormalized_image.dtype, np.float32)
+        self.assertTrue(np.allclose(unnormalized_image, expected_image, atol=1e-6))
 
     def test_center_crop(self):
         image = np.random.randint(0, 256, (3, 224, 224))

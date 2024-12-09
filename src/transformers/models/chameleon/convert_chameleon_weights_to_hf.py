@@ -81,7 +81,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, chameleon_version=1):
+def write_model(model_path, input_base_path, model_size, chameleon_version=1, vqvae_path=None):
     os.makedirs(model_path, exist_ok=True)
     input_model_path = os.path.join(input_base_path, "models", model_size.lower())
     params_path = os.path.join(input_model_path, "params.json")
@@ -316,8 +316,6 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
     vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
     for k, v in vqgan_state_dict.items():
-        if "decoder" in k:
-            continue  # we dont do image generation yet
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
@@ -327,9 +325,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
         tokenizer_config = json.load(tokenizer_file)
         vocabulary_map = tokenizer_config["model"]["vocab"]
-        vocabulary_map["<image>"] = vocabulary_map[
-            "<reserved08707>"
-        ]  # use a reserved token instead of adding a new one
+        # use a reserved token instead of adding a new one
+        vocabulary_map["<image>"] = vocabulary_map["<reserved08707>"]
         del vocabulary_map["<reserved08707>"]
 
         for token in tokenizer_config["added_tokens"]:
@@ -370,6 +367,9 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         swin_norm=swin_norm,
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,
+        image_token_id=vocabulary_map["<image>"],
+        boi_token_id=vocabulary_map["<racm3:break>"],
+        eoi_token_id=vocabulary_map["<eoss>"],
     )
     with init_empty_weights():
         model = ChameleonForConditionalGeneration(config)
@@ -377,9 +377,19 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     model.load_state_dict(state_dict, assign=True, strict=False)
     model.save_pretrained(model_path, safe_serialization=True)
 
+    if vqvae_path is not None:
+        model.model.vqmodel.save_pretrained(vqvae_path, safe_serialization=True)
+
     # Load and save the processor
+    extra_special_tokens = {
+        "image_token": "<image>",
+        "boi_token": "<racm3:break>",
+        "eoi_token": "<eoss>",
+    }
     tokenizer = LlamaTokenizerFast(
-        tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
+        tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"),
+        legacy=False,
+        extra_special_tokens=extra_special_tokens,
     )
     tokenizer.sep_token_id = 8710  # assign <reserved08706> to sep so that we can append it after input text
     tokenizer.pad_token_id = 1  # assing <pad> to special pad_token
@@ -463,12 +473,18 @@ def main():
         type=int,
         help="Version of the Chameleon model to convert",
     )
+    parser.add_argument(
+        "--vqvae_path",
+        default=None,
+        help="Location to write VQ-VAE model",
+    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         model_size=args.model_size,
         chameleon_version=args.chameleon_version,
+        vqvae_path=args.vqvae_path,
     )
 
 
