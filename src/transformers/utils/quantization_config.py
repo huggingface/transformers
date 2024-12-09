@@ -985,9 +985,7 @@ class AqlmConfig(QuantizationConfigMixin):
         if not isinstance(self.nbits_per_codebook, int):
             raise TypeError("nbits_per_codebook must be a float")
 
-        if self.modules_to_not_convert is not None and not isinstance(
-            self.modules_to_not_convert, list
-        ):
+        if self.modules_to_not_convert is not None and not isinstance(self.modules_to_not_convert, list):
             raise ValueError("modules_to_not_convert must be a list of strings")
 
         if self.modules_to_not_convert is None:
