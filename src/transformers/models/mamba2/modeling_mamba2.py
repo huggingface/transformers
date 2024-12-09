@@ -123,10 +123,7 @@ def remove_padding_influence(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    if hidden_states.shape[1] < 2 or attention_mask is None:
-        return hidden_states
-
-    if attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
@@ -322,9 +319,6 @@ class Mamba2Mixer(nn.Module):
             - 2 * self.n_groups * self.ssm_state_size
             - self.num_heads
         ) // 2
-        _, _, gate, hidden_states_B_C, dt = projected_states.split(
-            [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-        )
 
         # Single step calculations via cache
         if cache_params is not None and cache_position is not None and cache_position[0] > 0:
