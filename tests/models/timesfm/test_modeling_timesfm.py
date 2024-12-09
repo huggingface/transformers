@@ -107,15 +107,13 @@ class TimesFMModelTester:
 
     def prepare_config_and_inputs(self):
         forecast_input = [
-            torch.tensor(np.sin(np.linspace(0, 20, 100)), dtype=torch.float32),
-            torch.tensor(np.sin(np.linspace(0, 20, 200)), dtype=torch.float32),
-            torch.tensor(np.sin(np.linspace(0, 20, 400)), dtype=torch.float32),
+            torch.tensor(np.sin(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
+            torch.tensor(np.cos(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
+            torch.tensor(np.tan(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
         ]
-        frequency_input = [0, 1, 2]
+        frequency_input = torch.tensor([0, 1, 2], dtype=torch.long, device=torch_device)
 
-        config = self.get_config()
-
-        return (config, forecast_input, frequency_input)
+        return (self.get_config(), torch.stack(forecast_input, dim=0), frequency_input)
 
     def prepare_config_and_inputs_for_common(self):
         (config, forecast_input, frequency_input) = self.prepare_config_and_inputs()

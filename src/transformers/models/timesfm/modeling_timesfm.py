@@ -177,6 +177,8 @@ class TimesFMAttention(nn.Module):
 
     def __init__(self, config: TimesFMConfig):
         super().__init__()
+        self.attention_dropout = config.attention_dropout
+
         self.num_heads = config.num_heads
         self.num_kv_heads = config.num_heads
 
@@ -260,7 +262,7 @@ class TimesFMAttention(nn.Module):
         output = output.transpose(1, 2).contiguous().view(batch_size, input_len, -1)
         output = self.o_proj(output)
 
-        if output_attentions:
+        if not output_attentions:
             scores = None
 
         return output, scores
@@ -373,6 +375,7 @@ class TimesFMDecoderLayer(nn.Module):
         paddings: torch.Tensor,
         kv_write_indices: torch.Tensor | None = None,
         kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
+        output_attentions: bool = False,
     ) -> torch.Tensor:
         # Self Attention
         residual = hidden_states
@@ -382,6 +385,7 @@ class TimesFMDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             kv_write_indices=kv_write_indices,
             kv_cache=kv_cache,
+            output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
 
@@ -423,6 +427,7 @@ class TimesFMStackedDecoder(nn.Module):
                 paddings=paddings,
                 kv_write_indices=kv_write_indices,
                 kv_cache=kv_cache,
+                output_attentions=output_attentions,
             )
             if output_attentions:
                 all_attentions.append(scores)
@@ -727,7 +732,6 @@ class TimesFMDecoder(TimesFMPreTrainedModel):
         self, input_ts: torch.Tensor, input_padding: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """Preprocess input for stacked transformer."""
-
         # Reshape into patches (using view for efficiency)
         bsize = input_ts.shape[0]
         patched_inputs = input_ts.view(bsize, -1, self.config.patch_len)
