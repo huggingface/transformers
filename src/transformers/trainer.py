@@ -623,9 +623,7 @@ class Trainer:
             else unwrapped_model.get_base_model().forward
         )
         forward_params = inspect.signature(model_forward).parameters
-        self.model_accepts_loss_kwargs = (
-            "loss_kwargs" in forward_params and forward_params["loss_kwargs"].kind == inspect.Parameter.VAR_KEYWORD
-        )
+        self.model_accepts_loss_kwargs = any(k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values())
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -5130,10 +5128,6 @@ class Trainer:
                 batch_samples += [next(epoch_iterator)]
             except StopIteration:
                 break
-
-        # Keep default behavior the same
-        if not self.model_accepts_loss_kwargs:
-            return batch_samples, None
 
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
