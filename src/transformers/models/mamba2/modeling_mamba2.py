@@ -476,19 +476,16 @@ class Mamba2Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None and cache_position is not None and cache_position[0] > 0:
-            # We need to guarantee that anything regarding the cache is on the same device
-            cache_device = cache_params.conv_states.device
             cache_params.update_conv_state(layer_idx=self.layer_idx, new_conv_state=hidden_states_B_C, cache_init=False)
 
-            self.conv1d.weight = self.conv1d.weight.to(device=cache_device)
+            # We need to guarantee that anything regarding the cache is on the same device
+            conv_states = cache_params.conv_states[self.layer_idx].to(device=self.conv1d.weight.device)
+
             hidden_states_B_C = torch.sum(
-                cache_params.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1
+                conv_states * self.conv1d.weight.squeeze(1), dim=-1
             )
-
             if self.use_conv_bias:
-                self.conv1d.bias = self.conv1d.bias.to(device=cache_device)
                 hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
-
             hidden_states_B_C = self.act(hidden_states_B_C)
         else:
             # Init cache
