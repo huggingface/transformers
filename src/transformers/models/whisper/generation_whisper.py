@@ -14,6 +14,7 @@
 # limitations under the License.
 import copy
 import math
+import types
 import warnings
 import zlib
 from typing import Callable, Iterator, List, Optional, Tuple, Union
@@ -443,7 +444,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
                 If the passed input is > 30 seconds / > 3000 mel input features and `return_segments=True` then a dictionary of generated sequence ids, called `sequences` and a list of each generated segment is returned.
 
-                else if the passed input is <= 30 seconds / >= 3000 mel input features, the possible [`~utils.ModelOutput`] types are:
+                else if the passed input is <= 30 seconds / <= 3000 mel input features, the possible [`~utils.ModelOutput`] types are:
 
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
@@ -452,7 +453,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         Example:
 
-        - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate.
+        - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate. It is necessary to set `return_timestamps=True`.
+        Indeed, long-form transcription uses a sequential algorithm based on timestamps predictions, with heuristics like compression ratio threshold, log probability threshold and temperature fallback. This algorithm is described in the [the Whisper original paper](https://cdn.openai.com/papers/whisper.pdf), section *3.8. Long-form Transcription*.
 
         ```python
         >>> import torch
@@ -483,7 +485,9 @@ class WhisperGenerationMixin(GenerationMixin):
         " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
         ```
 
-        - *Shortform transcription*: If passed mel input features are < 30 seconds, the whole audio will be transcribed with a single call to generate.
+        - *Shortform transcription*: If passed mel input features are <= 30 seconds, there are two possibilities:
+            - `return_timestamps=False`: the whole audio will be transcribed with a single call to GenerationMixin's generate.
+            - `return_timestamps=True`: the audio will be transcribed using the same logic as long-form transcription.
 
         ```python
         >>> import torch
@@ -570,11 +574,21 @@ class WhisperGenerationMixin(GenerationMixin):
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
+        num_beams = kwargs.get(
+            "num_beams",
+            generation_config.num_beams
+            if hasattr(generation_config, "num_beams") and generation_config.num_beams is not None
+            else 1,
+        )
+        if "assistant_model" in kwargs:
+            # speculative decoding: the model should be able to return
+            generation_config.begin_suppress_tokens = None
+
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
             begin_index=begin_index,  # begin index is index of first generated decoder token
-            num_beams=kwargs.get("num_beams", 1),
+            num_beams=num_beams,
             device=device,
         )
 
@@ -618,6 +632,30 @@ class WhisperGenerationMixin(GenerationMixin):
             batch_size=cur_bsz,
             generation_config=generation_config,
         )
+
+        # 5bis speculative decoding: patch generate to make sure the assistant model returns the input tokens
+        # Whisper's generate method does not return the decoder input token ids.
+        # In Transformers, assisted decoding logic does a call to the generate method of the assistant model and expects the decoder input token ids to be returned.
+        # This patch is used to make sure the assistant model returns the decoder input token ids.
+        if "assistant_model" in kwargs:
+            from .modeling_whisper import WhisperForCausalLM
+
+            assistant_model = kwargs["assistant_model"]
+            if assistant_model is self:
+                assistant_model = copy.deepcopy(kwargs["assistant_model"])
+            if (
+                not hasattr(
+                    assistant_model, "_generate_with_input_tokens"
+                )  # make sure the assistant model does not already have the patch
+                and type(assistant_model)
+                != WhisperForCausalLM  # such a patch is not necessary for WhisperForCausalLM that uses directly GenerationMixin's generate
+            ):
+                # patch
+                assistant_model.generate = types.MethodType(
+                    self.generate_add_decoder_input_ids(assistant_model.generate.__func__), assistant_model
+                )
+                assistant_model._generate_with_input_tokens = True
+                kwargs["assistant_model"] = assistant_model
 
         # 6 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
@@ -729,12 +767,9 @@ class WhisperGenerationMixin(GenerationMixin):
                     return_token_timestamps=return_token_timestamps,
                 )
 
-                current_segments[prev_i] += segments
+                seek[prev_i] += segment_offset
 
-                if is_shortform:
-                    seek[prev_i] += max_frames[i]
-                else:
-                    seek[prev_i] += segment_offset
+                current_segments[prev_i] += segments
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
@@ -753,11 +788,6 @@ class WhisperGenerationMixin(GenerationMixin):
             return {"sequences": sequences, "segments": final_segments}
 
         if is_shortform:
-            # add eos token:
-            if generation_config.max_new_tokens is None and generation_config.max_length is None:
-                eos_tokens = torch.full((sequences.shape[0], 1), generation_config.eos_token_id)
-                sequences = torch.cat([sequences, eos_tokens], dim=-1)
-
             if return_token_timestamps:
                 outputs = {}
                 outputs["sequences"] = sequences
@@ -884,22 +914,16 @@ class WhisperGenerationMixin(GenerationMixin):
             new_decoder_attention_mask = []
 
             for i, seek_sequence in enumerate(seek_sequences):
-                # make sure we cut a predicted EOS token if we are not finished with the generation yet
-                prev_i = batch_idx_map[fallback_index_map[i]]
-                is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
-
-                # remove eos token id
-                if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
-                    seek_sequence = seek_sequence[:-1]
-                    if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-
-                # remove all padding tokens
+                # remove all padding tokens, except for the eos token
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
-                    seek_sequence = seek_sequence[:-num_paddings]
-                    if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
+                    if generation_config.pad_token_id == generation_config.eos_token_id:
+                        # we do not remove the eos token id since it is needed for avg logprob calculation in _need_fallback
+                        num_paddings -= 1
+                    if num_paddings != 0:
+                        seek_sequence = seek_sequence[:-num_paddings]
+                        if return_token_timestamps and not is_shortform:
+                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
@@ -911,6 +935,12 @@ class WhisperGenerationMixin(GenerationMixin):
                     self.config.vocab_size,
                     temperature,
                 )
+
+                # remove eos token
+                if seek_sequence[-1] == generation_config.eos_token_id:
+                    seek_sequence = seek_sequence[:-1]
+                    if return_token_timestamps:
+                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
@@ -954,10 +984,16 @@ class WhisperGenerationMixin(GenerationMixin):
         return current_segments
 
     def _postprocess_outputs(
-        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform
+        self,
+        seek_outputs,
+        decoder_input_ids,
+        return_token_timestamps,
+        generation_config,
+        is_shortform,
     ):
         # remove all previously passed decoder input ids
-        start_idx = decoder_input_ids.shape[-1] if not is_shortform else torch.tensor(0)
+        # should happen only if it is the first generated segment
+        start_idx = decoder_input_ids.shape[-1]
 
         if isinstance(seek_outputs, torch.Tensor):
             seek_outputs = seek_outputs[:, start_idx:]
@@ -1081,7 +1117,9 @@ class WhisperGenerationMixin(GenerationMixin):
             else:
                 scores = seek_outputs[index]["scores"]
                 logprobs = self._retrieve_avg_logprobs(
-                    scores, seek_sequence, generation_config.eos_token_id, temperature
+                    scores,
+                    seek_sequence,
+                    temperature,
                 )
 
             if logprobs < generation_config.logprob_threshold:
@@ -1176,13 +1214,6 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if no_speech_threshold is not None:
             logger.warning(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
-
-        # when passing temperature as a list it cannot just be ignored => throw error in this case
-        if isinstance(temperature, (list, tuple)):
-            raise ValueError(
-                f"Audio input consists of only {total_input_frames}. Short-form transcription is activated."
-                f"temperature cannot be set to {temperature} which can only be used for temperature fallback for long-form generation. Make sure to set `temperature` to a float value or `None` for short-form generation."
-            )
 
     @staticmethod
     def _set_return_outputs(return_dict_in_generate, return_token_timestamps, logprob_threshold, generation_config):
@@ -1766,7 +1797,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return compression_ratio
 
     @staticmethod
-    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature):
+    def _retrieve_avg_logprobs(scores, tokens, temperature):
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
 
@@ -1778,10 +1809,10 @@ class WhisperGenerationMixin(GenerationMixin):
         logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
 
         # retrieve logprob of selected tokens and sum
-        sum_logprobs = sum((logprobs[i][tokens[i]] * (tokens[i] != eos_token_id)) for i in range(logprobs.shape[0]))
-        length = (tokens != eos_token_id).sum(-1) if eos_token_id is not None else tokens.shape[0]
+        # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
+        sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
 
-        avg_logprobs = sum_logprobs / (length + 1)
+        avg_logprobs = sum_logprobs / len(tokens)
         return avg_logprobs
 
     @staticmethod
@@ -1870,3 +1901,30 @@ class WhisperGenerationMixin(GenerationMixin):
             segment_offset = seek_num_frames[prev_idx]
 
         return segments, segment_offset
+
+    @staticmethod
+    def generate_add_decoder_input_ids(func):
+        """
+        Wrapper to add decoder input token ids to the generated sequence.
+        Whisper's generate method does not return the decoder input token ids.
+        This wrapper can be used to add the decoder input token ids to the generated sequence.
+        Args:
+            func: The original generate function to be wrapped.
+        Returns:
+            A wrapped function that adds decoder input token ids to the output.
+        """
+
+        def wrapper(self, *args, **kwargs):
+            out_generate = func(self, *args, **kwargs)
+            out_sequence = out_generate.sequences if hasattr(out_generate, "sequences") else out_generate
+            batch_size = out_sequence.shape[0]
+            init_tokens = kwargs.get("decoder_input_ids", [self.generation_config.decoder_start_token_id])
+            init_tokens = torch.as_tensor(init_tokens, dtype=torch.long, device=out_sequence.device)
+            init_tokens = init_tokens.expand(batch_size, -1)
+            if hasattr(out_generate, "sequences"):
+                out_generate.sequences = torch.cat([init_tokens, out_generate.sequences], dim=-1)
+            else:
+                out_generate = torch.cat([init_tokens, out_generate], dim=-1)
+            return out_generate
+
+        return wrapper
