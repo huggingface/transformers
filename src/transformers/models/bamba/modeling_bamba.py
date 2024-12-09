@@ -25,7 +25,7 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Tuple, Union, Unpack
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -33,26 +33,25 @@ from torch import nn
 
 import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.activations import ACT2FN
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 
-from ...cache_utils import Cache, StaticCache  # we need __iter__ and __len__ of pkv
+from ...cache_utils import Cache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_flash_attn_2_available,
+from ...processing_utils import Unpack
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
-    is_mamba_2_ssm_available,
+    logging,
+    replace_return_docstrings,
 )
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_bamba import BambaConfig
 
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 if is_mamba_2_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
@@ -453,7 +452,7 @@ class BambaFlashAttention2(BambaAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
+        # in fp32. (BambaRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -521,7 +520,7 @@ class BambaSdpaAttention(BambaAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "BambaModel is using BambaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -581,6 +580,7 @@ class BambaSdpaAttention(BambaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
+        print(query_states.shape, key_states.shape, value_states.shape, causal_mask.shape)
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -919,7 +919,7 @@ class BambaMixer(nn.Module):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # Gated MLP's linear projection
-        projected_states =  self.in_proj(input_states.squeeze(1))
+        projected_states =  self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size -  2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
@@ -1122,6 +1122,22 @@ class BambaMixer(nn.Module):
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
+class BambaMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
 class BambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1142,22 +1158,6 @@ class BambaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class BambaMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
 BAMBA_ATTENTION_CLASSES = {
     "eager": BambaAttention,
     "flash_attention_2": BambaFlashAttention2,
@@ -1169,10 +1169,9 @@ class BambaDecoderLayer(nn.Module):
     def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "mamba"):
         super().__init__()
         self.hidden_size = config.hidden_size
-
-        self.mlp = BambaMLP(config)
         self.input_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.feed_forward = BambaMLP(config)
+        self.pre_ff_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_type = layer_type
         if layer_type == "mamba":
@@ -1236,8 +1235,8 @@ class BambaDecoderLayer(nn.Module):
 
         # feed-forward
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.pre_ff_layernorm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)

@@ -16,32 +16,35 @@
 
 import argparse
 import json
+import os
+import re
 from os import path
 from typing import Dict, Union
 
 import torch
-from transformers import AutoTokenizer
 from huggingface_hub import split_torch_state_dict_into_shards
-from transformers.utils import SAFE_WEIGHTS_NAME, SAFE_WEIGHTS_INDEX_NAME
 from safetensors.torch import save_file
-import re
-import os
+
+from transformers import AutoTokenizer
+from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME
+
 from .configuration_bamba import BambaConfig
+
 
 def convert_state_dict_from_mamba_ssm(original_sd: Dict) -> Dict[str, torch.Tensor]:
     state_dict = {}
 
     for orig_k, param in original_sd.items():
-        k = orig_k.replace('backbone', 'model')
+        k = orig_k.replace("backbone", "model")
 
         # for embeddings
-        k = k.replace('embedding', 'embed_tokens')
+        k = k.replace("embedding", "embed_tokens")
 
         # for mixer
-        k = k.replace('mixer', 'mamba')
+        k = k.replace("mixer", "mamba")
 
         # for final layernorm
-        k = k.replace('norm_f', 'final_layernorm')
+        k = k.replace("norm_f", "final_layernorm")
 
         # for block layernorm
         k = re.sub(r"(\d+)\.norm\.", r"\1.input_layernorm.", k)
@@ -56,10 +59,8 @@ def convert_state_dict_from_mamba_ssm(original_sd: Dict) -> Dict[str, torch.Tens
             state_dict[k2] = param2
             k = k.replace("mlp.fc1", "mlp.up_proj")
 
-        if (
-            ('in_proj' in k and orig_k.replace('in_proj', 'conv1d') in original_sd)
-            or
-            ('out_proj' in k and orig_k.replace('out_proj', 'conv1d') in original_sd)
+        if ("in_proj" in k and orig_k.replace("in_proj", "conv1d") in original_sd) or (
+            "out_proj" in k and orig_k.replace("out_proj", "conv1d") in original_sd
         ):
             # then this must be a mamba
             pass
@@ -81,6 +82,7 @@ def convert_state_dict_from_mamba_ssm(original_sd: Dict) -> Dict[str, torch.Tens
 
     return state_dict
 
+
 # Adapted from transformers.models.mamba.convert_mamba_ssm_checkpoint_to_pytorch.py
 def convert_ssm_config_to_hf_config(
     config_ssm: Dict,
@@ -94,23 +96,19 @@ def convert_ssm_config_to_hf_config(
     # Set important values from config and recalculate other resulting entries
     hf_config.hidden_size = config_ssm["d_model"]
     hf_config.intermediate_size = config_ssm["d_intermediate"]
-    hf_config.mamba_n_heads = (
-        (hf_config.hidden_size * hf_config.mamba_expand) // 
-        hf_config.mamba_d_head
-    )
+    hf_config.mamba_n_heads = (hf_config.hidden_size * hf_config.mamba_expand) // hf_config.mamba_d_head
     hf_config.num_hidden_layers = config_ssm["n_layer"]
     hf_config.tie_word_embeddings = config_ssm["tie_embeddings"]
 
     # currently this script assumes config_ssm belongs to v2
-    assert config_ssm["ssm_cfg"].get("layer") == "Mamba2", \
-        "Conversion script only supports Mamba2"
+    assert config_ssm["ssm_cfg"].get("layer") == "Mamba2", "Conversion script only supports Mamba2"
 
     # Set attention values
     attn_cfg = config_ssm.get("attn_cfg")
     if attn_cfg:
         assert attn_cfg["causal"], "Only support non-causal attention."
-        assert not attn_cfg["qkv_proj_bias"], "Only support no qkv bias." 
-        assert not attn_cfg["out_proj_bias"], "Only support no out bias." 
+        assert not attn_cfg["qkv_proj_bias"], "Only support no qkv bias."
+        assert not attn_cfg["out_proj_bias"], "Only support no out bias."
         hf_config.attn_rotary_emb = attn_cfg["rotary_emb_dim"]
         hf_config.num_attention_heads = attn_cfg["num_heads"]
         hf_config.num_key_value_heads = attn_cfg["num_heads_kv"]
@@ -128,23 +126,28 @@ def convert_ssm_config_to_hf_config(
 
     return hf_config
 
+
 def save_single_safetensor(
-    state_dict: Dict, 
-    save_directory: str, 
+    state_dict: Dict,
+    save_directory: str,
     metadata: Dict,
 ):
     save_file(
-        state_dict, os.path.join(save_directory, SAFE_WEIGHTS_NAME), 
+        state_dict,
+        os.path.join(save_directory, SAFE_WEIGHTS_NAME),
         metadata,
     )
 
+
 def save_sharded_safetensors(
-    state_dict: Dict, 
-    save_directory: str, 
+    state_dict: Dict,
+    save_directory: str,
     metadata: Dict,
     max_shard_size: Union[int, str] = "5GB",
 ):
-    filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(".safetensors", "{suffix}.safetensors")
+    filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
+        ".safetensors", "{suffix}.safetensors"
+    )
     state_dict_split = split_torch_state_dict_into_shards(
         state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
     )
@@ -152,11 +155,8 @@ def save_sharded_safetensors(
         "metadata": state_dict_split.metadata,
         "weight_map": state_dict_split.tensor_to_filename,
     }
-    # Save the index 
-    with open(
-        os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), 
-        "w", encoding="utf-8"
-    ) as f:
+    # Save the index
+    with open(os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8") as f:
         content = json.dumps(index, indent=2, sort_keys=True) + "\n"
         f.write(content)
 
@@ -174,29 +174,28 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
     tokenizer_path: str = None,
     save_model: Union[bool, str] = True,
 ) -> None:
-
     # load tokenizer if provided, this will be used to set the
     # token_ids in the config file
     token_ids = {}
     if tokenizer_path:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
         for key in [
-            'bos_token_id',
-            'eos_token_id',
-            'pad_token_id',
+            "bos_token_id",
+            "eos_token_id",
+            "pad_token_id",
         ]:
             id = getattr(tokenizer, key, None)
             if id:
                 token_ids[key] = id
 
-    # there are some configs unsettable by mamba_ssn config, so 
+    # there are some configs unsettable by mamba_ssn config, so
     # if there are changes from the defaults, have to pass them into
     # the function
     unsettables = {
-        'mamba_d_head': 64,
-        'mamba_d_state': 128,
-        'mamba_n_groups':1,
-        'rms_norm_eps': 1e-5,
+        "mamba_d_head": 64,
+        "mamba_d_state": 128,
+        "mamba_n_groups": 1,
+        "rms_norm_eps": 1e-5,
     }
 
     # Load and save config based on name
@@ -214,8 +213,9 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
 
     # Load state dict of the original model and transfer to hf model
     state_dict = torch.load(
-        path.join(mamba_ssm_checkpoint_path, "pytorch_model.bin"), 
-        map_location="cpu", weights_only=True,
+        path.join(mamba_ssm_checkpoint_path, "pytorch_model.bin"),
+        map_location="cpu",
+        weights_only=True,
     )
     # FIXME: allow other parameters to pass in
     state_dict = convert_state_dict_from_mamba_ssm(state_dict)
@@ -226,14 +226,12 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
     save_file_fn = None
     if isinstance(save_model, bool) and save_model:
         save_file_fn = save_single_safetensor
-    elif isinstance(save_model, str) and save_model == 'sharded':
+    elif isinstance(save_model, str) and save_model == "sharded":
         save_file_fn = save_sharded_safetensors
 
     if save_file_fn:
-        save_file_fn(
-            {k:v.to(dtype) for k,v in state_dict.items()},
-            output_dir, metadata={"format": "pt"}
-        )
+        save_file_fn({k: v.to(dtype) for k, v in state_dict.items()}, output_dir, metadata={"format": "pt"})
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -14,18 +14,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch Bamba model."""
 
-import tempfile
 import unittest
-import math
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, BambaConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, BambaConfig, is_torch_available
 from transformers.testing_utils import (
-    require_flash_attn,
-    require_read_token,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -46,6 +41,7 @@ if is_torch_available():
     from transformers.models.bamba.modeling_bamba import (
         HybridMambaAttentionDynamicCache,
     )
+
 
 class BambaModelTester:
     def __init__(
@@ -74,7 +70,7 @@ class BambaModelTester:
         mamba_n_groups=1,
         mamba_n_heads=16,
         mamba_d_state=16,
-        mamab_d_conv=4,
+        mamba_d_conv=4,
         mamba_expand=2,
         mamba_chunk_size=16,
         scope=None,
@@ -104,7 +100,7 @@ class BambaModelTester:
         self.mamba_n_groups = mamba_n_groups
         self.mamba_n_heads = mamba_n_heads
         self.mamba_d_state = mamba_d_state
-        self.mamab_d_conv = mamab_d_conv
+        self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
         self.mamba_chunk_size = mamba_chunk_size
 
@@ -135,12 +131,11 @@ class BambaModelTester:
         return config, inputs_dict
 
     def get_config(self):
-
         if self.attn_layer_indices is None:
             d = [x for x in range(2, self.num_hidden_layers) if self.num_hidden_layers % x == 0]
             if len(d) == 0:
                 raise ValueError("num_hidden_layers is prime, cannot automatically set attn_layer_indices.")
-            d = d[-1] # get the largest divisor
+            d = d[-1]  # get the largest divisor
             self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
 
         return BambaConfig(
@@ -160,7 +155,7 @@ class BambaModelTester:
             mamba_n_groups=self.mamba_n_groups,
             mamba_n_heads=self.mamba_n_heads,
             mamba_d_state=self.mamba_d_state,
-            mamab_d_conv=self.mamab_d_conv,
+            mamba_d_conv=self.mamba_d_conv,
             mamba_expand=self.mamba_expand,
             mamba_chunk_size=self.mamba_chunk_size,
         )
@@ -253,6 +248,7 @@ class BambaModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 @require_torch
 class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -399,6 +395,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
+
 @require_torch
 class BambaModelIntegrationTest(unittest.TestCase):
     model = None
@@ -415,7 +412,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
         # feels a bit forced to have to do this for the generation test
         cls.tokenizer.pad_token_id = cls.model.config.pad_token_id
-        cls.tokenizer.padding_side = 'left'
+        cls.tokenizer.padding_side = "left"
 
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
@@ -469,8 +466,8 @@ class BambaModelIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = {
             7: [],
             8: [
-                '<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing great, I am in a good',
-                '!!!<|begin_of_text|>I am late! I need to get to the airport! I have a flight to'
+                "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing great, I am in a good",
+                "!!!<|begin_of_text|>I am late! I need to get to the airport! I have a flight to",
             ],
             9: [],
         }
@@ -478,7 +475,9 @@ class BambaModelIntegrationTest(unittest.TestCase):
         self.model.to(torch_device)
 
         inputs = self.tokenizer(
-            ["Hey how are you doing on this lovely evening?", "I am late! I need to"], padding=True, return_tensors="pt"
+            ["Hey how are you doing on this lovely evening?", "I am late! I need to"],
+            padding=True,
+            return_tensors="pt",
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)

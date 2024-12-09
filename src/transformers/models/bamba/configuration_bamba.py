@@ -78,9 +78,10 @@ class BambaConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
+        max_position_embeddings (`<fill_type>`, *optional*, defaults to 262144): <fill_docstring>
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        attn_layer_indices (`list`, *optional*, defaults to None):
+        attn_layer_indices (`list`, *optional*):
             Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
         attn_rotary_emb (`int`, *optional*, defaults to 64):
             The embedding dimension of RoPE. Must be smaller than hidden_size / num_attention_heads.

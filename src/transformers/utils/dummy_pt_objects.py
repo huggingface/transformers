@@ -1143,7 +1143,7 @@ class BambaModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BambaPreTrainedMode(metaclass=DummyObject):
+class BambaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

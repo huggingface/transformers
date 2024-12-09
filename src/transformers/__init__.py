@@ -6419,11 +6419,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
-        from .models.bamba import (
-            BambaForCausalLM,
-            BambaModel,
-            BambaPreTrainedModel
-        )
+        from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
             BarkCoarseModel,
