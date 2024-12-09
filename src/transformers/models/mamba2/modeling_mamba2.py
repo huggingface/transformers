@@ -119,7 +119,7 @@ def segment_sum(input_tensor):
     return tensor_segsum
 
 
-def remove_padding_influence(hidden_states, attention_mask):
+def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
@@ -307,7 +307,7 @@ class Mamba2Mixer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
     ):
         # 1. Gated MLP's linear projection
-        hidden_states = remove_padding_influence(hidden_states, attention_mask)
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states)
 
         # Set up dimensions for reshapes later
@@ -425,7 +425,7 @@ class Mamba2Mixer(nn.Module):
                         activation=self.activation,
                     ).transpose(1, 2)
 
-                hidden_states_B_C = remove_padding_influence(hidden_states_B_C, attention_mask)
+                hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
                 hidden_states, B, C = torch.split(
                     hidden_states_B_C,
                     [self.intermediate_size, groups_time_state_size, groups_time_state_size],
@@ -467,7 +467,7 @@ class Mamba2Mixer(nn.Module):
         dtype = input_states.dtype
 
         # 1. Gated MLP's linear projection
-        input_states = remove_padding_influence(input_states, attention_mask)
+        input_states = apply_mask_to_padding_states(input_states, attention_mask)
         projected_states = self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size-self.num_heads) // 2
         _, _, gate, hidden_states_B_C, dt = projected_states.split(
@@ -501,7 +501,7 @@ class Mamba2Mixer(nn.Module):
 
             hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2))
 
-        hidden_states_B_C = remove_padding_influence(hidden_states_B_C, attention_mask)
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
             [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
