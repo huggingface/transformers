@@ -970,10 +970,11 @@ class Trainer:
                 dataset=self.train_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+                generator=torch.Generator(device=self.args.device),
             )
 
         else:
-            return RandomSampler(self.train_dataset)
+            return RandomSampler(self.train_dataset, generator=torch.Generator(device=self.args.device))
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -1000,6 +1001,7 @@ class Trainer:
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
+            "generator": torch.Generator(device=self.args.device),
         }
 
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
@@ -1019,7 +1021,9 @@ class Trainer:
         if self.args.use_legacy_prediction_loop:
             if is_torch_xla_available():
                 return SequentialDistributedSampler(
-                    eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+                    eval_dataset,
+                    num_replicas=xm.xrt_world_size(),
+                    rank=xm.get_ordinal(),
                 )
             elif is_sagemaker_mp_enabled():
                 return SequentialDistributedSampler(
@@ -1096,6 +1100,7 @@ class Trainer:
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
+            "generator": torch.Generator(device=self.args.device),
         }
 
         if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
@@ -1138,6 +1143,7 @@ class Trainer:
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
+            "generator": torch.Generator(device=self.args.device),
         }
 
         if not isinstance(test_dataset, torch.utils.data.IterableDataset):
