@@ -121,21 +121,10 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
     ):
         # Original merge implementation
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
-        exp_name = ""
-        if "ffn_gate_exps" in name:
-            exp_name = "gate_proj"
-        elif "ffn_down_exps" in name:
-            exp_name = "down_proj"
-        elif "ffn_up_exps" in name:
-            exp_name = "up_proj"
-        else:
-            raise ValueError(f"Cannot map expert tensor {name} in Qwen2Moe architecture.")
-        for tensor_name in tensor_key_mapping:
-            if tensor_name in name:
-                name = name.replace(tensor_name, tensor_key_mapping[tensor_name])
+        name = tensor_key_mapping[name]
         w_counter = self.config.get("num_experts", 60)
         for i in range(0, w_counter):
-            temp_name = name.replace(".weight", f".{i}.{exp_name}.weight")
+            temp_name = name.replace("mlp.experts.", f"mlp.experts.{i}.")
             exp_weight = weights[i]
             parsed_parameters["tensors"][temp_name] = torch.from_numpy(np.copy(exp_weight))
 
@@ -271,6 +260,8 @@ def get_gguf_hf_weights_map(
     # hack: ggufs have a different name for cohere
     if model_type == "cohere":
         model_type = "command-r"
+    if model_type == "qwen2_moe":
+        model_type = "qwen2moe"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -285,6 +276,10 @@ def get_gguf_hf_weights_map(
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
     for hf_name in state_dict.keys():
+        # An exception for qwen2moe model, where the expert layers are packed
+        if model_type == "qwen2moe" and "mlp.experts." in hf_name:
+            hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)
+
         name, suffix = hf_name, ""
         if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
             name, suffix = hf_name.rsplit(".", 1)
@@ -302,7 +297,7 @@ def get_gguf_hf_weights_map(
         for name, child in named_children:
             sub_map = get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
             # Remove the keys that are already in the main map to avoid overwriting
-            sub_map = {k:v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
+            sub_map = {k: v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
             gguf_to_hf_name_map.update(sub_map)
 
     return gguf_to_hf_name_map
