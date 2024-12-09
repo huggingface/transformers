@@ -45,7 +45,7 @@ url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
 image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
-model_id = "jmtzt/ijepa_vith14_1k"
+model_id = "facebook/ijepa_vith14_1k"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModel.from_pretrained(model_id)
 
