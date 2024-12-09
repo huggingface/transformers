@@ -46,8 +46,8 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     docstring of [`~InstructBlipVideoProcessor.__call__`] and [`~InstructBlipVideoProcessor.decode`] for more information.
 
     Args:
-        image_processor (`InstructBlipVideoImageProcessor`):
-            An instance of [`InstructBlipVideoImageProcessor`]. The image processor is a required input.
+        video_processor (`InstructBlipVideoVideoProcessor`):
+            An instance of [`InstructBlipVideoVideoProcessor`]. The video processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
         qformer_tokenizer (`AutoTokenizer`):
@@ -56,17 +56,17 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
-    attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
+    attributes = ["video_processor", "tokenizer", "qformer_tokenizer"]
     valid_kwargs = ["num_query_tokens"]
     video_processor_class = "InstructBlipVideoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         self.video_token = AddedToken("<video>", normalized=False, special=True)
         tokenizer.add_tokens([self.video_token], special_tokens=True)
         self.num_query_tokens = num_query_tokens
-        super().__init__(image_processor, tokenizer, qformer_tokenizer)
+        super().__init__(video_processor, tokenizer, qformer_tokenizer)
 
     def __call__(
         self,

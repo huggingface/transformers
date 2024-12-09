@@ -41,6 +41,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_qwen2_vl"] = ["Qwen2VLImageProcessor"]
+    _import_structure["video_processing_qwen2_vl"] = ["Qwen2VLVideoProcessor"]
 
 
 if TYPE_CHECKING:
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_qwen2_vl import Qwen2VLImageProcessor
+        from .video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 
 else:

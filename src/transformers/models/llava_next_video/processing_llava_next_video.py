@@ -41,7 +41,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     [`LlamaTokenizerFast`]. See the [`~LlavaNextVideoProcessor.__call__`] and [`~LlavaNextVideoProcessor.decode`] for more information.
 
     Args:
-        video_processor ([`LlavaNextVideoImageProcessor`], *optional*):
+        video_processor ([`LlavaNextVideoVideoProcessor`], *optional*):
             The video processor is a required input.
         image_processor ([`LlavaNextImageProcessor`], *optional*):
             The image processor is a required input.

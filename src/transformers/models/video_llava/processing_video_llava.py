@@ -36,8 +36,10 @@ class VideoLlavaProcessor(ProcessorMixin):
     [`~VideoLlavaProcessor.__call__`] and [`~VideoLlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`VideoLlavaImageProcessor`], *optional*):
+        image_processor ([`CLIPImageProcessor`], *optional*):
             The image processor is a required input.
+        video_processor ([`VideoLlavaVideoProcessor`], *optional*):
+            The video processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
         patch_size (`int`, *optional*):
@@ -53,15 +55,16 @@ class VideoLlavaProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "video_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
     image_processor_class = "CLIPImageProcessor"
-    image_processor_class = "VideoLlavaVideoProcessor"
+    video_processor_class = "VideoLlavaVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
         image_processor=None,
+        video_processor=None,
         tokenizer=None,
         patch_size=None,
         vision_feature_select_strategy=None,
@@ -74,7 +77,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         self.video_token = video_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
