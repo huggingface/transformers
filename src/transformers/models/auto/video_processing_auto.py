@@ -55,6 +55,7 @@ else:
             ("instructblipvideo", ("InstructBlipVideoVideoProcessor",)),
             ("llava_next_video", ("LlavaNextVideoVideoProcessor",)),
             ("llava_onevision", ("LlavaOnevisionVideoProcessor",)),
+            ("qwen2_vl", ("Qwen2VLVideoProcessor",)),
             ("video_llava", ("VideoLlavaVideoProcessor",)),
         ]
     )
