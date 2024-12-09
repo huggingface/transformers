@@ -263,7 +263,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             torch_dtype = torch.float16
         return torch_dtype
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
         if device_map is None:
             if torch.cuda.is_available():
