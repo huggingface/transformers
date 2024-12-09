@@ -62,7 +62,7 @@ model = ColPaliForRetrieval.from_pretrained(
 
 processor = ColPaliProcessor.from_pretrained(model_name)
 
-# Your inputs
+# Your inputs (replace dummy images with screenshots of your documents)
 images = [
     Image.new("RGB", (32, 32), color="white"),
     Image.new("RGB", (16, 16), color="black"),
