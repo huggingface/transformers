@@ -298,6 +298,14 @@ onnx_job = CircleCIJob(
 exotic_models_job = CircleCIJob(
     "exotic_models",
     docker_image=[{"image":"huggingface/transformers-exotic-models"}],
+    tests_to_run=[
+        *glob.glob("tests/models/layoutlm*/*.py", recursive=True),
+        *glob.glob("tests/models/layoutxlm/*.py", recursive=True),
+        *glob.glob("tests/models/*nat/*.py", recursive=True),
+        *glob.glob("tests/models/deta/*.py", recursive=True),
+        *glob.glob("tests/models/udop/*.py", recursive=True),
+        *glob.glob("tests/models/nougat/*.py", recursive=True),
+    ],
     pytest_num_workers=12,
     parallelism=4,
     pytest_options={"durations": 100},

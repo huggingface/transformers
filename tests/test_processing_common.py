@@ -247,6 +247,7 @@ class ProcessorTesterMixin:
 
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
+        max_length = 76
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -254,7 +255,7 @@ class ProcessorTesterMixin:
             do_rescale=True,
             rescale_factor=-1,
             padding="max_length",
-            max_length=76,
+            max_length=max_length,
         )
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
