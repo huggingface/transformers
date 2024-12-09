@@ -21,6 +21,7 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    pad,
     resize,
     to_channel_dimension_format,
 )
@@ -37,7 +38,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_device, is_torch_dtype, is_torch_tensor, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -46,56 +47,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-class BatchMixFeature(BatchFeature):
-    def to(self, *args, **kwargs) -> "BatchMixFeature":
-        """
-        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
-        different `dtypes` and sending the `BatchFeature` to a different `device`.
-
-        Args:
-            args (`Tuple`):
-                Will be passed to the `to(...)` function of the tensors.
-            kwargs (`Dict`, *optional*):
-                Will be passed to the `to(...)` function of the tensors.
-
-        Returns:
-            [`BatchFeature`]: The same instance after modification.
-        """
-        requires_backends(self, ["torch"])
-        import torch  # noqa
-
-        new_data = {}
-        device = kwargs.get("device")
-        # Check if the args are a device or a dtype
-        if device is None and len(args) > 0:
-            # device should be always the first argument
-            arg = args[0]
-            if is_torch_dtype(arg):
-                # The first argument is a dtype
-                pass
-            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
-                device = arg
-            else:
-                # it's something else
-                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
-            # check if v is a floating point
-            if isinstance(v, list):
-                new_data[k] = [
-                    element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
-                ]
-            elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
-                # cast and send to device
-                new_data[k] = v.to(*args, **kwargs)
-            elif isinstance(v, torch.Tensor) and device is not None:
-                new_data[k] = v.to(device=device)
-            else:
-                new_data[k] = v
-        self.data = new_data
-        return self
 
 
 # Copied from transformers.models.idefics2.image_processing_idefics2.make_list_of_images
@@ -367,6 +318,49 @@ class PixtralImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    def _pad_for_batching(
+        self,
+        pixel_values: List[np.ndarray],
+        image_sizes: List[List[int]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """
+        Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
+        Args:
+            pixel_values (`List[np.ndarray]`):
+                An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
+            image_sizes (`List[List[int]]`):
+                A list of sizes for each image in `pixel_values` in (height, width) format.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
+        Returns:
+            List[`np.ndarray`]: The padded images.
+        """
+
+        max_shape = (
+            max([size[0] for size in image_sizes]),
+            max([size[1] for size in image_sizes]),
+        )
+        pixel_values = [
+            pad(
+                image,
+                padding=((0, max_shape[0] - size[0]), (0, max_shape[1] - size[1])),
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+            for image, size in zip(pixel_values, image_sizes)
+        ]
+        return pixel_values
+
     def preprocess(
         self,
         images: ImageInput,
@@ -516,6 +510,17 @@ class PixtralImageProcessor(BaseImageProcessor):
             for images in batch_images
         ]
 
+        images_list = [size for l in images_list for size in l]
+        image_sizes_list = [im for l in batch_image_sizes for im in l]
+        pixel_values = self._pad_for_batching(
+            pixel_values=images_list,
+            image_sizes=image_sizes_list,
+            input_data_format=data_format,
+            data_format=data_format,
+        )
+
         # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
-        images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
-        return BatchMixFeature(data={"pixel_values": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)
+        # images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_sizes": image_sizes_list}, tensor_type=return_tensors
+        )

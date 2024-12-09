@@ -16,7 +16,7 @@
 
 from typing import Dict, List, Optional, Union
 
-from ...image_processing_utils import get_size_dict
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     ChannelDimension,
@@ -38,7 +38,6 @@ from ...utils import (
     logging,
 )
 from .image_processing_pixtral import (
-    BatchMixFeature,
     convert_to_rgb,
     get_resize_output_image_size,
     make_list_of_images,
@@ -206,7 +205,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
-    ) -> BatchMixFeature:
+    ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
 
@@ -346,4 +345,5 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             batch_images.append(images)
             batch_image_sizes.append(image_sizes)
 
-        return BatchMixFeature(data={"pixel_values": batch_images, "image_sizes": batch_image_sizes}, tensor_type=None)
+        # TODO: raushan add padding on fast image processors also
+        return BatchFeature(data={"pixel_values": batch_images, "image_sizes": batch_image_sizes}, tensor_type=None)
