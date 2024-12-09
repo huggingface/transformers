@@ -34,26 +34,6 @@ logger = logging.get_logger(__name__)
 
 
 GGUF_TENSOR_MAPPING = {
-    "qwen2moe": {
-        "token_embd": "model.embed_tokens",
-        "blk": "model.layers",
-        "ffn_up_exps": "mlp.experts",
-        "ffn_up_shexp": "mlp.shared_expert.up_proj",
-        "ffn_down_exps": "mlp.experts",
-        "ffn_down_shexp": "mlp.shared_expert.down_proj",
-        "ffn_norm": "post_attention_layernorm",
-        "ffn_gate_inp.weight": "mlp.gate.weight",
-        "ffn_gate_exps": "mlp.experts",
-        "ffn_gate_shexp": "mlp.shared_expert.gate_proj",
-        "ffn_gate_inp_shexp": "mlp.shared_expert_gate",
-        "attn_norm": "input_layernorm",
-        "attn_q": "self_attn.q_proj",
-        "attn_v": "self_attn.v_proj",
-        "attn_k": "self_attn.k_proj",
-        "attn_output": "self_attn.o_proj",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.norm",
-    },
     "falcon7b": {
         "token_embd": "word_embeddings",
         "blk": "h",
