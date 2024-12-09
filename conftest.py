@@ -124,7 +124,7 @@ def pytest_sessionfinish(session, exitstatus):
         session.exitstatus = 0
 
 
-# Doctest custom flag to ignore output.
+# Doctest custom flag to ignore the output.
 IGNORE_RESULT = doctest.register_optionflag("IGNORE_RESULT")
 
 OutputChecker = doctest.OutputChecker
