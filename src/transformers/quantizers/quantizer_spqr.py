@@ -53,7 +53,7 @@ class SpQRHfQuantizer(HfQuantizer):
         if torch_dtype is None:
             torch_dtype = torch.float16
             logger.info(
-                "Assuming CUDA is available. Assuming SpQR inference on GPU and loading the model in `torch.float16`."
+                "Assuming SpQR inference on GPU and loading the model in `torch.float16`."
             )
         elif torch_dtype != torch.float16:
             raise ValueError(
