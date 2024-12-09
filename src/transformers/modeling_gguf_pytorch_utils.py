@@ -69,6 +69,42 @@ class TensorProcessor:
         return GGUFTensor(weights, name, {})
 
 
+class FalconTensorProcessor(TensorProcessor):
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def process(self, weights, name, **kwargs):
+        if "qkv" in name:
+            shape = weights.shape
+            weights_copy = weights.copy()
+            parsed_parameters = kwargs.get("parsed_parameters")
+            num_attention_heads = parsed_parameters["config"]["num_attention_heads"]
+            num_key_value_heads = parsed_parameters["config"]["num_kv_heads"]
+            hidden_size = parsed_parameters["config"]["hidden_size"]
+            head_dim = hidden_size // num_attention_heads
+
+            # Split the weights array into q, k, v
+            split_indices = [
+                num_attention_heads * head_dim,
+                num_attention_heads * head_dim + num_key_value_heads * head_dim,
+            ]
+
+            q, k, v = np.split(weights_copy, split_indices)
+
+            # Reshape q, k, and v as needed
+            q = q.reshape(num_key_value_heads, num_attention_heads // num_key_value_heads, head_dim, hidden_size)
+            k = k.reshape(num_key_value_heads, 1, head_dim, hidden_size)
+            v = v.reshape(num_key_value_heads, 1, head_dim, hidden_size)
+
+            # Concatenate q, k, and v along the second dimension
+            qkv = np.concatenate((q, k, v), axis=1)
+
+            # Reshape qkv back to the original shape
+            weights = qkv.reshape(shape)
+
+        return GGUFTensor(weights, name, {})
+
+
 class LlamaTensorProcessor(TensorProcessor):
     def __init__(self, config=None):
         super().__init__(config=config)
@@ -246,6 +282,7 @@ TENSOR_PROCESSORS = {
     "t5encoder": T5TensorProcessor,
     "gpt2": GPT2TensorProcessor,
     "mamba": MambaTensorProcessor,
+    "falcon": FalconTensorProcessor,
 }
 
 
@@ -321,6 +358,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 f"From file name, cannot determine the number of parameters for {architecture} architecture"
             )
         model_size = m.group().strip("-")  # only keeps `7b`
+        if model_size == "40b":
+            parsed_parameters["config"]["new_decoder_architecture"] = True
 
     if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"Architecture {architecture + model_size} not supported")
