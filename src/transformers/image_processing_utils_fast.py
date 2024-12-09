@@ -419,7 +419,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional[torch.device] = None,
+        device: Optional["torch.device"] = None,
         **kwargs,
     ) -> tuple:
         """
