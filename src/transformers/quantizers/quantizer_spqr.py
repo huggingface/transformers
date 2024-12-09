@@ -52,9 +52,7 @@ class SpQRHfQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             torch_dtype = torch.float16
-            logger.info(
-                "Assuming SpQR inference on GPU and loading the model in `torch.float16`."
-            )
+            logger.info("Assuming SpQR inference on GPU and loading the model in `torch.float16`.")
         elif torch_dtype != torch.float16:
             raise ValueError(
                 "You cannot use any type other than torch.float16 for SpQR. Please either leave it None or set it to"
