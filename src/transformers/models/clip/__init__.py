@@ -20,6 +20,7 @@ from ...utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -51,6 +52,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_clip"] = ["CLIPFeatureExtractor"]
     _import_structure["image_processing_clip"] = ["CLIPImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_clip_fast"] = ["CLIPImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -124,6 +133,14 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_clip import CLIPFeatureExtractor
         from .image_processing_clip import CLIPImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_clip_fast import CLIPImageProcessorFast
 
     try:
         if not is_torch_available():
