@@ -1991,3 +1991,19 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "BertForMaskedLM",
+    "BertForMultipleChoice",
+    "BertForNextSentencePrediction",
+    "BertForPreTraining",
+    "BertForQuestionAnswering",
+    "BertForSequenceClassification",
+    "BertForTokenClassification",
+    "BertLayer",
+    "BertLMHeadModel",
+    "BertModel",
+    "BertPreTrainedModel",
+    "load_tf_weights_in_bert",
+]
