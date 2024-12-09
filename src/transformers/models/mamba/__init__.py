@@ -33,6 +33,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mamba"] = [
         "MambaForCausalLM",
+        "MambaForSequenceClassification",
         "MambaModel",
         "MambaPreTrainedModel",
     ]
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_mamba import (
             MambaForCausalLM,
+            MambaForSequenceClassification,
             MambaModel,
             MambaPreTrainedModel,
         )
