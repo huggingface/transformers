@@ -2513,9 +2513,13 @@ class Trainer:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                     # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
+                    disable_deepspeed_no_sync = (
+                            self.accelerator.distributed_type == DistributedType.DEEPSPEED
+                            and self.accelerator.deepspeed_engine_wrapped.engine.zero_optimization_partition_gradients()
+                    )
                     context = (
                         functools.partial(self.accelerator.no_sync, model=model)
-                        if i != len(batch_samples) - 1
+                        if i != len(batch_samples) - 1 and not disable_deepspeed_no_sync
                         else contextlib.nullcontext
                     )
                     with context():
