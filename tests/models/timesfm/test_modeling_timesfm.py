@@ -20,8 +20,9 @@ from typing import List
 import numpy as np
 import torch
 
+from huggingface_hub import hf_hub_download
 from transformers import TimesFMConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_fx_available
 
 from ...test_configuration_common import ConfigTester
@@ -32,7 +33,9 @@ if is_torch_fx_available():
     pass
 
 if is_torch_available():
-    from transformers import TimesFMModelForPrediction
+    from transformers import TimesFMDecoder, TimesFMModelForPrediction
+
+TOLERANCE = 1e-4
 
 
 class TimesFMModelTester:
@@ -46,7 +49,7 @@ class TimesFMModelTester:
         num_layers: int = 1,
         model_dim: int = 16,
         intermediate_size: int = 32,
-        head_dim: int = 2,
+        head_dim: int = 8,
         num_heads: int = 2,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
@@ -163,3 +166,30 @@ class TimesFMModelTest(ModelTesterMixin, unittest.TestCase):
         # The main input is the name of the argument after `self`
         observed_main_input_name = list(model_signature.parameters.keys())[1]
         self.assertEqual(TimesFMModelForPrediction.main_input_name, observed_main_input_name)
+
+
+@require_torch
+@slow
+class TimesFMModelIntegrationTests(unittest.TestCase):
+    @classmethod
+    def load_batch(cls, filename="train-batch.pt"):
+        file = hf_hub_download(
+            repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset"
+        )
+        batch = torch.load(file, map_location=torch_device)
+        return batch
+
+    def test_inference_no_head(self):
+        model = TimesFMModelForPrediction.from_pretrained("huggingface/timesfm-tourism-monthly").to(torch_device)
+        batch = self.load_batch()
+        with torch.no_grad():
+            inputs = batch["past_values"]
+            output = model(inputs=inputs).last_hidden_state
+        self.assertEqual(
+            output.shape, torch.Size([64, model.config.context_len // model.config.patch_len, model.config.model_dim])
+        )
+
+        expected_slice = torch.tensor(
+            [[-4.0141, 3.3141, 1.9321], [-4.9121, 3.1443, 2.0836], [-5.1142, 2.7376, 2.1566]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))

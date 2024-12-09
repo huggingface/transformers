@@ -851,7 +851,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
         - the number of padded examples for SPMD so that each core has the same
             number (a multiple of `batch_size`) of examples.
         """
-        input_ts, input_padding = [], []
+        input_ts, input_padding, inp_freq = [], [], []
 
         for i, ts in enumerate(inputs):
             input_len = ts.shape[0]
@@ -866,11 +866,12 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
             input_ts.append(ts)
             input_padding.append(padding)
+            inp_freq.append(freq[i])
 
         return (
             torch.stack(input_ts, dim=0),
             torch.stack(input_padding, dim=0),
-            torch.tensor(freq, dtype=torch.int32, device=input_ts[0].device).reshape(-1, 1),
+            torch.tensor(inp_freq, dtype=torch.int32).reshape(-1, 1),
         )
 
     def _postprocess_output(
@@ -990,8 +991,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
     def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         losses = []
-        for i, q in enumerate(self.config.quantiles):
-            errors = targets - predictions[:, :, i]
+        for q in self.config.quantiles:
+            errors = targets - predictions
             loss = torch.max((q - 1) * errors, q * errors)
             losses.append(loss.mean())
         return torch.stack(losses).mean()
@@ -1072,6 +1073,11 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             output_hidden_states = self.config.output_hidden_states
 
         input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
+
+        # Move tensors to the same device as input
+        input_ts = input_ts.to(device)
+        input_padding = input_padding.to(device)
+        inp_freq = inp_freq.to(device)
 
         mean_outputs, full_outputs, last_hidden_state, all_attentions, all_hidden_states = self.decode(
             input_ts=input_ts,
