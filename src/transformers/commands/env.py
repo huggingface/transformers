@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib.util
+
 import contextlib
+import importlib.util
 import io
 import os
 import platform
@@ -24,8 +25,8 @@ import huggingface_hub
 from .. import __version__ as version
 from ..utils import (
     is_accelerate_available,
-    is_flax_available,
     is_deepspeed_available,
+    is_flax_available,
     is_safetensors_available,
     is_tf_available,
     is_torch_available,
@@ -109,7 +110,6 @@ class EnvironmentCommand(BaseTransformersCLICommand):
 
         deepspeed_version = "not installed"
         if is_deepspeed_available():
-
             # Redirect command line output to silence deepspeed import output.
             with contextlib.redirect_stdout(io.StringIO()):
                 import deepspeed
