@@ -476,13 +476,19 @@ class Mamba2Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None and cache_position is not None and cache_position[0] > 0:
+            # We need to guarantee that anything regarding the cache is on the same device
+            cache_device = cache_params.conv_states.device
             cache_params.update_conv_state(layer_idx=self.layer_idx, new_conv_state=hidden_states_B_C, cache_init=False)
 
+            self.conv1d.weight = self.conv1d.weight.to(device=cache_device)
             hidden_states_B_C = torch.sum(
                 cache_params.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1
             )
+
             if self.use_conv_bias:
+                self.conv1d.bias = self.conv1d.bias.to(device=cache_device)
                 hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
+
             hidden_states_B_C = self.act(hidden_states_B_C)
         else:
             # Init cache
@@ -505,6 +511,9 @@ class Mamba2Mixer(nn.Module):
         # 3. SSM transformation
         A = -torch.exp(self.A_log.float())                            # [num_heads]
         if cache_params is not None and cache_position is not None and cache_position[0] > 0:
+            # We need to guarantee that anything regarding the cache is on the same device
+            cache_device = cache_params.ssm_states.device
+
             # Note: there is no need to pad parameter matrices here, as there is just one new token
             # for batched generation
             dt = dt[:, 0, :][:, None, ...]
@@ -516,7 +525,7 @@ class Mamba2Mixer(nn.Module):
             dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
             # [bsz, num_heads, head_dim, state_size]
-            dA = torch.exp(dt[..., None] * A)
+            dA = (torch.exp(dt[..., None] * A)).to(device=cache_device)
 
             # Discretize B
             # [bsz, n_groups * state_size] -> [bsz, n_groups, 1, state_size] ->
@@ -530,13 +539,12 @@ class Mamba2Mixer(nn.Module):
             # Discretize x into dB
             # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
             hidden_states = hidden_states.reshape(batch_size, -1, self.head_dim)
-            dBx = dB * hidden_states[..., None]
+            dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            cache_device = cache_params.ssm_states.device
             cache_params.update_ssm_state(
                 layer_idx=self.layer_idx,
-                new_ssm_state=cache_params.ssm_states[self.layer_idx] * dA.to(device=cache_device) + dBx.to(device=cache_device)
+                new_ssm_state=cache_params.ssm_states[self.layer_idx] * dA + dBx
             )
 
             # Subsequent output
@@ -546,7 +554,7 @@ class Mamba2Mixer(nn.Module):
             C = C.reshape(batch_size, -1, C.shape[-1])
             # [bsz, num_heads, head_dim]
 
-            ssm_states = cache_params.ssm_states[self.layer_idx].to(C.dtype)  # Shape: [b, h, d, n]
+            ssm_states = cache_params.ssm_states[self.layer_idx].to(device=C.device, dtype=C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
             ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
@@ -606,7 +614,7 @@ class Mamba2Mixer(nn.Module):
             # permute back B * decay states
             states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None] * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
             if cache_params is not None and cache_position is not None and cache_position[0] > 0:
-                previous_states = cache_params.ssm_states[self.layer_idx][:, None, ...]
+                previous_states = cache_params.ssm_states[self.layer_idx][:, None, ...].to(device=states.device)
             else:
                 previous_states = torch.zeros_like(states[:, :1])
             states = torch.cat([previous_states, states], dim=1)
