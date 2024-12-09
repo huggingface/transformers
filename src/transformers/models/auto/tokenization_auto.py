@@ -68,6 +68,7 @@ else:
                 ),
             ),
             ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("aria", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             (
@@ -348,6 +349,7 @@ else:
                 ),
             ),
             ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("olmo2", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "omdet-turbo",
