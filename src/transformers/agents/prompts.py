@@ -129,7 +129,7 @@ final_answer(caption)
 ```<end_action>
 
 ---
-Above example were using tools that might not exist for you. You only have acces to those Tools:
+Above example were using tools that might not exist for you. You only have access to these Tools:
 <<tool_names>>
 
 Remember to make sure that variables you use are all defined.
@@ -256,7 +256,7 @@ Action:
 }<end_action>
 
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. You only have access to these tools:
 <<tool_descriptions>>
 
 Here are the rules you should always follow to solve your task:
@@ -348,7 +348,7 @@ pope_current_age = 85 ** 0.36
 final_answer(pope_current_age)
 ```<end_action>
 
-Above example were using notional tools that might not exist for you. On top of performing computations in the Python code snippets that you create, you have acces to those tools (and no other tool):
+Above example were using notional tools that might not exist for you. On top of performing computations in the Python code snippets that you create, you have access to these tools (and no other tool):
 
 <<tool_descriptions>>
 

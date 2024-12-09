@@ -19,6 +19,12 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import numpy as np
 import torch
 
+from ..utils import is_sklearn_available
+
+
+if is_sklearn_available():
+    from sklearn.metrics import roc_curve
+
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
@@ -180,6 +186,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
 
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and type(self) is AssistedCandidateGenerator
+        ):
+            self.probs = []
+            self.matches = []
+
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
@@ -230,6 +244,17 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and type(self) is AssistedCandidateGenerator
+        ):
+            scores_tensor = torch.cat(assistant_output.scores, dim=0)
+            scores_softmax = torch.softmax(scores_tensor, dim=-1)
+            ids = assistant_output.sequences[-1, -len(assistant_output.scores) :]
+            p = scores_softmax[range(len(ids)), ids]
+            self.probs.extend(p.tolist())
+
         # 4. Prepare variables for output
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
@@ -255,10 +280,43 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "heuristic",
             "heuristic_transient",
         }:
-            if num_matches == int(self.num_assistant_tokens):
+            # len(scores[0])-1 is the number of candidates according to the target tokenizer.
+            if num_matches == len(scores[0]) - 1:
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+
+        # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
+        # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and type(self) is AssistedCandidateGenerator
+        ):
+            # update self.matches
+            self.matches.extend([1] * num_matches)
+            if len(self.probs) > len(self.matches):
+                self.matches.append(0)
+
+            # update self.probs
+            excess_length = len(self.probs) - len(self.matches)
+            if excess_length > 0:
+                del self.probs[-excess_length:]
+
+            if (
+                len(self.probs) > 5 and {0, 1}.issubset(self.matches)
+            ):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
+                fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
+                fnr = 1 - tpr
+
+                # Calculate the cost for each threshold
+                costs = fpr + 3 * fnr
+
+                # Find the threshold that minimizes the cost
+                optimal_threshold_index = np.argmin(costs)
+                best_threshold = thresholds[optimal_threshold_index]
+
+                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
 
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
@@ -309,10 +367,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
-        self.prev_tokens = None
         self.prev_assistant_ids = None
-        self.target_lookbehind = 10
-        self.assistant_lookbehind = 10
+        self.target_lookbehind = assistant_model.generation_config.target_lookbehind
+        self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
 
     @staticmethod
     def _get_longest_diag_dict(input_matrix, nonzero_idx):
@@ -449,9 +506,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         # Since re-encoding the tokens may result in tokenization discrepancies, we use 2 look behind values
         # (one for each conversion) which mark where to start looking for the overlap between the
         # source and target encodings, to ensure the new tokens include the correct prompt suffix.
-        if self.prev_tokens is not None and self.prev_target_ids.shape[1] > self.target_lookbehind:
+        if self.prev_assistant_ids is not None and input_ids.shape[1] > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
-            start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
+            start_index_in_target_window = input_ids.shape[1] - self.target_lookbehind
 
             new_assistant_ids = self.convert_source_tokens_to_target_tokens(
                 input_ids[:, start_index_in_target_window:], **convert_kwargs
@@ -484,7 +541,6 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         else:
             assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
-            self.prev_target_ids = input_ids
 
         self.prev_assistant_ids = assistant_input_ids
         new_cur_len = assistant_input_ids.shape[-1]
@@ -519,6 +575,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         num_prev_assistant = self.prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
+        if start_assistant_look_index < 0:
+            start_assistant_look_index = 0
 
         new_target_ids_from_window = self.convert_source_tokens_to_target_tokens(
             assistant_output.sequences[:, start_assistant_look_index:],
@@ -542,14 +600,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             # edge case: in case of no intersection between prompt and new_target_ids
             new_target_ids = torch.cat([new_target_ids, new_target_ids_from_window], dim=-1)
 
-        self.prev_target_ids = input_ids
-
         if hasattr(self.generation_config, "max_length"):
             new_target_ids = new_target_ids[:, : self.generation_config.max_length]
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
-        self.prev_tokens = assistant_output.sequences
 
         # 4. Prepare variables for output
         if input_ids.shape[1] >= new_target_ids.shape[1]:
@@ -668,6 +723,62 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         """
         # Currently does nothing
         return
+
+
+class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
+    """
+    `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
+    candidates through the use of **the model itself**, exiting early. Can only be used with models that support early
+    exit, e.g., `facebook/layerskip-llama3.2-1B`.
+
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+        assistant_model (`PreTrainedModel`):
+            The original model. This model must support early exit (i.e. is trained to compute logits in earlier
+            layers).
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+        logits_processor (`LogitsProcessorList`):
+            An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+            used to modify the prediction scores of the language modeling head applied at each generation step.
+        model_kwargs (`Dict`):
+            The keyword arguments that will be passed to the main model, and are used as base inputs for the assistant
+            model as well.
+        inputs_tensor (`torch.Tensor`, *optional*):
+            The model input tensor. In encoder-decoder models, this is the encoder input.
+    """
+
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+        model_kwargs: Dict,
+        inputs_tensor: Optional[torch.Tensor] = None,
+        logits_processor: "LogitsProcessorList" = None,
+    ):
+        super().__init__(
+            input_ids=input_ids,
+            assistant_model=assistant_model,
+            generation_config=generation_config,
+            model_kwargs=model_kwargs,
+            inputs_tensor=inputs_tensor,
+            logits_processor=logits_processor,
+        )
+        # We have to move early exit out of the generation config, otherwise the assistant will also call `generate`
+        # with early exit
+        self.assistant_early_exit = self.generation_config.assistant_early_exit
+        self.generation_config.assistant_early_exit = None
+
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+        # Temporarily sets the number of hidden layers to the early exit value
+        base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
+        original_num_hidden_layers = base_model.config.num_hidden_layers
+        base_model.config.num_hidden_layers = self.assistant_early_exit
+        candidate_ids, candidate_logits = super().get_candidates(input_ids)
+        base_model.config.num_hidden_layers = original_num_hidden_layers
+        return candidate_ids, candidate_logits
 
 
 def _crop_past_key_values(model, past_key_values, max_length):
