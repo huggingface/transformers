@@ -32,7 +32,10 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_instructblipvideo"] = ["InstructBlipVideoImageProcessor"]
+    _import_structure["video_processing_instructblipvideo"] = [
+        "InstructBlipVideoImageProcessor",
+        "InstructBlipVideoVideoProcessor",
+    ]
 
 
 try:
@@ -62,7 +65,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_instructblipvideo import InstructBlipVideoImageProcessor
+        from .video_processing_instructblipvideo import (
+            InstructBlipVideoImageProcessor,
+            InstructBlipVideoVideoProcessor,
+        )
 
     try:
         if not is_torch_available():

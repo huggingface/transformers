@@ -28,7 +28,12 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_llava_next_video"] = ["LlavaNextVideoImageProcessor"]
+    _import_structure["image_processing_llava_next_video"] = [
+        "LlavaNextVideoImageProcessor",
+    ]
+    _import_structure["video_processing_llava_next_video"] = [
+        "LlavaNextVideoVideoProcessor",
+    ]
 
 try:
     if not is_torch_available():
@@ -52,6 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_llava_next_video import LlavaNextVideoImageProcessor
+        from .video_processing_llava_next_video import LlavaNextVideoVideoProcessor
 
     try:
         if not is_torch_available():

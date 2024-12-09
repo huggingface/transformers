@@ -52,7 +52,10 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("instructblipvideo", ("InstructBlipVideoVideoProcessor",)),
+            ("llava_next_video", ("LlavaNextVideoVideoProcessor",)),
             ("llava_onevision", ("LlavaOnevisionVideoProcessor",)),
+            ("video_llava", ("VideoLlavaVideoProcessor",)),
         ]
     )
 

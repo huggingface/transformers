@@ -252,6 +252,7 @@ class ImageProcessingMixin(PushToHubMixin):
             custom_object_save(self, save_directory, config=self)
 
         # If we save using the predefined names, we can load using `from_pretrained`
+        # NOTE: save with the new naming by default with "image_" prefix
         output_image_processor_file = os.path.join(save_directory, IMAGE_PROCESSOR_NAME)
 
         self.to_json_file(output_image_processor_file)
@@ -320,6 +321,9 @@ class ImageProcessingMixin(PushToHubMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
+
+        # Try to load from new config file name, and emit warning if failed to find the file
+        # Deprecate old naming until v5.0
         old_image_processor_name = "preprocessor_config.json"
         if os.path.isdir(pretrained_model_name_or_path):
             image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
@@ -329,7 +333,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     "You have image processor config saved in `preprocessor.json` file which is deprecated. "
                     "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
                     "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v4.55."
+                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
                 image_processor_file = old_image_processor_file
         if os.path.isfile(pretrained_model_name_or_path):
@@ -389,7 +393,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     "You have image processor config saved in `preprocessor.json` file which is deprecated. "
                     "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
                     "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v4.55."
+                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
 
         try:

@@ -385,6 +385,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
+# Placeholder, should be added after merging https://github.com/huggingface/transformers/pull/34275/
 def load_video(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = None) -> "PIL.Image.Image":
     return image
 

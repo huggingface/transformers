@@ -27,7 +27,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_video_llava"] = ["VideoLlavaImageProcessor"]
+    _import_structure["video_processing_video_llava"] = ["VideoLlavaImageProcessor", "VideoLlavaVideoProcessor"]
 
 try:
     if not is_torch_available():
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from .configuration_video_llava import (
         VideoLlavaConfig,
     )
-    from .image_processing_video_llava import VideoLlavaProcessor
+    from .processing_video_llava import VideoLlavaProcessor
 
     try:
         if not is_vision_available():
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_video_llava import VideoLlavaImageProcessor
+        from .video_processing_video_llava import VideoLlavaImageProcessor, VideoLlavaVideoProcessor
 
     try:
         if not is_torch_available():

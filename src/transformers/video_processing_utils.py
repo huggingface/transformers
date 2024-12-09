@@ -45,7 +45,7 @@ INIT_SERVICE_KWARGS = [
 ]
 
 
-# initial design we keep the slow video processor which processed each frame with image processor
+# For now we start with slow video processor which processed each frame with image processor
 # TODO: @raushan integrate video processor with torchvision to process the whole video at once
 class BaseVideoProcessor(BaseImageProcessor):
     def __init__(self, **kwargs):
@@ -294,7 +294,7 @@ class BaseVideoProcessor(BaseImageProcessor):
                     "You have video processor config saved in `preprocessor.json` file which is deprecated. "
                     "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
                     "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v4.55."
+                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
                 video_processor_file = old_video_processor_file
         if os.path.isfile(pretrained_model_name_or_path):
@@ -354,7 +354,7 @@ class BaseVideoProcessor(BaseImageProcessor):
                     "You have video processor config saved in `preprocessor.json` file which is deprecated. "
                     "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
                     "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v4.55."
+                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
 
         try:

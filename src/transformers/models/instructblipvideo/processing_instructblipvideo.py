@@ -58,7 +58,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
     valid_kwargs = ["num_query_tokens"]
-    image_processor_class = "InstructBlipVideoImageProcessor"
+    video_processor_class = "InstructBlipVideoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 

@@ -1205,12 +1205,16 @@ else:
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
-    _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.instructblipvideo"].extend(
+        ["InstructBlipVideoImageProcessor", "InstructBlipVideoVideoProcessor"]
+    )
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
-    _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
+    _import_structure["models.llava_next_video"].extend(
+        ["LlavaNextVideoImageProcessor", "LlavaNextVideoVideoProcessor"]
+    )
     _import_structure["models.llava_onevision"].extend(
         ["LlavaOnevisionImageProcessor", "LlavaOnevisionVideoProcessor"]
     )
@@ -1238,7 +1242,7 @@ else:
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
-    _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
+    _import_structure["models.video_llava"].extend(["VideoLlavaImageProcessor", "VideoLlavaVideoProcessor"])
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -6114,7 +6118,7 @@ if TYPE_CHECKING:
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
-        from .models.instructblipvideo import InstructBlipVideoImageProcessor
+        from .models.instructblipvideo import InstructBlipVideoImageProcessor, InstructBlipVideoVideoProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -6125,7 +6129,7 @@ if TYPE_CHECKING:
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
-        from .models.llava_next_video import LlavaNextVideoImageProcessor
+        from .models.llava_next_video import LlavaNextVideoImageProcessor, LlavaNextVideoVideoProcessor
         from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
         from .models.mask2former import Mask2FormerImageProcessor
         from .models.maskformer import (
@@ -6163,7 +6167,7 @@ if TYPE_CHECKING:
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvp import TvpImageProcessor
-        from .models.video_llava import VideoLlavaImageProcessor
+        from .models.video_llava import VideoLlavaImageProcessor, VideoLlavaVideoProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor

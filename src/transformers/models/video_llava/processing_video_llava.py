@@ -55,7 +55,8 @@ class VideoLlavaProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
-    image_processor_class = "VideoLlavaImageProcessor"
+    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = "VideoLlavaVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
