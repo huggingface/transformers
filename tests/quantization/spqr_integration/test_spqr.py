@@ -73,7 +73,7 @@ class SpQRConfigTest(unittest.TestCase):
 @require_spqr
 @require_accelerate
 class SpQRTest(unittest.TestCase):
-    model_name = "/home/elvircrn/CLionProjects/spqr_kernel/data/hf_output"
+    model_name = "elvircrn/Llama-2-7b-SPQR-3Bit-16x16-red_pajama-hf"
 
     input_text = "Hello my name is"
     max_new_tokens = 32
