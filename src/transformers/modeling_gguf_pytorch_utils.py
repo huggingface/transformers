@@ -300,9 +300,10 @@ def get_gguf_hf_weights_map(
     # Therefore, we need to check submodule as well to get a correct mapping
     if named_children := hf_model.named_children():
         for name, child in named_children:
-            gguf_to_hf_name_map.update(
-                get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
-            )
+            sub_map = get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
+            # Remove the keys that are already in the main map to avoid overwriting
+            sub_map = {k:v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
+            gguf_to_hf_name_map.update(sub_map)
 
     return gguf_to_hf_name_map
 
