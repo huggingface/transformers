@@ -103,6 +103,10 @@ class Mamba2ModelTester:
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
+        # Only left padding is valid
+        attention_mask = torch.ones(size=(self.batch_size, self.seq_length), device=input_ids.device, dtype=torch.long)
+        attention_mask[0, :1] = 0
+
         sequence_labels = None
         token_labels = None
         choice_labels = None
@@ -118,7 +122,7 @@ class Mamba2ModelTester:
         return (
             config,
             input_ids,
-            None,
+            attention_mask,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -158,6 +162,35 @@ class Mamba2ModelTester:
         inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
+    def create_and_check_mamba2_caching(self, config, input_ids, attention_mask, *args):
+        model = Mamba2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        output_whole = model(input_ids, attention_mask=attention_mask).last_hidden_state
+
+        outputs = model(
+            input_ids[:, :-1],
+            attention_mask=attention_mask[:, :-1],
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
+        output_one = outputs.last_hidden_state
+
+        # Using the state computed on the first inputs, we will get the same output
+        outputs = model(
+            input_ids[:, -1:],
+            attention_mask=attention_mask[:, -1:],
+            use_cache=True,
+            cache_params=outputs.cache_params,
+            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
+        )
+        output_two = outputs.last_hidden_state
+
+        self.parent.assertTrue(
+            torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
+        )
+
 
 @unittest.skipIf(
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
@@ -184,6 +217,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
+    def test_mamba2_caching(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
+
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -197,23 +234,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @unittest.skip(reason="Mamba 2 weights are not tied")
     def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
