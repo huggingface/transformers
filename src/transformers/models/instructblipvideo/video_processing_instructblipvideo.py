@@ -32,7 +32,7 @@ from ...image_utils import (
     VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
+    make_list_of_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -46,25 +46,6 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-def make_batched_videos(videos) -> List[VideoInput]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
-
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if isinstance(videos[0], PIL.Image.Image):
-            return [videos]
-        elif len(videos[0].shape) == 4:
-            return [list(video) for video in videos]
-
-    elif is_valid_image(videos):
-        if isinstance(videos, PIL.Image.Image):
-            return [[videos]]
-        elif len(videos.shape) == 4:
-            return [list(videos)]
-
-    raise ValueError(f"Could not make batched video from {videos}")
 
 
 # Adapted from transformers.models.blip.image_processing_blip.BlipImageProcessor with Blip->InstructBlipVideo, BLIP->InstructBLIPVideo
@@ -259,7 +240,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        videos = make_batched_videos(videos)
+        videos = make_list_of_videos(videos)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -281,7 +262,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         pixel_values = [
             [
                 self._preprocess_image(
-                    video=frame,
+                    image=frame,
                     do_resize=do_resize,
                     size=size,
                     resample=resample,

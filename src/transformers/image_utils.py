@@ -208,6 +208,33 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
     )
 
 
+def make_list_of_videos(videos) -> List[VideoInput]:
+    """
+    Ensure that the input is a list of videos. If the input is a single video, it is converted to a list of length 1.
+    If the input is a batch of video, it is converted to a list of videos where each video is a list of images.
+
+    Args:
+        videos (`VideoInput`):
+            Video inputs to turn into a list of videos.
+        expected_ndims (`int`, *optional*, defaults to 3):
+            Expected number of dimensions for a single input video frame. If the input videos have a different number of
+            dimensions, an error is raised.
+    """
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+        return videos
+
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
+        if len(videos[0].shape) == 4:
+            return [list(video) for video in videos]
+        else:
+            return [videos]
+
+    elif is_valid_image(videos) and len(videos.shape) == 4:
+        return [list(videos)]
+
+    raise ValueError(f"Could not make list of videos from {type(videos)}")
+
+
 def to_numpy_array(img) -> np.ndarray:
     if not is_valid_image(img):
         raise ValueError(f"Invalid image type: {type(img)}")
