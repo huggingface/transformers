@@ -26,7 +26,7 @@ def write_model(model_path, safe_serialization=True):
 
     tfm = timesfm.TimesFm(
         hparams=timesfm.TimesFmHparams(
-            backend="cpu",
+            backend="cuda" if torch.cuda.is_available() else "cpu",
             per_core_batch_size=32,
             horizon_len=128,
         ),
@@ -139,7 +139,7 @@ def check_outputs(model_path):
     # Load original model
     tfm = timesfm.TimesFm(
         hparams=timesfm.TimesFmHparams(
-            backend="cpu",
+            backend="cuda" if torch.cuda.is_available() else "cpu",
             per_core_batch_size=32,
             horizon_len=128,
         ),
@@ -147,7 +147,11 @@ def check_outputs(model_path):
     )
 
     # Load converted model
-    converted_model = TimesFMModelForPrediction.from_pretrained(model_path)
+    converted_model = TimesFMModelForPrediction.from_pretrained(
+        model_path,
+        torch_dtype=torch.bfloat16,
+        attn_implementation="sdpa",
+    ).to("cuda" if torch.cuda.is_available() else "cpu")
     converted_model.eval()  # Set to evaluation mode
 
     # Create test inputs
@@ -165,14 +169,19 @@ def check_outputs(model_path):
     )
 
     # Convert inputs to sequence of tensors
-    forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32) for ts in forecast_input]
-    frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long)
+    forecast_input_tensor = [
+        torch.tensor(ts, dtype=torch.bfloat16).to("cuda" if torch.cuda.is_available() else "cpu")
+        for ts in forecast_input
+    ]
+    frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long).to(
+        "cuda" if torch.cuda.is_available() else "cpu"
+    )
 
     # Get predictions from converted model
     with torch.no_grad():
         outputs = converted_model(inputs=forecast_input_tensor, freq=frequency_input_tensor, return_dict=True)
-        point_forecast_conv = outputs.mean_predictions.numpy()
-        quantile_forecast_conv = outputs.full_predictions.numpy()
+        point_forecast_conv = outputs.mean_predictions.float().cpu().numpy()
+        quantile_forecast_conv = outputs.full_predictions.float().cpu().numpy()
 
     # Compare outputs
     point_forecast_diff = np.abs(point_forecast_orig - point_forecast_conv)
@@ -221,11 +230,15 @@ def main():
         "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
     )
     args = parser.parse_args()
-    write_model(
-        model_path=args.output_dir,
-        safe_serialization=args.safe_serialization,
-    )
 
+    # if the saved model file exists, skip the conversion
+    if os.path.exists(os.path.join(args.output_dir, "model.safetensors" if args.safe_serialization else "model.bin")):
+        print(f"Model already exists in {args.output_dir}, skipping conversion.")
+    else:
+        write_model(
+            model_path=args.output_dir,
+            safe_serialization=args.safe_serialization,
+        )
     check_outputs(args.output_dir)
 
 

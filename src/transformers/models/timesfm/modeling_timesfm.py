@@ -25,12 +25,7 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10
 from .configuration_timesfm import TimesFMConfig
-
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 @dataclass
@@ -271,93 +266,6 @@ class TimesFMAttention(nn.Module):
         return output, scores
 
 
-class TimesFMFlashAttention2(TimesFMAttention):
-    """TimesFM attention implementation using Flash Attention 2."""
-
-    def __init__(self, config: TimesFMConfig):
-        super().__init__(config)
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        kv_write_indices: torch.Tensor | None = None,
-        kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if output_attentions:
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                kv_write_indices=kv_write_indices,
-                kv_cache=kv_cache,
-                output_attentions=output_attentions,
-            )
-
-        batch_size, seq_length, _ = hidden_states.shape
-
-        # Project to q, k, v
-        qkv = self.qkv_proj(hidden_states)
-        xq, xk, xv = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-
-        # Reshape
-        xq = xq.view(batch_size, seq_length, self.num_heads, self.head_dim)
-        xk = xk.view(batch_size, seq_length, self.num_kv_heads, self.head_dim)
-        xv = xv.view(batch_size, seq_length, self.num_kv_heads, self.head_dim)
-
-        # Scale query using the model's learned scaling
-        xq = self._scale_query(xq)
-
-        # Handle KV cache
-        if kv_cache is not None and kv_write_indices is not None:
-            k_cache, v_cache = kv_cache
-            k_cache.index_copy_(1, kv_write_indices, xk)
-            v_cache.index_copy_(1, kv_write_indices, xv)
-            key = k_cache
-            value = v_cache
-        else:
-            key = xk
-            value = xv
-
-        # Handle grouped attention
-        if self.num_queries_per_kv > 1:
-            key = torch.repeat_interleave(key, self.num_queries_per_kv, dim=2)
-            value = torch.repeat_interleave(value, self.num_queries_per_kv, dim=2)
-
-        # Transpose for attention
-        query = xq.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-
-        # Convert attention mask to proper format for Flash Attention
-        if attention_mask is not None:
-            # Convert from [batch_size, 1, seq_length, seq_length] to [batch_size, seq_length]
-            # by checking which positions are not allowed to attend to any other position
-            attention_mask = attention_mask.squeeze(1)  # [batch_size, seq_length, seq_length]
-            attention_mask = ~attention_mask.all(dim=-1)  # [batch_size, seq_length]
-            attention_mask = attention_mask.to(query.dtype)
-
-        # Run flash attention
-        attn_output = _flash_attention_forward(
-            query,
-            key,
-            value,
-            attention_mask,
-            seq_length,
-            dropout=self.attention_dropout if self.training else 0.0,
-            softmax_scale=1,  # Set to 1.0 to disable default scaling
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=False,
-        )
-
-        # Reshape output
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_length, -1)
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None
-
-
 class TimesFMSdpaAttention(TimesFMAttention):
     """TimesFM attention implementation using torch.nn.functional.scaled_dot_product_attention."""
 
@@ -440,7 +348,6 @@ class TimesFMSdpaAttention(TimesFMAttention):
 
 TIMESFM_ATTENTION_CLASSES = {
     "eager": TimesFMAttention,
-    "flash_attention_2": TimesFMFlashAttention2,
     "sdpa": TimesFMSdpaAttention,
 }
 
@@ -708,7 +615,6 @@ class TimesFMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesfm"
     main_input_name = "inputs"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
@@ -945,13 +851,11 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
         for i, ts in enumerate(inputs):
             input_len = ts.shape[0]
-            padding = torch.zeros(input_len + self.horizon_len, dtype=torch.float32)
+            padding = torch.zeros(input_len + self.horizon_len, dtype=ts.dtype, device=ts.device)
             if input_len < self.context_len:
                 num_front_pad = self.context_len - input_len
-                ts = torch.cat([torch.zeros(num_front_pad, dtype=torch.float32, device=ts.device), ts], dim=0)
-                padding = torch.cat(
-                    [torch.ones(num_front_pad, dtype=torch.float32, device=padding.device), padding], dim=0
-                )
+                ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
+                padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
             elif input_len > self.context_len:
                 ts = ts[-self.context_len :]
                 padding = padding[-(self.context_len + self.horizon_len) :]
