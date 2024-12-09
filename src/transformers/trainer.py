@@ -2514,8 +2514,8 @@ class Trainer:
 
                     # We explicitly want to avoid relying on `accelerator.accumulate` for generation training
                     disable_deepspeed_no_sync = (
-                            self.accelerator.distributed_type == DistributedType.DEEPSPEED
-                            and self.accelerator.deepspeed_engine_wrapped.engine.zero_optimization_partition_gradients()
+                        self.accelerator.distributed_type == DistributedType.DEEPSPEED
+                        and self.accelerator.deepspeed_engine_wrapped.engine.zero_optimization_partition_gradients()
                     )
                     context = (
                         functools.partial(self.accelerator.no_sync, model=model)
