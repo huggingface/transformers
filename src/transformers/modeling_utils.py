@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVa
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import split_torch_state_dict_into_shards
+from huggingface_hub import DDUFEntry, get_file_explorer, split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
@@ -491,33 +491,33 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
 
 
 def load_state_dict(
-    checkpoint_file: Union[str, os.PathLike],
+    checkpoint_file: Union[str, os.PathLike, DDUFEntry],
     is_quantized: bool = False,
     map_location: Optional[Union[str, torch.device]] = None,
     weights_only: bool = True,
-    dduf_entries=None,
 ):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
-    if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
-        # Check format of the archive
-        if dduf_entries:
-            # TODO: Find a way to only open the metadata
-            with dduf_entries[checkpoint_file].as_mmap() as mm:
+    checkpoint = get_file_explorer(checkpoint_file)
+    if not checkpoint.is_file():
+        raise ValueError(
+            f"Unable to locate the file {checkpoint_file} which is necessary to load this pretrained "
+            "model. Make sure you have saved the model properly."
+        )
+
+    if checkpoint.file_extension == "safetensors":
+        if is_safetensors_available():
+            with checkpoint.as_mmap() as mm:
                 return safetensors.torch.load(mm)
-        else:
-            with safe_open(checkpoint_file, framework="pt") as f:
-                metadata = f.metadata()
-            if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
-                raise OSError(
-                    f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
-                    "you save your model with the `save_pretrained` method."
-                )
-            return safe_load_file(checkpoint_file)
+        raise ValueError(
+            f"Cannot load safetensors checkpoint at {checkpoint_file} since safetensors is not installed!"
+        )
+
+    if isinstance(checkpoint_file, DDUFEntry):
+        raise ValueError(f"Corrupted DDUF Entry: DDUF format only supports safetensors as saving format for model weights. got {checkpoint_file}")
+
     try:
-        if dduf_entries:
-            raise ValueError("DDUF format is not supported yet with torch format. Please use safetensors")
         if map_location is None:
             if (
                 (
@@ -3444,7 +3444,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
         generation_config = kwargs.pop("generation_config", None)
-        dduf_entries = kwargs.pop("dduf_entries", None)
 
         gguf_file = kwargs.pop("gguf_file", None)
         # Cache path to the GGUF file
@@ -3484,14 +3483,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
 
         if commit_hash is None:
-            if not isinstance(config, PretrainedConfig):
-                if dduf_entries:
-                    # files are in an archive, so I'm assuming the commit hash of the archive is enough.
-                    resolved_config_file = next(iter(dduf_entries.items()))[1].dduf_path
-
-                else:
-                    # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
-                    resolved_config_file = cached_file(
+            commit_hash = getattr(config, "_commit_hash", None)
+            if commit_hash is None:
+                resolved_file = pretrained_model_name_or_path if os.path.isfile(pretrained_model_name_or_path) else cached_file(
                         pretrained_model_name_or_path,
                         CONFIG_NAME,
                         cache_dir=cache_dir,
@@ -3506,33 +3500,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         _raise_exceptions_for_missing_entries=False,
                         _raise_exceptions_for_connection_errors=False,
                     )
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-            else:
-                commit_hash = getattr(config, "_commit_hash", None)
+                commit_hash = extract_commit_hash(resolved_file, commit_hash)
 
+        file_explorer = get_file_explorer(pretrained_model_name_or_path)
         if is_peft_available():
             _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
             if _adapter_model_path is None:
-                if dduf_entries:
-                    # TODO: use the global var from peft utils
-                    if os.path.join(pretrained_model_name_or_path,"adapter_config.json") in dduf_entries:
-                        _adapter_model_path = os.path.join(pretrained_model_name_or_path, "adapter_config.json")
-                else:
-                    _adapter_model_path = find_adapter_config_file(
-                        pretrained_model_name_or_path,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        resume_download=resume_download,
-                        proxies=proxies,
-                        local_files_only=local_files_only,
-                        _commit_hash=commit_hash,
-                        **adapter_kwargs,
-                    )
-            if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
-                with open(_adapter_model_path, "r", encoding="utf-8") as f:
+                _adapter_model_path = find_adapter_config_file(
+                    file_explorer,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    _commit_hash=commit_hash,
+                    **adapter_kwargs,
+                )
+            if _adapter_model_path is not None:
+                _adapter_file_explorer = get_file_explorer(_adapter_file_explorer)
+                if _adapter_file_explorer.is_file():
                     _adapter_model_path = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+                    pretrained_model_name_or_path = json.loads(_adapter_file_explorer.read_text())["base_model_name_or_path"]
         else:
             _adapter_model_path = None
 
@@ -3615,7 +3604,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 subfolder=subfolder,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
-                dduf_entries=dduf_entries,
                 **kwargs,
             )
         else:
@@ -3682,92 +3670,48 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
             )
         if pretrained_model_name_or_path is not None and gguf_file is None:
-            pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-            # passing a dduf_entries means that we already knows where the file
-            is_local = os.path.isdir(pretrained_model_name_or_path) or dduf_entries
+            file_explorer = get_file_explorer(pretrained_model_name_or_path)
+            is_local = file_explorer.is_dir()
             if is_local:
-                if from_tf and (
-                    os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index"))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
-                    in dduf_entries
-                ):
+                if from_tf and file_explorer.navigate_to(subfolder, TF_WEIGHTS_NAME + ".index").is_file():
                     # Load from a TF 1.0 checkpoint in priority if from_tf
-                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
+                    archive_file = file_explorer.navigate_to(subfolder, TF_WEIGHTS_NAME + ".index")
                 elif from_tf and (
-                    os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME) in dduf_entries
+                    file_explorer.navigate_to(subfolder, TF2_WEIGHTS_NAME + ".index").is_file()
                 ):
                     # Load from a TF 2.0 checkpoint in priority if from_tf
-                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME)
+                    archive_file=file_explorer.navigate_to(subfolder, TF2_WEIGHTS_NAME + ".index")
                 elif from_flax and (
-                    os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME) in dduf_entries
+                    file_explorer.navigate_to(subfolder, FLAX_WEIGHTS_NAME).is_file()
                 ):
                     # Load from a Flax checkpoint in priority if from_flax
-                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
+                    archive_file = file_explorer.navigate_to(subfolder, FLAX_WEIGHTS_NAME)
                 elif use_safetensors is not False and (
-                    os.path.isfile(
-                        os.path.join(
-                            pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)
-                        )
-                    )
-                    or os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
-                    in dduf_entries
+                    file_explorer.navigate_to(subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)).is_file()
                 ):
                     # Load from a safetensors checkpoint
-                    archive_file = os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)
-                    )
+                    archive_file = file_explorer.navigate_to(subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
                 elif use_safetensors is not False and (
-                    os.path.isfile(
-                        os.path.join(
-                            pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)
-                        )
-                    )
-                    or os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)
-                    )
-                    in dduf_entries
+                    file_explorer.navigate_to(subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)).is_file()
                 ):
                     # Load from a sharded safetensors checkpoint
-                    archive_file = os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)
-                    )
+                    file_explorer.navigate_to(subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant))
                     is_sharded = True
                 elif not use_safetensors and (
-                    os.path.isfile(
-                        os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant))
-                    )
-                    or os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant))
-                    in dduf_entries
+                    file_explorer.navigate_to(subfolder, _add_variant(WEIGHTS_NAME, variant)).is_file()
                 ):
                     # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant)
-                    )
+                    archive_file = file_explorer.navigate_to(subfolder, _add_variant(WEIGHTS_NAME, variant))
                 elif not use_safetensors and (
-                    os.path.isfile(
-                        os.path.join(
-                            pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
-                        )
-                    )
-                    or os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
-                    )
-                    in dduf_entries
+                    file_explorer.navigate_to(subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)).is_file()
                 ):
                     # Load from a sharded PyTorch checkpoint
-                    archive_file = os.path.join(
-                        pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
-                    )
+                    file_explorer.navigate_to(subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant))
                     is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
                 elif not use_safetensors and (
-                    os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index"))
-                    or os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
-                    in dduf_entries
-                    or os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME) in dduf_entries
+                    file_explorer.navigate_to(subfolder, TF_WEIGHTS_NAME + ".index").is_file()
+                    or file_explorer.navigate_to(subfolder, TF2_WEIGHTS_NAME).is_file()
                 ):
                     raise EnvironmentError(
                         f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
@@ -3775,8 +3719,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         " `from_tf=True` to load this model from those weights."
                     )
                 elif not use_safetensors and (
-                    os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME))
-                    or os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME) in dduf_entries
+                    file_explorer.navigate_to(subfolder, FLAX_WEIGHTS_NAME).is_file()
                 ):
                     raise EnvironmentError(
                         f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
@@ -3795,9 +3738,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f" {pretrained_model_name_or_path}."
                     )
             elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
+                # TODO: what would it mean in a DDUF environment?
                 archive_file = pretrained_model_name_or_path
                 is_local = True
             elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path + ".index")):
+                # TODO: what would it mean in a DDUF environment?
                 if not from_tf:
                     raise ValueError(
                         f"We found a TensorFlow checkpoint at {pretrained_model_name_or_path + '.index'}, please set "

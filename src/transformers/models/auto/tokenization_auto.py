@@ -28,7 +28,6 @@ from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     cached_file,
-    extract_commit_hash,
     is_g2p_en_available,
     is_sentencepiece_available,
     is_tokenizers_available,
@@ -706,10 +705,11 @@ def get_tokenizer_config(
     if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
-    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+    # TODO: handle this correctly
+    # commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+    commit_hash = None
 
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        result = json.load(reader)
+    result = json.loads(resolved_config_file.read_text())
     result["_commit_hash"] = commit_hash
     return result
 

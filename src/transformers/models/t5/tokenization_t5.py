@@ -21,6 +21,7 @@ from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
+from huggingface_hub import get_file_explorer
 
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import PreTrainedTokenizer
@@ -137,7 +138,6 @@ class T5Tokenizer(PreTrainedTokenizer):
         add_prefix_space=True,
         **kwargs,
     ) -> None:
-        dduf_entries = kwargs.get("dduf_entries", None)
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
         unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
         eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
@@ -147,11 +147,9 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if dduf_entries:
-            with dduf_entries[self.vocab_file].as_mmap() as mm:
-                self.sp_model.load_from_serialized_proto(mm)
-        else:
-            self.sp_model.Load(vocab_file)
+
+        with get_file_explorer(self.vocab_file).as_mmap() as mm:
+            self.sp_model.load_from_serialized_proto(mm)
 
         if additional_special_tokens is not None:
             extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
@@ -185,7 +183,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             legacy = True
 
         self.legacy = legacy
-        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False), dduf_entries=dduf_entries)
+        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
         self.add_prefix_space = add_prefix_space
@@ -203,30 +201,22 @@ class T5Tokenizer(PreTrainedTokenizer):
         )
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
-    def get_spm_processor(self, from_slow=False, dduf_entries=None):
+    def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if self.legacy or from_slow:  # no dependency on protobuf
-            if dduf_entries:
-                with dduf_entries[self.vocab_file].as_mmap() as mm:
-                    tokenizer.load_from_serialized_proto(mm)
-            else:
-                tokenizer.Load(self.vocab_file)
+            with get_file_explorer(self.vocab_file).as_mmap() as mm:
+                tokenizer.load_from_serialized_proto(mm)
             return tokenizer
 
-        if dduf_entries:
-            with dduf_entries[self.vocab_file].as_mmap() as mm:
-                tokenizer.load_from_serialized_proto(mm)
-        else:
-            with open(self.vocab_file, "rb") as f:
-                sp_model = f.read()
-        model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
-        model = model_pb2.ModelProto.FromString(sp_model)
-        normalizer_spec = model_pb2.NormalizerSpec()
-        normalizer_spec.add_dummy_prefix = False
-        model.normalizer_spec.MergeFrom(normalizer_spec)
-        sp_model = model.SerializeToString()
-        tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
+        with get_file_explorer(self.vocab_file).as_mmap() as sp_model:
+            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
+            model = model_pb2.ModelProto.FromString(sp_model)
+            normalizer_spec = model_pb2.NormalizerSpec()
+            normalizer_spec.add_dummy_prefix = False
+            model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+            return tokenizer
 
     @staticmethod
     def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):

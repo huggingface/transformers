@@ -31,6 +31,7 @@ from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from huggingface_hub import get_file_explorer
 from packaging import version
 
 from . import __version__
@@ -46,7 +47,6 @@ from .utils import (
     cached_file,
     copy_func,
     download_url,
-    extract_commit_hash,
     get_json_schema,
     is_flax_available,
     is_jax_tensor,
@@ -1915,9 +1915,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         vocab_files = {}
         init_configuration = {}
 
-        is_local = os.path.isdir(pretrained_model_name_or_path)
+        file_explorer = get_file_explorer(pretrained_model_name_or_path)
+        is_local = file_explorer.is_dir()
         single_file_id = None
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+        if file_explorer.is_file() or is_remote_url(pretrained_model_name_or_path):
             if len(cls.vocab_files_names) > 1 and not gguf_file:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
@@ -1949,60 +1950,48 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
                     fast_tokenizer_file = FULL_TOKENIZER_FILE
-                    if dduf_entries:
-                        tokenizer_config = json.loads(
-                            dduf_entries[
-                                os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
-                            ].read_text()
-                        )
+                    resolved_config_file = cached_file(
+                        pretrained_model_name_or_path,
+                        TOKENIZER_CONFIG_FILE,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        resume_download=resume_download,
+                        proxies=proxies,
+                        token=token,
+                        revision=revision,
+                        local_files_only=local_files_only,
+                        subfolder=subfolder,
+                        user_agent=user_agent,
+                        _raise_exceptions_for_gated_repo=False,
+                        _raise_exceptions_for_missing_entries=False,
+                        _raise_exceptions_for_connection_errors=False,
+                        _commit_hash=commit_hash,
+                    )
+                    # TODO: resolve that properly
+                    # commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+                    commit_hash = None
+                    if resolved_config_file is not None:
+                        tokenizer_config = json.loads(resolved_config_file.read_text())
                         if "fast_tokenizer_files" in tokenizer_config:
-                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    else:
-                        resolved_config_file = cached_file(
-                            pretrained_model_name_or_path,
-                            TOKENIZER_CONFIG_FILE,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            resume_download=resume_download,
-                            proxies=proxies,
-                            token=token,
-                            revision=revision,
-                            local_files_only=local_files_only,
-                            subfolder=subfolder,
-                            user_agent=user_agent,
-                            _raise_exceptions_for_gated_repo=False,
-                            _raise_exceptions_for_missing_entries=False,
-                            _raise_exceptions_for_connection_errors=False,
-                            _commit_hash=commit_hash,
-                        )
-                        commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                        if resolved_config_file is not None:
-                            with open(resolved_config_file, encoding="utf-8") as reader:
-                                tokenizer_config = json.load(reader)
-                                if "fast_tokenizer_files" in tokenizer_config:
-                                    fast_tokenizer_file = get_fast_tokenizer_file(
-                                        tokenizer_config["fast_tokenizer_files"]
-                                    )
+                            fast_tokenizer_file = get_fast_tokenizer_file(
+                                tokenizer_config["fast_tokenizer_files"]
+                            )
                     vocab_files["tokenizer_file"] = fast_tokenizer_file
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
         unresolved_files = []
         for file_id, file_path in vocab_files.items():
-            if dduf_entries:
-                # We don't necessarily have the file
-                if os.path.join(pretrained_model_name_or_path, file_path) in dduf_entries:
-                    resolved_vocab_files[file_id] = os.path.join(pretrained_model_name_or_path, file_path)
+            if file_explorer.is_file(file_path):
+                resolved_vocab_files[file_id] = file_explorer.navigate_to_file(file_path)
             elif file_path is None:
                 resolved_vocab_files[file_id] = None
             elif single_file_id == file_id:
-                if os.path.isfile(file_path):
-                    resolved_vocab_files[file_id] = file_path
-                elif is_remote_url(file_path):
+                if is_remote_url(file_path):
                     resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 resolved_vocab_files[file_id] = cached_file(
-                    pretrained_model_name_or_path,
+                    file_explorer,
                     file_path,
                     cache_dir=cache_dir,
                     force_download=force_download,
@@ -2018,7 +2007,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     _raise_exceptions_for_connection_errors=False,
                     _commit_hash=commit_hash,
                 )
-                commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
+
+                # TODO: do that properly
+                # commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
+                commit_hash = None
         # if dduf_entries:
         #     # preload files that are going to be opened in the tokenizer so that we don't need to modify each tokenizer with dduf ?
         #     for file in cls.vocab_files_names:
@@ -2106,11 +2098,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
         if tokenizer_config_file is not None:
-            if dduf_entries:
-                init_kwargs = json.loads(dduf_entries[tokenizer_config_file].read_text())
-            else:
-                with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
-                    init_kwargs = json.load(tokenizer_config_handle)
+            init_kwargs = json.loads(tokenizer_config_file.read_text())
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
@@ -2126,12 +2114,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # If an independent chat template file exists, it takes priority over template entries in the tokenizer config
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         if chat_template_file is not None:
-            if dduf_entries:
-                # TODO: check that it works
-                init_kwargs["chat_template"] = dduf_entries[chat_template_file].read_text()
-            else:
-                with open(chat_template_file) as chat_template_handle:
-                    init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
+            init_kwargs["chat_template"] = chat_template_file.read_text()
 
         if not _is_local:
             if "auto_map" in init_kwargs:

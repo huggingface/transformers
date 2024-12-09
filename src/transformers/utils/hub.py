@@ -14,7 +14,6 @@
 """
 Hub utilities: utilities related to download and cache models
 """
-
 import json
 import os
 import re
@@ -34,12 +33,14 @@ import requests
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
+    FileExplorer,
     ModelCard,
     ModelCardData,
     constants,
     create_branch,
     create_commit,
     create_repo,
+    get_file_explorer,
     get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
@@ -285,7 +286,7 @@ def cached_file(
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: Optional[str] = None,
     **deprecated_kwargs,
-) -> Optional[str]:
+) -> Optional[FileExplorer]:
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
 
@@ -365,11 +366,10 @@ def cached_file(
     if subfolder is None:
         subfolder = ""
 
-    path_or_repo_id = str(path_or_repo_id)
-    full_filename = os.path.join(subfolder, filename)
-    if os.path.isdir(path_or_repo_id):
-        resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
-        if not os.path.isfile(resolved_file):
+    file_explorer = get_file_explorer(path_or_repo_id)
+    if file_explorer.is_dir():
+        resolved_file = file_explorer.navigate_to(subfolder, filename)
+        if not resolved_file.is_file():
             if _raise_exceptions_for_missing_entries and filename not in ["config.json", f"{subfolder}/config.json"]:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
@@ -469,7 +469,7 @@ def cached_file(
         raise EnvironmentError(
             f"Incorrect path_or_model_id: '{path_or_repo_id}'. Please provide either the path to a local folder or the repo_id of a model on the Hub."
         ) from e
-    return resolved_file
+    return get_file_explorer(resolved_file)
 
 
 # TODO: deprecate `get_file_from_repo` or document it differently?

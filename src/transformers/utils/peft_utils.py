@@ -15,6 +15,7 @@ import importlib
 import os
 from typing import Dict, Optional, Union
 
+from huggingface_hub import get_file_explorer
 from packaging import version
 
 from .hub import cached_file
@@ -77,15 +78,17 @@ def find_adapter_config_file(
             In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
             specify the folder name here.
     """
-    adapter_cached_filename = None
     if model_id is None:
         return None
-    elif os.path.isdir(model_id):
-        list_remote_files = os.listdir(model_id)
+    file_explorer = get_file_explorer(model_id)
+    if file_explorer.is_dir():
+        # 'model_id' is either a local directory or a DDUF file (e.g. a zip-based file)
+        list_remote_files = file_explorer.listdir()
         if ADAPTER_CONFIG_NAME in list_remote_files:
-            adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
+            return file_explorer.navigate_to(ADAPTER_CONFIG_NAME)
     else:
-        adapter_cached_filename = cached_file(
+        # otherwise, assume it's a model ID on the Hub
+        return get_file_explorer(cached_file(
             model_id,
             ADAPTER_CONFIG_NAME,
             cache_dir=cache_dir,
@@ -100,9 +103,7 @@ def find_adapter_config_file(
             _raise_exceptions_for_gated_repo=False,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
-        )
-
-    return adapter_cached_filename
+        ))
 
 
 def check_peft_version(min_version: str) -> None:
