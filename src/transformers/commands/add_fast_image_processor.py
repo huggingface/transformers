@@ -31,6 +31,9 @@ REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
 
 def add_import_structure_entry_init(content: str, fast_image_processor_name: str, model_name: str):
+    """
+    Add an entry to the `_import_structure` dictionary in the `__init__.py` file of the transformers package.
+    """
     # Step 1: Find the block
     block_regex = re.compile(
         r"if not is_torchvision_available\(\):.*?else:\s*(\n(?P<indent>\s+)_import_structure\[.*?\].*?\n(?:\s*(?P=indent)_import_structure\[.*?\].*?\n)*)",
@@ -70,6 +73,9 @@ def add_import_structure_entry_init(content: str, fast_image_processor_name: str
 
 
 def add_import_statement_init(content: str, fast_image_processor_name: str, model_name: str):
+    """
+    Add an import statement to the `__init__.py` file of the transformers package.
+    """
     # Step 1: Find the block
     block_regex = re.compile(
         r"if not is_torchvision_available\(\):\s+raise OptionalDependencyNotAvailable\(\)\s+except OptionalDependencyNotAvailable:\s+from \.utils\.dummy_torchvision_objects import \*\s+else:(?P<else_block>\s*(\n\s*from .+ import .*\n)+)(?=\s*# Modeling)",
@@ -110,6 +116,9 @@ def add_import_statement_init(content: str, fast_image_processor_name: str, mode
 
 
 def add_fast_image_processor_to_main_init(fast_image_processor_name: str, model_name: str):
+    """
+    Add the fast image processor to the main __init__.py file of the transformers package.
+    """
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -126,6 +135,9 @@ def add_fast_image_processor_to_main_init(fast_image_processor_name: str, model_
 def add_fast_image_processor_to_model_init(
     fast_image_processing_module_file: str, fast_image_processor_name, model_name: str
 ):
+    """
+    Add the fast image processor to the __init__.py file of the model.
+    """
     with open(TRANSFORMERS_PATH / "models" / model_name / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -237,6 +249,9 @@ def add_fast_image_processor_to_model_init(
 
 
 def add_fast_image_processor_to_auto(image_processor_name: str, fast_image_processor_name: str):
+    """
+    Add the fast image processor to the auto module.
+    """
     with open(TRANSFORMERS_PATH / "models" / "auto" / "image_processing_auto.py", "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -251,6 +266,9 @@ def add_fast_image_processor_to_auto(image_processor_name: str, fast_image_proce
 
 
 def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
+    """
+    Add the fast image processor to the dummy torchvision objects file.
+    """
     dummy_torchvision_objects_file = TRANSFORMERS_PATH / "utils" / "dummy_torchvision_objects.py"
     with open(dummy_torchvision_objects_file, "r", encoding="utf-8") as f:
         content = f.read()
@@ -282,6 +300,9 @@ def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
 
 
 def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: str):
+    """
+    Add the fast image processor to the model's doc file.
+    """
     doc_source = REPO_PATH / "docs" / "source"
     # find the doc files
     doc_files = list(doc_source.glob(f"*/model_doc/{model_name}.md"))
@@ -315,6 +336,9 @@ def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: 
 
 
 def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name: str):
+    """
+    Add the fast image processor to the image processing tests.
+    """
     tests_path = REPO_PATH / "tests" / "models" / model_name
     test_file = tests_path / f"test_image_processing_{model_name}.py"
     if not os.path.exists(test_file):
@@ -387,6 +411,9 @@ def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name
 
 
 def get_fast_image_processing_content_header(content: str) -> str:
+    """
+    Get the header of the slow image processor file.
+    """
     # get all lines before and including the line containing """Image processor
     content_header = re.search(r"^(.*?\n)*?\"\"\"Image processor.*", content)
     content_header = content_header.group(0)
@@ -398,6 +425,9 @@ def get_fast_image_processing_content_header(content: str) -> str:
 def write_default_fast_image_processor_file(
     fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
 ):
+    """
+    Write a default fast image processor file. Used when encountering a problem while parsing the slow image processor file.
+    """
     imports = "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n\n\n"
     content_header = get_fast_image_processing_content_header(content_base_file)
     content_base_file = (
@@ -425,6 +455,9 @@ def write_default_fast_image_processor_file(
 def add_fast_image_processor_file(
     fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
 ):
+    """
+    Add the fast image processor file to the model's folder.
+    """
     # if the file already exists, do nothing
     if os.path.exists(fast_image_processing_module_file):
         print(f"{fast_image_processing_module_file} already exists. Skipping.")
@@ -531,6 +564,10 @@ def add_fast_image_processor_file(
 
 
 def add_fast_image_processor(model_name: str):
+    """
+    Add the necessary references to the fast image processor in the transformers package,
+    and create the fast image processor file in the model's folder.
+    """
     model_module = TRANSFORMERS_PATH / "models" / model_name
     image_processing_module_file = list(model_module.glob("image_processing*.py"))
     if not image_processing_module_file:

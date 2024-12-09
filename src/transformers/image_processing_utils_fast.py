@@ -36,6 +36,7 @@ from .image_utils import (
     make_batched_images,
     make_list_of_images,
     validate_fast_preprocess_arguments,
+    validate_kwargs,
 )
 from .utils import (
     TensorType,
@@ -170,13 +171,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
     Constructs a Fast Base image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `None`):
+        do_resize (`bool`, *optional*):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `None`):
+        size (`dict`, *optional*):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `None`):
+        resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
@@ -185,24 +186,24 @@ class BaseImageProcessorFast(BaseImageProcessor):
         crop_size (`Dict[str, int]` *optional*, defaults to 224):
             Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
             method.
-        do_rescale (`bool`, *optional*, defaults to `None`):
+        do_rescale (`bool`, *optional*):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
             `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `None`):
+        do_normalize (`bool`, *optional*):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `None`):
+        image_mean (`float` or `List[float]`, *optional*):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `None`):
+        image_std (`float` or `List[float]`, *optional*):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `None`):
+        do_convert_rgb (`bool`, *optional*):
             Whether to convert the image to RGB.
     """
 
@@ -218,6 +219,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     do_normalize = None
     do_convert_rgb = None
     model_input_names = ["pixel_values"]
+    valid_extra_kwargs = ["default_to_square", "device"]
 
     def __init__(
         self,
@@ -255,6 +257,22 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else self.image_std
         self.do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+    def prepare_images_structure(
+        self,
+        images: ImageInput,
+    ) -> ImageInput:
+        """
+        Prepare the images structure for processing.
+
+        Args:
+            images (`ImageInput`):
+                The input images to process.
+
+        Returns:
+            `ImageInput`: The images with a valid nesting.
+        """
+        return make_list_of_images(images)
+
     def resize(
         self,
         image: "torch.Tensor",
@@ -270,20 +288,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
 
         Returns:
             `np.ndarray`: The resized image.
@@ -294,23 +300,24 @@ class BaseImageProcessorFast(BaseImageProcessor):
             # while maintaining the aspect ratio of the original image.
             new_size = get_size_with_aspect_ratio(
                 image.size()[-2:],
-                size["shortest_edge"],
-                size["longest_edge"],
+                size.shortest_edge,
+                size.longest_edge,
             )
         elif size.shortest_edge:
             new_size = get_resize_output_image_size(
                 image,
-                size=size["shortest_edge"],
+                size=size.shortest_edge,
                 default_to_square=False,
                 input_data_format=ChannelDimension.FIRST,
             )
         elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size["max_height"], size["max_width"])
+            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
         elif size.height and size.width:
-            new_size = (size["height"], size["width"])
+            new_size = (size.height, size.width)
         else:
             raise ValueError(
-                "Size must contain 'height' and 'width' keys or 'shortest_edge' keys. Got" f" {size.keys()}."
+                "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
+                f" {size.keys()}."
             )
         return F.resize(image, new_size, interpolation=resample)
 
@@ -328,16 +335,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Image to rescale.
             scale (`float`):
                 The scaling factor to rescale pixel values by.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
 
         Returns:
             `torch.Tensor`: The rescaled image.
@@ -346,13 +343,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def normalize(
         self,
-        image: np.ndarray,
+        image: "torch.Tensor",
         mean: Union[float, Iterable[float]],
         std: Union[float, Iterable[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> "torch.Tensor":
         """
         Normalize an image. image = (image - image_mean) / image_std.
 
@@ -363,16 +358,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Image mean to use for normalization.
             std (`torch.Tensor`, `float` or `Iterable[float]`):
                 Image standard deviation to use for normalization.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
 
         Returns:
             `torch.Tensor`: The normalized image.
@@ -381,31 +366,22 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def center_crop(
         self,
-        image: np.ndarray,
+        image: "torch.Tensor",
         size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> "torch.Tensor":
         """
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
         any edge, the image is padded with 0's and then center cropped.
 
         Args:
-            image (`np.ndarray`):
+            image (`"torch.Tensor"`):
                 Image to center crop.
             size (`Dict[str, int]`):
                 Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `torch.Tensor`: The center cropped image.
         """
         if size.height is None or size.width is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
@@ -419,10 +395,91 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
         as is.
         Args:
-            image (Image):
+            image (ImageInput):
                 The image to convert.
+
+        Returns:
+            ImageInput: The converted image.
         """
         return convert_to_rgb(image)
+
+    def prepare_process_arguments(
+        self,
+        images: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
+        crop_size: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional[torch.device] = None,
+        **kwargs,
+    ) -> tuple:
+        """
+        Prepare the arguments for the process method.
+        """
+        # Make hashable for cache
+        size = SizeDict(**size) if size is not None else None
+        crop_size = SizeDict(**crop_size) if crop_size is not None else None
+        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
+        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
+
+        validate_fast_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            return_tensors=return_tensors,
+            data_format=data_format,
+        )
+
+        images = self.prepare_images_structure(images)
+        image_type = get_image_type(images[0])
+        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
+            raise ValueError(f"Unsupported input image type {image_type}")
+
+        if do_convert_rgb:
+            images = [self.convert_to_rgb(image) for image in images]
+
+        if image_type == ImageType.PIL:
+            images = [F.pil_to_tensor(image) for image in images]
+        elif image_type == ImageType.NUMPY:
+            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+            images = [torch.from_numpy(image).contiguous() for image in images]
+
+        # Now that we have torch tensors, we can move them to the right device
+        if device is not None:
+            images = [image.to(device) for image in images]
+
+        # We assume that all images have the same channel dimension format.
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(images[0])
+        if input_data_format == ChannelDimension.LAST:
+            # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
+            images = [image.permute(2, 0, 1).contiguous() for image in images]
+            input_data_format = ChannelDimension.FIRST
+
+        if do_rescale and do_normalize:
+            # fused rescale and normalize
+            image_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
+            image_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
+
+        interpolation = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
+
+        return images, image_mean, image_std, size, crop_size, interpolation
 
     def preprocess(
         self,
@@ -457,6 +514,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
             resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the output image after applying `center_crop`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -485,6 +546,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         default_to_square = kwargs.pop(
@@ -504,68 +567,29 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return_tensors = "pt" if return_tensors is None else return_tensors
         device = kwargs.pop("device", None)
 
-        # Make hashable for cache
-        size = SizeDict(**size) if size is not None else None
-        crop_size = SizeDict(**crop_size) if crop_size is not None else None
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        # TODO: add better kwargs handling
-        # validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        images = make_list_of_images(images)
-        image_type = get_image_type(images[0])
-
-        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
-            raise ValueError(f"Unsupported input image type {image_type}")
-
-        validate_fast_preprocess_arguments(
+        images, image_mean, image_std, size, crop_size, interpolation = self.prepare_process_arguments(
+            images=images,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+            do_convert_rgb=do_convert_rgb,
             return_tensors=return_tensors,
             data_format=data_format,
+            input_data_format=input_data_format,
+            device=device,
+            **kwargs,
         )
-
-        if do_convert_rgb:
-            images = [self.convert_to_rgb(image) for image in images]
-
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images = [torch.from_numpy(image).contiguous() for image in images]
-
-        # Now that we have torch tensors, we can move them to the right device
-        if device is not None:
-            images = [image.to(device) for image in images]
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-        if input_data_format == ChannelDimension.LAST:
-            # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
-            images = [image.permute(2, 0, 1).contiguous() for image in images]
-            input_data_format = ChannelDimension.FIRST
-
-        if do_rescale and do_normalize:
-            # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
 
         processed_images = []
         for image in images:
             if do_resize:
-                interpolation = (
-                    pil_torch_interpolation_mapping[resample]
-                    if isinstance(resample, (PILImageResampling, int))
-                    else resample
-                )
                 image = self.resize(
                     image=image,
                     size=size,
@@ -577,7 +601,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
             if do_rescale and do_normalize:
                 # fused rescale and normalize
-                image = self.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+                image = self.normalize(image.to(dtype=torch.float32), image_mean, image_std)
             elif do_rescale:
                 image = image * rescale_factor
             elif do_normalize:
@@ -602,6 +626,7 @@ class LlavaPatchingMixin:
         image_grid_pinpoints: List = None,
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = None,
@@ -616,6 +641,7 @@ class LlavaPatchingMixin:
             size=size,
             resample=resample,
             do_center_crop=do_center_crop,
+            crop_size=crop_size,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
@@ -628,6 +654,22 @@ class LlavaPatchingMixin:
             image_grid_pinpoints if image_grid_pinpoints is not None else self.image_grid_pinpoints
         )
         self.do_pad = do_pad if do_pad is not None else self.do_pad
+
+    def prepare_images_structure(
+        self,
+        images: ImageInput,
+    ) -> ImageInput:
+        """
+        Prepare the images structure for processing.
+
+        Args:
+            images (`ImageInput`):
+                The input images to process.
+
+        Returns:
+            `ImageInput`: The images with a valid nesting.
+        """
+        return make_batched_images(images)
 
     def _resize_for_patching(
         self, image: "torch.Tensor", target_resolution: tuple, resample, input_data_format: ChannelDimension
@@ -772,6 +814,10 @@ class LlavaPatchingMixin:
             resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the output image after applying `center_crop`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -800,6 +846,8 @@ class LlavaPatchingMixin:
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         default_to_square = kwargs.pop(
@@ -821,62 +869,24 @@ class LlavaPatchingMixin:
         return_tensors = "pt" if return_tensors is None else return_tensors
         device = kwargs.pop("device", None)
 
-        # Make hashable for cache
-        size = SizeDict(**size) if size is not None else None
-        crop_size = SizeDict(**crop_size) if crop_size is not None else None
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        # TODO: add better kwargs handling
-        # validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        images = make_batched_images(images)
-        image_type = get_image_type(images[0])
-
-        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
-            raise ValueError(f"Unsupported input image type {image_type}")
-
-        validate_fast_preprocess_arguments(
+        images, image_mean, image_std, size, crop_size, interpolation = self.prepare_process_arguments(
+            images=images,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+            do_convert_rgb=do_convert_rgb,
             return_tensors=return_tensors,
             data_format=data_format,
-        )
-
-        if do_convert_rgb:
-            images = [self.convert_to_rgb(image) for image in images]
-
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images = [torch.from_numpy(image).contiguous() for image in images]
-
-        # Now that we have torch tensors, we can move them to the right device
-        if device is not None:
-            images = [image.to(device) for image in images]
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-        if input_data_format == ChannelDimension.LAST:
-            # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
-            images = [image.permute(2, 0, 1).contiguous() for image in images]
-            input_data_format = ChannelDimension.FIRST
-
-        if do_rescale and do_normalize:
-            # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
-
-        interpolation = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+            input_data_format=input_data_format,
+            device=device,
+            **kwargs,
         )
 
         processed_images = []
@@ -885,15 +895,18 @@ class LlavaPatchingMixin:
             size_tuple = (
                 (size.height, size.width) if size.height and size.width else (size.shortest_edge, size.shortest_edge)
             )
+            patch_size = (
+                crop_size.height
+                if crop_size is not None and crop_size.height
+                else size.height
+                if size.height
+                else size.shortest_edge
+            )
             image_patches = self._get_image_patches(
                 image,
                 image_grid_pinpoints,
                 size=size_tuple,
-                patch_size=crop_size.height
-                if crop_size is not None and crop_size.height
-                else size.height
-                if size.height
-                else size.shortest_edge,
+                patch_size=patch_size,
                 resample=interpolation,
             )
             processed_image_patches = {}
@@ -923,7 +936,7 @@ class LlavaPatchingMixin:
                     image_patch = self.center_crop(image_patch, crop_size)
                 if do_rescale and do_normalize:
                     # fused rescale and normalize
-                    image_patch = self.normalize(image_patch.to(dtype=torch.float32), new_mean, new_std)
+                    image_patch = self.normalize(image_patch.to(dtype=torch.float32), image_mean, image_std)
                 elif do_rescale:
                     image_patch = image_patch * rescale_factor
                 elif do_normalize:
