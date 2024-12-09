@@ -565,42 +565,6 @@ def flash_attention_forward(
     return attn_output, None
 
 
-def flex_attention_forward(
-    config: Qwen2VLConfig,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    **_kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    key_states = repeat_kv(key, config.num_key_value_groups)
-    value_states = repeat_kv(value, config.num_key_value_groups)
-
-    causal_mask = mask
-    if causal_mask is not None:
-        causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-    def causal_mod(score, b, h, q_idx, kv_idx):
-        if causal_mask is not None:
-            score += causal_mask[b][0][q_idx][kv_idx]
-        return score
-
-    attn_output, attn_weights = flex_attention(
-        query,
-        key_states,
-        value_states,
-        score_mod=causal_mod,
-        enable_gqa=True,
-        return_lse=True,
-    )
-
-    # lse is returned in float32
-    attn_weights = attn_weights.to(value_states.dtype)
-
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
 def sdpa_attention_forward(
     config: Qwen2VLConfig,
     query: torch.Tensor,
@@ -637,6 +601,37 @@ def sdpa_attention_forward(
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, None
+
+
+def flex_attention_forward(
+    config: Qwen2VLConfig,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    causal_mask = mask
+    if causal_mask is not None:
+        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+
+    def causal_mod(score, b, h, q_idx, kv_idx):
+        if causal_mask is not None:
+            score += causal_mask[b][0][q_idx][kv_idx]
+        return score
+
+    attn_output, attn_weights = flex_attention(
+        query,
+        key,
+        value,
+        score_mod=causal_mod,
+        enable_gqa=True,
+        return_lse=True,
+    )
+    attn_weights = attn_weights.to(value.dtype)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 QWEN2_VL_ATTENTION_FUNCTION = {
