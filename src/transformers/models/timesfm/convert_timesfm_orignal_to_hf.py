@@ -3,9 +3,10 @@ import os
 import shutil
 
 import numpy as np
-import timesfm
+
 import torch
 
+import timesfm
 from transformers import TimesFMConfig, TimesFMModelForPrediction
 
 
@@ -232,7 +233,9 @@ def main():
     args = parser.parse_args()
 
     # if the saved model file exists, skip the conversion
-    if os.path.exists(os.path.join(args.output_dir, "model.safetensors" if args.safe_serialization else "model.bin")):
+    if os.path.exists(
+        os.path.join(args.output_dir, "model.safetensors" if args.safe_serialization else "pytorch_model.bin")
+    ):
         print(f"Model already exists in {args.output_dir}, skipping conversion.")
     else:
         write_model(
