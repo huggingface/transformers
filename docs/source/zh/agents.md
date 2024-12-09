@@ -208,8 +208,8 @@ Python 解释器默认不允许导入不在安全列表中的模块，因此大�
 
 如果有任何代码尝试执行非法操作，或者生成的代码出现常规 Python 错误，执行将停止。
 
-> [WARNING]
-> The LLM can generate arbitrary code that will then be executed: do not add any unsafe imports!
+> [!WARNING]
+> 在使用大语言模型（LLM）生成代码时，生成的代码会被执行，避免导入或使用任何不安全的库或模块。
 
 ### 系统提示
 
@@ -263,8 +263,7 @@ agent = ReactJsonAgent(tools=[PythonInterpreterTool()], system_prompt="{your_cus
 ```
 
 > [WARNING]
-> Please make sure to define the `<<tool_descriptions>>` string somewhere in the `template` so the agent is aware 
-of the available tools.
+> 必须在`template`中定义 `<<tool_descriptions>>` 这个变量，以便智能体能够正确地识别并使用可用的工具
 
 
 ### 检查智能体的运行
@@ -287,7 +286,7 @@ Transformers 提供了一个默认工具箱，用于增强智能体，您可以�
 
 - **文档问答**：给定一个文档（如图像格式的 PDF），回答关于该文档的问题([Donut](./model_doc/donut))
 - **图像问答**：给定一张图片，回答关于该图像的问题([VILT](./model_doc/vilt))
-语音转文本：给定一个人讲述的音频录音，将其转录为文本（Whisper）
+- **语音转文本**：给定一个人讲述的音频录音，将其转录为文本（Whisper）
 - **文本转语音**：将文本转换为语音([SpeechT5](./model_doc/speecht5))
 - **翻译**：将给定的句子从源语言翻译为目标语言
 - **DuckDuckGo 搜索**：使用 `DuckDuckGo` 浏览器进行网络搜索
@@ -348,7 +347,7 @@ def model_download_tool(task: str) -> str:
 所有这些将自动嵌入到智能体的系统提示中，因此请尽量使它们尽可能清晰！
 
 > [TIP]
-> This definition format is the same as tool schemas used in `apply_chat_template`, the only difference is the added `tool` decorator: read more on our tool use API [here](https://huggingface.co/blog/unified-tool-use#passing-tools-to-a-chat-template).
+> 这个定义格式与 apply_chat_template 中使用的工具模式相同，唯一的区别是添加了 tool 装饰器：可以在我们的工具使用 API 中[了解更多](https://huggingface.co/blog/unified-tool-use#passing-tools-to-a-chat-template).
 
 然后，您可以直接初始化您的智能体：
 ```py
@@ -399,7 +398,7 @@ agent.run(
 
 
 > [WARNING]
-> Beware when adding tools to an agent that already works well because it can bias selection towards your tool or select another tool other than the one already defined.
+> 当向一个已经运行良好的代理添加工具时要小心，因为这可能会导致选择偏向你的工具，或者选择已经定义的工具之外的其他工具。
 
 
 使用 agent.toolbox.update_tool() 方法可以替换智能体工具箱中的现有工具。
