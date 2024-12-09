@@ -13,8 +13,7 @@
 # limitations under the License.
 "SpQR (Sparse-Quantized Representation) integration file"
 
-from ..utils import is_torch_available
-
+from ..utils import is_torch_available, is_spqr_available, is_accelerate_available
 
 if is_torch_available():
     import torch.nn as nn
@@ -49,8 +48,10 @@ def replace_with_spqr_linear(
     if modules_to_not_convert is None:
         modules_to_not_convert = []
 
-    from accelerate import init_empty_weights
-    from spqr_quant import QuantizedLinear
+    if is_accelerate_available():
+        from accelerate import init_empty_weights
+    if is_spqr_available():
+        from spqr_quant import QuantizedLinear
 
     for name, module in model.named_children():
         if current_key_name is None:
