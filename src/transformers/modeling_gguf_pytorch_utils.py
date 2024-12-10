@@ -359,20 +359,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
-    model_size = ""
-    # extract the number of params from file name as architectures can differ ;
-    # eg. for falcon : `...falcon-7b-...`
-    if "falcon" in architecture:
-        gguf_file_name = gguf_checkpoint_path.split("/")[-1].lower()
-        m = re.search(r"-\d+b-", gguf_file_name)  # regex to catch `-7b-`
-        if m is None:
-            raise ValueError(
-                f"From file name, cannot determine the number of parameters for {architecture} architecture"
-            )
-        model_size = m.group().strip("-")  # only keeps `7b`
-
-    if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
-        raise ValueError(f"Architecture {architecture + model_size} not supported")
+    if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
+        raise ValueError(f"Architecture {architecture} not supported")
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
     # tie_word_embeddings is true otherwise false
@@ -424,7 +412,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             )
 
     if return_tensors:
-        # tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture + model_size]
         tensor_key_mapping = get_gguf_hf_weights_map(model_to_load)
         config = parsed_parameters.get("config", {})
 
@@ -449,11 +436,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
                 continue
 
             name = tensor_key_mapping[name]
-            # for tensor_name in tensor_key_mapping:
-            #     if tensor_name.format(bid=bid) in name:
-            #         name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
 
-            # Use copy to avoid errors with numpy and pytorch
             parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
 
     if len(reader_keys) > 0:
