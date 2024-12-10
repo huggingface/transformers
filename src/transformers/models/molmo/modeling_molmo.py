@@ -1983,7 +1983,7 @@ class MolmoPoolingAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
 
-        self.attention_dropout = config.attention_dropout
+        self.dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
@@ -2011,7 +2011,7 @@ class MolmoPoolingAttention(nn.Module):
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -2533,8 +2533,10 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
             valid_positions = image_token_indices_flat >= 0
             valid_indices = image_token_indices_flat[valid_positions].long()
-            valid_features = image_features_flat[valid_positions]
-            valid_batch_indices = valid_batch_indices_expanded[valid_positions].long()
+            valid_features = image_features_flat[valid_positions.to(image_features_flat.device)]
+            valid_batch_indices = valid_batch_indices_expanded[
+                valid_positions.to(valid_batch_indices_expanded.device)
+            ].long()
 
             flat_indices = valid_batch_indices * seq_len + valid_indices
             inputs_embeds_flat = inputs_embeds.view(-1, hidden_size)
