@@ -244,7 +244,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
-                
+
         # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
         # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
         if (
@@ -275,7 +275,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 optimal_threshold_index = np.argmin(costs)
                 best_threshold = thresholds[optimal_threshold_index]
 
-                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold 
+                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
 
     def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> Tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
@@ -325,6 +325,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
+
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     """
