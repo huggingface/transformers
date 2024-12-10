@@ -19,8 +19,8 @@ from typing import List
 
 import numpy as np
 import torch
-
 from huggingface_hub import hf_hub_download
+
 from transformers import TimesFMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_fx_available
@@ -33,7 +33,7 @@ if is_torch_fx_available():
     pass
 
 if is_torch_available():
-    from transformers import TimesFMDecoder, TimesFMModelForPrediction
+    from transformers import TimesFMModelForPrediction
 
 TOLERANCE = 1e-4
 
