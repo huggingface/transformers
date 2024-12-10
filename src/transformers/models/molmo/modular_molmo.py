@@ -1356,6 +1356,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
 __all__ = [
     "MolmoConfig",
+    "MolmoPoolingConfig",
     "MolmoTextConfig",
     "MolmoVisionConfig",
     "MolmoVisionEmbeddings",

@@ -495,4 +495,4 @@ class MolmoConfig(PretrainedConfig):
         )
 
 
-__all__ = ["MolmoConfig", "MolmoTextConfig", "MolmoVisionConfig"]
+__all__ = ["MolmoConfig", "MolmoPoolingConfig", "MolmoTextConfig", "MolmoVisionConfig"]
