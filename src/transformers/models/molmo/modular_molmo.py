@@ -62,7 +62,7 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 logger = logging.get_logger(__name__)
-_CONFIG_FOR_DOC = "MolmoTextConfig"
+_CONFIG_FOR_DOC = "MolmoConfig"
 
 
 class MolmoVisionConfig(PretrainedConfig):
@@ -76,17 +76,17 @@ class MolmoVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 23):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 576):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -97,8 +97,9 @@ class MolmoVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        num_image_positions (`int`, *optional*, defaults to 577):
+            The number of image tokens per crop.
     Example:
-
     ```python
     >>> from transformers import MolmoVisionConfig, MolmoVisionModel
 
@@ -156,18 +157,16 @@ class MolmoPoolingConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the pooler attention layer.
-        text_hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the text encoder layers.
-        text_intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the text Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer pooler.
         head_dim (`int`, *optional*, defaults to 64):
             The poolinng attention head dimension.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         pooling_height (`int`, *optional*, defaults to 2):
             The height of image features requred for pooling operation.
         pooling_width (`int`, *optional*, defaults to 2):
@@ -176,16 +175,18 @@ class MolmoPoolingConfig(PretrainedConfig):
             Dimensionality of a padding tensor which is multiplied with the image mask.
         image_num_patches (`int`, *optional*, defaults to 24):
             Number of patches each image feature has after the vision tower.
-        image_feature_dropout (`float`, *optional*, defaults to 0.9):
+        image_feature_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the image features after vision tower.
+        text_intermediate_size (`int`, *optional*, defaults to 37888):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the text Transformer encoder.
+        text_hidden_size (`int`, *optional*, defaults to 3584):
+            Dimensionality of the text encoder layers.
         image_pooling_type (`str`, *optional*, defaults to `"attention_meanq"`):
             Type of pooling to apply on image features. Can be one of ["attention", "attention_meanq", "attention_2wide", "attention_v2", "stack"] or `None`
         image_padding_embed (`str`, *optional*, defaults to `"pad_and_partial_pad"`):
             Type of padding to apply of image masks. Can be one of ["pad_embed", "regress", "pad_and_partial_pad]
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        projector_hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The activation function used by the multimodal projector.
 
     Example:
 
@@ -251,19 +252,8 @@ class MolmoTextConfig(CohereConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 152192):
-            Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MolmoTextModel`]
         hidden_size (`int`, *optional*, defaults to 3584):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 37888):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 28):
-            Number of hidden layers in the Transformer encoder.
-        head_dim (`int`, *optional*, defaults to 128):
-            The poolinng attention head dimension.
-        num_attention_heads (`int`, *optional*, defaults to 28):
-            Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*, defaults to 4):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -271,6 +261,17 @@ class MolmoTextConfig(CohereConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+        num_attention_heads (`int`, *optional*, defaults to 28):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 28):
+            Number of hidden layers in the Transformer encoder.
+        head_dim (`int`, *optional*, defaults to 128):
+            The poolinng attention head dimension.
+        vocab_size (`int`, *optional*, defaults to 152192):
+            Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`MolmoTextModel`]
+        intermediate_size (`int`, *optional*, defaults to 37888):
+            Dimension of the MLP representations.
         hidden_act (`str` or `function`, *optional*, defaults to `"swiglu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -392,7 +393,7 @@ class MolmoTextConfig(CohereConfig):
 class MolmoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MolmoForConditionalGeneration`]. It is used to instantiate an
-    Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    Momlmo model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Molmo-7B-D.
 
     e.g. [allenai/Molmo-7B-D-0924-hf](https://huggingface.co/allenai/Molmo-7B-D-0924-hf)
