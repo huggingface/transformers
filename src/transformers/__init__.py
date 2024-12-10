@@ -546,9 +546,7 @@ _import_structure = {
         "LlavaNextVideoConfig",
         "LlavaNextVideoProcessor",
     ],
-    "models.llava_next_video2": [
-        "LlavaNextVideo2Config",
-    ],
+    "models.llava_next_video2": ["LlavaNextVideo2Config"],
     "models.llava_onevision": ["LlavaOnevisionConfig", "LlavaOnevisionProcessor"],
     "models.longformer": [
         "LongformerConfig",

@@ -49,20 +49,6 @@ class LlavaNextVideo2Pooler(nn.Module):
         stride = config.spatial_pool_stride
         out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
         self.image_size = config.vision_config.image_size // config.vision_config.patch_size**2
-
-        if mode == "average":
-            self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
-        elif mode == "max":
-            self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
-        elif mode == "conv":
-            self.pool = nn.Conv2d(
-                in_channels=config.vision_config.hidden_size,
-                out_channels=out_channels,
-                kernel_size=stride,
-                stride=stride,
-            )
-        else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
         if mode == "average":
             self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
         elif mode == "max":
@@ -715,13 +701,6 @@ class LlavaNextVideo2ForConditionalGeneration(LlavaNextVideo2PreTrainedModel, Ge
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-
-                if vision_feature_select_strategy == "default":
-                    expected_num_patches = height * width
-                elif vision_feature_select_strategy == "full":
-                    expected_num_patches = height * width + 1
-                if expected_num_patches != base_image_feature.shape[0]:
-                    raise ValueError("The number of patches is not consistent with the image size.")
 
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],

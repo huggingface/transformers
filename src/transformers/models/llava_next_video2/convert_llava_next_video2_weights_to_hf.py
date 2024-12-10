@@ -124,22 +124,15 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     if model_id == "lmms-lab/LLaVA-Video-7B-Qwen2":
         text_model_id = "Qwen/Qwen2-7B-Instruct"
-        video_token_index = 151646
-        image_token_index = 151647
-        overwrite_text_config = {}
     elif model_id == "lmms-lab/LLaVA-Video-32B-Qwen":
         text_model_id = "Qwen/Qwen1.5-32B-Chat"
-        video_token_index = 151646
-        image_token_index = 151647
-        overwrite_text_config = {}
     elif model_id == "lmms-lab/LLaVA-Video-72B-Qwen2":
         text_model_id = "Qwen/Qwen2-72B-Instruct"
-        video_token_index = 151646
-        image_token_index = 151647
-        overwrite_text_config = {}
     else:
         raise ValueError("Incorrect checkpoint referenced. Text model-id not identified!")
 
+    image_token_index = 151646
+    video_token_index = 151647
     vision_model_id = data["mm_vision_tower"]
 
     if vision_model_id == "google/siglip-so400m-patch14-384":
@@ -162,13 +155,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     torch.set_default_dtype(torch.bfloat16)
     text_config = AutoConfig.from_pretrained(text_model_id)
     text_config = text_config.to_dict()
-    text_config.update(overwrite_text_config)
 
     tokenizer = AutoTokenizer.from_pretrained(
         text_model_id,
         use_fast=True,
         padding_side="left",
-        extra_special_tokens={"image_token": "<image>", "video_token": "<image>"},
+        extra_special_tokens={"image_token": "<image>", "video_token": "<video>"},
     )
 
     image_processor = LlavaNextImageProcessor.from_pretrained(
@@ -184,6 +176,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         video_processor=video_processor,
         image_processor=image_processor,
         chat_template=model2template[model_id],
+        vision_feature_select_strategy=vision_feature_select_strategy,
+        patch_size=14,
     )
 
     config = LlavaNextVideo2Config(
@@ -240,6 +234,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     if push_to_hub:
         repo_id = model_id.split("/")[-1]
+        repo_id = repo_id.replace("LLaVA-Video", "LLaVA-Next-Video")
         print(f"Pushing model to hub repo: {repo_id}")
         model.push_to_hub(f"llava-hf/{repo_id}-hf")
         processor.push_to_hub(f"llava-hf/{repo_id}-hf")
