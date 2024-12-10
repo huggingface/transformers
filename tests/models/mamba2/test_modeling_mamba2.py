@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
+from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -191,6 +192,27 @@ class Mamba2ModelTester:
             torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
         )
 
+    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
+        model = Mamba2Model(config)
+        model.eval()
+
+        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
+            self.parent.skipTest(
+                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
+            )
+        if torch_device != "cuda":
+            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
+
+        model.to(torch_device)
+        if gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+
+        token_emb = model.embeddings(input_ids)
+        outputs_fast = model.layers[0].mixer.cuda_kernels_forward(token_emb)
+        outputs_slow = model.layers[0].mixer.torch_forward(token_emb)
+
+        self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
+
 
 @unittest.skipIf(
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
@@ -220,6 +242,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
+
+    def test_mamba2_slow_vs_fast_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
