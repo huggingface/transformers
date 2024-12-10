@@ -784,10 +784,12 @@ class ModelFileMapper(ModuleMapper):
                 remaining_dependencies.remove(dep)
                 relative_order[dep] = idx
                 idx += 1
-            # Add the class itself
-            remaining_dependencies.remove(class_name)
-            relative_order[class_name] = idx
-            idx += 1
+            # Add the class itself (it can sometimes already be present if the order of classes in the source file
+            # does not make sense, i.e. a class is used somewhere before being defined like in `rt_detr`...)
+            if class_name in remaining_dependencies:
+                remaining_dependencies.remove(class_name)
+                relative_order[class_name] = idx
+                idx += 1
 
         # Now add what still remains
         remaining_dependencies = tuple(remaining_dependencies)
@@ -944,6 +946,7 @@ def replace_class_node(
         ).body[0]
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
+    # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
     additional_bases = [base for base in all_bases if base != original_super_class]
     new_bases = []
     for original_base in original_node.bases:
@@ -1675,7 +1678,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/molmo/modular_molmo.py"],
+        default=["src/transformers/models/aria/modular_aria.py"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
