@@ -177,12 +177,10 @@ class HiggsHfQuantizer(HfQuantizer):
                             num_bits=module.num_bits,
                             group_size=module.group_size,
                             num_sms_packed=module.num_sms_packed.item(),
-                        )
-                        .T.contiguous()
-                        .cpu(),
+                        ).T.contiguous(),
                         module.num_bits,
                         module.group_size,
-                    ).to(device=new_device)
+                    )
                     module.num_sms_packed = torch.nn.Parameter(
                         torch.tensor(new_num_sms, device=new_device, dtype=torch.int32),
                         requires_grad=False,
@@ -226,3 +224,9 @@ class HiggsHfQuantizer(HfQuantizer):
             return True
         else:
             return False
+
+    def _dequantize(self, model):
+        from ..integrations import dequantize_higgs
+
+        model = dequantize_higgs(model)
+        return model
