@@ -99,6 +99,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 <frameworkcontent>
 <pt>
+    
 ```py
 >>> from transformers import DataCollatorWithPadding
 
@@ -106,6 +107,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ```
 </pt>
 <tf>
+    
 ```py
 >>> from transformers import DataCollatorWithPadding
 
