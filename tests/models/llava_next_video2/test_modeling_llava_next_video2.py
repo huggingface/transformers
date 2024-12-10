@@ -190,7 +190,7 @@ class LlavaNextVideo2VisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llavanextvideo2_model_fp16_forward(
+    def create_and_check_llava_next_video2_model_fp16_forward(
         self, config, input_ids, pixel_values, pixel_values_videos, attention_mask, image_sizes
     ):
         model = LlavaNextVideo2ForConditionalGeneration(config=config)
@@ -207,7 +207,7 @@ class LlavaNextVideo2VisionText2TextModelTester:
         )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
-    def create_and_check_llavanextvideo2_model_fp16_autocast_forward(
+    def create_and_check_llava_next_video2_model_fp16_autocast_forward(
         self, config, input_ids, pixel_values, pixel_values_videos, attention_mask, image_sizes
     ):
         config.torch_dtype = torch.float16

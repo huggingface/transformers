@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_llavanextvideo2": ["LlavaNextVideo2Config"],
+    "configuration_llava_next_video2": ["LlavaNextVideo2Config"],
 }
 
 
@@ -27,13 +27,13 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_llavanextvideo2"] = [
+    _import_structure["modeling_llava_next_video2"] = [
         "LlavaNextVideo2ForConditionalGeneration",
         "LlavaNextVideo2PreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_llavanextvideo2 import LlavaNextVideo2Config
+    from .configuration_llava_next_video2 import LlavaNextVideo2Config
 
     try:
         if not is_torch_available():
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llavanextvideo2 import (
+        from .modeling_llava_next_video2 import (
             LlavaNextVideo2ForConditionalGeneration,
             LlavaNextVideo2PreTrainedModel,
         )
