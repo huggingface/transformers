@@ -21,7 +21,7 @@
 
 
 from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class LlavaNextVideo2Config(PretrainedConfig):
@@ -61,9 +61,6 @@ class LlavaNextVideo2Config(PretrainedConfig):
             Pooling mode to use for videos. Can be "average", "max" or "conv".
         spatial_pool_stride (`int`, *optional*, defaults to 2):
             Stride used in the pooling layer for videos.
-        newline_position (`str`, *optional*):
-            Defines where to add `image_newline` when processing videos. If `newline_position="grid"` then newline is added on each grid,
-            otherwise no newlines is added.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 288):
@@ -89,7 +86,7 @@ class LlavaNextVideo2Config(PretrainedConfig):
     ```"""
 
     model_type = "llavanextvideo2"
-    is_composition = True
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -105,7 +102,6 @@ class LlavaNextVideo2Config(PretrainedConfig):
         video_token_index=32000,
         spatial_pool_mode="average",
         spatial_pool_stride=2,
-        newline_position=None,
         image_seq_length=576,
         video_seq_length=288,
         **kwargs,
@@ -118,7 +114,6 @@ class LlavaNextVideo2Config(PretrainedConfig):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.newline_position = newline_position
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
