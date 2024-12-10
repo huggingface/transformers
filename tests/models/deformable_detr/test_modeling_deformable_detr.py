@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
+    require_torch_greater_or_equal,
     require_vision,
     slow,
     torch_device,
@@ -200,6 +201,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -656,6 +658,11 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
         output = model(**inputs)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
+
+    @slow
+    @require_torch_greater_or_equal("2.3")
+    def test_torch_export(self):
+        return super().test_torch_export(config_kwargs={"disable_custom_kernels": True})
 
 
 TOLERANCE = 1e-4
