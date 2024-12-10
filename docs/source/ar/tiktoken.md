@@ -18,7 +18,7 @@ from transformers import AutoTokenizer
 model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
 tokenizer = AutoTokenizer.from_pretrained(model_id, subfolder="original")
 ```
-## إنشاء محلل لغوي tiktoken
+## إنشاء مجزىء لغوي tiktoken
 
 لا يحتوي ملف `tokenizer.model` على أي معلومات حول الرموز أو الأنماط الإضافية. إذا كانت هذه الأمور مهمة، قم بتحويل المحلل اللغوي إلى `tokenizer.json`، وهو التنسيق المناسب لـ [`PreTrainedTokenizerFast`].
 
