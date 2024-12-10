@@ -1951,4 +1951,3 @@ class WhisperGenerationMixin(GenerationMixin):
             segment_offset = seek_num_frames[prev_idx]
 
         return segments, segment_offset
-
