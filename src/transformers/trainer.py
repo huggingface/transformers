@@ -5138,4 +5138,8 @@ class Trainer:
 
         if self.args.average_tokens_across_devices:
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
+
+        if torch.is_tensor(num_items_in_batch):
+            num_items_in_batch = num_items_in_batch.item()
+
         return batch_samples, num_items_in_batch
