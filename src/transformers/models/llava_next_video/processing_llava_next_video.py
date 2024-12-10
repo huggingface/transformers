@@ -76,7 +76,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     ]
     image_processor_class = "LlavaNextImageProcessor"
     video_processor_class = "LlavaNextVideoImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,

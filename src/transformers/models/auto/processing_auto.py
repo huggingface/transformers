@@ -76,6 +76,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava_next", "LlavaNextProcessor"),
         ("llava_next_video", "LlavaNextVideoProcessor"),
         ("llava_onevision", "LlavaOnevisionProcessor"),
+        ("llavanextvideo2", "LlavaNextVideo2Processor"),
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),

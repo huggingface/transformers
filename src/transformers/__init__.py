@@ -546,6 +546,9 @@ _import_structure = {
         "LlavaNextVideoConfig",
         "LlavaNextVideoProcessor",
     ],
+    "models.llavanextvideo2": [
+        "LlavaNextVideo2Config",
+    ],
     "models.llava_onevision": ["LlavaOnevisionConfig", "LlavaOnevisionProcessor"],
     "models.longformer": [
         "LongformerConfig",
@@ -2622,6 +2625,12 @@ else:
         [
             "LlavaNextVideoForConditionalGeneration",
             "LlavaNextVideoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llavanextvideo2"].extend(
+        [
+            "LlavaNextVideo2ForConditionalGeneration",
+            "LlavaNextVideo2PreTrainedModel",
         ]
     )
     _import_structure["models.llava_onevision"].extend(
@@ -5458,6 +5467,9 @@ if TYPE_CHECKING:
         LlavaOnevisionConfig,
         LlavaOnevisionProcessor,
     )
+    from .models.llavanextvideo2 import (
+        LlavaNextVideo2Config,
+    )
     from .models.longformer import (
         LongformerConfig,
         LongformerTokenizer,
@@ -7333,6 +7345,10 @@ if TYPE_CHECKING:
         from .models.llava_onevision import (
             LlavaOnevisionForConditionalGeneration,
             LlavaOnevisionPreTrainedModel,
+        )
+        from .models.llavanextvideo2 import (
+            LlavaNextVideo2ForConditionalGeneration,
+            LlavaNextVideo2PreTrainedModel,
         )
         from .models.longformer import (
             LongformerForMaskedLM,
