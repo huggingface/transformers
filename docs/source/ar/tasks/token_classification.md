@@ -415,8 +415,8 @@ pip install transformers datasets evaluate seqeval
 
 ```py
 >>> text = "The Golden State Warriors are an American professional basketball team based in San Francisco."
+```
 
-النص المترجم:
 أبسط طريقة لتجربة نموذجك المُدرب مسبقًا للاستدلال هي استخدامه في [`pipeline`]. قم بتنفيذ `pipeline` لتصنيف الكيانات المسماة مع نموذجك، ومرر نصك إليه:
 
 ```py
