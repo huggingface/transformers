@@ -237,6 +237,7 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
+# modified from https://github.com/vllm-project/vllm/blob/v0.6.4.post1/vllm/model_executor/model_loader/loader.py#L1115-L1147
 def get_gguf_hf_weights_map(
     hf_model,
     model_type: Optional[str] = None,
@@ -294,7 +295,7 @@ def get_gguf_hf_weights_map(
     if named_children := hf_model.named_children():
         for name, child in named_children:
             sub_map = get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
-            # Remove the keys that are already in the main map to avoid overwriting
+            # Ignore the keys that are already in the main map to avoid overwriting
             sub_map = {k: v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
             gguf_to_hf_name_map.update(sub_map)
 
