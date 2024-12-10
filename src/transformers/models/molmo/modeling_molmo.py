@@ -1999,13 +1999,14 @@ class MolmoPoolingAttention(nn.Module):
         """Input shape: Batch x Time x Channel"""
 
         bsz, q_len, _ = hidden_states.size()
+        kv_len = key_value_hidden_states.shape[1]
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(key_value_hidden_states)
         value_states = self.v_proj(key_value_hidden_states)
 
         query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, kv_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, kv_len, -1, self.head_dim).transpose(1, 2)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
