@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Llava-NeXT-Video model."""
+"""Testing suite for the PyTorch Llava-NeXT-Video2 model."""
 
 import gc
 import unittest
@@ -329,13 +329,13 @@ class LlavaNextVideo2ForConditionalGenerationModelTest(ModelTesterMixin, Generat
         pass
 
     @unittest.skip(
-        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
+        reason="Compile not yet supported in LLava models (https://github.com/huggingface/transformers/issues/29891)"
     )
     def test_sdpa_can_compile_dynamic(self):
         pass
 
     @unittest.skip(
-        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
+        reason="Compile not yet supported in LLava models (https://github.com/huggingface/transformers/issues/29891)"
     )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
@@ -344,7 +344,7 @@ class LlavaNextVideo2ForConditionalGenerationModelTest(ModelTesterMixin, Generat
 @require_torch
 class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
+        self.processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf")
         image_file = hf_hub_download(
             repo_id="raushan-testing-hf/images_test", filename="llava_v1_5_radar.jpg", repo_type="dataset"
         )
@@ -353,8 +353,31 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         self.image = Image.open(image_file)
         self.video = np.load(video_file)
-        self.prompt_image = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
-        self.prompt_video = "USER: <video>\nWhy is this video funny? ASSISTANT:"
+        conversation_image = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is shown in this image?"},
+                    {"type": "image"},
+                ],
+            },
+        ]
+        self.prompt_image = self.processor.apply_chat_template(
+            conversation_image, tokenize=False, add_generation_prompt=True
+        )
+
+        conversation_video = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Why is this video funny?"},
+                    {"type": "video"},
+                ],
+            },
+        ]
+        self.prompt_video = self.processor.apply_chat_template(
+            conversation_video, tokenize=False, add_generation_prompt=True
+        )
 
     def tearDown(self):
         gc.collect()
@@ -364,7 +387,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True, cache_dir="./"
+            "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf", load_in_4bit=True
         )
 
         inputs = self.processor(self.prompt_video, videos=self.video, return_tensors="pt")
@@ -386,7 +409,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True, cache_dir="./"
+            "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf", load_in_4bit=True
         )
 
         inputs = self.processor(
@@ -411,7 +434,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_vision_types(self):
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf",
+            "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf",
             load_in_4bit=True,
             cache_dir="./",
         )
@@ -439,7 +462,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True, cache_dir="./"
+            "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf", load_in_4bit=True
         )
 
         inputs_batched = self.processor(
@@ -464,7 +487,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_padding_side_when_merging_inputs(self):
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+            "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf", load_in_4bit=True
         )
 
         inputs_batched = self.processor(
@@ -501,7 +524,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_expansion_in_processing(self):
-        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf"
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
         )
@@ -529,7 +552,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_expansion_in_processing_images(self):
-        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf"
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
         )
@@ -557,7 +580,7 @@ class LlavaNextVideo2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_expansion_in_processing_multiimage(self):
-        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-Qwen2-hf"
         model = LlavaNextVideo2ForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
         )
