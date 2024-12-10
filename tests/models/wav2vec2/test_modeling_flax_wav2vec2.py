@@ -623,9 +623,10 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
-            2
-        ) as pool:
+        with (
+            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
+            multiprocessing.get_context("fork").Pool(2) as pool,
+        ):
             transcription = processor.batch_decode(np.array(logits), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)
