@@ -1403,28 +1403,29 @@ def set_model_tester_for_less_flaky_test(test_case):
 
 
 def set_config_for_less_flaky_test(config):
-    config.rms_norm_eps = 1.0
-    config.layer_norm_eps = 1.0
-    config.norm_eps = 1.0
-    config.norm_epsilon = 1.0
-    config.layer_norm_epsilon = 1.0
+    target_attrs = ["rms_norm_eps", "layer_norm_eps", "norm_eps", "norm_epsilon", "layer_norm_epsilon", "batch_norm_eps"]
+    for target_attr in target_attrs:
+        setattr(config, target_attr, 1.0)
 
     # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
     # (We don't need the original epsilon values to check eager/sdpa matches)
-    for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
+    attrs = ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]
+    for attr in attrs:
         if hasattr(config, attr):
-            getattr(config, attr).rms_norm_eps = 1.0
-            getattr(config, attr).layer_norm_eps = 1.0
-            getattr(config, attr).norm_eps = 1.0
-            getattr(config, attr).norm_epsilon = 1.0
-            getattr(config, attr).layer_norm_epsilon = 1.0
+            for target_attr in target_attrs:
+                setattr(getattr(config, attr), target_attr, 1.0)
 
 
 def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-    for module in model.modules():
-        if type(module).__name__ in ["GemmaRMSNorm", "LayerNorm", "GroupNorm"]:
-            module.eps = 1.0
+    target_names = ("LayerNorm", "GroupNorm", "BatchNorm", "RMSNorm", "BatchNorm2d", "BatchNorm1d")
+    target_attrs = ["eps", "epsilon", "variance_epsilon"]
+    if is_torch_available() and isinstance(model, torch.nn.Module):
+        for module in model.modules():
+            if type(module).__name__.endswith(target_names):
+                for attr in target_attrs:
+                    if hasattr(module, attr):
+                        setattr(module, attr, 1.0)
 
 
 class CaptureStd:
