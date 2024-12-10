@@ -1403,7 +1403,14 @@ def set_model_tester_for_less_flaky_test(test_case):
 
 
 def set_config_for_less_flaky_test(config):
-    target_attrs = ["rms_norm_eps", "layer_norm_eps", "norm_eps", "norm_epsilon", "layer_norm_epsilon", "batch_norm_eps"]
+    target_attrs = [
+        "rms_norm_eps",
+        "layer_norm_eps",
+        "norm_eps",
+        "norm_epsilon",
+        "layer_norm_epsilon",
+        "batch_norm_eps",
+    ]
     for target_attr in target_attrs:
         setattr(config, target_attr, 1.0)
 
