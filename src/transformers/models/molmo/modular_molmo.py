@@ -845,7 +845,7 @@ class MolmoPoolingAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
 
-        self.dropout = config.attention_dropout
+        self.attention_dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
@@ -860,40 +860,29 @@ class MolmoPoolingAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
-        src_len = key_value_hidden_states.shape[1]
-
+        bsz, q_len, _ = hidden_states.size()
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        key_states = self.k_proj(key_value_hidden_states)
+        value_states = self.v_proj(key_value_hidden_states)
 
-        query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, tgt_len, self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
 
         return attn_output, attn_weights
 
