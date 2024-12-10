@@ -600,7 +600,13 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
-    "models.molmo": ["MolmoConfig", "MolmoImageProcessor", "MolmoProcessor"],
+    "models.molmo": [
+        "MolmoConfig",
+        "MolmoTextConfig",
+        "MolmoVisionConfig",
+        "MolmoImageProcessor",
+        "MolmoProcessor"
+        ],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
