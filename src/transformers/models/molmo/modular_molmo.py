@@ -677,6 +677,7 @@ class MolmoTextModel(CohereModel):
 
 
 class MolmoForCausalLM(Qwen2ForCausalLM):
+    _tp_plan = {"lm_head": "colwise_rep"}
     pass
 
 

@@ -16,40 +16,34 @@
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
-from ...image_transforms import convert_to_rgb, normalize, pad, resize
+from ...image_transforms import convert_to_rgb
 from ...image_utils import (
-    get_image_type,
-    is_torch_available,
-    is_torchvision_available,
-    is_vision_available, 
-    ImageType,
-    ImageInput,
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
+    ImageType,
     PILImageResampling,
     get_image_size,
+    get_image_type,
     infer_channel_dimension_format,
-    is_scaled_image,
-    is_valid_image,
-    to_numpy_array,
-    valid_images,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
     validate_kwargs,
-    validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging, is_torchvision_v2_available
-from .image_processing_molmo import make_batched_images
+from ...utils import TensorType, is_torchvision_v2_available, logging
+from .image_processing_molmo import get_resize_output_image_size, make_batched_images
+
+
 if is_torch_available:
     import torch
     from torch.nn import functional as F
 
 if is_vision_available:
-    from PIL import Image
+    pass
 
 if is_torchvision_available():
     if is_vision_available():
@@ -64,45 +58,6 @@ if TYPE_CHECKING:
     from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
-
-
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched video from {images}")
-
-
-def get_resize_output_image_size(
-    image: np.ndarray,
-    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
-) -> tuple:
-    original_height, original_width = get_image_size(image)
-
-    scale_y = size["height"] / original_height
-    scale_x = size["width"] / original_width
-    scale = min(scale_x, scale_y)
-
-    # Compute new dimensions
-    new_height = round(original_height * scale)
-    new_width = round(original_width * scale)
-    return {"height": new_height, "width": new_width}
 
 
 def pad_to_bounding_box(
@@ -129,9 +84,10 @@ def pad_to_bounding_box(
     right_padding = max(0, target_width - width - offset_width)
     image = image.permute(2, 0, 1)  # Now (C, H, W)
     padding = [left_padding, top_padding, right_padding, bottom_padding]
-    padded_image = F.pad(image, padding=padding, padding_mode='constant', fill=value)
+    padded_image = F.pad(image, padding=padding, padding_mode="constant", fill=value)
     padded_image = padded_image.permute(1, 2, 0)  # Back to (H, W, C)
     return padded_image
+
 
 class MolmoImageProcessorFast(BaseImageProcessor):
     """
@@ -304,7 +260,7 @@ class MolmoImageProcessorFast(BaseImageProcessor):
         if torch.all(required_scale < 1):
             selected_index = torch.argmax(required_scale)
         else:
-            required_scale = torch.where(required_scale < 1.0, float('inf'), required_scale)
+            required_scale = torch.where(required_scale < 1.0, float("inf"), required_scale)
             selected_index = torch.argmin(required_scale)
         return candidate_crop_grid[selected_index].tolist()
 
@@ -547,7 +503,7 @@ class MolmoImageProcessorFast(BaseImageProcessor):
             images = [F.pil_to_tensor(image) for image in images]
         elif image_type == ImageType.NUMPY:
             images = [torch.from_numpy(image).contiguous() for image in images]
-        
+
         all_images = []
         all_crop_grids = []
         all_cropped_masks = []
@@ -597,7 +553,9 @@ class MolmoImageProcessorFast(BaseImageProcessor):
             global_image = self.reshape_into_patches(global_image, input_data_format=input_data_format)
             crops = torch.cat([global_image.unsqueeze(0), crops], dim=0)
             patch_orderings = torch.where(patch_orderings >= 0, patch_orderings + self.tokens_per_image, -1)
-            patch_orderings = torch.cat([torch.arange(0, self.tokens_per_image, device=device), patch_orderings], dim=0)
+            patch_orderings = torch.cat(
+                [torch.arange(0, self.tokens_per_image, device=device), patch_orderings], dim=0
+            )
             all_images.append(crops)
             all_crop_grids.append(crop_grid)
             all_cropped_masks.append(cropped_masks)
@@ -611,5 +569,6 @@ class MolmoImageProcessorFast(BaseImageProcessor):
         if do_pad:
             data = self._pad_for_batching(data)
         return BatchFeature(data=data, tensor_type=return_tensors)
+
 
 __all__ = ["MolmoImageProcessorFast"]

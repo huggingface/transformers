@@ -44,6 +44,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging
 
+
 if TYPE_CHECKING:
     from ...utils import TensorType
 
@@ -113,10 +114,10 @@ def pad_to_bounding_box(
     after_padding_height = target_height - offset_height - height
     after_padding_width = target_width - offset_width - width
     padding = [
-            (offset_height, after_padding_height),
-            (offset_width, after_padding_width),
-            (0, 0),  # don't pad on the channel dim
-        ]
+        (offset_height, after_padding_height),
+        (offset_width, after_padding_width),
+        (0, 0),  # don't pad on the channel dim
+    ]
     padded_image = np.pad(image, padding, mode="constant", constant_values=value)
     return padded_image
 
@@ -261,7 +262,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         if input_data_format == ChannelDimension.LAST:
             resized_image = np.transpose(resized_image, (1, 2, 0))
         elif input_data_format == ChannelDimension.FIRST:
-            pass # already in correct shape
+            pass  # already in correct shape
         return resized_image
 
     def pad(
