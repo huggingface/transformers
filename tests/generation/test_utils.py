@@ -4283,6 +4283,7 @@ class TokenHealingTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.generate(max_length=20, bos_token_id=None)
 
+
 class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
     def test_no_intersection(self):
         prompt = np.array([[1, 2, 3]])
