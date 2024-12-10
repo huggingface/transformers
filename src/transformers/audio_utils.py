@@ -546,7 +546,7 @@ def spectrogram(
         buffer[:frame_length] = waveform[timestep : timestep + frame_length]
 
         if dither != 0.0:
-            buffer[:frame_length] += dither * np.random.randn(*buffer[:frame_length].shape)
+            buffer[:frame_length] += dither * np.random.randn(frame_length)
 
         if remove_dc_offset:
             buffer[:frame_length] = buffer[:frame_length] - buffer[:frame_length].mean()
@@ -662,7 +662,7 @@ def spectrogram_batch(
             The padding strategy when `center` is `True`.
         onesided (`bool`, *optional*, defaults to `True`):
             If True, returns a one-sided spectrogram for real input signals.
-        dither (`float`):
+        dither (`float`, *optional*, defaults to 0.0):
             Adds dithering. In other words, adds a small Gaussian noise to each frame.
             E.g. use 4.0 to add dithering with a normal distribution centered
             around 0.0 with standard deviation 4.0, 0.0 means no dithering.

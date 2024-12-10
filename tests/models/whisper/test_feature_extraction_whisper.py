@@ -201,6 +201,8 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_dither(self):
+        np.random.seed(42)  # seed the dithering randn()
+
         # Tests that features with and without little dithering are similar, but not the same
         dict_no_dither = self.feat_extract_tester.prepare_feat_extract_dict()
         dict_no_dither["dither"] = 0.0
