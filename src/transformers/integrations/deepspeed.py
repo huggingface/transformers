@@ -58,7 +58,7 @@ else:
 
 if is_deepspeed_available():
     from deepspeed.sequence.layer import _SeqAllToAll
-    from deepspeed.utils import groups as deepspeed_mpu
+    from deepspeed.utils import groups as deepspeed_groups
 
 
 class HfDeepSpeedConfig(DeepSpeedConfig):
@@ -466,7 +466,7 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
 def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
     def wrapped(*args, **kwargs):
         if is_deepspeed_sp_enabled():
-            spg = deepspeed_mpu._get_sequence_parallel_group()
+            spg = deepspeed_groups._get_sequence_parallel_group()
             scatter_idx = head_dim  # Scatter on num_heads dimension
             gather_idx = seq_dim  # Gather on seq_len dimension
             batch_dim_idx = 0  # Synonymous with the batch_first==true
@@ -497,7 +497,7 @@ def support_deepspeed_ulysses(module):
     def wrapped_forward(*args, **kwargs):
         # lazily set if sequence parallelism is enabled to ensure deepspeed is initialized first
         if is_deepspeed_sp_enabled():
-            module.q_len_multiplier = deepspeed_mpu._get_sequence_parallel_world_size()
+            module.sp_group_size = deepspeed_groups._get_sequence_parallel_world_size()
 
         return original_forward(*args, **kwargs)
 

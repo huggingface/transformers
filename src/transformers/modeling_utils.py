@@ -137,7 +137,7 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         import deepspeed
-        from deepspeed.utils import groups as deepspeed_mpu
+        from deepspeed.utils import groups as deepspeed_groups
 
 
 if is_safetensors_available():
@@ -4058,14 +4058,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             sequence_data_parallel_group = None
-            if is_deepspeed_sp_enabled() and deepspeed_mpu._zero_param_parallel_is_initialized():
-                sequence_data_parallel_group = deepspeed_mpu._get_sequence_data_parallel_group()
+            if is_deepspeed_sp_enabled() and deepspeed_groups._zero_param_parallel_is_initialized():
+                sequence_data_parallel_group = deepspeed_groups._get_sequence_data_parallel_group()
 
             init_contexts = [
                 deepspeed.zero.Init(
                     config_dict_or_path=deepspeed_config(),
                     sequence_data_parallel_group=sequence_data_parallel_group,
-                    mpu=deepspeed_mpu.mpu,
+                    mpu=deepspeed_groups.mpu,
                 ),
                 set_zero3_state(),
             ] + init_contexts

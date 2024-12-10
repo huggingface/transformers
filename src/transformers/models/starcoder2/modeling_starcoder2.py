@@ -416,7 +416,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             key_states,
             value_states,
             attention_mask,
-            q_len * getattr(self, "q_len_multiplier", 1),
+            q_len * getattr(self, "sp_group_size", 1),
             position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
@@ -503,7 +503,7 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2] * getattr(self, "q_len_multiplier", 1)]
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2] * getattr(self, "sp_group_size", 1)]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -517,7 +517,7 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
         # # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        if hasattr(self, "q_len_multiplier") and self.q_len_multiplier > 1:
+        if hasattr(self, "sp_group_size") and self.sp_group_size > 1:
             scaled_dot_product_attention = deepspeed_ulysses_attention(
                 torch.nn.functional.scaled_dot_product_attention, seq_dim=2, head_dim=1
             )
@@ -841,7 +841,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1] * getattr(self, "q_len_multiplier", 1),
+                past_seen_tokens + inputs_embeds.shape[1] * getattr(self, "sp_group_size", 1),
                 device=inputs_embeds.device,
             )
         if position_ids is None:
@@ -954,7 +954,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1] * getattr(self, "q_len_multiplier", 1)
+        sequence_length = input_tensor.shape[1] * getattr(self, "sp_group_size", 1)
         # SlidingWindowCache or StaticCache
         if using_sliding_window_cache or using_static_cache:
             target_length = past_key_values.get_max_cache_shape()

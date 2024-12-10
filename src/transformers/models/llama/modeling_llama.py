@@ -464,7 +464,7 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states,
             value_states,
             attention_mask,
-            q_len * getattr(self, "q_len_multiplier", 1),
+            q_len * getattr(self, "sp_group_size", 1),
             position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
@@ -556,7 +556,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2] * getattr(self, "q_len_multiplier", 1)]
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2] * getattr(self, "sp_group_size", 1)]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -569,7 +569,7 @@ class LlamaSdpaAttention(LlamaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        if hasattr(self, "q_len_multiplier") and self.q_len_multiplier > 1:
+        if hasattr(self, "sp_group_size") and self.sp_group_size > 1:
             scaled_dot_product_attention = deepspeed_ulysses_attention(
                 torch.nn.functional.scaled_dot_product_attention, seq_dim=2, head_dim=1
             )
@@ -892,7 +892,7 @@ class LlamaModel(LlamaPreTrainedModel):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1] * getattr(self, "q_len_multiplier", 1),
+                past_seen_tokens + inputs_embeds.shape[1] * getattr(self, "sp_group_size", 1),
                 # past_seen_tokens + inputs_embeds.shape[1],
                 device=inputs_embeds.device,
             )
@@ -998,7 +998,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
-        sequence_length = input_tensor.shape[1] * getattr(self, "q_len_multiplier", 1)
+        sequence_length = input_tensor.shape[1] * getattr(self, "sp_group_size", 1)
         if using_static_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
