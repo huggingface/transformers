@@ -338,6 +338,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "CLIPTextModel",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
+    "MolmoTextModel",
 ]
 
 # DO NOT edit this list!

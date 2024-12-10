@@ -31,7 +31,6 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
-from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
@@ -66,7 +65,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MolmoTextConfig"
 
 
-class MolmoVisionConfig(CLIPVisionConfig):
+class MolmoVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MolmoVisionModel`]. It is used to instantiate a
     `MolmoVisionModel` according to the specified arguments, defining the model architecture. Instantiating a
@@ -113,22 +112,25 @@ class MolmoVisionConfig(CLIPVisionConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "molmo_vision_model"
+    base_config_key = "vision_config"
+
     def __init__(
         self,
         hidden_size=1024,
-        num_attention_heads=16,
         intermediate_size=4096,
         num_hidden_layers=23,
-        num_image_positions=577,
+        num_attention_heads=16,
         image_size=576,
         patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
-        **super_kwargs,
+        num_image_positions=577,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -138,8 +140,8 @@ class MolmoVisionConfig(CLIPVisionConfig):
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
-        self.num_image_positions = num_image_positions
         self.hidden_act = hidden_act
+        self.num_image_positions = num_image_positions
 
 
 class MolmoPoolingConfig(PretrainedConfig):
@@ -327,8 +329,6 @@ class MolmoTextConfig(CohereConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -339,8 +339,6 @@ class MolmoTextConfig(CohereConfig):
             Whther to apply layer norm to keys and queries in attention module.
         use_postnorm (`bool), *optional*, defaults to `True`):
             Whther to apply pre or post layer normalization in each decoder layer.
-        use_attention_layer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to keys and queries in the attention layer.
 
     ```python
     >>> from transformers import MolmoTextModel, MolmoTextConfig
@@ -375,22 +373,18 @@ class MolmoTextConfig(CohereConfig):
         pad_token_id=None,
         bos_token_id=None,
         eos_token_id=None,
-        use_sliding_window=False,
         sliding_window=4096,
         attention_dropout=0.0,
         attention_bias=False,
         use_qk_norm=False,
         use_postnorm=True,
-        use_attention_layer_norm=False,
         **kwargs,
     ):
         self.head_dim = head_dim
         self.attention_bias = attention_bias
         self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
-        self.use_attention_layer_norm = use_attention_layer_norm
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
+        self.sliding_window = sliding_window
         super().__init__(**kwargs)
         del self.logit_scale
 
@@ -415,8 +409,6 @@ class MolmoConfig(PretrainedConfig):
             The config object or dictionary of the adapter backbone.
         image_token_index (`int`, *optional*, defaults to 152069):
             The image token index to encode the image prompt.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
@@ -462,7 +454,6 @@ class MolmoConfig(PretrainedConfig):
         text_config=None,
         pooling_config=None,
         image_token_index=152069,
-        image_seq_length=576,
         initializer_range=0.02,
         vision_feature_select_strategy="default",
         vision_feature_layers=(-2, -9),
@@ -470,7 +461,6 @@ class MolmoConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.image_token_index = image_token_index
-        self.image_seq_length = image_seq_length
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layers = vision_feature_layers
         if vision_config is None:
