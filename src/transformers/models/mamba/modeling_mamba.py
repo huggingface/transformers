@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import MambaCache
@@ -33,6 +33,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
 from .configuration_mamba import MambaConfig
@@ -461,6 +462,31 @@ class MambaOutput(ModelOutput):
 
 
 @dataclass
+class MambaSequenceClassifierOutput(ModelOutput):
+    """
+    Base class for outputs of sentence classification models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        cache_params (`MambaCache`):
+            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+            avoid providing the old `input_ids`.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    cache_params: Optional[MambaCache] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+@dataclass
 class MambaCausalLMOutput(ModelOutput):
     """
     Base class for causal language model (or autoregressive) outputs.
@@ -804,6 +830,134 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         return MambaCausalLMOutput(
             loss=loss,
             logits=logits,
+            cache_params=mamba_outputs.cache_params,
+            hidden_states=mamba_outputs.hidden_states,
+        )
+
+
+@add_start_docstrings(
+    """
+    Mamba Model backbone with a sequence classification/regression head on top
+    (a linear layer on top of the pooled output) e.g. for GLUE tasks.
+
+    [`MambaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token.
+    If a `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row.
+    If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """,
+    MAMBA_START_DOCSTRING,
+)
+class MambaForSequenceClassification(MambaPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.config = config
+        self.backbone = MambaModel(config)
+        self.classifier = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=MambaSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MambaSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_params: Optional[MambaCache] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[MambaSequenceClassifierOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in `[0, ..., config.num_labels - 1]`.
+            If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        mamba_outputs = self.backbone(
+            input_ids,
+            cache_params=cache_params,
+            inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            use_cache=use_cache,
+        )
+
+        last_hidden_states = mamba_outputs[0]
+
+        if input_ids is not None:
+            batch_size, _ = input_ids.shape[:2]
+        else:
+            batch_size, _ = inputs_embeds.shape[:2]
+
+        if self.config.pad_token_id is None and batch_size > 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if input_ids is not None:
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(last_hidden_states.device)
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
+
+        pooled_last_hidden_states = last_hidden_states[
+            torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths
+        ]
+        pooled_logits = self.classifier(pooled_last_hidden_states)
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype in [torch.long, torch.int]):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
+
+        if not return_dict:
+            output = (pooled_logits,) + mamba_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MambaSequenceClassifierOutput(
+            loss=loss,
+            logits=pooled_logits,
             cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
         )
