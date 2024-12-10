@@ -171,6 +171,7 @@ class GPTQTest(unittest.TestCase):
         """
         if is_gptqmodel_available():
             from gptqmodel.utils.importer import hf_select_quant_linear
+
             if hasattr(self.config, "quantization_config"):
                 checkpoint_format = self.config.quantization_config.get("checkpoint_format")
                 meta = self.config.quantization_config.get("meta")
@@ -416,7 +417,10 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
 
     def test_quantized_layers_type(self):
-        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllama" if is_gptqmodel_available() else "exllamav2")
+        self.assertEqual(
+            self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
+            "exllama" if is_gptqmodel_available() else "exllamav2",
+        )
 
     def check_inference_correctness(self, model):
         """
