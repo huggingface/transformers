@@ -34,17 +34,6 @@ logger = logging.get_logger(__name__)
 
 
 GGUF_TENSOR_MAPPING = {
-    "falcon7b": {
-        "token_embd": "word_embeddings",
-        "blk": "h",
-        "ffn_up": "mlp.dense_h_to_4h",
-        "ffn_down": "mlp.dense_4h_to_h",
-        "attn_norm": "input_layernorm",
-        "attn_qkv": "self_attention.query_key_value",
-        "attn_output": "self_attention.dense",
-        ".output.": ".lm_head.",
-        "output_norm": "ln_f",
-    },
     "falcon40b": {
         "token_embd": "word_embeddings",
         "blk": "h",
