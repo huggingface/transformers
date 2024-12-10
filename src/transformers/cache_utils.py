@@ -1859,22 +1859,28 @@ class MambaCache:
         self.conv_kernel_size = config.conv_kernel
         self.device = torch.device(device) if device is not None else torch.device("meta")
 
-        conv_states: torch.Tensor = torch.zeros(
-            self.max_batch_size,
-            self.intermediate_size,
-            self.conv_kernel_size,
-            device=self.device,
-            dtype=dtype,
-        )
-        ssm_states: torch.Tensor = torch.zeros(
-            self.max_batch_size,
-            self.intermediate_size,
-            self.ssm_state_size,
-            device=self.device,
-            dtype=dtype,
-        )
-        self.conv_states = [torch._dynamo.mark_static_address(conv_states) for _ in range(config.num_hidden_layers)]
-        self.ssm_states = [torch._dynamo.mark_static_address(ssm_states) for _ in range(config.num_hidden_layers)]
+        self.conv_states: List[torch.Tensor] = []
+        self.ssm_states: List[torch.Tensor] = []
+        for _ in range(config.num_hidden_layers):
+            conv_state: torch.Tensor = torch.zeros(
+                self.max_batch_size,
+                self.intermediate_size,
+                self.conv_kernel_size,
+                device=self.device,
+                dtype=dtype,
+            )
+            ssm_state: torch.Tensor = torch.zeros(
+                self.max_batch_size,
+                self.intermediate_size,
+                self.ssm_state_size,
+                device=self.device,
+                dtype=dtype,
+            )
+
+            torch._dynamo.mark_static_address(conv_state)
+            torch._dynamo.mark_static_address(ssm_state)
+            self.conv_states.append(conv_state)
+            self.ssm_states.append(ssm_state)
 
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
