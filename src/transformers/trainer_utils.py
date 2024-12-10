@@ -901,7 +901,7 @@ def prepare_inputs_for_sequence_parallel(inputs, sequence_parallel_size, sequenc
         position_ids = torch.arange(inputs["input_ids"].shape[1], dtype=torch.long, device=inputs["input_ids"].device)
         position_ids = position_ids.unsqueeze(0).expand(inputs["input_ids"].shape[0], -1)
         inputs["position_ids"] = position_ids
-    for key in ["input_ids", "attention_mask", "loss_mask", "inputs_embeds", "position_ids"]:
+    for key in ["input_ids", "attention_mask", "loss_mask", "inputs_embeds", "position_ids", "labels"]:
         if key in inputs:
             if inputs[key] is None:
                 continue
