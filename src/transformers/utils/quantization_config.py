@@ -25,9 +25,15 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
+from ..utils import (
+    is_auto_awq_available,
+    is_gptqmodel_available,
+    is_hqq_available,
+    is_torch_available,
+    is_torchao_available,
+    logging,
+)
 from .import_utils import is_auto_gptq_available
-from ..utils import (is_auto_awq_available, is_hqq_available, is_torch_available, is_gptqmodel_available,
-                     is_torchao_available, logging)
 
 
 if is_torch_available():
@@ -583,7 +589,7 @@ class GPTQConfig(QuantizationConfigMixin):
             Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
             i.e. `meta.quantizer`: ["optimum:_version_", "gptqmodel:_version_"]
         backend (`str`, *optional*):
-            Controls which gptq kernel to be used. Valid values for gptqmodel are `auto`, `auto_trainable` and more. For auto-gptq, only 
+            Controls which gptq kernel to be used. Valid values for gptqmodel are `auto`, `auto_trainable` and more. For auto-gptq, only
             valid value is None and `auto_trainable`. Ref gptqmodel backends: https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
         use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
             Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16. Auto-gptq only.
@@ -706,7 +712,7 @@ class GPTQConfig(QuantizationConfigMixin):
         if is_gptqmodel_available():
             # convert auto-gptq control into gptqmodel backend
             if self.backend is None:
-                self.backend = "auto_trainable" if self.use_exllama == False else "auto"
+                self.backend = "auto_trainable" if not self.use_exllama else "auto"
         else:
             # convert gptqmodel backend `auto_trainable` into auto-gptq control
             if self.backend == "auto_trainable":
