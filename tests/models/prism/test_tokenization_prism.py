@@ -142,6 +142,7 @@ class PrismTokenizerIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_src_tokens, ids)
 
     def test_tokenizer_decode_ignores_language_codes(self):
+        self.assertIn(FR_CODE, self.tokenizer.all_special_ids)
         generated_ids = [
             FR_CODE,
             16370,
