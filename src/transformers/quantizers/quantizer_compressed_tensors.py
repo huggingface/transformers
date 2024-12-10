@@ -68,10 +68,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         ct_quantization_config = self.compressor.quantization_config
 
-        # populate scales and zp
         if self.run_compressed and self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
-        elif not self.is_quantization_compressed:  # Just quantized model or sparse model
+        elif not self.is_quantization_compressed: 
             apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
@@ -119,7 +118,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
         # models need to be decompressed carry out qat
-        return not self.run_compressed or not self.is_compressed
+        return not self.run_compressed or not self.is_quantization_compressed
 
     def is_serializable(self, safe_serialization=None) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
