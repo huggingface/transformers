@@ -14,7 +14,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 -->
 
-# تصنيف النص
+# تصنيف النص(Text classification)
 
 [[open-in-colab]]
 
@@ -72,7 +72,7 @@ pip install transformers datasets evaluate accelerate
 - `text`: نص مراجعة الفيلم.
 - `label`: قيمة إما `0` لمراجعة سلبية أو `1` لمراجعة إيجابية.
 
-## المعالجة المسبقة
+## المعالجة المسبقة(Preprocess)
 
 الخطوة التالية هي تحميل مجزء النص DistilBERT للمعالجة المسبقة لحقل `text`:
 
@@ -99,7 +99,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 <frameworkcontent>
 <pt>
-    
+
 ```py
 >>> from transformers import DataCollatorWithPadding
 
@@ -107,7 +107,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ```
 </pt>
 <tf>
-    
+
 ```py
 >>> from transformers import DataCollatorWithPadding
 
@@ -116,7 +116,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 </tf>
 </frameworkcontent>
 
-## التقييم
+## التقييم(Evaluate)
 
 غالبًا ما يكون تضمين مقياس أثناء التدريب مفيدًا لتقييم أداء نموذجك. يمكنك تحميل طريقة تقييم بسرعة باستخدام مكتبة 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) . بالنسبة لهذه المهمة، قم بتحميل مقياس [الدقة](https://huggingface.co/spaces/evaluate-metric/accuracy) (راجع جولة 🤗 Evaluate [السريعة](https://huggingface.co/docs/evaluate/a_quick_tour) لمعرفة المزيد حول كيفية تحميل وحساب مقياس):
 
@@ -139,7 +139,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 وظيفتك `compute_metrics` جاهزة الآن، وستعود إليها عندما تقوم بإعداد تدريبك.
 
-## التدريب
+## التدريب(Train)
 
 قبل أن تبدأ في تدريب نموذجك، قم بإنشاء خريطة من المعرفات المتوقعة إلى تسمياتها باستخدام `id2label` و `label2id`:
 
@@ -311,7 +311,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 </Tip>
 
-## الاستدلال
+## الاستدلال(Inference)
 
 رائع، الآن بعد أن قمت بضبط نموذج، يمكنك استخدامه للاستدلال!
 
