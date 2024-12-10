@@ -68,34 +68,48 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         ct_quantization_config = self.compressor.quantization_config
 
-        if self.run_compressed and self.is_compressed:
+        # populate scales and zp
+        if self.run_compressed and self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
-        if not self.is_compressed:
+        elif not self.is_quantization_compressed:  # Just quantized model or sparse model
             apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
-        if self.is_compressed and not self.run_compressed:
+
+        if (self.is_quantization_compressed and not self.run_compressed) or self.is_sparsification_compressed:
             config = kwargs.get("config", None)
             cache_path = config._name_or_path
+
             if not os.path.exists(cache_path):
                 from transformers.utils import cached_file
 
                 config_file_path = cached_file(cache_path, "config.json")
                 cache_path = os.path.sep.join(config_file_path.split(os.path.sep)[:-1])
 
-            from compressed_tensors.quantization import QuantizationStatus
+            if self.is_quantization_compressed and not self.run_compressed:
+                from compressed_tensors.quantization import QuantizationStatus
 
-            self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
+                self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
+
             self.compressor.decompress(model_path=cache_path, model=model)
 
     @property
-    def is_compressed(self):
+    def is_quantization_compressed(self):
         from compressed_tensors.quantization import QuantizationStatus
 
         return (
             self.quantization_config.quantization_config is not None
             and self.quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        )
+
+    @property
+    def is_sparsification_compressed(self):
+        from compressed_tensors.config.base import CompressionFormat
+
+        return (
+            self.quantization_config.sparsity_config is not None
+            and self.quantization_config.sparsity_config.format is not CompressionFormat.dense.value
         )
 
     @property
