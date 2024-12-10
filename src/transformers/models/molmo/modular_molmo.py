@@ -414,7 +414,7 @@ class MolmoConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
-        vision_feature_layers (`List[int]`, *optional*, defaults to (-2, -9)):
+        vision_feature_layers (`List[int]`, *optional*, defaults to `(-2, -9)`):
             The indices of the layers to select the vision feature.
 
     Example:
