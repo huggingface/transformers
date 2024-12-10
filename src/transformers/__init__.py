@@ -602,11 +602,11 @@ _import_structure = {
     "models.mobilevitv2": ["MobileViTV2Config"],
     "models.molmo": [
         "MolmoConfig",
+        "MolmoImageProcessor",
+        "MolmoPoolingConfig",
+        "MolmoProcessor",
         "MolmoTextConfig",
         "MolmoVisionConfig",
-        "MolmoPoolingConfig",
-        "MolmoImageProcessor",
-        "MolmoProcessor",
     ],
     "models.moshi": [
         "MoshiConfig",
