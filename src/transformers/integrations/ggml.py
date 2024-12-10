@@ -33,22 +33,6 @@ from ..utils.logging import tqdm
 logger = logging.get_logger(__name__)
 
 
-GGUF_TENSOR_MAPPING = {
-    "falcon40b": {
-        "token_embd": "word_embeddings",
-        "blk": "h",
-        "ffn_up": "mlp.dense_h_to_4h",
-        "ffn_down": "mlp.dense_4h_to_h",
-        ".attn_norm.": ".ln_mlp.",
-        "attn_norm_2": "ln_attn",
-        "attn_qkv": "self_attention.query_key_value",
-        "attn_output": "self_attention.dense",
-        ".output.": ".lm_head.",
-        "output_norm": "ln_f",
-    },
-}
-
-
 GGUF_CONFIG_MAPPING = {
     "general": {
         "architecture": "model_type",

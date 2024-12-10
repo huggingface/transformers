@@ -22,7 +22,6 @@ from tqdm import tqdm
 
 from .integrations import (
     GGUF_CONFIG_MAPPING,
-    GGUF_TENSOR_MAPPING,
     GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
 )
@@ -47,7 +46,6 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
         "general": {"file_type": "file_type", "quantization_version": "quantization_version"},
     },
     "config": GGUF_CONFIG_MAPPING,
-    "tensors": GGUF_TENSOR_MAPPING,
     "tokenizer": {"tokenizer": GGUF_TOKENIZER_MAPPING["tokenizer"]},
     "tokenizer_config": {"tokenizer": GGUF_TOKENIZER_MAPPING["tokenizer_config"]},
 }
