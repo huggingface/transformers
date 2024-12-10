@@ -644,10 +644,10 @@ class UtilFunctionTester(unittest.TestCase):
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
 
     def test_infer_channel_dimension(self):
-        # Test we fail with invalid input
-        with pytest.raises(ValueError):
-            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10)))
+        # Test should not fail with image in format (width, height)
+        self.assertEqual(infer_channel_dimension_format(np.random.randint(0, 256, (10, 10))), ChannelDimension.NONE)
 
+        # Test should fail with 5 dim image
         with pytest.raises(ValueError):
             infer_channel_dimension_format(np.random.randint(0, 256, (10, 10, 10, 10, 10)))
 
