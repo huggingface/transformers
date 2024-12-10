@@ -919,6 +919,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if batch_size is None and seq_len is None:
             batch_size, seq_len = input_ids.shape[:2]
 
@@ -1075,9 +1077,9 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         if self.pad_logits:
             if self.pad_logits_no_grad:
-                logits = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)[0]
+                logits, _ = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
             else:
-                logits = self._pad_outputs(logits, indices, batch_size, seq_len)[0]
+                logits, _ = self._pad_outputs(logits, indices, batch_size, seq_len)
             return MaskedLMOutput(
                 loss=loss,
                 logits=logits,

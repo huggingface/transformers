@@ -203,7 +203,7 @@ else:
                     "GemmaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("modernbert", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("modernbert", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("glm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
