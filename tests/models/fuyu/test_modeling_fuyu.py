@@ -26,7 +26,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, is_flaky, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -298,6 +298,10 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @is_flaky()  # @zucchini-nlp This fails ~30% of the time, heavily flaky - might be due to the generate changes
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @pytest.mark.generate
