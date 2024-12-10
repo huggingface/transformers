@@ -267,7 +267,12 @@ def get_gguf_hf_weights_map(
             arch = key
             break
     if arch is None:
-        raise RuntimeError(f"Unknown gguf model_type: {model_type}")
+        raise NotImplementedError(
+            f"Unknown gguf model_type: {model_type} in gguf-py. "
+            "This might because you're using an outdated version of gguf-py package, "
+            "you can install `gguf` package from source refer to "
+            "https://github.com/ggerganov/llama.cpp/tree/master/gguf-py#development"
+        )
     name_map = get_tensor_name_map(arch, num_layers)
 
     # Use a dummy conversion to get the mapping, because
@@ -359,7 +364,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
     if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
-        raise ValueError(f"Architecture {architecture} not supported")
+        raise ValueError(f"GGUF model with architecture {architecture} is not supported yet.")
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
     # tie_word_embeddings is true otherwise false
