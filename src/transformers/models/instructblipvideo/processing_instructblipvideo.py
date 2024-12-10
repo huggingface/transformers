@@ -50,24 +50,26 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             An instance of [`InstructBlipVideoImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-        qformer_tokenizer (`AutoTokenizer`, *optional*):
+        qformer_tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
         num_query_tokens (`int`, *optional*):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
     valid_kwargs = ["num_query_tokens"]
     image_processor_class = "InstructBlipVideoImageProcessor"
     tokenizer_class = "AutoTokenizer"
+    qformer_tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, qformer_tokenizer=None, num_query_tokens=None, **kwargs):
-        # add QFormer tokenizer
-        self.qformer_tokenizer = qformer_tokenizer
-        self.video_token = AddedToken("<video>", normalized=False, special=True)
-        tokenizer.add_tokens([self.video_token], special_tokens=True)
+    def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+        if not hasattr(tokenizer, "video_token"):
+            self.video_token = AddedToken("<video>", normalized=False, special=True)
+            tokenizer.add_tokens([self.video_token], special_tokens=True)
+        else:
+            self.video_token = tokenizer.video_token
         self.num_query_tokens = num_query_tokens
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
     def __call__(
         self,
@@ -95,6 +97,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        if images is None and text is None:
+            raise ValueError("You have to specify at least one of images or text.")
+
         encoding = BatchFeature()
 
         if text is not None:
@@ -129,7 +134,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 video_tokens = (
                     self.video_token.content * self.num_query_tokens * 4
                 )  # InstrucBLIP works with 4 frames only
-                video_token_encoding = self.tokenizer([video_tokens], add_special_tokens=False, return_tensors=None)
+                video_token_encoding = self.tokenizer(
+                    [video_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding
@@ -204,7 +211,17 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         os.makedirs(save_directory, exist_ok=True)
         qformer_tokenizer_path = os.path.join(save_directory, "qformer_tokenizer")
         self.qformer_tokenizer.save_pretrained(qformer_tokenizer_path)
-        return super().save_pretrained(save_directory, **kwargs)
+
+        # We modify the attributes so that only the tokenizer and image processor are saved in the main folder
+        qformer_present = "qformer_tokenizer" in self.attributes
+        if qformer_present:
+            self.attributes.remove("qformer_tokenizer")
+
+        outputs = super().save_pretrained(save_directory, **kwargs)
+
+        if qformer_present:
+            self.attributes += ["qformer_tokenizer"]
+        return outputs
 
     # overwrite to load the Q-Former tokenizer from a separate folder
     @classmethod

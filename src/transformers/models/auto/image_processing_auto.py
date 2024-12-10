@@ -54,6 +54,7 @@ else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("align", ("EfficientNetImageProcessor",)),
+            ("aria", ("AriaImageProcessor")),
             ("beit", ("BeitImageProcessor",)),
             ("bit", ("BitImageProcessor",)),
             ("blip", ("BlipImageProcessor",)),
@@ -68,11 +69,11 @@ else:
             ("convnextv2", ("ConvNextImageProcessor",)),
             ("cvt", ("ConvNextImageProcessor",)),
             ("data2vec-vision", ("BeitImageProcessor",)),
-            ("deformable_detr", ("DeformableDetrImageProcessor",)),
+            ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("deit", ("DeiTImageProcessor",)),
             ("depth_anything", ("DPTImageProcessor",)),
             ("deta", ("DetaImageProcessor",)),
-            ("detr", ("DetrImageProcessor",)),
+            ("detr", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("dinat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("dinov2", ("BitImageProcessor",)),
             ("donut-swin", ("DonutImageProcessor",)),
@@ -89,6 +90,8 @@ else:
             ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
+            ("idefics3", ("Idefics3ImageProcessor",)),
+            ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
@@ -99,9 +102,11 @@ else:
             ("llava", ("CLIPImageProcessor",)),
             ("llava_next", ("LlavaNextImageProcessor",)),
             ("llava_next_video", ("LlavaNextVideoImageProcessor",)),
+            ("llava_onevision", ("LlavaOnevisionImageProcessor",)),
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor",)),
             ("mobilevit", ("MobileViTImageProcessor",)),
@@ -111,15 +116,17 @@ else:
             ("oneformer", ("OneFormerImageProcessor",)),
             ("owlv2", ("Owlv2ImageProcessor",)),
             ("owlvit", ("OwlViTImageProcessor",)),
+            ("paligemma", ("SiglipImageProcessor",)),
             ("perceiver", ("PerceiverImageProcessor",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
+            ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
             ("qwen2_vl", ("Qwen2VLImageProcessor",)),
             ("regnet", ("ConvNextImageProcessor",)),
             ("resnet", ("ConvNextImageProcessor",)),
-            ("rt_detr", "RTDetrImageProcessor"),
+            ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor",)),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
@@ -427,7 +434,11 @@ class AutoImageProcessor:
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_class is None and image_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
+                )
             # It could be in `config.image_processor_type``
             image_processor_class = getattr(config, "image_processor_type", None)
             if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:

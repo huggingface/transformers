@@ -157,7 +157,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 과적합을 방지하고 모델을 보다 견고하게 만들기 위해 데이터 세트의 훈련 부분에 데이터 증강을 추가합니다.
 여기서 Keras 전처리 레이어로 훈련 데이터에 대한 변환(데이터 증강 포함)과
-검증 데이터에 대한 변환(중앙 크로핑, 크기 조정, 정규화만)을 정의합니다. 
+검증 데이터에 대한 변환(중앙 크로핑, 크기 조정, 정규화만)을 정의합니다.
 `tf.image` 또는 다른 원하는 라이브러리를 사용할 수 있습니다.
 
 ```py
@@ -241,7 +241,7 @@ food["test"].set_transform(preprocess_val)
 ## 평가[[evaluate]]
 
 훈련 중에 평가 지표를 포함하면 모델의 성능을 평가하는 데 도움이 되는 경우가 많습니다.
-🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리로 평가 방법을 빠르게 가져올 수 있습니다. 이 작업에서는 
+🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리로 평가 방법을 빠르게 가져올 수 있습니다. 이 작업에서는
 [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) 평가 지표를 가져옵니다. (🤗 Evaluate [빠른 둘러보기](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하여 평가 지표를 가져오고 계산하는 방법에 대해 자세히 알아보세요):
 
 ```py
@@ -317,7 +317,7 @@ food["test"].set_transform(preprocess_val)
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -404,7 +404,7 @@ TensorFlow에서 모델을 미세 조정하려면 다음 단계를 따르세요:
 ```
 
 예측에서 정확도를 계산하고 모델을 🤗 Hub로 푸시하려면 [Keras callbacks](../main_classes/keras_callbacks)를 사용하세요.
-`compute_metrics` 함수를 [KerasMetricCallback](../main_classes/keras_callbacks#transformers.KerasMetricCallback)에 전달하고, 
+`compute_metrics` 함수를 [KerasMetricCallback](../main_classes/keras_callbacks#transformers.KerasMetricCallback)에 전달하고,
 [PushToHubCallback](../main_classes/keras_callbacks#transformers.PushToHubCallback)을 사용하여 모델을 업로드합니다:
 
 ```py

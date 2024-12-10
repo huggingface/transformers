@@ -22,8 +22,15 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...integrations.fsdp import is_fsdp_managed_module
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask,
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -333,7 +340,14 @@ class M2M100Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->M2M100
 class M2M100FlashAttention2(M2M100Attention):
+    """
+    M2M100 flash attention module. This module inherits from `M2M100Attention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -355,7 +369,9 @@ class M2M100FlashAttention2(M2M100Attention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
+        # M2M100FlashAttention2 attention does not support output_attentions
+        if output_attentions:
+            raise ValueError("M2M100FlashAttention2 attention does not support output_attentions")
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -406,21 +422,153 @@ class M2M100FlashAttention2(M2M100Attention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
 
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (LlamaRMSNorm handles it correctly)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
         attn_output = _flash_attention_forward(
             query_states,
             key_states,
             value_states,
             attention_mask,
             q_len,
-            dropout=self.dropout,
-            softmax_scale=None,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+
+# Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->M2M100
+class M2M100SdpaAttention(M2M100Attention):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        if output_attentions or layer_head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "M2M100Model is using M2M100SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                key_value_states=key_value_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+            )
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        query_states = self._shape(query_states, tgt_len, bsz)
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+
+        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
+        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
         # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, q_len, self.embed_dim)
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -501,6 +649,7 @@ class M2M100EncoderLayer(nn.Module):
 M2M100_ATTENTION_CLASSES = {
     "eager": M2M100Attention,
     "flash_attention_2": M2M100FlashAttention2,
+    "sdpa": M2M100SdpaAttention,
 }
 
 
@@ -631,6 +780,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["M2M100EncoderLayer", "M2M100DecoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -804,6 +954,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.layers = nn.ModuleList([M2M100EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -886,6 +1037,11 @@ class M2M100Encoder(M2M100PreTrainedModel):
         if attention_mask is not None:
             if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
+            elif self._use_sdpa and head_mask is None and not output_attentions:
+                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
@@ -900,7 +1056,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
                     f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
                     f" {head_mask.size()[0]}."
                 )
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -910,8 +1066,8 @@ class M2M100Encoder(M2M100PreTrainedModel):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
 
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
@@ -980,6 +1136,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
         )
         self.layers = nn.ModuleList([M2M100DecoderLayer(config) for _ in range(config.decoder_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -1093,6 +1250,15 @@ class M2M100Decoder(M2M100PreTrainedModel):
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             combined_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self._use_sdpa and not output_attentions and cross_attn_head_mask is None:
+            # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
+            combined_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask,
+                input_shape,
+                inputs_embeds,
+                past_key_values_length,
+            )
         else:
             # 4d mask is passed through the layers
             combined_attention_mask = _prepare_4d_causal_attention_mask(
@@ -1103,6 +1269,15 @@ class M2M100Decoder(M2M100PreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             if self._use_flash_attention_2:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
+            elif self._use_sdpa and cross_attn_head_mask is None and not output_attentions:
+                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask,
+                    inputs_embeds.dtype,
+                    tgt_len=input_shape[-1],
+                )
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask(
@@ -1138,7 +1313,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                         f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
                         f" {head_mask.size()[0]}."
                     )
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1148,8 +1323,8 @@ class M2M100Decoder(M2M100PreTrainedModel):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
 
                 past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1342,7 +1517,7 @@ class M2M100Model(M2M100PreTrainedModel):
 @add_start_docstrings(
     "The M2M100 Model with a language modeling head. Can be used for summarization.", M2M_100_START_DOCSTRING
 )
-class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
+class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1445,43 +1620,6 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):

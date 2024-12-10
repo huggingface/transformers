@@ -202,7 +202,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--trax_model_pkl_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--trax_model_pkl_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.\n"
+        "Given the files are in the pickle format, please be wary of passing it files you trust.",
     )
     parser.add_argument(
         "--config_file",

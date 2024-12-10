@@ -1,0 +1,129 @@
+name: model jobs
+
+on:
+  workflow_call:
+    inputs:
+      folder_slices:
+        required: true
+        type: string
+      machine_type:
+        required: true
+        type: string
+      slice_id:
+        required: true
+        type: number
+      runner:
+        required: true
+        type: string
+      docker:
+        required: true
+        type: string
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
+  CUDA_VISIBLE_DEVICES: 0,1
+
+jobs:
+  run_models_gpu:
+    name: " "
+    strategy:
+      max-parallel: 1  # For now, not to parallelize. Can change later if it works well.
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
+    runs-on: ['${{ inputs.machine_type }}', self-hosted, amd-gpu, '${{ inputs.runner }}']
+    container:
+      image: ${{ inputs.docker }}
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Echo input and matrix info
+        shell: bash
+        run: |
+          echo "${{ inputs.folder_slices }}"
+          echo "${{ matrix.folders }}"
+          echo "${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}"
+
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') }}
+        working-directory: /transformers
+        run: |
+          python3 -m pip install -U datasets
+
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
+      - name: ROCM-SMI
+        run: |
+          rocm-smi
+
+      - name: ROCM-INFO
+        run: |
+          rocminfo  | grep "Agent" -A 14
+
+      - name: Show ROCR environment
+        run: |
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}  -m "not not_device_test"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
+
+      - name: Run test
+        shell: bash
+        run: |
+          mkdir -p /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
+          echo "hello" > /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
+
+      - name: "Test suite reports artifacts: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports

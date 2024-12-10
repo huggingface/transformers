@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 OpenAI GPT model was proposed in [Improving Language Understanding by Generative Pre-Training](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
 by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever. It's a causal (unidirectional) transformer
-pre-trained using language modeling on a large corpus will long range dependencies, the Toronto Book Corpus.
+pre-trained using language modeling on a large corpus with long range dependencies, the Toronto Book Corpus.
 
 The abstract from the paper is the following:
 

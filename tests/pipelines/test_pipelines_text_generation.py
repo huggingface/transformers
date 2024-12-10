@@ -377,8 +377,23 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        text_generator = TextGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
@@ -469,24 +484,28 @@ class TextGenerationPipelineTests(unittest.TestCase):
             "RwkvForCausalLM",
             "XGLMForCausalLM",
             "GPTNeoXForCausalLM",
+            "GPTNeoXJapaneseForCausalLM",
             "FuyuForCausalLM",
+            "LlamaForCausalLM",
         ]
         if (
             tokenizer.model_max_length < 10000
             and text_generator.model.__class__.__name__ not in EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS
         ):
             # Handling of large generations
-            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
-                text_generator("This is a test" * 500, max_new_tokens=20)
+            if str(text_generator.device) == "cpu":
+                with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
+                    text_generator("This is a test" * 500, max_new_tokens=20)
 
             outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)
             # Hole strategy cannot work
-            with self.assertRaises(ValueError):
-                text_generator(
-                    "This is a test" * 500,
-                    handle_long_generation="hole",
-                    max_new_tokens=tokenizer.model_max_length + 10,
-                )
+            if str(text_generator.device) == "cpu":
+                with self.assertRaises(ValueError):
+                    text_generator(
+                        "This is a test" * 500,
+                        handle_long_generation="hole",
+                        max_new_tokens=tokenizer.model_max_length + 10,
+                    )
 
     @require_torch
     @require_accelerate

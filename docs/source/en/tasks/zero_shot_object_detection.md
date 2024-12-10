@@ -26,8 +26,8 @@ is an open-vocabulary object detector. It means that it can detect objects in im
 the need to fine-tune the model on labeled datasets.
 
 OWL-ViT leverages multi-modal representations to perform open-vocabulary detection. It combines [CLIP](../model_doc/clip) with
-lightweight object classification and localization heads. Open-vocabulary detection is achieved by embedding free-text queries with the text encoder of CLIP and using them as input to the object classification and localization heads.
-associate images and their corresponding textual descriptions, and ViT processes image patches as inputs. The authors
+lightweight object classification and localization heads. Open-vocabulary detection is achieved by embedding free-text queries with the text encoder of CLIP and using them as input to the object classification and localization heads,
+which associate images with their corresponding textual descriptions, while ViT processes image patches as inputs. The authors
 of OWL-ViT first trained CLIP from scratch and then fine-tuned OWL-ViT end to end on standard object detection datasets using
 a bipartite matching loss.
 
@@ -288,7 +288,7 @@ as before except now there are no labels.
 >>> scores = results["scores"].tolist()
 >>> boxes = results["boxes"].tolist()
 
->>> for box, score, label in zip(boxes, scores, labels):
+>>> for box, score in zip(boxes, scores):
 ...     xmin, ymin, xmax, ymax = box
 ...     draw.rectangle((xmin, ymin, xmax, ymax), outline="white", width=4)
 

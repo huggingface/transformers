@@ -14,12 +14,12 @@
 # limitations under the License.
 
 import datetime
-import gc
 import math
 import unittest
 
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -29,7 +29,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -123,26 +123,6 @@ class XGLMModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
         )
 
     def create_and_check_xglm_model(self, config, input_ids, input_mask, head_mask, *args):
@@ -363,8 +343,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def _test_lm_generate_xglm_helper(
         self,

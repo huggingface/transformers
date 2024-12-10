@@ -439,10 +439,11 @@ def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
 
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
     if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
-        return torch.stack(examples, dim=0)
+        if not isinstance(examples, torch.Tensor):
+            return torch.stack(examples, dim=0)
 
     # If yes, check if we have a `pad_token`.
-    if tokenizer._pad_token is None:
+    if tokenizer.pad_token is None:
         raise ValueError(
             "You are attempting to pad samples but the tokenizer you are using"
             f" ({tokenizer.__class__.__name__}) does not have a pad token."
@@ -476,7 +477,7 @@ def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = N
         return tf.stack(examples, axis=0)
 
     # If yes, check if we have a `pad_token`.
-    if tokenizer._pad_token is None:
+    if tokenizer.pad_token is None:
         raise ValueError(
             "You are attempting to pad samples but the tokenizer you are using"
             f" ({tokenizer.__class__.__name__}) does not have a pad token."
@@ -512,7 +513,7 @@ def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
         return np.stack(examples, axis=0)
 
     # If yes, check if we have a `pad_token`.
-    if tokenizer._pad_token is None:
+    if tokenizer.pad_token is None:
         raise ValueError(
             "You are attempting to pad samples but the tokenizer you are using"
             f" ({tokenizer.__class__.__name__}) does not have a pad token."
@@ -1089,7 +1090,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
         probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             probability_matrix.masked_fill_(padding_mask, value=0.0)
 
@@ -1130,7 +1131,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels
         ]
         masked_indices = masked_indices & ~tf.cast(special_tokens_mask, dtype=tf.bool)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = inputs == self.tokenizer.pad_token_id
             masked_indices = masked_indices & ~padding_mask
 
@@ -1169,7 +1170,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
         masked_indices[np.array(special_tokens_mask, dtype=bool)] = 0
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
             masked_indices[padding_mask] = 0
 
@@ -1250,13 +1251,13 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
         probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             probability_matrix.masked_fill_(padding_mask, value=0.0)
         masked_indices = torch.bernoulli(probability_matrix).bool()
         # probability be `1` (masked), however in albert model attention mask `0` means masked, revert the value
         attention_mask = (~masked_indices).float()
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             attention_padding_mask = labels.eq(self.tokenizer.pad_token_id)
             attention_mask.masked_fill_(attention_padding_mask, value=1.0)
         labels[~masked_indices] = -100  # We only compute loss on masked tokens, -100 is default for CE compute
@@ -1366,7 +1367,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             dtype=torch.bool,
         )
         masked_indices.masked_fill_(special_tokens_mask, value=0.0)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             masked_indices.masked_fill_(padding_mask, value=0.0)
 
@@ -1470,7 +1471,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         )
         special_tokens_mask = tf.cast(special_tokens_mask, dtype=tf.bool)
         masked_indices = masked_indices & ~special_tokens_mask
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
             masked_indices = masked_indices & ~padding_mask
 
@@ -1570,7 +1571,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             dtype=bool,
         )
         masked_indices[special_tokens_mask] = 0
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
             masked_indices[padding_mask] = 0.0
 

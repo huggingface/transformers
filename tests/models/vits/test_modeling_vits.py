@@ -167,8 +167,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     has_attentions = False
 
-    input_name = "input_ids"
-
     def setUp(self):
         self.model_tester = VitsModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=37)

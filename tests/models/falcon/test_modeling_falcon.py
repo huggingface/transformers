@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Falcon model."""
 
-import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -27,7 +26,6 @@ from transformers import (
     set_seed,
 )
 from transformers.testing_utils import (
-    is_flaky,
     require_bitsandbytes,
     require_torch,
     require_torch_sdpa,
@@ -312,7 +310,14 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -461,6 +466,10 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         # Inputs
         x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = position_ids_short.unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
         original_rope = FalconRotaryEmbedding(
@@ -468,10 +477,10 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
         ).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, short_input_length)
-        original_cos_long, original_sin_long = original_rope(x, long_input_length)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:short_input_length, :])
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
@@ -481,14 +490,14 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             base=config.rope_theta,
             scaling_factor=scaling_factor,
         ).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, short_input_length)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, long_input_length)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:short_input_length, :])
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[new_position, :], original_cos_long[original_position, :])
-            torch.testing.assert_close(linear_sin_long[new_position, :], original_sin_long[original_position, :])
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
@@ -499,8 +508,8 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             base=config.rope_theta,
             scaling_factor=scaling_factor,
         ).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, short_input_length)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, long_input_length)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
         torch.testing.assert_close(ntk_sin_short, original_sin_short)
         with self.assertRaises(AssertionError):
@@ -508,78 +517,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-    # TODO: @Fxmarty
-    @is_flaky(max_attempts=3, description="flaky on some models.")
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        max_new_tokens = 30
-
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(f"{model_class.__name__} does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
-                    attn_implementation="eager",
-                ).to(torch_device)
-
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                # NOTE: This check is disabled for Falcon as the non-SDPA/SDPA implementation is in the same class (legacy reason).
-                # for name, submodule in model_eager.named_modules():
-                #     if "SdpaAttention" in submodule.__class__.__name__:
-                #         raise ValueError("The eager model should not have SDPA attention layers")
-
-                # has_sdpa = False
-                # for name, submodule in model_sdpa.named_modules():
-                #     if "SdpaAttention" in submodule.__class__.__name__:
-                #         has_sdpa = True
-                #         break
-                # if not has_sdpa:
-                #     raise ValueError("The SDPA model should have SDPA attention layers")
-
-                # Just test that a large cache works as expected
-                res_eager = model_eager.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                res_sdpa = model_sdpa.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
 
 @require_torch
