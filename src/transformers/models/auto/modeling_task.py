@@ -1,19 +1,20 @@
+from typing import List, Optional, Tuple, Union, Unpack
+
 import torch
 import torch.nn as nn
-from typing import Optional, List, Union, Unpack, Tuple, Dict
 
-from ...modeling_utils import PreTrainedModel
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ..auto import AutoModel
-from ...cache_utils import Cache, DynamicCache, StaticCache
-
-from ...utils.generic import KwargsForCausalLM, validate_config_kwargs
 from ...modeling_outputs import (
+    CausalLMOutputWithPast,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
-    CausalLMOutputWithPast,
-    TokenClassifierOutput
+    TokenClassifierOutput,
 )
+from ...modeling_utils import PreTrainedModel
+from ...utils.generic import KwargsForCausalLM, validate_config_kwargs
+from ..auto import AutoModel
+
 
 class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
@@ -51,7 +52,7 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             **kwargs,
         )
-        self.lm_head.weight.data = self.model.embed_tokens.weight.data
+        self.lm_head.weight.data = self.model.embed_tokens.weight.data # TODO fix me!
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 

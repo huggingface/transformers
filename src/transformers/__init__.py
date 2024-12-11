@@ -5037,10 +5037,10 @@ if TYPE_CHECKING:
         TOKENIZER_MAPPING,
         AutoConfig,
         AutoFeatureExtractor,
+        AutoForCausalLM,
         AutoImageProcessor,
         AutoProcessor,
         AutoTokenizer,
-        AutoForCausalLM,
     )
     from .models.autoformer import (
         AutoformerConfig,
@@ -6202,7 +6202,6 @@ if TYPE_CHECKING:
         from .utils.dummy_pt_objects import *
     else:
         # Benchmarks
-        from .models.auto.modeling_task import AutoForCausalLM
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
         from .cache_utils import (
@@ -6405,6 +6404,7 @@ if TYPE_CHECKING:
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
+        from .models.auto.modeling_task import AutoForCausalLM
         from .models.autoformer import (
             AutoformerForPrediction,
             AutoformerModel,

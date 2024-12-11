@@ -1,4 +1,4 @@
-import torch 
+import torch
 
 
 def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):

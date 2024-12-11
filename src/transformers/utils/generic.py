@@ -24,9 +24,10 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, ContextManager, Iterable, List, Optional, Tuple, TypedDict, Callable, Union
+from typing import Any, ContextManager, Iterable, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
+import torch
 from packaging import version
 
 from ..modeling_flash_attention_utils import FlashAttentionKwargs
@@ -39,7 +40,6 @@ from .import_utils import (
     is_torch_fx_proxy,
 )
 
-import torch
 
 class cached_property(property):
     """
