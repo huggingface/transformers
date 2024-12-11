@@ -85,9 +85,9 @@ class ModernBertConfig(PretrainedConfig):
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
+        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the decoder. Will default to `"gelu"`
+            if not specified.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -169,7 +169,7 @@ class ModernBertConfig(PretrainedConfig):
         classifier_pooling="mean",
         classifier_norm=True,
         classifier_bias=False,
-        classifier_activation=None,
+        classifier_activation="gelu",
         deterministic_flash_attn=False,
         **kwargs,
     ):
@@ -211,7 +211,7 @@ class ModernBertConfig(PretrainedConfig):
         self.classifier_pooling = classifier_pooling
         self.classifier_bias = classifier_bias
         self.classifier_norm = classifier_norm
-        self.classifier_activation = classifier_activation if classifier_activation is not None else hidden_activation
+        self.classifier_activation = classifier_activation
         self.deterministic_flash_attn = deterministic_flash_attn
 
 
