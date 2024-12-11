@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
