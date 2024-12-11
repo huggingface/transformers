@@ -539,7 +539,7 @@ class ModernBertAttention(nn.Module):
             )
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
-        self.out_drop = nn.Dropout(config.attn_out_dropout) if config.attn_out_dropout > 0.0 else nn.Identity()
+        self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
 
     def _init_weights(self, reset_params: bool = False):
         _init_modernbert_weights(self.config, self.Wqkv, module_type=ModernBertModuleType.in_module)

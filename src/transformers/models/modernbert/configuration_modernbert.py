@@ -121,7 +121,6 @@ class ModernBertConfig(PretrainedConfig):
         global_rope_theta=160000.0,
         attention_bias=False,
         attention_dropout=0.0,
-        attn_out_dropout=0.1,
         global_attn_every_n_layers=3,
         local_attention=128,
         local_rope_theta=10000.0,
@@ -163,7 +162,6 @@ class ModernBertConfig(PretrainedConfig):
         self.global_rope_theta = global_rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.attn_out_dropout = attn_out_dropout
         self.hidden_activation = hidden_activation
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_attention = local_attention

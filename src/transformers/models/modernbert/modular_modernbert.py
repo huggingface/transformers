@@ -153,7 +153,6 @@ class ModernBertConfig(PretrainedConfig):
         global_rope_theta=160000.0,
         attention_bias=False,
         attention_dropout=0.0,
-        attn_out_dropout=0.1,
         global_attn_every_n_layers=3,
         local_attention=128,
         local_rope_theta=10000.0,
@@ -195,7 +194,6 @@ class ModernBertConfig(PretrainedConfig):
         self.global_rope_theta = global_rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.attn_out_dropout = attn_out_dropout
         self.hidden_activation = hidden_activation
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_attention = local_attention
@@ -781,7 +779,7 @@ class ModernBertAttention(nn.Module):
             )
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
-        self.out_drop = nn.Dropout(config.attn_out_dropout) if config.attn_out_dropout > 0.0 else nn.Identity()
+        self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
 
     def _init_weights(self, reset_params: bool = False):
         _init_modernbert_weights(self.config, self.Wqkv, module_type=ModernBertModuleType.in_module)
